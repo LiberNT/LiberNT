@@ -39,7 +39,6 @@ static HANDLE ConsoleAgent;
 static DWORD ConsoleSession;
 static AGENT Agents[MAX_AGENTS];
 static LONG NextDisplay;
-static HANDLE DisplayReady;
 
 static BOOL ReadCookie(SOCKET client, WCHAR *user, DWORD count, BOOL *routed)
 {
@@ -88,25 +87,37 @@ static BOOL SessionUser(DWORD session, WCHAR *user, DWORD count)
     return TRUE;
 }
 
-static HRESULT DisplayResult;
+typedef struct DISPLAY_CREATION
+{
+    LONG References;
+    HANDLE Ready;
+    HRESULT Result;
+    WCHAR Instance[MAX_DEVICE_ID_LEN];
+} DISPLAY_CREATION;
+
+static void ReleaseCreation(DISPLAY_CREATION *creation)
+{
+    if (InterlockedDecrement(&creation->References)) return;
+    if (creation->Ready) CloseHandle(creation->Ready);
+    HeapFree(GetProcessHeap(), 0, creation);
+}
 
 static VOID WINAPI DisplayCreated(HSWDEVICE device, HRESULT result, PVOID context, PCWSTR instance)
 {
-    AGENT *agent = context;
+    DISPLAY_CREATION *creation = context;
     (void)device;
-    DisplayResult = result;
-    if (SUCCEEDED(result) && instance)
-        lstrcpynW(agent->DisplayInstance, instance, ARRAYSIZE(agent->DisplayInstance));
-    SetEvent(DisplayReady);
+    if (SUCCEEDED(result) && instance) lstrcpynW(creation->Instance, instance, ARRAYSIZE(creation->Instance));
+    creation->Result = SUCCEEDED(result) && !instance ? E_UNEXPECTED : result;
+    SetEvent(creation->Ready);
+    ReleaseCreation(creation);
 }
 
-static DWORD VideoDevices(void)
+static BOOL DisplayStarted(const WCHAR *instance)
 {
-    DWORD max = 0, size = sizeof(max);
-    if (RegGetValueW(HKEY_LOCAL_MACHINE, L"HARDWARE\\DEVICEMAP\\VIDEO", L"MaxObjectNumber", RRF_RT_REG_DWORD, NULL,
-                     &max, &size) != ERROR_SUCCESS)
-        return 0;
-    return max + 1;
+    ULONG status = 0, problem = 0;
+    DEVINST node;
+    return CM_Locate_DevNodeW(&node, (DEVINSTID_W)instance, CM_LOCATE_DEVNODE_NORMAL) == CR_SUCCESS &&
+           CM_Get_DevNode_Status(&status, &problem, node, 0) == CR_SUCCESS && (status & DN_STARTED);
 }
 
 static void CloseAgent(AGENT *agent)
@@ -129,9 +140,11 @@ static AGENT *StartNewSession(const WCHAR *user)
     WCHAR name[64];
     HANDLE port = NULL, csrss = NULL, initial = NULL;
     AGENT *agent = NULL;
+    DISPLAY_CREATION *creation;
     NTSTATUS status;
     ULONG session = 0;
-    DWORD i, wait, before = VideoDevices();
+    DWORD i, wait;
+    BOOL created;
     for (i = 0; i < MAX_AGENTS && !agent; ++i)
         if (!Agents[i].Process && !Agents[i].Display) agent = &Agents[i];
     if (!agent)
@@ -147,17 +160,31 @@ static AGENT *StartNewSession(const WCHAR *user)
     info.CapabilityFlags = SWDeviceCapabilitiesRemovable | SWDeviceCapabilitiesSilentInstall |
                            SWDeviceCapabilitiesDriverRequired;
     info.pszDeviceDescription = L"LiberNT Remote Display Adapter";
-    ResetEvent(DisplayReady);
-    DisplayResult = E_FAIL;
-    if (FAILED(SwDeviceCreate(L"RemoteDisplayEnum", L"HTREE\\ROOT\\0", &info, 0, NULL, DisplayCreated, agent,
-                              &agent->Display)) ||
-        WaitForSingleObject(DisplayReady, 15000) != WAIT_OBJECT_0 || FAILED(DisplayResult))
+    creation = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*creation));
+    if (!creation || !(creation->Ready = CreateEventW(NULL, TRUE, FALSE, NULL)))
     {
-        Log("Cannot create the display of a new session: 0x%08lx", DisplayResult);
+        if (creation) HeapFree(GetProcessHeap(), 0, creation);
+        Log("Cannot create the display of a new session: out of memory");
         goto failed;
     }
-    for (wait = 0; wait < 150 && VideoDevices() <= before; ++wait) Sleep(100);
-    if (VideoDevices() <= before)
+    creation->References = 2;
+    creation->Result = E_FAIL;
+    if (FAILED(SwDeviceCreate(L"RemoteDisplayEnum", L"HTREE\\ROOT\\0", &info, 0, NULL, DisplayCreated, creation,
+                              &agent->Display)))
+    {
+        agent->Display = NULL;
+        ReleaseCreation(creation);
+        ReleaseCreation(creation);
+        Log("Cannot create the display of a new session");
+        goto failed;
+    }
+    created = WaitForSingleObject(creation->Ready, 15000) == WAIT_OBJECT_0 && SUCCEEDED(creation->Result);
+    if (created) lstrcpynW(agent->DisplayInstance, creation->Instance, ARRAYSIZE(agent->DisplayInstance));
+    else Log("Cannot create the display of a new session: 0x%08lx", creation->Result);
+    ReleaseCreation(creation);
+    if (!created) goto failed;
+    for (wait = 0; wait < 150 && !DisplayStarted(agent->DisplayInstance); ++wait) Sleep(100);
+    if (!DisplayStarted(agent->DisplayInstance))
     {
         Log("The display of a new session did not start");
         goto failed;
@@ -274,20 +301,25 @@ static void Route(SOCKET client)
     if (!handed) Log("Dropped a connection for %ls", *user ? user : L"an unnamed user");
 }
 
+static NTSTATUS StopSession(DWORD session)
+{
+    HANDLE port = NULL;
+    NTSTATUS status = SmConnectToSm(NULL, NULL, 0, &port);
+    if (NT_SUCCESS(status)) status = SmStopCsr(port, session);
+    if (port) NtClose(port);
+    return status;
+}
+
 /* Winlogon of a session started for a user leaves when the user signs out, and the session ends with it */
 static void EndSignedOutSessions(void)
 {
-    HANDLE port = NULL;
     NTSTATUS status;
     DWORD i;
     EnterCriticalSection(&AgentLock);
     for (i = 0; i < MAX_AGENTS; ++i)
     {
         if (!Agents[i].Winlogon || WaitForSingleObject(Agents[i].Winlogon, 0) != WAIT_OBJECT_0) continue;
-        status = SmConnectToSm(NULL, NULL, 0, &port);
-        if (NT_SUCCESS(status)) status = SmStopCsr(port, Agents[i].Session);
-        if (port) NtClose(port);
-        port = NULL;
+        status = StopSession(Agents[i].Session);
         Log("Session %lu of %ls ended after its user signed out: 0x%08lx", Agents[i].Session, Agents[i].User, status);
         CloseAgent(&Agents[i]);
     }
@@ -379,8 +411,7 @@ BOOL BrokerStart(BROKER_LOG log, BROKER_START_AGENT start, BROKER_ALLOWED allowe
     InitializeCriticalSection(&AgentLock);
     if (WSAStartup(MAKEWORD(2, 2), &winsock)) return FALSE;
     BrokerStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
-    DisplayReady = CreateEventW(NULL, FALSE, FALSE, NULL);
-    if (!BrokerStopEvent || !DisplayReady) return FALSE;
+    if (!BrokerStopEvent) return FALSE;
     BrokerThread = CreateThread(NULL, 0, BrokerMain, NULL, 0, NULL);
     return BrokerThread != NULL;
 }
@@ -394,7 +425,14 @@ void BrokerStop(void)
     CloseHandle(BrokerThread);
     BrokerThread = NULL;
     EnterCriticalSection(&AgentLock);
-    for (i = 0; i < MAX_AGENTS; ++i) CloseAgent(&Agents[i]);
+    for (i = 0; i < MAX_AGENTS; ++i)
+    {
+        /* The display of a session goes away with this process, so a session left behind could never be shown again */
+        if (Agents[i].Session)
+            Log("Session %lu of %ls ended with the service: 0x%08lx", Agents[i].Session, Agents[i].User,
+                StopSession(Agents[i].Session));
+        CloseAgent(&Agents[i]);
+    }
     if (ConsoleAgent) CloseHandle(ConsoleAgent);
     ConsoleAgent = NULL;
     LeaveCriticalSection(&AgentLock);
