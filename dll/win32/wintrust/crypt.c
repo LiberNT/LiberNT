@@ -778,6 +778,8 @@ done:
     return ret;
 }
 
+static BOOL cab_image_hash(HANDLE file, HCRYPTHASH hash);
+
 static BOOL catadmin_calc_hash_from_filehandle(HCATADMIN catAdmin, HANDLE hFile, DWORD *pcbHash,
                                                BYTE *pbHash, DWORD dwFlags)
 {
@@ -836,7 +838,7 @@ static BOOL catadmin_calc_hash_from_filehandle(HCATADMIN catAdmin, HANDLE hFile,
             return FALSE;
         }
 
-        if (!(ret = pe_image_hash(hFile, hash)))
+        if (!(ret = pe_image_hash(hFile, hash)) && !(ret = cab_image_hash(hFile, hash)))
         {
             while ((ret = ReadFile(hFile, buffer, 4096, &bytes_read, NULL)) && bytes_read)
             {
@@ -2634,6 +2636,25 @@ static BOOL sip_hash_cab(const BYTE *data, const struct cab_layout *cab, HCRYPTH
             return FALSE;
     }
     return CryptHashData(hash, data + cab->rest_offset, cab->cabinet_size - cab->rest_offset, 0);
+}
+
+static BOOL cab_image_hash(HANDLE file, HCRYPTHASH hash)
+{
+    struct cab_layout cab;
+    DWORD file_size;
+    HANDLE mapping;
+    BYTE *view;
+    BOOL ret = FALSE;
+
+    if ((file_size = GetFileSize(file, NULL)) == INVALID_FILE_SIZE) return FALSE;
+    if (!(mapping = CreateFileMappingW(file, NULL, PAGE_READONLY, 0, 0, NULL))) return FALSE;
+    if ((view = MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0)))
+    {
+        ret = sip_cab_layout(view, file_size, &cab) && sip_hash_cab(view, &cab, hash);
+        UnmapViewOfFile(view);
+    }
+    CloseHandle(mapping);
+    return ret;
 }
 
 static void sip_cab_reserve_layout(const BYTE *data, const struct cab_layout *cab, DWORD signature_size, BYTE *out)
