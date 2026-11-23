@@ -942,6 +942,8 @@ BuildMultitasking(PageBuilder &page)
 #define TERMINAL_SERVER_KEY L"SYSTEM\\CurrentControlSet\\Control\\Terminal Server"
 #define RDP_SERVICE_KEY L"SYSTEM\\CurrentControlSet\\Services\\LiberNTRDPServer"
 
+static BOOL OpenH264Busy;
+
 void
 BuildRemoteDesktop(PageBuilder &page)
 {
@@ -974,8 +976,9 @@ BuildRemoteDesktop(PageBuilder &page)
                 !page.Indexing && OpenH264Enabled(),
                 [host](int on)
                 {
-                    DWORD error;
-                    HCURSOR cursor;
+                    DWORD *result;
+                    if (OpenH264Busy)
+                        return;
                     if (on && !Confirm(host->Window(), Str(IDS_REMOTE_DESKTOP_OPENH264_CONFIRM),
                                        Str(IDS_REMOTE_DESKTOP_OPENH264_CONFIRM_TEXT),
                                        Str(IDS_REMOTE_DESKTOP_OPENH264_CONFIRM_ACTION)))
@@ -983,13 +986,22 @@ BuildRemoteDesktop(PageBuilder &page)
                         host->Refresh();
                         return;
                     }
-                    cursor = SetCursor(LoadCursorW(NULL, IDC_WAIT));
-                    error = on ? OpenH264Install() : OpenH264Remove();
-                    SetCursor(cursor);
-                    if (error)
-                        ShowError(host->Window(), error);
+                    result = new DWORD(ERROR_SUCCESS);
+                    OpenH264Busy = TRUE;
                     host->Refresh();
-                }).Enabled = installed && IsAdmin();
+                    host->RunJob([on, result]()
+                                 {
+                                     *result = on ? OpenH264Install() : OpenH264Remove();
+                                 },
+                                 [host, result]()
+                                 {
+                                     OpenH264Busy = FALSE;
+                                     if (*result != ERROR_SUCCESS)
+                                         ShowError(host->Window(), *result);
+                                     delete result;
+                                     host->Refresh();
+                                 });
+                }).Enabled = installed && IsAdmin() && !OpenH264Busy;
     page.Link(Str(IDS_REMOTE_DESKTOP_OPENH264_LICENSE), Str(IDS_REMOTE_DESKTOP_OPENH264_LICENSE_DESC),
               L"document_20_regular",
               [host](int)
