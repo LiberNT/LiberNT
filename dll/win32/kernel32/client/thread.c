@@ -248,6 +248,7 @@ CreateRemoteThread(IN HANDLE hProcess,
     ULONG_PTR Cookie;
     ULONG ReturnLength;
     SIZE_T ReturnSize;
+    BOOLEAN StackOwnedByThread = FALSE;
 
     DPRINT("CreateRemoteThread: hProcess: %p dwStackSize: %Iu lpStartAddress"
            ": %p lpParameter: %p, dwCreationFlags: %lx\n", hProcess,
@@ -299,6 +300,17 @@ CreateRemoteThread(IN HANDLE hProcess,
         BaseFreeThreadStack(hProcess, &InitialTeb);
         BaseSetLastNTError(Status);
         return NULL;
+    }
+
+    /* The stack made above is the thread's own: the kernel releases it however the thread ends */
+    if (NT_SUCCESS(NtQueryInformationThread(hThread, ThreadBasicInformation, &ThreadBasicInfo,
+                                            sizeof(ThreadBasicInfo), &ReturnLength)))
+    {
+        UCHAR FreeStack = TRUE;
+
+        StackOwnedByThread = NT_SUCCESS(NtWriteVirtualMemory(hProcess,
+                                                             &((PTEB)ThreadBasicInfo.TebBaseAddress)->ReservedPad1,
+                                                             &FreeStack, sizeof(FreeStack), NULL));
     }
 
     /* Are we in the same process? */
@@ -407,7 +419,7 @@ Quit:
 
         NtTerminateThread(hThread, Status);
         NtWaitForSingleObject(hThread, FALSE, NULL);
-        BaseFreeThreadStack(hProcess, &InitialTeb);
+        if (!StackOwnedByThread) BaseFreeThreadStack(hProcess, &InitialTeb);
         NtClose(hThread);
 
         BaseSetLastNTError(Status);
