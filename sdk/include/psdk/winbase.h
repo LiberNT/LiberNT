@@ -2123,6 +2123,13 @@ GetNamedPipeClientProcessId(
     _In_ HANDLE Pipe,
     _Out_ PULONG ClientProcessId);
 
+WINBASEAPI
+BOOL
+WINAPI
+GetNamedPipeServerProcessId(
+    _In_ HANDLE Pipe,
+    _Out_ PULONG ServerProcessId);
+
 BOOL
 WINAPI
 GetNamedPipeHandleStateA(
