@@ -43,5 +43,8 @@ endif()
 
 add_asm_files(chkstk_lib_asm ${CHKSTK_ASM_SOURCE})
 add_library(chkstk ${CHKSTK_SOURCE} ${chkstk_lib_asm})
+if(ARCH STREQUAL "i386" AND NOT MSVC)
+    target_compile_definitions(chkstk PRIVATE CRT_COMPILER_STACK_PROBE_ALIASES)
+endif()
 set_target_properties(chkstk PROPERTIES LINKER_LANGUAGE "C")
 add_dependencies(chkstk asm)
