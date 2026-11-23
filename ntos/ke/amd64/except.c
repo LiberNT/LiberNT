@@ -619,7 +619,7 @@ KiMcheckAbortHandler(
                        0);
 
     BankCount = (ULONG)(__readmsr(MSR_MCG_CAP) & 0xFF);
-    DbgPrint("Machine check on processor %lu, global status 0x%I64x\n",
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "Machine check on processor %lu, global status 0x%I64x\n",
              KeGetCurrentPrcb()->Number,
              __readmsr(MSR_MCG_STATUS));
 
@@ -631,7 +631,7 @@ KiMcheckAbortHandler(
 
         Address = (Status & (1ULL << 58)) ? __readmsr(MSR_MC0_ADDR + 4 * Bank) : 0;
         Misc = (Status & (1ULL << 59)) ? __readmsr(MSR_MC0_MISC + 4 * Bank) : 0;
-        DbgPrint("Machine check bank %lu: status 0x%I64x, address 0x%I64x, misc 0x%I64x\n",
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "Machine check bank %lu: status 0x%I64x, address 0x%I64x, misc 0x%I64x\n",
                  Bank, Status, Address, Misc);
 
         if (!Found || ((Status & (1ULL << 61)) && !(ReportedStatus & (1ULL << 61))))

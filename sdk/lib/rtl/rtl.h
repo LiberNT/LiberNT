@@ -51,6 +51,8 @@
 
 #endif /* _BLDR_ */
 
+#include <dpfilter.h>
+
 /* Internal RTL header */
 #include "rtlp.h"
 

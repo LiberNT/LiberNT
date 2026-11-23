@@ -76,7 +76,7 @@ RtlAssert(
 
     do
     {
-        DbgPrint("\n*** Assertion failed: %s%s\n"
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "\n*** Assertion failed: %s%s\n"
                  "***   Source File: %s, line %lu\n\n",
                  (Message != NULL) ? Message : "",
                  (PSTR)FailedAssertion,
@@ -96,7 +96,7 @@ RtlAssert(
 
             case RtlpAssertBreakAndAsk:
             case RtlpAssertBreakOnce:
-                DbgPrint("Execute '.cxr %p' to dump context\n", &Context);
+                DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "Execute '.cxr %p' to dump context\n", &Context);
                 DbgBreakPoint();
                 break;
 

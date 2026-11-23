@@ -136,7 +136,7 @@ StringOut(const string& String, bool forcePrint)
                 }
 
                 DbgString[size] = 0;
-                DbgPrint("%s", DbgString);
+                DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%s", DbgString);
             }
 
             last_newline = curr_pos;
@@ -154,7 +154,7 @@ StringOut(const string& String, bool forcePrint)
 
         memcpy(DbgString, NewString.c_str() + start, size);
         DbgString[size] = 0;
-        DbgPrint("%s", DbgString);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%s", DbgString);
 
         NewString.clear();
         return NewString;

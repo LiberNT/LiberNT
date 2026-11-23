@@ -222,8 +222,8 @@ DbgPrint(PCCH Format,
     /* Call the internal routine that also handles ControlC */
     va_start(ap, Format);
     Status = vDbgPrintExWithPrefixInternal("",
-                                           -1,
-                                           DPFLTR_ERROR_LEVEL,
+                                           DPFLTR_DEFAULT_ID,
+                                           DPFLTR_INFO_LEVEL,
                                            Format,
                                            ap,
                                            TRUE);
@@ -270,8 +270,8 @@ DbgPrintReturnControlC(PCCH Format,
     /* Call the internal routine that also handles ControlC */
     va_start(ap, Format);
     Status = vDbgPrintExWithPrefixInternal("",
-                                           -1,
-                                           DPFLTR_ERROR_LEVEL,
+                                           DPFLTR_DEFAULT_ID,
+                                           DPFLTR_INFO_LEVEL,
                                            Format,
                                            ap,
                                            FALSE);
@@ -286,8 +286,8 @@ ChpeVDbgPrintReturnControlC(PCCH Format,
                             va_list Arguments)
 {
     return vDbgPrintExWithPrefixInternal("",
-                                         (ULONG)-1,
-                                         DPFLTR_ERROR_LEVEL,
+                                         DPFLTR_DEFAULT_ID,
+                                         DPFLTR_INFO_LEVEL,
                                          Format,
                                          Arguments,
                                          FALSE);

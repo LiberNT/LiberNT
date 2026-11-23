@@ -89,21 +89,23 @@ RtlAssert(
 #endif
 
 /* For internal purposes only */
-#define __NOTICE(level, fmt, ...)   DbgPrint(#level ":  %s at %s:%d " fmt, __FUNCTION__, __RELFILE__, __LINE__, ##__VA_ARGS__)
+/* DbgPrint is filtered as DPFLTR_DEFAULT_ID at DPFLTR_INFO_LEVEL; LiberNT traces use DPFLTR_DEFAULT_ID (101) at DPFLTR_ERROR_LEVEL (0) */
+#define __DEBUG_PRINT(fmt, ...)     DbgPrintEx(101, 0, fmt, ##__VA_ARGS__)
+#define __NOTICE(level, fmt, ...)   __DEBUG_PRINT(#level ":  %s at %s:%d " fmt, __FUNCTION__, __RELFILE__, __LINE__, ##__VA_ARGS__)
 
 
     /* These are always printed */
     #define DPRINT1(fmt, ...) do { \
-        if (DbgPrint("(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__))  \
-            DbgPrint("(%s:%d) DbgPrint() failed!\n", __RELFILE__, __LINE__); \
+        if (__DEBUG_PRINT("(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__))  \
+            __DEBUG_PRINT("(%s:%d) DbgPrint() failed!\n", __RELFILE__, __LINE__); \
     } while (0)
 
     /* These are printed only if NDEBUG is NOT defined */
     #ifndef NDEBUG
 
         #define DPRINT(fmt, ...) do { \
-            if (DbgPrint("(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__))  \
-                DbgPrint("(%s:%d) DbgPrint() failed!\n", __RELFILE__, __LINE__); \
+            if (__DEBUG_PRINT("(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__))  \
+                __DEBUG_PRINT("(%s:%d) DbgPrint() failed!\n", __RELFILE__, __LINE__); \
         } while (0)
 
     #else

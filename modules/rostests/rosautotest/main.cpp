@@ -78,7 +78,7 @@ SetNtGlobalFlags()
     Status = RtlAdjustPrivilege(SE_DEBUG_PRIVILEGE, TRUE, FALSE, &PrivilegeEnabled);
     if (!NT_SUCCESS(Status))
     {
-        DbgPrint("Failed to enable SeDebugPrivilege: 0x%08lx\n", Status);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "Failed to enable SeDebugPrivilege: 0x%08lx\n", Status);
         return;
     }
 
@@ -86,7 +86,7 @@ SetNtGlobalFlags()
     Status = NtQuerySystemInformation(SystemFlagsInformation, &NtGlobalFlags, sizeof(NtGlobalFlags), NULL);
     if (!NT_SUCCESS(Status))
     {
-        DbgPrint("Failed to get NtGlobalFlags: 0x%08lx\n", Status);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "Failed to get NtGlobalFlags: 0x%08lx\n", Status);
         return;
     }
 
@@ -97,7 +97,7 @@ SetNtGlobalFlags()
     Status = NtSetSystemInformation(SystemFlagsInformation, &NtGlobalFlags, sizeof(NtGlobalFlags));
     if (!NT_SUCCESS(Status))
     {
-        DbgPrint("Failed to set NtGlobalFlags: 0x%08lx\n", Status);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "Failed to set NtGlobalFlags: 0x%08lx\n", Status);
     }
 }
 
@@ -196,7 +196,7 @@ wmain(int argc, wchar_t* argv[])
         StringOut(ss.str());
 
         /* For sysreg2 */
-        DbgPrint("SYSREG_CHECKPOINT:THIRDBOOT_COMPLETE\n");
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SYSREG_CHECKPOINT:THIRDBOOT_COMPLETE\n");
 
         ReturnValue = 0;
     }
@@ -227,7 +227,7 @@ wmain(int argc, wchar_t* argv[])
 
     /* For sysreg2 to notice if rosautotest itself failed */
     if(ReturnValue == 1)
-        DbgPrint("SYSREG_ROSAUTOTEST_FAILURE\n");
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SYSREG_ROSAUTOTEST_FAILURE\n");
 
     /* Report successful end of tests */
     ReportEventW(hLog,

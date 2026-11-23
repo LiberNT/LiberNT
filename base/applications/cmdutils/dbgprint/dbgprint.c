@@ -13,6 +13,14 @@
 #include <tchar.h>
 //#include <debug.h>
 #include <stdio.h>
+#include <dpfilter.h>
+
+ULONG __cdecl DbgPrintEx(ULONG ComponentId, ULONG Level, PCSTR Format, ...);
+
+static VOID DebugOutputA(PCSTR Text)
+{
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%s", Text);
+}
 
 int _tmain(int argc, TCHAR ** argv)
 {
@@ -58,7 +66,7 @@ int _tmain(int argc, TCHAR ** argv)
                     /* run the current test */
                     strcpy(test, "\n\nRunning ");
                     strcat(test, cmd);
-                    OutputDebugStringA(test);
+                    DebugOutputA(test);
                     pPipe2 = _popen(cmd, "r");
                     if (pPipe2 != NULL)
                     {
@@ -70,7 +78,7 @@ int _tmain(int argc, TCHAR ** argv)
                             puts(psBuffer2);
                             if (nlptr2)
                                 *nlptr2 = '\n';
-                            OutputDebugStringA(psBuffer2);
+                            DebugOutputA(psBuffer2);
                         }
                         _pclose(pPipe2);
                     }
@@ -91,7 +99,7 @@ int _tmain(int argc, TCHAR ** argv)
             while(fgets(psBuffer, sizeof(psBuffer), pPipe))
             {
                 fputs(psBuffer, stdout);
-                OutputDebugStringA(psBuffer);
+                DebugOutputA(psBuffer);
             }
             ret = _pclose(pPipe);
         }
@@ -123,7 +131,11 @@ int _tmain(int argc, TCHAR ** argv)
             offset++;
         }
         _putts(buf);
-        OutputDebugString(buf);
+#ifdef UNICODE
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%ws", buf);
+#else
+        DebugOutputA(buf);
+#endif
         HeapFree(GetProcessHeap(), 0, buf);
     }
     return 0;

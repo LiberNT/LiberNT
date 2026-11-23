@@ -146,6 +146,28 @@ DbgPrint(
     return 0;
 }
 
+ULONG
+__cdecl
+DbgPrintEx(
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level,
+    _In_z_ _Printf_format_string_ PCSTR Format,
+    ...)
+{
+    CHAR Text[512];
+    va_list Arguments;
+
+    UNREFERENCED_PARAMETER(ComponentId);
+    UNREFERENCED_PARAMETER(Level);
+
+    va_start(Arguments, Format);
+    RtlStringCbVPrintfA(Text, sizeof(Text), Format, Arguments);
+    va_end(Arguments);
+
+    FwDebugPrint(Text);
+    return 0;
+}
+
 VOID
 NTAPI
 RtlAssert(
