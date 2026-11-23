@@ -85,6 +85,7 @@ typedef struct _DXGKP_DISPLAY_BRIDGE
     PVOID                       Win32kPhysDisp;
     PVIDEO_WIN32K_CALLOUT       Win32kCallout;
     ULONG                       Win32kSessionId;
+    ULONG64                     Win32kGeneration;
     ULONG                       UseSessionId;
     KSPIN_LOCK                  DetachLock;
     PVOID                       DetachedFb;
@@ -196,8 +197,12 @@ typedef struct _DXGKP_WIN32K_SESSION
 {
     LIST_ENTRY Entry;
     ULONG SessionId;
+    ULONG64 Generation;
     PEPROCESS Process;
+    EX_RUNDOWN_REF Rundown;
 } DXGKP_WIN32K_SESSION, *PDXGKP_WIN32K_SESSION;
+
+static ULONG64 g_DisplayWin32kGeneration;
 
 static LIST_ENTRY g_DisplayWin32kSessions = { &g_DisplayWin32kSessions, &g_DisplayWin32kSessions };
 static KSPIN_LOCK g_DisplayWin32kProcessLock;
@@ -383,6 +388,7 @@ DxgkpBindWin32kSession(
     ObReferenceObject(Process);
     NewSession->SessionId = SessionId;
     NewSession->Process = Process;
+    ExInitializeRundownProtection(&NewSession->Rundown);
 
     KeAcquireSpinLock(&g_DisplayWin32kProcessLock, &OldIrql);
     if (SessionId == 0 && Bridge->Win32kCallout != NULL && Bridge->Win32kSessionId != 0)
@@ -401,11 +407,14 @@ DxgkpBindWin32kSession(
         }
         else
         {
+            NewSession->Generation = ++g_DisplayWin32kGeneration;
             InsertTailList(&g_DisplayWin32kSessions, &NewSession->Entry);
+            Session = NewSession;
             NewSession = NULL;
         }
         Bridge->Win32kPhysDisp = Callbacks->PhysDisp;
         Bridge->Win32kSessionId = SessionId;
+        Bridge->Win32kGeneration = Session->Generation;
         InterlockedExchangePointer((PVOID *)&Bridge->Win32kCallout, (PVOID)Callbacks->Callout);
     }
     KeReleaseSpinLock(&g_DisplayWin32kProcessLock, OldIrql);
@@ -558,56 +567,78 @@ DxgkDisplayWin32kProcessCleanup(
     if (Found == NULL)
         return;
     ASSERT(Found->SessionId == PsGetProcessSessionId(Process));
+    ExWaitForRundownProtectionRelease(&Found->Rundown);
     ObDereferenceObject(Found->Process);
     ExFreePoolWithTag(Found, TAG_DXGK_DISPLAY);
+}
+
+static
+BOOLEAN
+DxgkpAttachWin32kSessionLocked(
+    _In_ PDXGKP_WIN32K_SESSION Session,
+    _Out_ PDXGK_WIN32K_ATTACHMENT Attachment)
+{
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    if (!ExAcquireRundownProtection(&Session->Rundown))
+        return FALSE;
+    Attachment->Process = Session->Process;
+    Attachment->Binding = Session;
+    ObReferenceObject(Attachment->Process);
+    return TRUE;
+}
+
+static
+VOID
+DxgkpEnterWin32kSession(
+    _Inout_ PDXGK_WIN32K_ATTACHMENT Attachment)
+{
+    ASSERT(Attachment->Process != NULL && Attachment->Binding != NULL);
+    if (Attachment->Process == PsGetCurrentProcess())
+        return;
+    KeStackAttachProcess((PRKPROCESS)Attachment->Process, &Attachment->ApcState);
+    Attachment->Attached = TRUE;
 }
 
 BOOLEAN
 DxgkDisplayAttachWin32kSession(
     _In_ ULONG SessionId,
-    _Out_ PRKAPC_STATE ApcState,
-    _Out_ PEPROCESS *AttachedProcess)
+    _Out_ PDXGK_WIN32K_ATTACHMENT Attachment)
 {
     PDXGKP_WIN32K_SESSION Session;
-    PEPROCESS Process = NULL;
+    BOOLEAN Found = FALSE;
     KIRQL OldIrql;
 
     PAGED_CODE();
 
-    *AttachedProcess = NULL;
+    RtlZeroMemory(Attachment, sizeof(*Attachment));
     KeAcquireSpinLock(&g_DisplayWin32kProcessLock, &OldIrql);
     Session = DxgkpFindWin32kSession(SessionId);
     if (Session != NULL)
-    {
-        Process = Session->Process;
-        ObReferenceObject(Process);
-    }
+        Found = DxgkpAttachWin32kSessionLocked(Session, Attachment);
     KeReleaseSpinLock(&g_DisplayWin32kProcessLock, OldIrql);
-    if (Process == NULL)
+    if (!Found)
         return FALSE;
-    ASSERT(PsGetProcessSessionId(Process) == SessionId);
-    if (Process == PsGetCurrentProcess())
-    {
-        ObDereferenceObject(Process);
-        return TRUE;
-    }
-    KeStackAttachProcess((PRKPROCESS)Process, ApcState);
-    *AttachedProcess = Process;
+    ASSERT(PsGetProcessSessionId(Attachment->Process) == SessionId);
+    DxgkpEnterWin32kSession(Attachment);
     return TRUE;
 }
 
 VOID
 DxgkDisplayDetachWin32kSession(
-    _In_ PRKAPC_STATE ApcState,
-    _In_opt_ PEPROCESS AttachedProcess)
+    _Inout_ PDXGK_WIN32K_ATTACHMENT Attachment)
 {
     PAGED_CODE();
 
-    if (AttachedProcess == NULL)
+    if (Attachment->Binding == NULL)
         return;
-    ASSERT(PsGetCurrentProcess() == AttachedProcess);
-    KeUnstackDetachProcess(ApcState);
-    ObDereferenceObject(AttachedProcess);
+    if (Attachment->Attached)
+    {
+        ASSERT(PsGetCurrentProcess() == Attachment->Process);
+        KeUnstackDetachProcess(&Attachment->ApcState);
+    }
+    ObDereferenceObject(Attachment->Process);
+    ExReleaseRundownProtection(&((PDXGKP_WIN32K_SESSION)Attachment->Binding)->Rundown);
+    RtlZeroMemory(Attachment, sizeof(*Attachment));
 }
 
 static VOID
@@ -615,22 +646,31 @@ DxgkpDisplayRefreshWin32k(
     _In_ PDXGKP_DISPLAY_BRIDGE Bridge)
 {
     VIDEO_WIN32K_CALLBACKS_PARAMS Params;
+    DXGK_WIN32K_ATTACHMENT Attachment;
+    PDXGKP_WIN32K_SESSION Session;
     PVIDEO_WIN32K_CALLOUT Callout;
-    KAPC_STATE ApcState;
-    PEPROCESS Process;
+    BOOLEAN Found = FALSE;
+    KIRQL OldIrql;
 
     PAGED_CODE();
 
-    Callout = (PVIDEO_WIN32K_CALLOUT)InterlockedCompareExchangePointer((PVOID *)&Bridge->Win32kCallout, NULL, NULL);
-    if (Callout == NULL)
-        return;
     RtlZeroMemory(&Params, sizeof(Params));
+    RtlZeroMemory(&Attachment, sizeof(Attachment));
     Params.CalloutType = VideoDxgkMonitorEventCallout;
-    Params.PhysDisp = Bridge->Win32kPhysDisp;
-    if (!DxgkDisplayAttachWin32kSession(Bridge->Win32kSessionId, &ApcState, &Process))
+    KeAcquireSpinLock(&g_DisplayWin32kProcessLock, &OldIrql);
+    Callout = Bridge->Win32kCallout;
+    Session = Callout != NULL ? DxgkpFindWin32kSession(Bridge->Win32kSessionId) : NULL;
+    if (Session != NULL && Session->Generation == Bridge->Win32kGeneration)
+    {
+        Params.PhysDisp = Bridge->Win32kPhysDisp;
+        Found = DxgkpAttachWin32kSessionLocked(Session, &Attachment);
+    }
+    KeReleaseSpinLock(&g_DisplayWin32kProcessLock, OldIrql);
+    if (!Found)
         return;
+    DxgkpEnterWin32kSession(&Attachment);
     Callout(&Params);
-    DxgkDisplayDetachWin32kSession(&ApcState, Process);
+    DxgkDisplayDetachWin32kSession(&Attachment);
 }
 
 VOID
