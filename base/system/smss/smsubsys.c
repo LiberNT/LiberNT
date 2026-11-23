@@ -825,12 +825,11 @@ SmpQueryProcesses(OUT PSYSTEM_PROCESS_INFORMATION *Processes)
 }
 
 static
-BOOLEAN
+HANDLE
 SmpEndSessionProcess(IN PSYSTEM_PROCESS_INFORMATION Process)
 {
     OBJECT_ATTRIBUTES ObjectAttributes;
     PROCESS_BASIC_INFORMATION Basic;
-    LARGE_INTEGER Timeout;
     CLIENT_ID ClientId;
     HANDLE ProcessHandle, ThreadHandle;
     ULONG Index, Critical = 0;
@@ -844,13 +843,13 @@ SmpEndSessionProcess(IN PSYSTEM_PROCESS_INFORMATION Process)
                            &ObjectAttributes,
                            &ClientId);
     if (!NT_SUCCESS(Status))
-        return FALSE;
+        return NULL;
 
     Status = NtQueryInformationProcess(ProcessHandle, ProcessBasicInformation, &Basic, sizeof(Basic), NULL);
     if (!NT_SUCCESS(Status) || Basic.ExitStatus != STATUS_PENDING)
     {
         NtClose(ProcessHandle);
-        return FALSE;
+        return NULL;
     }
 
     for (Index = 0; Index < Process->NumberOfThreads; Index++)
@@ -866,15 +865,31 @@ SmpEndSessionProcess(IN PSYSTEM_PROCESS_INFORMATION Process)
     ASSERT(NT_SUCCESS(Status));
 
     Status = NtTerminateProcess(ProcessHandle, STATUS_SUCCESS);
-    if (NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status))
     {
-        Timeout.QuadPart = -100000000LL;
-        Status = NtWaitForSingleObject(ProcessHandle, FALSE, &Timeout);
-        if (Status != STATUS_WAIT_0)
-            DPRINT1("SMSS: Process %p of the session did not end: %lx\n", Process->UniqueProcessId, Status);
+        NtClose(ProcessHandle);
+        return NULL;
     }
-    NtClose(ProcessHandle);
-    return TRUE;
+    return ProcessHandle;
+}
+
+static
+VOID
+SmpWaitSessionProcesses(IN PHANDLE Handles,
+                        IN ULONG Count)
+{
+    LARGE_INTEGER Timeout;
+    NTSTATUS Status;
+    ULONG Index;
+
+    if (!Count)
+        return;
+    Timeout.QuadPart = -100000000LL;
+    Status = NtWaitForMultipleObjects(Count, Handles, WaitAll, FALSE, &Timeout);
+    if (Status != STATUS_WAIT_0)
+        DPRINT1("SMSS: %lu processes of the session did not all end: %lx\n", Count, Status);
+    for (Index = 0; Index < Count; Index++)
+        NtClose(Handles[Index]);
 }
 
 NTSTATUS
@@ -882,9 +897,11 @@ NTAPI
 SmpStopMuSession(IN ULONG MuSessionId)
 {
     PSYSTEM_PROCESS_INFORMATION Processes, Process;
+    HANDLE Handles[MAXIMUM_WAIT_OBJECTS];
     PSMP_SUBSYSTEM Subsystem;
     PLIST_ENTRY NextEntry;
-    ULONG Pass, Ended;
+    ULONG Pass, Ended, Count;
+    HANDLE ProcessHandle;
     NTSTATUS Status;
     PVOID State;
 
@@ -901,21 +918,37 @@ SmpStopMuSession(IN ULONG MuSessionId)
         if (!NT_SUCCESS(Status))
             break;
         Ended = 0;
+        Count = 0;
         for (Process = Processes; ; Process = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)Process + Process->NextEntryOffset))
         {
             if (Process->UniqueProcessId && Process->UniqueProcessId != NtCurrentTeb()->ClientId.UniqueProcess &&
-                Process->SessionId == MuSessionId && SmpEndSessionProcess(Process))
-                Ended++;
+                Process->SessionId == MuSessionId)
+            {
+                ProcessHandle = SmpEndSessionProcess(Process);
+                if (ProcessHandle)
+                {
+                    if (Count == RTL_NUMBER_OF(Handles))
+                    {
+                        SmpWaitSessionProcesses(Handles, Count);
+                        Count = 0;
+                    }
+                    Handles[Count++] = ProcessHandle;
+                    Ended++;
+                }
+            }
             if (!Process->NextEntryOffset)
                 break;
         }
         RtlFreeHeap(SmpHeap, 0, Processes);
+        SmpWaitSessionProcesses(Handles, Count);
         if (!Ended)
             break;
     }
     SmpReleasePrivilege(State);
     if (NT_SUCCESS(Status) && Pass == 8)
         Status = STATUS_TIMEOUT;
+    if (Status == STATUS_TIMEOUT)
+        return Status;
 
     RtlEnterCriticalSection(&SmpKnownSubSysLock);
     NextEntry = SmpKnownSubSysHead.Flink;
