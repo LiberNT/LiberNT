@@ -2278,7 +2278,7 @@ int RunCommand(int argc, LPWSTR *argv)
                 BOOL reboot = FALSE;
                 DWORD error = plan.Error;
 
-                if (!FindDevice(group.front().InstanceId, target) || !WantsCatalogDriver(target))
+                if (!FindDevice(group.front().InstanceId, target) || !NeedsDriver(target))
                 {
                     Print(FormatText(IDS_CLI_ALREADY, GroupName(group)));
                     return true;
@@ -2334,7 +2334,7 @@ int RunCommand(int argc, LPWSTR *argv)
         };
         Catalog catalog;
         PrintThrottle throttle;
-        std::vector<std::vector<DeviceInfo>> groups = MissingGroups(devices, true, true);
+        std::vector<std::vector<DeviceInfo>> groups = MissingGroups(devices, true, false);
         std::vector<SearchPlan> plans;
         InstallSink sink(groups);
         size_t missing = 0;
