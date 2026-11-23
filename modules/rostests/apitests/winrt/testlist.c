@@ -3,6 +3,7 @@
 
 extern void func_AnalyticsInfo(void);
 extern void func_AppInstallManager(void);
+extern void func_CoreApplication(void);
 extern void func_DispatcherQueue(void);
 extern void func_NotificationData(void);
 extern void func_PenDevice(void);
@@ -16,6 +17,7 @@ const struct test winetest_testlist[] =
 {
     { "AnalyticsInfo", func_AnalyticsInfo },
     { "AppInstallManager", func_AppInstallManager },
+    { "CoreApplication", func_CoreApplication },
     { "DispatcherQueue", func_DispatcherQueue },
     { "NotificationData", func_NotificationData },
     { "PenDevice", func_PenDevice },

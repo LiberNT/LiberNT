@@ -1,6 +1,7 @@
 spec2def(windows.applicationmodel.dll windows.applicationmodel.spec)
 
 list(APPEND SOURCE
+    coreapplication.c
     designmode.c
     main.c
     package.c)
