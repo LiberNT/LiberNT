@@ -674,6 +674,9 @@ public:
                          _In_ ULONGLONG IndexName,
                          _In_ ULONGLONG Vcn);
 
+    void
+    ForgetLookupNodes();
+
     /* Free list of record-sized buffers. Every parsed record allocated and
      * freed 1 KB of pool; recycling them needs its own lock because records
      * are destroyed outside the metadata serialization. */
