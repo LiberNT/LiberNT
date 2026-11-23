@@ -2796,6 +2796,20 @@ ScmAutoStartServices(VOID)
     if (hSafeBootKey != NULL)
         RegCloseKey(hSafeBootKey);
 
+    /* cfgmgr32 reaches every device through the Plug and Play service, so it serves before any other service starts */
+    CurrentService = ScmGetServiceEntryByName(L"PlugPlay");
+    if (CurrentService != NULL &&
+        CurrentService->dwStartType == SERVICE_AUTO_START &&
+        CurrentService->ServiceVisited == FALSE)
+    {
+        CurrentService->ServiceVisited = TRUE;
+        dwError = ScmLoadService(CurrentService, 0, NULL);
+        if (dwError == ERROR_SUCCESS)
+            dwError = ScmWaitForDependency(CurrentService);
+        if (dwError != ERROR_SUCCESS)
+            DPRINT1("The Plug and Play service did not start (Error %lu)\n", dwError);
+    }
+
     /* Start all services which are members of an existing group */
     GroupEntry = GroupListHead.Flink;
     while (GroupEntry != &GroupListHead)
