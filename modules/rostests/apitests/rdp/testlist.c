@@ -10,6 +10,7 @@ extern void func_FrameMove(void);
 extern void func_GfxBatch(void);
 extern void func_OpenH264(void);
 extern void func_OtherUser(void);
+extern void func_PasswordMemory(void);
 extern void func_PipeSquat(void);
 extern void func_RemoteDesktop(void);
 extern void func_VideoDetect(void);
@@ -26,6 +27,7 @@ const struct test winetest_testlist[] =
     { "GfxBatch", func_GfxBatch },
     { "OpenH264", func_OpenH264 },
     { "OtherUser", func_OtherUser },
+    { "PasswordMemory", func_PasswordMemory },
     { "PipeSquat", func_PipeSquat },
     { "RemoteDesktop", func_RemoteDesktop },
     { "VideoDetect", func_VideoDetect },

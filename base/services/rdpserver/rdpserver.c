@@ -462,6 +462,17 @@ static BOOL RemoteLogonAllowed(HANDLE token)
     return allowed && !denied;
 }
 
+static void ForgetPassword(DESKTOP_CONTEXT *ctx)
+{
+    SEC_WINNT_AUTH_IDENTITY *identity = &ctx->rdp.peer->identity;
+    SecureZeroMemory(ctx->NlaPassword, sizeof(ctx->NlaPassword));
+    if (identity->Password)
+        SecureZeroMemory(identity->Password, identity->PasswordLength *
+                         ((identity->Flags & SEC_WINNT_AUTH_IDENTITY_UNICODE) ? sizeof(WCHAR) : sizeof(char)));
+    if (freerdp_settings_get_string(ctx->rdp.settings, FreeRDP_Password))
+        freerdp_settings_set_string(ctx->rdp.settings, FreeRDP_Password, NULL);
+}
+
 static BOOL Logon(freerdp_peer *peer, const SEC_WINNT_AUTH_IDENTITY *identity, BOOL automatic)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)peer->context;
@@ -945,14 +956,22 @@ static BOOL PostConnect(freerdp_peer *peer)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)peer->context;
     UINT32 error;
-    if (ControllerMode) return ControllerPostConnect(peer);
+    BOOL authorized;
+    if (ControllerMode)
+    {
+        authorized = ControllerPostConnect(peer);
+        ForgetPassword(ctx);
+        return authorized;
+    }
     if (!ctx->NlaLogon)
     {
+        ForgetPassword(ctx);
         Log("Authentication rejected for peer %s", peer->hostname);
         return FALSE;
     }
     ctx->Authorized = TRUE;
     error = AcquireRemoteDisplay(ctx);
+    ForgetPassword(ctx);
     if (!error && !OpenRemoteFrames(ctx)) error = ERRINFO_CLOSE_STACK_ON_DRIVER_FAILURE;
     if (error && ctx->ConsoleStatus == ERROR_ACCESS_DENIED && !ctx->Named && !*AdoptedDisplay && RedirectToOwnSession(ctx))
         return FALSE;

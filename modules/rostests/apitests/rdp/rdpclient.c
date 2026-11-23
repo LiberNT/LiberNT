@@ -62,6 +62,32 @@ WaitForListener(VOID)
 }
 
 BOOL
+RdpTestEnableDebugPrivilege(VOID)
+{
+    TOKEN_PRIVILEGES Privileges = { 1 };
+    HANDLE Token;
+    BOOL Enabled;
+
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &Token))
+        return FALSE;
+    Privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    Enabled = LookupPrivilegeValueW(NULL, L"SeDebugPrivilege", &Privileges.Privileges[0].Luid) &&
+              AdjustTokenPrivileges(Token, FALSE, &Privileges, 0, NULL, NULL) && GetLastError() == ERROR_SUCCESS;
+    CloseHandle(Token);
+    return Enabled;
+}
+
+const char *
+RdpTestPassword(VOID)
+{
+    static char Password[32];
+
+    if (!Password[0])
+        _snprintf(Password, sizeof(Password), "Rdp-%08lx!%08lx", GetTickCount(), GetCurrentProcessId() * 2654435761u);
+    return Password;
+}
+
+BOOL
 RdpTestStart(PRDP_TEST_SETUP Setup)
 {
     DWORD Size = sizeof(Setup->Original), Type, Value = 0;
@@ -108,7 +134,7 @@ RdpTestEnd(PRDP_TEST_SETUP Setup)
 BOOL
 RdpTestAddUser(PCWSTR Name)
 {
-    static WCHAR Password[] = L"" RDP_TEST_PASSWORD;
+    WCHAR Password[32];
     LOCALGROUP_MEMBERS_INFO_3 Member;
     USER_INFO_1 User = { 0 };
     SID_IDENTIFIER_AUTHORITY Nt = { SECURITY_NT_AUTHORITY };
@@ -119,6 +145,7 @@ RdpTestAddUser(PCWSTR Name)
     NET_API_STATUS Status;
     BOOL Added;
 
+    MultiByteToWideChar(CP_ACP, 0, RdpTestPassword(), -1, Password, ARRAYSIZE(Password));
     User.usri1_name = (LPWSTR)Name;
     User.usri1_password = Password;
     User.usri1_priv = USER_PRIV_USER;
@@ -160,7 +187,7 @@ ClientThread(PVOID Parameter)
     Set = freerdp_settings_set_string(Settings, FreeRDP_ServerHostname, "127.0.0.1") &&
           freerdp_settings_set_uint32(Settings, FreeRDP_ServerPort, 3389) &&
           freerdp_settings_set_string(Settings, FreeRDP_Username, Client->User) &&
-          freerdp_settings_set_string(Settings, FreeRDP_Password, RDP_TEST_PASSWORD) &&
+          freerdp_settings_set_string(Settings, FreeRDP_Password, RdpTestPassword()) &&
           freerdp_settings_set_bool(Settings, FreeRDP_IgnoreCertificate, TRUE) &&
           freerdp_settings_set_bool(Settings, FreeRDP_NlaSecurity, TRUE) &&
           freerdp_settings_set_bool(Settings, FreeRDP_DeactivateClientDecoding, TRUE);

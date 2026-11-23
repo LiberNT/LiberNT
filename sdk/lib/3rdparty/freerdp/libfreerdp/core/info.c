@@ -696,8 +696,10 @@ static BOOL rdp_read_info_string(rdpSettings* settings, FreeRDP_Settings_Keys_St
 
 			memcpy(wstr, Stream_Pointer(s), cbLenNonNull);
 			const WCHAR* domain = wstr;
-			if (!freerdp_settings_set_string_from_utf16N(settings, id, domain,
-			                                             cbLenNonNull / sizeof(WCHAR)))
+			const BOOL set = freerdp_settings_set_string_from_utf16N(settings, id, domain,
+			                                                         cbLenNonNull / sizeof(WCHAR));
+			SecureZeroMemory(wstr, sizeof(wstr));
+			if (!set)
 				return FALSE;
 		}
 		else
@@ -708,6 +710,8 @@ static BOOL rdp_read_info_string(rdpSettings* settings, FreeRDP_Settings_Keys_St
 		}
 	}
 
+	if (id == FreeRDP_Password)
+		SecureZeroMemory(Stream_Pointer(s), cbLenNonNull);
 	Stream_Seek(s, cbLenNonNull);
 
 	terminator.w = L'\0';

@@ -7,7 +7,6 @@
 
 #pragma once
 
-#define RDP_TEST_PASSWORD "Rdp-Owner!Test2026"
 
 typedef struct _RDP_CLIENT
 {
@@ -29,6 +28,8 @@ typedef struct _RDP_TEST_SETUP
     BOOL Started;
 } RDP_TEST_SETUP, *PRDP_TEST_SETUP;
 
+BOOL RdpTestEnableDebugPrivilege(VOID);
+const char *RdpTestPassword(VOID);
 BOOL RdpTestStart(PRDP_TEST_SETUP Setup);
 VOID RdpTestEnd(PRDP_TEST_SETUP Setup);
 BOOL RdpTestAddUser(PCWSTR Name);

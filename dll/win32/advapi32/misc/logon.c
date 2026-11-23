@@ -1383,7 +1383,7 @@ LogonUserExW(
     UNICODE_STRING UserName;
     UNICODE_STRING Password;
     PMSV1_0_INTERACTIVE_LOGON AuthInfo = NULL;
-    ULONG AuthInfoLength;
+    ULONG AuthInfoLength = 0;
     ULONG_PTR Ptr;
     TOKEN_SOURCE TokenSource;
     PTOKEN_GROUPS TokenGroups = NULL;
@@ -1642,7 +1642,10 @@ done:
         RtlFreeSid(LogonSid);
 
     if (AuthInfo != NULL)
+    {
+        RtlSecureZeroMemory(AuthInfo, AuthInfoLength);
         RtlFreeHeap(RtlGetProcessHeap(), 0, AuthInfo);
+    }
 
     if (!NT_SUCCESS(Status))
     {
