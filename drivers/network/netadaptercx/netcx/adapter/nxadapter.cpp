@@ -1315,7 +1315,7 @@ NxAdapter::SetReceiveFilter(
     // Do not support requests to set unsupported packet filters.
     CX_RETURN_NTSTATUS_IF_MSG(
         STATUS_NOT_SUPPORTED,
-        PacketFilter & ~(m_receiveFilterCapabilities.SupportedPacketFilters)
+        (static_cast<ULONG>(PacketFilter) & ~static_cast<ULONG>(m_receiveFilterCapabilities.SupportedPacketFilters))
             && GetMediaType() != NdisMediumNative802_11,
         "NETADAPTER %p",
         m_adapter);
@@ -2220,7 +2220,9 @@ NxAdapter::GetDatapathCapabilities(
             dmaAdapter,
             &adapterInfo);
 
-        auto const maximumDmaLogicalAddress = (1ULL << adapterInfo.V1.DmaAddressWidth) - 1;
+        auto const maximumDmaLogicalAddress = adapterInfo.V1.DmaAddressWidth >= 64
+            ? 0xffffffffffffffff
+            : (1ULL << adapterInfo.V1.DmaAddressWidth) - 1;
         auto const maximumDriverLogicalAddress = txCap.DmaCapabilities->MaximumPhysicalAddress.QuadPart > 0
             ? static_cast<UINT64>(txCap.DmaCapabilities->MaximumPhysicalAddress.QuadPart)
             : 0xffffffffffffffff;

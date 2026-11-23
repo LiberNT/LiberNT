@@ -577,7 +577,7 @@ namespace details
     } while ((void)0, 0)
 
 //! Clear zero or more bitflags specified by `flags` from the variable `var`.
-#define WI_ClearAllFlags(var, flags) ((var) &= ~(flags))
+#define WI_ClearAllFlags(var, flags) wil::details::ClearAllFlagsHelper(var, flags)
 //! Clear a single compile-time constant `flag` from the variable `var`.
 #define WI_ClearFlag(var, flag) WI_ClearAllFlags(var, WI_StaticAssertSingleBitSet(flag))
 //! Conditionally clear a single compile-time constant `flag` in the variable `var` only if `condition` is true.
@@ -999,6 +999,14 @@ namespace details
     {
         using type = typename variable_size<sizeof(T)>::type;
     };
+
+    template <typename TVal, typename TFlags>
+    __forceinline constexpr TVal& ClearAllFlagsHelper(_Inout_ TVal& val, TFlags flags)
+    {
+        using TInt = typename variable_size_mapping<TVal>::type;
+        val = static_cast<TVal>(static_cast<TInt>(val) & static_cast<TInt>(~static_cast<TInt>(flags)));
+        return val;
+    }
 } // namespace details
 /// @endcond
 

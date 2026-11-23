@@ -72,7 +72,7 @@ class NxExecutionContextTask;
 //
 // This macro is used to check if an input flag mask contains only allowed flag values, as defined by _supported
 //
-#define VERIFIER_CHECK_FLAGS(_flags, _supported) (((_flags) & ~(_supported)) == 0)
+#define VERIFIER_CHECK_FLAGS(_flags, _supported) ((static_cast<ULONG64>(_flags) & ~static_cast<ULONG64>(_supported)) == 0)
 
 //
 // NetAdapterCx failure codes
