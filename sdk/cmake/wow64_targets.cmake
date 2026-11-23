@@ -11,6 +11,9 @@ set(WOW64_I386_MODULES ${COMPAT_RUNTIME_MODULES}
     dplayx
     dpwsockx
     iccvid
+    icu
+    icuin
+    icuuc
     mshtml.tlb
     msvcrt20
     msvcrt40
@@ -22,7 +25,11 @@ set(WOW64_I386_MODULES ${COMPAT_RUNTIME_MODULES}
     stdole2.tlb
     stdole32.tlb
     winegstreamer
+    winsqlite3
 )
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    list(REMOVE_ITEM WOW64_I386_MODULES winsqlite3)
+endif()
 set(WOW64_I386_AUXILIARY_MODULES ${COMPAT_RUNTIME_AUXILIARY_MODULES} fusion fusion_1_1 fusion_2_0 iexplore msvcm80 msvcm90 msvcp80 msvcp90 msvcr80 msvcr90 npmshtml)
 set(WOW64_I386_ALIASES ${COMPAT_RUNTIME_ALIASES})
 
