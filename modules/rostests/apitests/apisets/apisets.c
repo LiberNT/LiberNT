@@ -59,6 +59,31 @@ fail_single(PCUNICODE_STRING Apiset)
 }
 
 
+static void
+test_contract_host(PCUNICODE_STRING Contract, PCUNICODE_STRING ExpectedHost)
+{
+    UNICODE_STRING Host = {0};
+    BOOLEAN Resolved = FALSE;
+    NTSTATUS Status;
+
+    Status = ApiSetResolveToHost(APISET_WIN10, Contract, &Resolved, &Host);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    ok(Resolved, "%S did not resolve\n", Contract->Buffer);
+    ok(Resolved && RtlEqualUnicodeString(&Host, ExpectedHost, TRUE),
+       "%S did not resolve to %S\n", Contract->Buffer, ExpectedHost->Buffer);
+}
+
+static void
+test_contract_presence(PCUNICODE_STRING Contract)
+{
+    BOOLEAN InSchema = FALSE, Present = FALSE;
+    NTSTATUS Status;
+
+    Status = ApiSetQuerySchemaPresence(APISET_WIN10, Contract, &InSchema, &Present);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    ok(InSchema && Present, "%S is not present in the API set schema\n", Contract->Buffer);
+}
+
 START_TEST(apisets)
 {
     // Ensure we can find some manually selected ones (both with and without extension):
@@ -68,6 +93,48 @@ START_TEST(apisets)
     UNICODE_STRING Handle2 = RTL_CONSTANT_STRING(L"api-MS-Win-Core-Handle-L1-1-0");
     UNICODE_STRING Heap1 = RTL_CONSTANT_STRING(L"api-MS-Win-Core-Heap-L1-1-0.dll");
     UNICODE_STRING Heap2 = RTL_CONSTANT_STRING(L"api-MS-Win-Core-Heap-L1-1-0");
+    UNICODE_STRING StringAnsi = RTL_CONSTANT_STRING(L"api-ms-win-core-stringansi-l1-1-0.dll");
+    UNICODE_STRING NamedPipe = RTL_CONSTANT_STRING(L"api-ms-win-core-namedpipe-l1-1-0.dll");
+    UNICODE_STRING ServiceLegacy = RTL_CONSTANT_STRING(L"api-ms-win-service-legacy-l1-1-0.dll");
+    UNICODE_STRING KernelBase = RTL_CONSTANT_STRING(L"kernelbase.dll");
+    UNICODE_STRING Advapi32 = RTL_CONSTANT_STRING(L"advapi32.dll");
+    UNICODE_STRING Shcore = RTL_CONSTANT_STRING(L"shcore.dll");
+    UNICODE_STRING MemoryNewest = RTL_CONSTANT_STRING(L"api-ms-win-core-memory-l1-1-9");
+    UNICODE_STRING SysinfoNewest = RTL_CONSTANT_STRING(L"api-ms-win-core-sysinfo-l1-2-8");
+    UNICODE_STRING KernelContracts[] = {
+        RTL_CONSTANT_STRING(L"api-ms-win-core-memory-l1-1-0.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-core-memory-l1-1-1.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-core-memory-l1-1-2.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-core-memory-l1-1-7.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-core-sysinfo-l1-2-0.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-core-sysinfo-l1-2-1.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-core-sysinfo-l1-2-6.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-core-wow64-l1-1-0.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-core-wow64-l1-1-3.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-security-base-l1-1-0.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-security-base-l1-1-1.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-core-memory-l1-1-4.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-core-memory-l1-1-9.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-core-sysinfo-l1-2-3.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-core-sysinfo-l1-2-8.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-core-wow64-l1-1-1.dll"),
+    };
+    UNICODE_STRING ShcoreContracts[] = {
+        RTL_CONSTANT_STRING(L"api-ms-win-shcore-registry-l1-1-0.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-shcore-registry-l1-1-1.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-shcore-sysinfo-l1-1-0.dll"),
+        RTL_CONSTANT_STRING(L"api-ms-win-shcore-unicodeansi-l1-1-0.dll"),
+    };
+
+    test_contract_host(&StringAnsi, &KernelBase);
+    test_contract_host(&NamedPipe, &KernelBase);
+    test_contract_host(&ServiceLegacy, &Advapi32);
+    test_contract_presence(&MemoryNewest);
+    test_contract_presence(&SysinfoNewest);
+    for (DWORD n = 0; n < RTL_NUMBER_OF(KernelContracts); n++)
+        test_contract_host(&KernelContracts[n], &KernelBase);
+    for (DWORD n = 0; n < RTL_NUMBER_OF(ShcoreContracts); n++)
+        test_contract_host(&ShcoreContracts[n], &Shcore);
 
     test_single(&Console1);
     test_single(&Console2);

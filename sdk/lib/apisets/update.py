@@ -34,6 +34,7 @@ CONTRACT_HOST_OVERRIDES = {
     'api-ms-win-core-libraryloader-l1-2-2.dll': 'kernelbase.dll',
     'api-ms-win-core-libraryloader-l2-1-0.dll': 'kernelbase.dll',
     'api-ms-win-core-localregistry-l1-1-0.dll': 'kernelbase.dll',
+    'api-ms-win-core-namedpipe-l1-1-0.dll': 'kernelbase.dll',
     'api-ms-win-core-perfcounters-l1-1-0.dll': 'kernelbase.dll',
     'api-ms-win-core-processthreads-l1-1-0.dll': 'kernelbase.dll',
     'api-ms-win-core-registry-l1-1-0.dll': 'advapi32.dll',
@@ -44,6 +45,7 @@ CONTRACT_HOST_OVERRIDES = {
     'api-ms-win-core-shlwapi-obsolete-l1-2-0.dll': 'kernelbase.dll',
     'api-ms-win-core-string-l2-1-0.dll': 'kernelbase.dll',
     'api-ms-win-core-string-l2-1-1.dll': 'kernelbase.dll',
+    'api-ms-win-core-stringansi-l1-1-0.dll': 'kernelbase.dll',
     'api-ms-win-core-url-l1-1-0.dll': 'kernelbase.dll',
     'api-ms-win-core-version-l1-1-0.dll': 'version.dll',
     'api-ms-win-core-version-l1-1-1.dll': 'version.dll',
@@ -62,16 +64,27 @@ CONTRACT_HOST_OVERRIDES = {
     'api-ms-win-eventing-consumer-l1-1-0.dll': 'advapi32.dll',
     'api-ms-win-eventing-controller-l1-1-0.dll': 'sechost.dll',
     'api-ms-win-eventing-provider-l1-1-0.dll': 'kernelbase.dll',
-    'api-ms-win-security-base-l1-1-0.dll': 'advapi32.dll',
+    'api-ms-win-security-base-l1-1-0.dll': 'kernelbase.dll',
+    'api-ms-win-security-base-l1-1-1.dll': 'kernelbase.dll',
     'api-ms-win-security-base-l1-2-0.dll': 'kernelbase.dll',
     'api-ms-win-shcore-obsolete-l1-1-0.dll': 'shcore.dll',
     'api-ms-win-shcore-path-l1-1-0.dll': 'shcore.dll',
+    'api-ms-win-shcore-registry-l1-1-0.dll': 'shcore.dll',
+    'api-ms-win-shcore-registry-l1-1-1.dll': 'shcore.dll',
     'api-ms-win-shcore-scaling-l1-1-0.dll': 'shcore.dll',
     'api-ms-win-shcore-scaling-l1-1-1.dll': 'shcore.dll',
     'api-ms-win-shcore-scaling-l1-1-2.dll': 'shcore.dll',
     'api-ms-win-shcore-stream-l1-1-0.dll': 'shcore.dll',
     'api-ms-win-shcore-stream-winrt-l1-1-0.dll': 'shcore.dll',
+    'api-ms-win-shcore-sysinfo-l1-1-0.dll': 'shcore.dll',
+    'api-ms-win-shcore-unicodeansi-l1-1-0.dll': 'shcore.dll',
     'api-ms-win-shell-shellfolders-l1-1-0.dll': 'shell32.dll',
+}
+
+CONTRACT_FAMILY_HOST_OVERRIDES = {
+    'api-ms-win-core-memory-l1-1': 'kernelbase.dll',
+    'api-ms-win-core-sysinfo-l1-2': 'kernelbase.dll',
+    'api-ms-win-core-wow64-l1-1': 'kernelbase.dll',
 }
 
 OUTPUT_HEADER = """/*
@@ -138,6 +151,10 @@ class Apiset:
         else:
             replace = CONTRACT_HOST_OVERRIDES.get(contract_name, None)
             if replace is None:
+                family, separator, minor = contract_name[:-4].rpartition('-')
+                if separator and minor.isdecimal():
+                    replace = CONTRACT_FAMILY_HOST_OVERRIDES.get(family)
+            if replace is None:
                 # Check to see if there is any dll we want to swap (kernelbase -> kernel32)
                 replace = REDIRECT_HOSTS.get(host.lower(), None)
             if replace:
@@ -188,6 +205,13 @@ class CombinedSchemas:
         if old not in self._apisets and new in self._apisets:
             source = self._apisets[new]
             self._apisets[old] = Apiset(old, 'shcore.dll', list(source.versions))
+        for contract in ('api-ms-win-core-memory-l1-1-9.dll',
+                         'api-ms-win-core-sysinfo-l1-2-8.dll'):
+            if contract not in self._apisets:
+                self._apisets[contract] = Apiset(contract, 'kernelbase.dll', ['APISET_WIN10'])
+        legacy = 'api-ms-win-service-legacy-l1-1-0.dll'
+        if legacy not in self._apisets:
+            self._apisets[legacy] = Apiset(legacy, 'advapi32.dll', ['APISET_WIN10'])
         for key in sorted(self._apisets):
             apiset = self._apisets[key]
             output.write(f'{apiset}\n'.encode('utf-8'))

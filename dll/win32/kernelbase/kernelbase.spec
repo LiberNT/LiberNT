@@ -504,6 +504,7 @@
 @ stdcall GetNumberOfConsoleInputEvents(long ptr)
 @ stdcall GetNumberOfConsoleMouseButtons(ptr)
 @ stdcall GetOEMCP() kernel32.GetOEMCP
+@ stdcall GetOsSafeBootMode(ptr) kernel32.GetOsSafeBootMode
 @ stdcall GetOverlappedResult(long ptr ptr long) kernel32.GetOverlappedResult
 @ stdcall -version=0x602+ GetOverlappedResultEx(long ptr ptr long long) kernel32.GetOverlappedResultEx
 @ stdcall GetPackageFamilyName(long ptr ptr)
@@ -535,6 +536,7 @@
 @ stdcall GetProcessShutdownParameters(ptr ptr) kernel32.GetProcessShutdownParameters
 @ stdcall GetProcessTimes(long ptr ptr ptr ptr) kernel32.GetProcessTimes
 @ stdcall GetProcessVersion(long) kernel32.GetProcessVersion
+@ stdcall GetProcessWorkingSetSize(long ptr ptr) kernel32.GetProcessWorkingSetSize
 @ stdcall GetProcessWorkingSetSizeEx(long ptr ptr long) kernel32.GetProcessWorkingSetSizeEx
 @ stdcall -version=0x600+ GetProductInfo(long long long long ptr)
 @ stub GetPtrCalData
@@ -741,6 +743,7 @@
 @ stdcall IsValidSecurityDescriptor(ptr)
 @ stdcall IsValidSid(ptr)
 @ stdcall IsWellKnownSid(ptr long)
+@ stdcall IsWow64GuestMachineSupported(long ptr) kernel32.IsWow64GuestMachineSupported
 @ stdcall IsWow64Process(ptr ptr) kernel32.IsWow64Process
 @ stdcall -version=0xA00+ IsWow64Process2(ptr ptr ptr) kernel32.IsWow64Process2
 @ stdcall -version=0x601+ K32EmptyWorkingSet(long) kernel32.K32EmptyWorkingSet
@@ -1207,6 +1210,7 @@
 @ stdcall SetProcessPriorityBoost(long long) kernel32.SetProcessPriorityBoost
 @ stdcall SetProcessShutdownParameters(long long) kernel32.SetProcessShutdownParameters
 @ stdcall SetProcessValidCallTargets(long ptr long long ptr) kernel32.SetProcessValidCallTargets
+@ stdcall SetProcessWorkingSetSize(long long long) kernel32.SetProcessWorkingSetSize
 @ stdcall SetProcessWorkingSetSizeEx(long long long long) kernel32.SetProcessWorkingSetSizeEx
 @ stdcall SetSecurityAccessMask(long ptr) advapi32.SetSecurityAccessMask
 @ stdcall SetSecurityDescriptorControl(ptr long long)
