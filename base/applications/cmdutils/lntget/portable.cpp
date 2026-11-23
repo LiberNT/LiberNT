@@ -195,6 +195,13 @@ Status InstallPortable(const PackageRecord &package, const InstallerEntry &insta
     std::vector<PortableLink> links;
     if (AsciiEquals(installer.type, "zip"))
     {
+        /* TODO: remove only the files of the previous version, as WinGet does, instead of the whole directory */
+        if (directoryExisted)
+        {
+            DeleteDirectoryTree(installDirectory);
+            if (GetFileAttributesW(installDirectory.c_str()) != INVALID_FILE_ATTRIBUTES)
+                return Status::Fail(ERROR_SHARING_VIOLATION, "cannot replace " + Utf8FromWide(installDirectory) + "; close the application and retry");
+        }
         std::printf("Extracting archive...\n");
         status = ExtractArchiveInto(downloadPath, installDirectory);
         if (!status) return status;
