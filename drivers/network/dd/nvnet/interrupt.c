@@ -223,7 +223,7 @@ static
 ULONG
 ProcessReceiveDescriptors(
     _In_ PNVNET_ADAPTER Adapter,
-    _In_ ULONG TotalRxProcessed)
+    _In_ ULONG Budget)
 {
     ULONG i, RxProcessed = 0;
     PNET_BUFFER_LIST ReceiveHead = NULL, ReceiveTail = NULL;
@@ -233,7 +233,7 @@ ProcessReceiveDescriptors(
 
     NdisDprAcquireSpinLock(&Adapter->Receive.Lock);
 
-    for (i = 0; i < NVNET_RECEIVE_DESCRIPTORS; ++i)
+    for (i = 0; i < Budget; ++i)
     {
         ULONG Flags;
         USHORT Length;
@@ -252,9 +252,6 @@ ProcessReceiveDescriptors(
         }
 
         if (Flags & NV_RX_AVAIL)
-            break;
-
-        if (TotalRxProcessed + RxProcessed >= NVNET_RECEIVE_PROCESSING_LIMIT)
             break;
 
         if (!Adapter->PacketFilter)
@@ -498,7 +495,7 @@ MiniportInterruptDpc(
         return;
 
     /* Process the rings and measure network activity */
-    while (TotalRxProcessed < NVNET_RECEIVE_PROCESSING_LIMIT)
+    while (TotalRxProcessed < NVNET_RECEIVE_DESCRIPTORS)
     {
         CompleteHead = NULL;
         CompleteTail = NULL;
@@ -513,7 +510,9 @@ MiniportInterruptDpc(
 
         NvNetCompleteSends(Adapter, CompleteHead, TRUE);
 
-        RxProcessed = ProcessReceiveDescriptors(Adapter, TotalRxProcessed);
+        RxProcessed = ProcessReceiveDescriptors(Adapter,
+                                                min(NVNET_RECEIVE_PROCESSING_LIMIT,
+                                                    NVNET_RECEIVE_DESCRIPTORS - TotalRxProcessed));
         if (!RxProcessed)
             break;
 

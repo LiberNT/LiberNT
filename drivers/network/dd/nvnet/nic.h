@@ -416,7 +416,7 @@ typedef struct _NVNET_DESCRIPTOR_64
 #define NV_RX_OVERFLOW     (1<<28)
 #define NV_RX_FRAMINGERR   (1<<29)
 #define NV_RX_ERROR    (1<<30)
-#define NV_RX_AVAIL    (1<<31)
+#define NV_RX_AVAIL    (1u << 31)
 #define NV_RX_ERROR_MASK  (NV_RX_ERROR1|NV_RX_ERROR2|NV_RX_ERROR3|NV_RX_ERROR4|NV_RX_CRCERR| \
                            NV_RX_OVERFLOW|NV_RX_FRAMINGERR)
 
@@ -435,7 +435,7 @@ typedef struct _NVNET_DESCRIPTOR_64
 #define NV_RX2_FRAMINGERR  (1<<24)
 /* Error and avail are the same for both */
 #define NV_RX2_ERROR    (1<<30)
-#define NV_RX2_AVAIL    (1<<31)
+#define NV_RX2_AVAIL    (1u << 31)
 #define NV_RX2_ERROR_MASK  (NV_RX2_ERROR1|NV_RX2_ERROR2|NV_RX2_ERROR3|NV_RX2_ERROR4| \
                             NV_RX2_CRCERR|NV_RX2_OVERFLOW|NV_RX2_FRAMINGERR)
 

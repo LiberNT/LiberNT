@@ -807,7 +807,7 @@ Vmx3InterruptDpc(
 {
     PVMX3_ADAPTER Adapter = (PVMX3_ADAPTER)MiniportInterruptContext;
     PNDIS_RECEIVE_THROTTLE_PARAMETERS Throttle = (PNDIS_RECEIVE_THROTTLE_PARAMETERS)ReceiveThrottleParameters;
-    ULONG Budget = VMX3_RX_BUDGET;
+    ULONG Budget = VMX3_RX_RING_SIZE;
     ULONG Events;
 
     UNREFERENCED_PARAMETER(MiniportDpcContext);
@@ -816,8 +816,7 @@ Vmx3InterruptDpc(
     if (Throttle)
     {
         Throttle->MoreNblsPending = FALSE;
-        if (Throttle->MaxNblsToIndicate != NDIS_INDICATE_ALL_NBLS)
-            Budget = max(1, min(Budget, Throttle->MaxNblsToIndicate));
+        Budget = min(Budget, Throttle->MaxNblsToIndicate);
     }
 
     Events = *(volatile ULONG *)&Adapter->Shared->Ecr;
