@@ -1640,6 +1640,7 @@ VolumeCheck::CheckDirectory(_In_ ULONGLONG Directory)
                     continue;
 
                 RtlCopyMemory(Scratch, Buffer, BlockSize);
+                V->InvalidateLookupNode(MakeFileReference(File), NtfsLookupIndexName(NtfsI30Name), Vcn);
                 if (NT_SUCCESS(NtfsCommitFixup(reinterpret_cast<PNTFSRecordHeader>(Scratch),
                                                BlockSize,
                                                V->BytesPerSector)) &&

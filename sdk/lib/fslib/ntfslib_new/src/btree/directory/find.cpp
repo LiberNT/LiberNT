@@ -20,11 +20,7 @@ PathElementLength(_In_ PCWSTR FileName)
     return Separator ? (ULONG)(Separator - FileName) : NtfsWcsLen(FileName);
 }
 
-/*
- * Search one already-validated index node. A directory B+tree stores the VCN
- * for values less than an entry on that entry, while the end entry points at
- * the rightmost child.
- */
+/* One node of a directory: the name's file, or the child that leads to it. */
 static NTSTATUS
 FindEntryInNode(
     _In_ PVolume DiskVolume,
@@ -32,87 +28,24 @@ FindEntryInNode(
     _In_ BOOLEAN CaseSensitive,
     _In_ PIndexNodeHeader Header,
     _In_ ULONG HeaderBytes,
+    _In_opt_ PNtfsIndexEntryTable Table,
     _Out_ PULONGLONG FileReference,
     _Out_ PULONGLONG ChildVCN,
     _Out_ PBOOLEAN Descend)
 {
-    PIndexEntry Entry;
-    ULONG_PTR End;
-    LONG CompareResult;
-    BOOLEAN FoundEnd = FALSE;
+    IndexSearchKey Key = {ATTRDEF_COLLATION_FILENAME, FileName, NULL, 0, CaseSensitive};
+    ULONG Offset;
+    BOOLEAN Exact;
+    NTSTATUS Status;
 
-    *FileReference = 0;
-    *ChildVCN = 0;
-    *Descend = FALSE;
-
-    if (HeaderBytes < sizeof(IndexNodeHeader) ||
-        Header->IndexOffset < sizeof(IndexNodeHeader) ||
-        Header->IndexOffset > Header->TotalIndexSize ||
-        Header->TotalIndexSize > HeaderBytes)
+    Status = NtfsFindIndexInsertionPoint(DiskVolume, Header, HeaderBytes, &Key, &Offset, ChildVCN, Descend, &Exact, Table);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Exact)
     {
-        return STATUS_FILE_CORRUPT_ERROR;
+        *FileReference = reinterpret_cast<PIndexEntry>(reinterpret_cast<PUCHAR>(Header) + Offset)->Data.Directory.IndexedFile;
+        return STATUS_SUCCESS;
     }
-
-    Entry = (PIndexEntry)((PUCHAR)Header + Header->IndexOffset);
-    End = (ULONG_PTR)Header + Header->TotalIndexSize;
-
-    while ((ULONG_PTR)Entry < End)
-    {
-        UNICODE_STRING IndexedNameString;
-        NTSTATUS Status;
-
-        if (!NtfsIsDirectoryIndexEntryValid(
-                Entry,
-                (ULONG)(End - (ULONG_PTR)Entry)))
-        {
-            return STATUS_FILE_CORRUPT_ERROR;
-        }
-
-        if (Entry->Flags & INDEX_ENTRY_END)
-        {
-            FoundEnd = TRUE;
-            if (Entry->Flags & INDEX_ENTRY_NODE)
-            {
-                *ChildVCN = *GetSubnodeVCN(Entry);
-                *Descend = TRUE;
-            }
-            break;
-        }
-
-        PFileNameEx IndexedName = (PFileNameEx)Entry->IndexStream;
-        IndexedNameString = NtfsMakeCountedUnicodeString(
-            IndexedName->Name,
-            IndexedName->NameLength * sizeof(WCHAR));
-        Status = DiskVolume->CollateFileNames(
-            FileName,
-            &IndexedNameString,
-            CaseSensitive,
-            &CompareResult);
-        if (!NT_SUCCESS(Status))
-            return Status;
-
-        if (CompareResult == 0)
-        {
-            *FileReference = Entry->Data.Directory.IndexedFile;
-            return STATUS_SUCCESS;
-        }
-
-        if (CompareResult < 0)
-        {
-            if (Entry->Flags & INDEX_ENTRY_NODE)
-            {
-                *ChildVCN = *GetSubnodeVCN(Entry);
-                *Descend = TRUE;
-                return STATUS_SUCCESS;
-            }
-            return STATUS_NOT_FOUND;
-        }
-
-        Entry = (PIndexEntry)((PUCHAR)Entry + Entry->EntryLength);
-    }
-
-    if (!FoundEnd)
-        return STATUS_FILE_CORRUPT_ERROR;
     return *Descend ? STATUS_SUCCESS : STATUS_NOT_FOUND;
 }
 
@@ -126,15 +59,11 @@ Directory::FindNextFile(_In_  PFileRecord File,
     ULONG ElementLength;
     UNICODE_STRING FileNameString;
     PAttribute IndexRootAttribute;
-    PAttribute IndexAllocationAttribute = NULL;
-    PAttribute BitmapAttribute = NULL;
     PIndexRootEx IndexRoot;
-    PUCHAR IndexBufferData = NULL;
     PNtfsLookupSlot Slot = NULL;
     ULONG IndexRecordSize;
-    ULONGLONG BitmapLength;
+    ULONGLONG AllocationUnit;
     ULONGLONG ChildVCN;
-    ULONGLONG DirectoryReference;
     ULONGLONG VisitedVCNs[64];
     ULONG VisitedCount = 0;
     BOOLEAN Descend;
@@ -144,7 +73,6 @@ Directory::FindNextFile(_In_  PFileRecord File,
     if (!File || !(File->Header->Flags & FR_IS_DIRECTORY))
         return STATUS_NOT_FOUND;
     CaseSensitive = File->IsCaseSensitiveDirectory();
-    DirectoryReference = MakeFileReference(File);
 
     ElementLength = PathElementLength(FileName);
     if (ElementLength == 0)
@@ -158,7 +86,7 @@ Directory::FindNextFile(_In_  PFileRecord File,
 
     IndexRootAttribute = File->GetAttribute(
         TypeIndexRoot,
-        const_cast<PWSTR>(L"$I30"));
+        const_cast<PWSTR>(NtfsI30Name));
     if (!IndexRootAttribute ||
         IndexRootAttribute->IsNonResident ||
         IndexRootAttribute->Resident.DataLength <
@@ -184,50 +112,25 @@ Directory::FindNextFile(_In_  PFileRecord File,
         &IndexRoot->Header,
         IndexRootAttribute->Resident.DataLength -
             FIELD_OFFSET(IndexRootEx, Header),
+        NULL,
         FileReference,
         &ChildVCN,
         &Descend);
     if (!NT_SUCCESS(Status) || !Descend)
         return Status;
 
-    IndexAllocationAttribute = File->GetAttribute(
-        TypeIndexAllocation,
-        const_cast<PWSTR>(L"$I30"));
-    BitmapAttribute = File->GetAttribute(
-        TypeBitmap,
-        const_cast<PWSTR>(L"$I30"));
-    if (!IndexAllocationAttribute ||
-        !IndexAllocationAttribute->IsNonResident ||
-        !BitmapAttribute)
-    {
+    AllocationUnit = IndexRecordSize < BytesPerCluster(DiskVolume)
+        ? DiskVolume->BytesPerSector
+        : BytesPerCluster(DiskVolume);
+    if (AllocationUnit == 0)
         return STATUS_FILE_CORRUPT_ERROR;
-    }
-
-    BitmapLength = GetAttributeDataSize(BitmapAttribute);
-    if (BitmapLength == 0)
-        return STATUS_FILE_CORRUPT_ERROR;
-
-    Slot = DiskVolume->AcquireLookupSlot(DirectoryReference, IndexRecordSize);
-    if (!Slot)
-    {
-        Status = STATUS_INSUFFICIENT_RESOURCES;
-        goto Done;
-    }
-    IndexBufferData = Slot->Buffer;
 
     while (Descend)
     {
         PIndexBuffer NodeBuffer;
-        ULONGLONG AllocationUnit;
-        ULONGLONG AllocationOffset;
-        ULONGLONG IndexRecordNumber;
-        ULONGLONG BitmapByte;
-        ULONG BitmapBytesRemaining = sizeof(UCHAR);
-        UCHAR BitmapMask;
-        UCHAR BitmapValue;
-        ULONG BytesRemaining = IndexRecordSize;
 
-        if (VisitedCount == RTL_NUMBER_OF(VisitedVCNs))
+        if (VisitedCount == RTL_NUMBER_OF(VisitedVCNs) ||
+            ChildVCN > MaximumValue / AllocationUnit)
         {
             Status = STATUS_FILE_CORRUPT_ERROR;
             goto Done;
@@ -242,83 +145,11 @@ Directory::FindNextFile(_In_  PFileRecord File,
         }
         VisitedVCNs[VisitedCount++] = ChildVCN;
 
-        AllocationUnit = IndexRecordSize < BytesPerCluster(DiskVolume)
-            ? DiskVolume->BytesPerSector
-            : BytesPerCluster(DiskVolume);
-        if (AllocationUnit == 0 ||
-            ChildVCN > MaximumValue / AllocationUnit)
-        {
-            Status = STATUS_FILE_CORRUPT_ERROR;
+        Status = PinIndexNode(DiskVolume, File, NtfsI30Name, IndexRecordSize, AllocationUnit, ChildVCN, &Slot);
+        if (!NT_SUCCESS(Status))
             goto Done;
-        }
 
-        AllocationOffset = ChildVCN * AllocationUnit;
-        if (AllocationOffset % IndexRecordSize != 0)
-        {
-            Status = STATUS_FILE_CORRUPT_ERROR;
-            goto Done;
-        }
-
-        IndexRecordNumber = AllocationOffset / IndexRecordSize;
-        if ((IndexRecordNumber >> 3) >= BitmapLength)
-        {
-            Status = STATUS_FILE_CORRUPT_ERROR;
-            goto Done;
-        }
-
-        if (!Slot->Valid ||
-            Slot->Generation != DiskVolume->IndexEditGeneration ||
-            Slot->FileReference != DirectoryReference ||
-            Slot->VCN != ChildVCN)
-        {
-            Slot->Valid = FALSE;
-            BitmapByte = IndexRecordNumber >> 3;
-            BitmapMask = (UCHAR)(1 << (IndexRecordNumber & 7));
-            Status = File->CopyData(BitmapAttribute,
-                                    &BitmapValue,
-                                    &BitmapBytesRemaining,
-                                    BitmapByte);
-            if (!NT_SUCCESS(Status) ||
-                BitmapBytesRemaining != 0 ||
-                !(BitmapValue & BitmapMask))
-            {
-                if (NT_SUCCESS(Status))
-                    Status = STATUS_FILE_CORRUPT_ERROR;
-                goto Done;
-            }
-
-            Status = File->CopyData(IndexAllocationAttribute,
-                                    IndexBufferData,
-                                    &BytesRemaining,
-                                    AllocationOffset);
-            if (!NT_SUCCESS(Status) || BytesRemaining != 0)
-            {
-                if (NT_SUCCESS(Status))
-                    Status = STATUS_END_OF_FILE;
-                goto Done;
-            }
-
-            NodeBuffer = (PIndexBuffer)IndexBufferData;
-            Status = NtfsApplyFixup(&NodeBuffer->RecordHeader,
-                                    IndexRecordSize,
-                                    DiskVolume->BytesPerSector);
-            if (!NT_SUCCESS(Status) ||
-                RtlCompareMemory(NodeBuffer->RecordHeader.TypeID,
-                                 "INDX",
-                                 4) != 4 ||
-                NodeBuffer->VCN != ChildVCN)
-            {
-                Status = STATUS_FILE_CORRUPT_ERROR;
-                goto Done;
-            }
-
-            Slot->FileReference = DirectoryReference;
-            Slot->VCN = ChildVCN;
-            Slot->Generation = DiskVolume->IndexEditGeneration;
-            Slot->Valid = TRUE;
-        }
-
-        NodeBuffer = (PIndexBuffer)IndexBufferData;
+        NodeBuffer = (PIndexBuffer)Slot->Buffer;
         Descend = FALSE;
         Status = FindEntryInNode(
             DiskVolume,
@@ -326,6 +157,7 @@ Directory::FindNextFile(_In_  PFileRecord File,
             CaseSensitive,
             &NodeBuffer->IndexHeader,
             IndexRecordSize - FIELD_OFFSET(IndexBuffer, IndexHeader),
+            &Slot->Table,
             FileReference,
             &ChildVCN,
             &Descend);

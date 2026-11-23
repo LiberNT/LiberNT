@@ -191,15 +191,11 @@ FileRecord::UpdateParentIndexEntry(
     PFileRecord Parent = NULL;
     PFileRecord IndexRootOwner;
     PAttribute IndexRootAttribute;
-    PAttribute IndexAllocationAttribute;
-    PAttribute BitmapAttribute;
     PIndexRootEx IndexRoot;
-    PUCHAR Bitmap = NULL;
     PUCHAR IndexBufferData = NULL;
+    PNtfsLookupSlot Pinned = NULL;
     ULONGLONG ParentRecordNumber;
-    ULONGLONG AllocationLength;
     ULONGLONG AllocationUnit;
-    ULONG BitmapLength = 0;
     ULONG IndexRecordSize;
     USHORT ParentSequence;
     IndexSearchKey Key;
@@ -331,34 +327,6 @@ FileRecord::UpdateParentIndexEntry(
     goto Done;
 
 SearchAllocation:
-    IndexAllocationAttribute = Parent->GetAttribute(
-        TypeIndexAllocation,
-        const_cast<PWSTR>(NtfsI30Name));
-    BitmapAttribute = Parent->GetAttribute(
-        TypeBitmap,
-        const_cast<PWSTR>(NtfsI30Name));
-    if (!IndexAllocationAttribute ||
-        !IndexAllocationAttribute->IsNonResident ||
-        !BitmapAttribute)
-    {
-        Status = STATUS_FILE_CORRUPT_ERROR;
-        goto Done;
-    }
-
-    Status = Parent->ReadAttributeAlloc(BitmapAttribute,
-                                        &Bitmap,
-                                        &BitmapLength);
-    if (!NT_SUCCESS(Status) ||
-        !Bitmap ||
-        BitmapLength == 0)
-    {
-        if (NT_SUCCESS(Status))
-            Status = STATUS_FILE_CORRUPT_ERROR;
-        goto Done;
-    }
-
-    AllocationLength =
-        GetAttributeDataSize(IndexAllocationAttribute);
     AllocationUnit =
         IndexRecordSize < BytesPerCluster(DiskVolume)
             ? DiskVolume->BytesPerSector
@@ -369,24 +337,10 @@ SearchAllocation:
         goto Done;
     }
 
-    IndexBufferData =
-        new(PagedPool, TAG_NTFS) UCHAR[IndexRecordSize];
-    if (!IndexBufferData)
-    {
-        Status = STATUS_INSUFFICIENT_RESOURCES;
-        goto Done;
-    }
-
     while (Descend)
     {
         PIndexBuffer NodeBuffer;
-        LARGE_INTEGER WriteOffset;
-        ULONGLONG AllocationOffset;
-        ULONGLONG ExpectedVCN;
-        ULONGLONG RecordNumber;
-        ULONG BytesRemaining;
-        ULONG WriteLength;
-        UCHAR Mask;
+        ULONGLONG NodeVcn = ChildVcn;
 
         if (VisitedCount == RTL_NUMBER_OF(VisitedVcns) ||
             ChildVcn > ~(ULONGLONG)0 / AllocationUnit)
@@ -403,67 +357,11 @@ SearchAllocation:
             }
         }
         VisitedVcns[VisitedCount++] = ChildVcn;
-        AllocationOffset = ChildVcn * AllocationUnit;
-        if (AllocationOffset % IndexRecordSize != 0)
-        {
-            Status = STATUS_FILE_CORRUPT_ERROR;
-            goto Done;
-        }
-        RecordNumber = AllocationOffset / IndexRecordSize;
-        if ((RecordNumber >> 3) >= BitmapLength)
-        {
-            Status = STATUS_FILE_CORRUPT_ERROR;
-            goto Done;
-        }
-        Mask = (UCHAR)(1u << (RecordNumber & 7));
-        if (!(Bitmap[RecordNumber >> 3] & Mask))
-        {
-            Status = STATUS_FILE_CORRUPT_ERROR;
-            goto Done;
-        }
-        if (AllocationOffset > AllocationLength ||
-            IndexRecordSize >
-                AllocationLength - AllocationOffset ||
-            AllocationOffset % AllocationUnit != 0)
-        {
-            Status = STATUS_FILE_CORRUPT_ERROR;
-            goto Done;
-        }
-        ExpectedVCN =
-            AllocationOffset / AllocationUnit;
 
-        BytesRemaining = IndexRecordSize;
-        Status = Parent->CopyData(
-            IndexAllocationAttribute,
-            IndexBufferData,
-            &BytesRemaining,
-            AllocationOffset);
-        if (!NT_SUCCESS(Status) ||
-            BytesRemaining != 0)
-        {
-            if (NT_SUCCESS(Status))
-                Status = STATUS_END_OF_FILE;
+        Status = PinIndexNode(DiskVolume, Parent, NtfsI30Name, IndexRecordSize, AllocationUnit, ChildVcn, &Pinned);
+        if (!NT_SUCCESS(Status))
             goto Done;
-        }
-
-        NodeBuffer =
-            reinterpret_cast<PIndexBuffer>(
-                IndexBufferData);
-        Status = NtfsApplyFixup(
-            &NodeBuffer->RecordHeader,
-            IndexRecordSize,
-            DiskVolume->BytesPerSector);
-        if (!NT_SUCCESS(Status) ||
-            RtlCompareMemory(
-                NodeBuffer->RecordHeader.TypeID,
-                "INDX",
-                4) != 4 ||
-            NodeBuffer->VCN != ExpectedVCN)
-        {
-            Status = STATUS_FILE_CORRUPT_ERROR;
-            goto Done;
-        }
-
+        NodeBuffer = reinterpret_cast<PIndexBuffer>(Pinned->Buffer);
         Status = NtfsFindIndexInsertionPoint(
             DiskVolume,
             &NodeBuffer->IndexHeader,
@@ -472,7 +370,8 @@ SearchAllocation:
             &EntryOffset,
             &ChildVcn,
             &Descend,
-            &FoundExact);
+            &FoundExact,
+            &Pinned->Table);
         if (!NT_SUCCESS(Status))
             goto Done;
         if (!FoundExact)
@@ -482,6 +381,19 @@ SearchAllocation:
             Status = STATUS_FILE_CORRUPT_ERROR;
             goto Done;
         }
+
+        /* Only the node holding the name changes: it is edited in a copy of its own. */
+        IndexBufferData =
+            new(PagedPool, TAG_NTFS) UCHAR[IndexRecordSize];
+        if (!IndexBufferData)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto Done;
+        }
+        RtlCopyMemory(IndexBufferData, Pinned->Buffer, IndexRecordSize);
+        DiskVolume->ReleaseLookupSlot(Pinned);
+        Pinned = NULL;
+        NodeBuffer = reinterpret_cast<PIndexBuffer>(IndexBufferData);
 
         Status = UpdateIndexNodeInformation(
             &NodeBuffer->IndexHeader,
@@ -500,36 +412,17 @@ SearchAllocation:
         if (!NT_SUCCESS(Status))
             goto Done;
 
-        Status = NtfsCommitFixup(
-            &NodeBuffer->RecordHeader,
-            IndexRecordSize,
-            DiskVolume->BytesPerSector);
-        if (!NT_SUCCESS(Status))
-            goto Done;
-
-        WriteOffset.QuadPart =
-            (LONGLONG)AllocationOffset;
-        WriteLength = IndexRecordSize;
-        DiskVolume->IndexEditGeneration++;
-        Status = Parent->WriteFileData(
-            TypeIndexAllocation,
-            const_cast<PWSTR>(NtfsI30Name),
-            IndexBufferData,
-            &WriteLength,
-            &WriteOffset);
-        if (NT_SUCCESS(Status) &&
-            WriteLength != IndexRecordSize)
-        {
-            Status = STATUS_END_OF_FILE;
-        }
+        Status = WriteIndexNode(DiskVolume, Parent, NtfsI30Name, NodeVcn, AllocationUnit, IndexRecordSize,
+                                IndexBufferData);
         goto Done;
     }
 
     Status = STATUS_FILE_CORRUPT_ERROR;
 
 Done:
+    if (Pinned)
+        DiskVolume->ReleaseLookupSlot(Pinned);
     delete[] IndexBufferData;
-    delete[] Bitmap;
     delete Parent;
     return Status;
 }
