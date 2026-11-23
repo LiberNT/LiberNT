@@ -219,7 +219,7 @@ VOID MiVadRangeForAddress(_In_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Address, _O
 BOOLEAN MiAddressIsImageView(_In_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Address);
 NTSTATUS MiQuerySectionName(_In_ HANDLE ProcessHandle, _In_ PVOID BaseAddress, _Out_ PVOID MemoryInformation,
                             _In_ SIZE_T MemoryInformationLength, _Out_opt_ PSIZE_T ReturnLength);
-VOID MiSessionAddProcess(_Inout_ PEPROCESS NewProcess);
+BOOLEAN MiSessionAddProcess(_Inout_ PEPROCESS NewProcess);
 VOID MiSessionRemoveProcess(_Inout_ PEPROCESS Process);
 VOID MiSessionProcessCleaned(_Inout_ PEPROCESS Process);
 VOID MiSignalMemoryAvailable(VOID);
