@@ -2843,6 +2843,7 @@ StorPortExtendedFunction(
             break;
         }
 
+        /* TODO: ExtFunctionInitializePoFxPower and the other PoFx functions (runtime power management); miniports get STOR_STATUS_NOT_IMPLEMENTED */
         default:
             DPRINT1("StorPortExtendedFunction(%d %p ...) not supported\n",
                     FunctionCode, HwDeviceExtension);
