@@ -280,6 +280,26 @@ UserMonitorDeviceKey(
     RtlStringCchCatW(Buffer, Capacity, DriverKey);
 }
 
+static
+PGRAPHICS_DEVICE
+UserFindDisplaySettingsDevice(
+    _In_opt_ PUNICODE_STRING pustrDevice)
+{
+    PGRAPHICS_DEVICE pGraphicsDevice = NULL;
+    PPDEVOBJ ppdev;
+
+    if (pustrDevice)
+        return EngpFindGraphicsDevice(pustrDevice, 0);
+
+    ppdev = EngpGetPDEV(NULL);
+    if (ppdev)
+    {
+        pGraphicsDevice = ppdev->pGraphicsDevice;
+        PDEVOBJ_vRelease(ppdev);
+    }
+    return pGraphicsDevice ? pGraphicsDevice : EngpFindGraphicsDevice(NULL, 0);
+}
+
 NTSTATUS
 NTAPI
 UserEnumDisplayDevices(
@@ -588,7 +608,7 @@ UserEnumDisplaySettings(
           pustrDevice, iModeNum);
 
     /* Ask GDI for the GRAPHICS_DEVICE */
-    pGraphicsDevice = EngpFindGraphicsDevice(pustrDevice, 0);
+    pGraphicsDevice = UserFindDisplaySettingsDevice(pustrDevice);
     if (!pGraphicsDevice)
     {
         /* No device found */
@@ -657,7 +677,7 @@ UserOpenDisplaySettingsKey(
     if (!pustrDevice)
         EngpUpdateGraphicsDeviceList();
 
-    pGraphicsDevice = EngpFindGraphicsDevice(pustrDevice, 0);
+    pGraphicsDevice = UserFindDisplaySettingsDevice(pustrDevice);
     if (!pGraphicsDevice)
         return STATUS_UNSUCCESSFUL;
 
