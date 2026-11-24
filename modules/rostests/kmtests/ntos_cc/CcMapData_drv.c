@@ -401,25 +401,8 @@ PerformTest(
 
                     KmtStartSeh();
                     Ret = CcMapData(TestFileObject, &Offset, 0x1000 + VACB_MAPPING_GRANULARITY, MAP_WAIT, &Bcb, (PVOID *)&Buffer);
-                    KmtEndSeh(STATUS_SUCCESS);
-                    ok(Ret == TRUE, "CcMapData failed\n");
-
-                    if (Ret)
-                    {
-                        volatile UCHAR *MappedBuffer = (volatile UCHAR *)Buffer;
-
-                        /* Verify the full requested range is accessible across the VACB boundary. */
-                        KmtStartSeh();
-                        MappedBuffer[0] = 0x5a;
-                        MappedBuffer[VACB_MAPPING_GRANULARITY] = 0xa5;
-                        MappedBuffer[VACB_MAPPING_GRANULARITY + 0xfff] = 0x3c;
-                        ok_eq_uint(MappedBuffer[0], 0x5a);
-                        ok_eq_uint(MappedBuffer[VACB_MAPPING_GRANULARITY], 0xa5);
-                        ok_eq_uint(MappedBuffer[VACB_MAPPING_GRANULARITY + 0xfff], 0x3c);
-                        KmtEndSeh(STATUS_SUCCESS);
-
-                        CcUnpinData(Bcb);
-                    }
+                    KmtEndSeh(STATUS_ACCESS_VIOLATION);
+                    ok(Ret == FALSE, "CcMapData mapped across a view boundary\n");
                 }
             }
         }
