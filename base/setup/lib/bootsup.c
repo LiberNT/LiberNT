@@ -1792,7 +1792,9 @@ InstallBootManagerAndBootEntries(
     }
 
 InstallBootManager:
-    Status = InstallBootManagerAndBootEntriesWorker(
+    /* The boot record install locks the volume, which fails while this handle stays open */
+    NtClose(DeviceHandle);
+    return InstallBootManagerAndBootEntriesWorker(
                 ArchType, SystemRootPath,
                 DiskNumber, PartitionStyle, IsSuperFloppy, FileSystem,
                 SourceRootPath, DestinationArcPath, Options);
