@@ -12,12 +12,15 @@
 #include <debug.h>
 
 PDC defaultDCstate = NULL;
+static PSURFACE gpsurfPrimary;
 
 BOOL FASTCALL
 IntCreatePrimarySurface(VOID)
 {
     /* Create surface */
-    PDEVOBJ_pSurface(gpmdev->ppdevGlobal);
+    if (gpsurfPrimary)
+        SURFACE_ShareUnlockSurface(gpsurfPrimary);
+    gpsurfPrimary = PDEVOBJ_pSurface(gpmdev->ppdevGlobal);
 
     DPRINT("IntCreatePrimarySurface, ppdevGlobal=%p, ppdevGlobal->pSurface = %p\n",
         gpmdev->ppdevGlobal, gpmdev->ppdevGlobal->pSurface);
@@ -31,16 +34,11 @@ IntCreatePrimarySurface(VOID)
 VOID FASTCALL
 IntDestroyPrimarySurface(VOID)
 {
-    PSURFACE pSurface;
-
-    if (gpmdev == NULL || gpmdev->ppdevGlobal == NULL)
-        return;
-
     /* Give back the reference IntCreatePrimarySurface took, so that the
      * device can let its driver free the surface once nothing draws on it */
-    pSurface = gpmdev->ppdevGlobal->pSurface;
-    if (pSurface != NULL)
-        SURFACE_ShareUnlockSurface(pSurface);
+    if (gpsurfPrimary != NULL)
+        SURFACE_ShareUnlockSurface(gpsurfPrimary);
+    gpsurfPrimary = NULL;
 }
 
 PPDEVOBJ FASTCALL
