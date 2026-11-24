@@ -8,6 +8,7 @@ extern void func_exe(void);
 extern void func_gui(void);
 extern void func_guiagreements(void);
 extern void func_guiuninstall(void);
+extern void func_guiupdate(void);
 extern void func_inno(void);
 extern void func_nullsoft(void);
 extern void func_nullsoftdirectory(void);
@@ -26,6 +27,7 @@ const struct test winetest_testlist[] =
     { "gui", func_gui },
     { "guiagreements", func_guiagreements },
     { "guiuninstall", func_guiuninstall },
+    { "guiupdate", func_guiupdate },
     { "inno", func_inno },
     { "nullsoft", func_nullsoft },
     { "nullsoftdirectory", func_nullsoftdirectory },

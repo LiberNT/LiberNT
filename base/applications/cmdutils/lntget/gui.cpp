@@ -10,6 +10,7 @@
 #include <commctrl.h>
 #include <shellapi.h>
 
+#include "arp.hpp"
 #include "category.hpp"
 #include "details.hpp"
 #include "gui.hpp"
@@ -36,6 +37,7 @@ enum : UINT
     MessageCatalogReady = WM_APP + 1,
     MessageDetailsReady = WM_APP + 2,
     MessageOperationUpdate = WM_APP + 3,
+    MessageInstalledReady = WM_APP + 4,
 };
 
 enum : int
@@ -111,11 +113,20 @@ struct PreparedCatalog
     std::vector<uint32_t> counts;
 };
 
+struct InstalledVersion
+{
+    std::wstring version;
+    std::string available;
+};
+
+typedef std::map<std::string, InstalledVersion> InstalledVersions;
+
 struct CatalogResult
 {
     bool ok = false;
     std::string error;
     PreparedCatalog catalog;
+    InstalledVersions installed;
 };
 
 struct DetailResult
@@ -273,6 +284,25 @@ void PrepareCatalog(const Catalog &catalog, PreparedCatalog &prepared)
     }
 }
 
+void CollectInstalledVersions(SourceManager *source, InstalledVersions &versions)
+{
+    versions.clear();
+    std::vector<InstalledPackage> packages;
+    CollectInstalledPackages(source, packages);
+    for (const InstalledPackage &package : packages)
+    {
+        if (!package.correlated || package.packageId.empty())
+            continue;
+        const auto inserted = versions.insert(std::make_pair(AsciiLower(package.packageId), InstalledVersion()));
+        InstalledVersion &entry = inserted.first->second;
+        if (inserted.second || CompareVersions(Utf8FromWide(package.entry.version), Utf8FromWide(entry.version)) > 0)
+        {
+            entry.version = package.entry.version;
+            entry.available = package.available;
+        }
+    }
+}
+
 int RankPackage(const GuiPackage &package, const std::string &query)
 {
     if (query.empty())
@@ -374,6 +404,14 @@ public:
     }
 
     void CancelDetails() { InterlockedIncrement(&generation_); }
+
+    void RequestInstalled()
+    {
+        EnterCriticalSection(&lock_);
+        installedPending_ = true;
+        LeaveCriticalSection(&lock_);
+        SetEvent(signal_);
+    }
 
     uint32_t RequestOperation(const PackageRecord &package, bool install, bool acceptAgreements)
     {
@@ -518,6 +556,7 @@ private:
                 bool catalog = false;
                 bool refresh = false;
                 bool details = false;
+                bool installed = false;
                 bool operation = false;
                 bool install = false;
                 bool acceptAgreements = false;
@@ -541,6 +580,11 @@ private:
                     catalogRefresh_ = false;
                     catalog = true;
                 }
+                else if (installedPending_)
+                {
+                    installedPending_ = false;
+                    installed = true;
+                }
                 else if (detailsPending_)
                 {
                     detailsPending_ = false;
@@ -555,6 +599,8 @@ private:
                     RunOperationJob(package, install, acceptAgreements, generation);
                 else if (catalog)
                     RunCatalogJob(refresh);
+                else if (installed)
+                    RunInstalledJob();
                 else if (details)
                     RunDetailsJob(package, generation);
                 else
@@ -577,10 +623,19 @@ private:
         else
         {
             PrepareCatalog(catalog, result->catalog);
+            CollectInstalledVersions(source_, result->installed);
             result->ok = true;
         }
         if (!PostMessageW(window_, MessageCatalogReady, 0, reinterpret_cast<LPARAM>(result)))
             delete result;
+    }
+
+    void RunInstalledJob()
+    {
+        InstalledVersions *versions = new InstalledVersions();
+        CollectInstalledVersions(source_, *versions);
+        if (!PostMessageW(window_, MessageInstalledReady, 0, reinterpret_cast<LPARAM>(versions)))
+            delete versions;
     }
 
     void PostDetails(const DetailResult &result)
@@ -679,6 +734,7 @@ private:
             DWORD exitCode = 0;
             status = service.Install(package, installer, path, InstallMode::Default, exitCode);
             update.exitCode = exitCode;
+            RunInstalledJob();
             if (!status)
             {
                 update.stage = OperationStage::Failed;
@@ -774,6 +830,7 @@ private:
     bool catalogPending_ = false;
     bool catalogRefresh_ = false;
     bool detailsPending_ = false;
+    bool installedPending_ = false;
     bool operationPending_ = false;
     bool operationInstall_ = false;
     bool operationAcceptAgreements_ = false;
@@ -1267,8 +1324,11 @@ struct CatalogWindow
     Worker worker;
     SourceManager *source = nullptr;
     PreparedCatalog catalog;
+    InstalledVersions installedVersions;
     std::vector<uint32_t> filtered;
     std::map<std::string, DetailResult> cache;
+    DetailResult shownResult;
+    bool hasShownResult = false;
     std::string query;
     std::string failure;
     std::wstring placeholder;
@@ -1633,6 +1693,13 @@ void AdvanceSizeAnimation(CatalogWindow &state)
 
 void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const DetailResult *result)
 {
+    if (result != &state.shownResult)
+    {
+        state.hasShownResult = result != nullptr;
+        if (result)
+            state.shownResult = *result;
+        result = state.hasShownResult ? &state.shownResult : nullptr;
+    }
     std::vector<InfoBlock> blocks;
 
     InfoBlock title;
@@ -1644,6 +1711,18 @@ void SetInfoBlocks(CatalogWindow &state, const GuiPackage &package, const Detail
     subtitle.kind = BlockKind::Subtitle;
     subtitle.text = package.id + L"   ·   version " + package.version;
     blocks.push_back(subtitle);
+
+    const auto installed = state.installedVersions.find(AsciiLower(package.utf8Id));
+    if (installed != state.installedVersions.end())
+    {
+        InfoBlock field;
+        field.kind = BlockKind::Field;
+        field.label = L"Installed";
+        field.text = installed->second.version.empty() ? L"yes" : L"version " + installed->second.version;
+        if (!installed->second.available.empty())
+            field.text += L"; version " + WideFromUtf8(installed->second.available) + L" is available";
+        blocks.push_back(field);
+    }
 
     InfoBlock categories;
     categories.kind = BlockKind::Chips;
@@ -1920,6 +1999,15 @@ void ShowDetails(CatalogWindow &state)
 void UpdateActionButtons(CatalogWindow &state)
 {
     const bool selected = state.selected >= 0 && static_cast<std::size_t>(state.selected) < state.filtered.size();
+    const wchar_t *action = L"Install";
+    if (selected)
+    {
+        const GuiPackage &package = state.catalog.packages[state.filtered[state.selected]];
+        const auto installed = state.installedVersions.find(AsciiLower(package.utf8Id));
+        if (installed != state.installedVersions.end())
+            action = installed->second.available.empty() ? L"Reinstall" : L"Update";
+    }
+    SetWindowTextW(state.install, action);
     EnableWindow(state.install, selected && !state.loading && !state.operationBusy);
     EnableWindow(state.download, selected && !state.loading && !state.operationBusy);
     EnableWindow(state.refresh, !state.loading && !state.operationBusy);
@@ -2476,6 +2564,8 @@ LRESULT CALLBACK CatalogProc(HWND window, UINT message, WPARAM wParam, LPARAM lP
                 case IdInstalled:
                 {
                     const Status status = ShowInstalledAppsManager(window);
+                    if (IsWindow(window))
+                        state->worker.RequestInstalled();
                     if (!status)
                     {
                         const std::wstring message = WideFromUtf8(status.message);
@@ -2611,6 +2701,7 @@ LRESULT CALLBACK CatalogProc(HWND window, UINT message, WPARAM wParam, LPARAM lP
             state->failure.clear();
             state->catalog.packages.swap(result->catalog.packages);
             state->catalog.counts.swap(result->catalog.counts);
+            state->installedVersions.swap(result->installed);
             delete result;
             state->placeholder = L"Search " + FormatCount(state->catalog.packages.size()) + L" packages…";
             InvalidateRect(state->search, nullptr, TRUE);
@@ -2652,6 +2743,19 @@ LRESULT CALLBACK CatalogProc(HWND window, UINT message, WPARAM wParam, LPARAM lP
             else
                 StopSizeAnimation(*state);
             delete result;
+            return 0;
+        }
+        case MessageInstalledReady:
+        {
+            InstalledVersions *versions = reinterpret_cast<InstalledVersions *>(lParam);
+            state->installedVersions.swap(*versions);
+            delete versions;
+            UpdateActionButtons(*state);
+            if (state->selected >= 0 && static_cast<std::size_t>(state->selected) < state->filtered.size())
+            {
+                SetInfoBlocks(*state, state->catalog.packages[state->filtered[state->selected]],
+                              state->hasShownResult ? &state->shownResult : nullptr);
+            }
             return 0;
         }
         case MessageOperationUpdate:

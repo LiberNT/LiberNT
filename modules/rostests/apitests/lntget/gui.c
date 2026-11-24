@@ -93,6 +93,31 @@ JqInstalled(void)
 }
 
 static BOOL
+GetJqVersion(PWSTR Version, DWORD VersionLength)
+{
+    WCHAR SubKey[256], Name[256];
+    DWORD Index, Length, Size;
+    HKEY Uninstall;
+    BOOL Found = FALSE;
+
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall", 0, KEY_READ, &Uninstall) != ERROR_SUCCESS)
+        return FALSE;
+    for (Index = 0; !Found; Index++)
+    {
+        Length = _countof(SubKey);
+        if (RegEnumKeyExW(Uninstall, Index, SubKey, &Length, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        Size = sizeof(Name);
+        if (RegGetValueW(Uninstall, SubKey, L"DisplayName", RRF_RT_REG_SZ, NULL, Name, &Size) != ERROR_SUCCESS || wcscmp(Name, L"jq"))
+            continue;
+        Size = VersionLength * sizeof(WCHAR);
+        Found = RegGetValueW(Uninstall, SubKey, L"DisplayVersion", RRF_RT_REG_SZ, NULL, Version, &Size) == ERROR_SUCCESS;
+    }
+    RegCloseKey(Uninstall);
+    return Found;
+}
+
+static BOOL
 ArpViewHasPrefix(HKEY Root, REGSAM View, PCWSTR Prefix)
 {
     WCHAR SubKey[256], Name[512];
@@ -225,6 +250,23 @@ WaitForText(HWND Window, PCWSTR Text, PWSTR Buffer, int BufferLength, DWORD Time
 }
 
 static BOOL
+WaitForExactText(HWND Window, PCWSTR Text, PWSTR Buffer, int BufferLength, DWORD Timeout)
+{
+    DWORD Start = GetTickCount();
+
+    for (;;)
+    {
+        Buffer[0] = L'\0';
+        GetWindowTextW(Window, Buffer, BufferLength);
+        if (!wcscmp(Buffer, Text))
+            return TRUE;
+        if (GetTickCount() - Start > Timeout || !IsWindow(Window))
+            return FALSE;
+        Sleep(200);
+    }
+}
+
+static BOOL
 WaitForEnabled(HWND Window, DWORD Timeout)
 {
     DWORD Start = GetTickCount();
@@ -330,6 +372,8 @@ UninstallFromInstalledApps(HANDLE Process, HWND Catalog)
 Close:
     PostMessageW(Installed, WM_CLOSE, 0, 0);
     ok(WaitForSingleObject(Process, 0) == WAIT_TIMEOUT, "lntget exited when the installed apps window closed\n");
+    ok(WaitForExactText(GetDlgItem(Catalog, ID_INSTALL), L"Install", Text, _countof(Text), 60000),
+       "the action is '%ls' after the uninstall\n", Text);
 }
 
 START_TEST(gui)
@@ -394,11 +438,15 @@ START_TEST(gui)
 
     Install = GetDlgItem(Catalog, ID_INSTALL);
     ok(WaitForEnabled(Install, 30000), "Install stays disabled\n");
+    GetWindowTextW(Install, Text, _countof(Text));
+    ok(!wcscmp(Text, L"Install"), "the action is '%ls' before the installation\n", Text);
     PostMessageW(Install, BM_CLICK, 0, 0);
     Title = GetDlgItem(Catalog, ID_OPERATION_TITLE);
     ok(WaitForText(Title, L"Installation complete", Text, _countof(Text), GUI_TIMEOUT), "operation title is '%ls'\n", Text);
     ok(WaitForInstalledState(TRUE, 5000), "jq is not installed after the window installed it\n");
     ok(IsWindowEnabled(Install), "Install stays disabled after the installation\n");
+    GetWindowTextW(Install, Text, _countof(Text));
+    ok(!wcscmp(Text, L"Reinstall"), "the action is '%ls' after the installation\n", Text);
 
     if (JqInstalled())
         UninstallFromInstalledApps(Process.hProcess, Catalog);
@@ -753,4 +801,91 @@ Exit:
     GetExitCodeProcess(Process.hProcess, &ExitCode);
     ok(ExitCode == 0, "lntget gui returned 0x%08lx\n", ExitCode);
     CloseHandle(Process.hProcess);
+}
+
+START_TEST(guiupdate)
+{
+    SECURITY_ATTRIBUTES Inherit = { sizeof(Inherit), NULL, TRUE };
+    WCHAR CommandLine[1024], OutputPath[MAX_PATH], Directory[MAX_PATH], Text[256], Version[64];
+    STARTUPINFOW Startup = { sizeof(Startup) };
+    PROCESS_INFORMATION Process;
+    HWND Catalog, Notice, Install, Title;
+    HANDLE File;
+    DWORD ExitCode, Read = 0;
+    char Output[4096];
+
+    if (wcsstr(GetTool(), L"winget"))
+    {
+        skip("winget has no catalog window\n");
+        return;
+    }
+    if (JqInstalled())
+    {
+        skip("jq is already installed\n");
+        return;
+    }
+    if (!RunTool(L"install --id jqlang.jq -e --version 1.8.1 --source winget --silent --disable-interactivity", &ExitCode) ||
+        ExitCode != 0 || !JqInstalled())
+    {
+        skip("cannot install jq 1.8.1: 0x%08lx\n", ExitCode);
+        return;
+    }
+    ok(GetJqVersion(Version, _countof(Version)) && !wcscmp(Version, L"1.8.1"), "jq version is '%ls'\n", Version);
+
+    GetTempPathW(_countof(Directory), Directory);
+    GetTempFileNameW(Directory, L"lng", 0, OutputPath);
+    File = CreateFileW(OutputPath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &Inherit,
+                       CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "cannot create %ls: %lu\n", OutputPath, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        goto Cleanup;
+    StringCchPrintfW(CommandLine, _countof(CommandLine), L"\"%s\" gui jqlang.jq", GetTool());
+    Startup.dwFlags = STARTF_USESTDHANDLES;
+    Startup.hStdOutput = File;
+    Startup.hStdError = File;
+    if (!CreateProcessW(NULL, CommandLine, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &Startup, &Process))
+    {
+        ok(0, "CreateProcess(%ls) failed with %lu\n", CommandLine, GetLastError());
+        CloseHandle(File);
+        goto Cleanup;
+    }
+    CloseHandle(Process.hThread);
+
+    Catalog = WaitForWindow(Process.hProcess, L"LntGetCatalog", NULL, 60000);
+    ok(Catalog != NULL, "the catalog window did not open\n");
+    if (!Catalog)
+        goto Exit;
+    Notice = WaitForWindow(Process.hProcess, L"#32770", Catalog, 30000);
+    ok(Notice != NULL, "the compatibility notice did not open\n");
+    if (Notice)
+        PostMessageW(Notice, WM_COMMAND, IDOK, 0);
+
+    ok(WaitForText(Catalog, L" packages)", Text, _countof(Text), GUI_TIMEOUT), "catalog title is '%ls'\n", Text);
+    Install = GetDlgItem(Catalog, ID_INSTALL);
+    ok(WaitForEnabled(Install, 30000), "Install stays disabled\n");
+    ok(WaitForExactText(Install, L"Update", Text, _countof(Text), 30000), "the action is '%ls' with jq 1.8.1 installed\n", Text);
+    PostMessageW(Install, BM_CLICK, 0, 0);
+    Title = GetDlgItem(Catalog, ID_OPERATION_TITLE);
+    ok(WaitForText(Title, L"Installation complete", Text, _countof(Text), GUI_TIMEOUT), "operation title is '%ls'\n", Text);
+    ok(GetJqVersion(Version, _countof(Version)) && wcscmp(Version, L"1.8.1"), "jq version is '%ls' after the update\n", Version);
+    ok(WaitForExactText(Install, L"Reinstall", Text, _countof(Text), 30000), "the action is '%ls' after the update\n", Text);
+
+    PostMessageW(Catalog, WM_CLOSE, 0, 0);
+
+Exit:
+    ok(WaitForSingleObject(Process.hProcess, 30000) == WAIT_OBJECT_0, "lntget did not exit after its window closed\n");
+    TerminateProcess(Process.hProcess, ERROR_TIMEOUT);
+    GetExitCodeProcess(Process.hProcess, &ExitCode);
+    ok(ExitCode == 0, "lntget gui returned 0x%08lx\n", ExitCode);
+    CloseHandle(Process.hProcess);
+
+    SetFilePointer(File, 0, NULL, FILE_BEGIN);
+    ReadFile(File, Output, sizeof(Output) - 1, &Read, NULL);
+    Output[Read] = '\0';
+    CloseHandle(File);
+    ok(strstr(Output, "LNTGET_GUI_INSTALL_DONE id=jqlang.jq") != NULL, "output:\n%s\n", Output);
+
+Cleanup:
+    if (JqInstalled() && RunTool(L"uninstall --id jqlang.jq -e --source winget --silent --disable-interactivity", &ExitCode))
+        ok(ExitCode == 0, "cleanup uninstall returned 0x%08lx\n", ExitCode);
 }
