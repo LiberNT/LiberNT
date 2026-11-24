@@ -44,6 +44,7 @@ struct InstalledWindow
     HWND refresh = nullptr;
     HWND close = nullptr;
     HFONT font = nullptr;
+    HANDLE thread = nullptr;
     bool busy = false;
     std::vector<InstalledPackage> apps;
 };
@@ -128,10 +129,11 @@ void RunUninstaller(InstalledWindow &state)
         MessageBoxW(state.window, message.c_str(), app.entry.name.c_str(), MB_OK | MB_ICONERROR);
         return;
     }
-    CloseHandle(thread);
+    state.thread = thread;
     state.busy = true;
     EnableWindow(state.uninstall, FALSE);
     EnableWindow(state.refresh, FALSE);
+    EnableWindow(state.close, FALSE);
     const std::wstring status = L"Uninstalling " + app.entry.name + L"\u2026";
     SetWindowTextW(state.status, status.c_str());
 }
@@ -230,8 +232,12 @@ LRESULT CALLBACK InstalledProc(HWND window, UINT message, WPARAM wParam, LPARAM 
         case MessageUninstallDone:
         {
             UninstallJob *job = reinterpret_cast<UninstallJob *>(lParam);
+            WaitForSingleObject(state->thread, INFINITE);
+            CloseHandle(state->thread);
+            state->thread = nullptr;
             state->busy = false;
             EnableWindow(state->refresh, TRUE);
+            EnableWindow(state->close, TRUE);
             const std::wstring message = job->status ? job->package.entry.name + L" was uninstalled." :
                                          job->package.entry.name + L" was not uninstalled: " + WideFromUtf8(job->status.message);
             delete job;
@@ -243,7 +249,11 @@ LRESULT CALLBACK InstalledProc(HWND window, UINT message, WPARAM wParam, LPARAM 
                 RunUninstaller(*state);
             else if (LOWORD(wParam) == IdInstalledRefresh && !state->busy)
                 RefreshInstalled(*state);
-            else if (LOWORD(wParam) == IdInstalledClose || LOWORD(wParam) == IDCANCEL)
+            else if ((LOWORD(wParam) == IdInstalledClose || LOWORD(wParam) == IDCANCEL) && !state->busy)
+                DestroyWindow(window);
+            return 0;
+        case WM_CLOSE:
+            if (!state->busy)
                 DestroyWindow(window);
             return 0;
         case WM_DESTROY:
@@ -293,6 +303,12 @@ Status ShowInstalledAppsManager(HWND owner)
             continue;
         TranslateMessage(&message);
         DispatchMessageW(&message);
+    }
+    if (state.thread)
+    {
+        WaitForSingleObject(state.thread, INFINITE);
+        CloseHandle(state.thread);
+        state.thread = nullptr;
     }
     EnableWindow(owner, TRUE);
     SetForegroundWindow(owner);

@@ -8,6 +8,7 @@
 #include <apitest.h>
 #include <windows.h>
 #include <commctrl.h>
+#include <tlhelp32.h>
 #include <strsafe.h>
 #include <string.h>
 
@@ -89,6 +90,90 @@ JqInstalled(void)
     }
     RegCloseKey(Uninstall);
     return Found;
+}
+
+static BOOL
+ArpViewHasPrefix(HKEY Root, REGSAM View, PCWSTR Prefix)
+{
+    WCHAR SubKey[256], Name[512];
+    DWORD Index, Length, Size;
+    HKEY Uninstall;
+    BOOL Found = FALSE;
+
+    if (RegOpenKeyExW(Root, L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall", 0, KEY_READ | View, &Uninstall) != ERROR_SUCCESS)
+        return FALSE;
+    for (Index = 0; !Found; Index++)
+    {
+        Length = _countof(SubKey);
+        if (RegEnumKeyExW(Uninstall, Index, SubKey, &Length, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        Size = sizeof(Name);
+        Found = RegGetValueW(Uninstall, SubKey, L"DisplayName", RRF_RT_REG_SZ, NULL, Name, &Size) == ERROR_SUCCESS &&
+                !wcsncmp(Name, Prefix, wcslen(Prefix));
+    }
+    RegCloseKey(Uninstall);
+    return Found;
+}
+
+static BOOL
+SevenZipInstalled(void)
+{
+    return ArpViewHasPrefix(HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY, L"7-Zip") ||
+           ArpViewHasPrefix(HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY, L"7-Zip") ||
+           ArpViewHasPrefix(HKEY_CURRENT_USER, 0, L"7-Zip");
+}
+
+static DWORD
+WaitForChild(DWORD ParentId, PCWSTR Name, DWORD Timeout)
+{
+    PROCESSENTRY32W Entry;
+    DWORD Start = GetTickCount(), Found = 0;
+    HANDLE Snapshot;
+    BOOL More;
+
+    while (!Found && GetTickCount() - Start <= Timeout)
+    {
+        Snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (Snapshot == INVALID_HANDLE_VALUE)
+            return 0;
+        Entry.dwSize = sizeof(Entry);
+        for (More = Process32FirstW(Snapshot, &Entry); More && !Found; More = Process32NextW(Snapshot, &Entry))
+        {
+            if (Entry.th32ParentProcessID == ParentId && !_wcsicmp(Entry.szExeFile, Name))
+                Found = Entry.th32ProcessID;
+        }
+        CloseHandle(Snapshot);
+        if (!Found)
+            Sleep(5);
+    }
+    return Found;
+}
+
+static ULONG
+SuspendProcessThreads(DWORD ProcessId, BOOL Suspend)
+{
+    THREADENTRY32 Entry;
+    HANDLE Snapshot, Thread;
+    ULONG Count = 0;
+    BOOL More;
+
+    Snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (Snapshot == INVALID_HANDLE_VALUE)
+        return 0;
+    Entry.dwSize = sizeof(Entry);
+    for (More = Thread32First(Snapshot, &Entry); More; More = Thread32Next(Snapshot, &Entry))
+    {
+        if (Entry.th32OwnerProcessID != ProcessId)
+            continue;
+        Thread = OpenThread(THREAD_SUSPEND_RESUME, FALSE, Entry.th32ThreadID);
+        if (!Thread)
+            continue;
+        if ((Suspend ? SuspendThread(Thread) : ResumeThread(Thread)) != (DWORD)-1)
+            Count++;
+        CloseHandle(Thread);
+    }
+    CloseHandle(Snapshot);
+    return Count;
 }
 
 static BOOL CALLBACK
@@ -180,7 +265,7 @@ ConfirmMessageBox(HANDLE Process, HWND Owner)
 }
 
 static int
-SelectInstalledRow(HANDLE Process, HWND List, PCWSTR Name)
+SelectInstalledRow(HANDLE Process, HWND List, PCWSTR Name, BOOL Prefix)
 {
     struct
     {
@@ -196,7 +281,7 @@ SelectInstalledRow(HANDLE Process, HWND List, PCWSTR Name)
     if (!Remote)
         return -1;
     StringCchCopyW(Local.Text, _countof(Local.Text), Name);
-    Local.Find.flags = LVFI_STRING;
+    Local.Find.flags = Prefix ? LVFI_PARTIAL | LVFI_STRING : LVFI_STRING;
     Local.Find.psz = Remote->Text;
     Local.Item.stateMask = LVIS_SELECTED | LVIS_FOCUSED;
     Local.Item.state = LVIS_SELECTED | LVIS_FOCUSED;
@@ -228,7 +313,7 @@ UninstallFromInstalledApps(HANDLE Process, HWND Catalog)
     Status = GetDlgItem(Installed, ID_INSTALLED_STATUS);
     ok(!IsWindowEnabled(Uninstall), "Uninstall is enabled with nothing selected\n");
 
-    Row = SelectInstalledRow(Process, List, L"jq");
+    Row = SelectInstalledRow(Process, List, L"jq", FALSE);
     ok(Row >= 0, "jq is not in the installed apps list\n");
     if (Row < 0)
         goto Close;
@@ -240,7 +325,7 @@ UninstallFromInstalledApps(HANDLE Process, HWND Catalog)
         goto Close;
     ok(WaitForText(Status, L"jq was uninstalled.", Text, _countof(Text), GUI_TIMEOUT), "status is '%ls'\n", Text);
     ok(WaitForInstalledState(FALSE, 20000), "jq is still installed after the window uninstalled it\n");
-    ok(SelectInstalledRow(Process, List, L"jq") < 0, "jq is still listed after the uninstall\n");
+    ok(SelectInstalledRow(Process, List, L"jq", FALSE) < 0, "jq is still listed after the uninstall\n");
 
 Close:
     PostMessageW(Installed, WM_CLOSE, 0, 0);
@@ -335,5 +420,120 @@ Exit:
     ok(strstr(Output, "LNTGET_GUI_UNINSTALL_DONE id=") != NULL, "output:\n%s\n", Output);
 
     if (JqInstalled() && RunTool(L"uninstall --id jqlang.jq -e --source winget --silent --disable-interactivity", &ExitCode))
+        trace("cleanup uninstall returned 0x%08lx\n", ExitCode);
+}
+
+START_TEST(guiuninstall)
+{
+    SECURITY_ATTRIBUTES Inherit = { sizeof(Inherit), NULL, TRUE };
+    WCHAR CommandLine[1024], OutputPath[MAX_PATH], Directory[MAX_PATH];
+    STARTUPINFOW Startup = { sizeof(Startup) };
+    PROCESS_INFORMATION Process;
+    HWND Catalog, Notice, Installed = NULL, List, Uninstall, Box;
+    HANDLE File;
+    DWORD ExitCode, Read = 0, Uninstaller = 0;
+    char Output[4096];
+    int Row;
+
+    if (wcsstr(GetTool(), L"winget"))
+    {
+        skip("winget has no catalog window\n");
+        return;
+    }
+    if (SevenZipInstalled())
+    {
+        skip("7-Zip is already installed\n");
+        return;
+    }
+    if (!RunTool(L"install --id 7zip.7zip -e --source winget --installer-type wix --silent --disable-interactivity", &ExitCode) ||
+        ExitCode != 0 || !SevenZipInstalled())
+    {
+        skip("cannot install 7-Zip: 0x%08lx\n", ExitCode);
+        return;
+    }
+
+    GetTempPathW(_countof(Directory), Directory);
+    GetTempFileNameW(Directory, L"lng", 0, OutputPath);
+    File = CreateFileW(OutputPath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &Inherit,
+                       CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "cannot create %ls: %lu\n", OutputPath, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        goto Cleanup;
+    StringCchPrintfW(CommandLine, _countof(CommandLine), L"\"%s\" gui", GetTool());
+    Startup.dwFlags = STARTF_USESTDHANDLES;
+    Startup.hStdOutput = File;
+    Startup.hStdError = File;
+    if (!CreateProcessW(NULL, CommandLine, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &Startup, &Process))
+    {
+        ok(0, "CreateProcess(%ls) failed with %lu\n", CommandLine, GetLastError());
+        CloseHandle(File);
+        goto Cleanup;
+    }
+    CloseHandle(Process.hThread);
+
+    Catalog = WaitForWindow(Process.hProcess, L"LntGetCatalog", NULL, 60000);
+    ok(Catalog != NULL, "the catalog window did not open\n");
+    if (!Catalog)
+        goto Exit;
+    Notice = WaitForWindow(Process.hProcess, L"#32770", Catalog, 30000);
+    ok(Notice != NULL, "the compatibility notice did not open\n");
+    if (Notice)
+        PostMessageW(Notice, WM_COMMAND, IDOK, 0);
+
+    PostMessageW(Catalog, WM_COMMAND, ID_INSTALLED, 0);
+    Installed = WaitForWindow(Process.hProcess, L"LntGetInstalledApps", Catalog, 30000);
+    ok(Installed != NULL, "the installed apps window did not open\n");
+    if (!Installed)
+        goto Close;
+    List = GetDlgItem(Installed, ID_INSTALLED_LIST);
+    Uninstall = GetDlgItem(Installed, ID_UNINSTALL);
+    Row = SelectInstalledRow(Process.hProcess, List, L"7-Zip", TRUE);
+    ok(Row >= 0, "7-Zip is not in the installed apps list\n");
+    if (Row < 0 || !WaitForEnabled(Uninstall, 5000))
+        goto Close;
+    PostMessageW(Uninstall, BM_CLICK, 0, 0);
+    Box = WaitForWindow(Process.hProcess, L"#32770", Installed, 30000);
+    ok(Box != NULL, "no confirmation owned by the installed apps window\n");
+    if (!Box)
+        goto Close;
+    PostMessageW(Box, WM_COMMAND, IDOK, 0);
+    Uninstaller = WaitForChild(GetProcessId(Process.hProcess), L"msiexec.exe", 30000);
+    ok(Uninstaller != 0, "the window started no uninstaller\n");
+    if (!Uninstaller || !SuspendProcessThreads(Uninstaller, TRUE))
+    {
+        skip("cannot hold the uninstaller\n");
+        Uninstaller = 0;
+        goto Close;
+    }
+    PostMessageW(Installed, WM_CLOSE, 0, 0);
+    Sleep(1000);
+    ok(IsWindow(Installed), "the installed apps window closed while 7-Zip was uninstalling\n");
+    PostMessageW(Catalog, WM_CLOSE, 0, 0);
+    ok(WaitForSingleObject(Process.hProcess, 3000) == WAIT_TIMEOUT, "lntget exited while its uninstall was running\n");
+    SuspendProcessThreads(Uninstaller, FALSE);
+    goto Exit;
+
+Close:
+    PostMessageW(Catalog, WM_CLOSE, 0, 0);
+
+Exit:
+    ok(WaitForSingleObject(Process.hProcess, GUI_TIMEOUT) == WAIT_OBJECT_0, "lntget did not exit after its window closed\n");
+    TerminateProcess(Process.hProcess, ERROR_TIMEOUT);
+    GetExitCodeProcess(Process.hProcess, &ExitCode);
+    ok(ExitCode == 0, "lntget gui returned 0x%08lx\n", ExitCode);
+    CloseHandle(Process.hProcess);
+
+    SetFilePointer(File, 0, NULL, FILE_BEGIN);
+    ReadFile(File, Output, sizeof(Output) - 1, &Read, NULL);
+    Output[Read] = '\0';
+    CloseHandle(File);
+    if (Installed)
+    {
+        ok(strstr(Output, "LNTGET_GUI_UNINSTALL_DONE id=") != NULL, "lntget exited before the uninstall finished:\n%s\n", Output);
+        ok(!SevenZipInstalled(), "7-Zip is still installed after the window uninstalled it\n");
+    }
+
+Cleanup:
+    if (SevenZipInstalled() && RunTool(L"uninstall --id 7zip.7zip -e --source winget --silent --disable-interactivity", &ExitCode))
         trace("cleanup uninstall returned 0x%08lx\n", ExitCode);
 }
