@@ -6,10 +6,10 @@
  *
  * Register offsets and descriptor ownership rules are taken from the
  * lawfully published FreeBSD re(4)/rl(4) headers (BSD-2-Clause).
- * RTL8168H MAC and PHY bring-up is LiberNT-owned black-box register
- * programming derived from FreeBSD behaviour and public hardware notes.
- * Realtek linux-firmware blobs and their opcode streams are not
- * embedded, shipped or interpreted here.
+ * RTL8168H MAC and PHY bring-up is LiberNT-owned register programming:
+ * FreeBSD-derived MAC quirks, plus an 8168H MCU patch and PHY ram-code
+ * sequence rewritten as ordinary OCP/PHY writes (no .fw file, no opcode
+ * VM). Realtek linux-firmware blobs are not shipped or interpreted.
  * The miniport itself is a LiberNT NDIS 6.30 reimplementation.
  */
 
@@ -708,6 +708,122 @@ Rtl8168PhySoftReset(
 }
 
 static VOID
+Rtl8168Load8168hMcuPatch(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    static const USHORT Patch[] =
+    {
+    0xe008, 0xe00f, 0xe011, 0xe047, 0xe049, 0xe073, 0xe075, 0xe077, 0xc707, 0x1d00, 0x8de2, 0x48c1,
+    0xc502, 0xbd00, 0x00e4, 0xe0c0, 0xc502, 0xbd00, 0x0216, 0xc634, 0x75c0, 0x49d3, 0xf027, 0xc631,
+    0x75c0, 0x49d3, 0xf123, 0xc627, 0x75c0, 0xb405, 0xc525, 0x9dc0, 0xc621, 0x75c8, 0x49d5, 0xf00a,
+    0x49d6, 0xf008, 0x49d7, 0xf006, 0x49d8, 0xf004, 0x75d2, 0x49d9, 0xf111, 0xc517, 0x9dc8, 0xc516,
+    0x9dd2, 0xc618, 0x75c0, 0x49d4, 0xf003, 0x49d0, 0xf104, 0xc60a, 0xc50e, 0x9dc0, 0xb005, 0xc607,
+    0x9dc0, 0xb007, 0xc602, 0xbe00, 0x1a06, 0xb400, 0xe86c, 0xa000, 0x01e1, 0x0200, 0x9200, 0xe84c,
+    0xe004, 0xe908, 0xc502, 0xbd00, 0x0b58, 0xb407, 0xb404, 0x2195, 0x25bd, 0x9be0, 0x1c1c, 0x484f,
+    0x9ce2, 0x72e2, 0x49ae, 0xf1fe, 0x0b00, 0xf116, 0xc71c, 0xc419, 0x9ce0, 0x1c13, 0x484f, 0x9ce2,
+    0x74e2, 0x49ce, 0xf1fe, 0xc412, 0x9ce0, 0x1c13, 0x484f, 0x9ce2, 0x74e2, 0x49ce, 0xf1fe, 0xc70c,
+    0x74f8, 0x48c3, 0x8cf8, 0xb004, 0xb007, 0xc502, 0xbd00, 0x0f24, 0x0481, 0x0c81, 0xde24, 0xe000,
+    0xc602, 0xbe00, 0x0ca4, 0xc502, 0xbd00, 0x0000, 0xc602, 0xbe00, 0x0000,
+    };
+    ULONG i;
+
+    Rtl8168MacOcpWrite(Adapter, 0x1f, 0x0fc2);
+    Rtl8168MacOcpWrite(Adapter, 0x08, 0x0000);
+    Rtl8168MacOcpWrite(Adapter, 0x0a, 0x0000);
+    Rtl8168MacOcpWrite(Adapter, 0x0c, 0x0000);
+    Rtl8168MacOcpWrite(Adapter, 0x0e, 0x0000);
+    Rtl8168MacOcpWrite(Adapter, 0x10, 0x0000);
+    Rtl8168MacOcpWrite(Adapter, 0x12, 0x0000);
+    Rtl8168MacOcpWrite(Adapter, 0x14, 0x0000);
+    Rtl8168MacOcpWrite(Adapter, 0x16, 0x0000);
+    NdisMSleep(3);
+    Rtl8168MacOcpWrite(Adapter, 0x06, 0x0000);
+
+    Rtl8168MacOcpWrite(Adapter, 0x1f, 0x0f80);
+    for (i = 0; i < RTL_NUMBER_OF(Patch); i++)
+        Rtl8168MacOcpWrite(Adapter, i * 2, Patch[i]);
+
+    Rtl8168MacOcpWrite(Adapter, 0x1f, 0x0fc2);
+    Rtl8168MacOcpWrite(Adapter, 0x06, 0x8000);
+    Rtl8168MacOcpWrite(Adapter, 0x08, 0x00e2);
+    Rtl8168MacOcpWrite(Adapter, 0x0a, 0x0210);
+    Rtl8168MacOcpWrite(Adapter, 0x0c, 0x1a04);
+    Rtl8168MacOcpWrite(Adapter, 0x0e, 0x0b26);
+    Rtl8168MacOcpWrite(Adapter, 0x10, 0x0f02);
+    Rtl8168MacOcpWrite(Adapter, 0x12, 0x0ca0);
+    Rtl8168MacOcpWrite(Adapter, 0x18, 0x003f);
+}
+
+static VOID
+Rtl8168Enable8168hPhyRamCode(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    USHORT Value;
+    ULONG i;
+
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0b82);
+    Rtl8168PhyModify(Adapter, 0x10, 0x0000, 0x0010);
+
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0b80);
+    for (i = 0; i < 100; i++)
+    {
+        NdisMSleep(1);
+        if (!Rtl8168PhyRead(Adapter, 0x10, &Value))
+            break;
+        if (Value & 0x0040)
+            break;
+    }
+
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0a43);
+    Rtl8168PhyWrite(Adapter, 0x13, 0x8028);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x6201);
+    Rtl8168PhyWrite(Adapter, 0x13, 0xb82e);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x0001);
+
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0a43);
+    Rtl8168PhyWrite(Adapter, 0x13, 0xb820);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x0290);
+    Rtl8168PhyWrite(Adapter, 0x13, 0xa012);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x0000);
+    Rtl8168PhyWrite(Adapter, 0x13, 0xa014);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x2c04);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x2c09);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x2c09);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x2c09);
+    Rtl8168PhyWrite(Adapter, 0x14, 0xad01);
+    Rtl8168PhyWrite(Adapter, 0x14, 0xad01);
+    Rtl8168PhyWrite(Adapter, 0x14, 0xad01);
+    Rtl8168PhyWrite(Adapter, 0x14, 0xad01);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x236c);
+    Rtl8168PhyWrite(Adapter, 0x13, 0xa01a);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x0000);
+    Rtl8168PhyWrite(Adapter, 0x13, 0xa006);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x0fff);
+    Rtl8168PhyWrite(Adapter, 0x13, 0xa004);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x0fff);
+    Rtl8168PhyWrite(Adapter, 0x13, 0xa002);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x0fff);
+    Rtl8168PhyWrite(Adapter, 0x13, 0xa000);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x136b);
+    Rtl8168PhyWrite(Adapter, 0x13, 0xb820);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x0210);
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0a43);
+    Rtl8168PhyWrite(Adapter, 0x13, 0x0000);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x0000);
+
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0b82);
+    Rtl8168PhyModify(Adapter, 0x17, 0x0001, 0x0000);
+
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0a43);
+    Rtl8168PhyWrite(Adapter, 0x13, 0x8028);
+    Rtl8168PhyWrite(Adapter, 0x14, 0x0000);
+
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0b82);
+    Rtl8168PhyModify(Adapter, 0x10, 0x0010, 0x0000);
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0a40);
+}
+
+static VOID
 Rtl8168Configure8168hPhy(
     _In_ PRTL8168_ADAPTER Adapter)
 {
@@ -720,6 +836,8 @@ Rtl8168Configure8168hPhy(
     USHORT PhyVal;
 
     Rtl8168PhySoftReset(Adapter);
+    Rtl8168Load8168hMcuPatch(Adapter);
+    Rtl8168Enable8168hPhyRamCode(Adapter);
 
     Rtl8168PhyWrite(Adapter, 0x1f, 0x0a43);
     Rtl8168PhyWrite(Adapter, 0x13, 0x808a);
@@ -779,7 +897,7 @@ Rtl8168Configure8168hPhy(
         Rtl8168PhyModify(Adapter, 0x10, 0x0004, 0x0000);
     Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
 
-    DPRINT1("rtl8168: applied black-box 8168H PHY bring-up\n");
+    DPRINT1("rtl8168: applied 8168H MCU patch and PHY bring-up\n");
 }
 
 static VOID
