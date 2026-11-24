@@ -35,6 +35,7 @@ list(APPEND SOURCE
     PrivilegeNames.c
     QueryServiceConfig.c
     QueryServiceConfig2.c
+    RegCreateKeyBackupRestore.c
     RegCreateKeyEx.c
     RegCreateKeyTransacted.c
     RegEnumKey.c
