@@ -298,6 +298,7 @@ HKCR,"CLSID\{25336920-03F9-11CF-8FD0-00AA00686F13}\BrowseInPlace","",0x00000000,
 HKCR,"htmlfile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\ieframe.dll,0"
 HKCR,"htmlfile\shell\open\command","",0x00020000,"""%ProgramFiles%\Internet Explorer\iexplore.exe"" ""%1"""
 
+; FIXME: Windows takes the image type icons from imageres.dll and opens images in a viewer; these use the shell32 picture icon and Paint
 ; Icons
 HKCR,".ico","",0x00000000,"icofile"
 HKCR,".ico","Content Type",0x00000000,"image/x-icon"
@@ -305,24 +306,22 @@ HKCR,".ico","PerceivedType",0x00000000,"image"
 HKCR,"icofile","",0x00000000,"Icon"
 HKCR,"icofile","FriendlyTypeName",0x00020000,"@%SystemRoot%\system32\shell32.dll,-213"
 HKCR,"icofile\DefaultIcon","",0x00000000,"%1"
-HKCR,"icofile\shell\open\command","",0x00020000,"rundll32.exe %SystemRoot%\system32\shimgvw.dll,ImageView_Fullscreen %1"
+HKCR,"icofile\shell\open\command","",0x00020000,"%SystemRoot%\system32\mspaint.exe ""%1"""
 
 ; EMF Images
 HKCR,".emf","",0x00000000,"emffile"
 HKCR,".emf","PerceivedType",0x00000000,"image"
 HKCR,"emffile","",0x00000000,"EMF Image"
-HKCR,"emffile","FriendlyTypeName",0x00020000,"@%SystemRoot%\system32\shimgvw.dll,-301"
-HKCR,"emffile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shimgvw.dll,0"
-HKCR,"emffile\shell\open\command","",0x00020000,"rundll32.exe %SystemRoot%\system32\shimgvw.dll,ImageView_Fullscreen %1"
+HKCR,"emffile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shell32.dll,-226"
+; TODO: open EMF files once LiberNT has a metafile viewer
 
 ; GIF Images
 HKCR,".gif","",0x00000000,"giffile"
 HKCR,".gif","Content Type",0x00000000,"image/gif"
 HKCR,".gif","PerceivedType",0x00000000,"image"
 HKCR,"giffile","",0x00000000,"GIF Image"
-HKCR,"giffile","FriendlyTypeName",0x00020000,"@%SystemRoot%\system32\shimgvw.dll,-302"
-HKCR,"giffile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shimgvw.dll,2"
-HKCR,"giffile\shell\open\command","",0x00020000,"rundll32.exe %SystemRoot%\system32\shimgvw.dll,ImageView_Fullscreen %1"
+HKCR,"giffile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shell32.dll,-226"
+HKCR,"giffile\shell\open\command","",0x00020000,"%SystemRoot%\system32\mspaint.exe ""%1"""
 
 ; JPEG Images
 HKCR,".jpg","",0x00000000,"jpegfile"
@@ -339,8 +338,8 @@ HKCR,".jfif","Content Type",0x00000000,"image/jpeg"
 HKCR,".jfif","PerceivedType",0x00000000,"image"
 HKCR,"jpegfile","",0x00000000,"JPEG Image"
 HKCR,"jpegfile","FriendlyTypeName",0x00020000,"@%SystemRoot%\system32\shell32.dll,-30596"
-HKCR,"jpegfile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shimgvw.dll,0"
-HKCR,"jpegfile\shell\open\command","",0x00020000,"rundll32.exe %SystemRoot%\system32\shimgvw.dll,ImageView_Fullscreen %1"
+HKCR,"jpegfile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shell32.dll,-226"
+HKCR,"jpegfile\shell\open\command","",0x00020000,"%SystemRoot%\system32\mspaint.exe ""%1"""
 HKCR,"jpegfile\shell\edit\command","",0x00020000,"%SystemRoot%\system32\mspaint.exe ""%1"""
 
 ; Bitmap Images
@@ -353,9 +352,8 @@ HKCR,".dib","",0x00000000,"bmpfile"
 HKCR,".dib","Content Type",0x00000000,"image/bmp"
 HKCR,".dib","PerceivedType",0x00000000,"image"
 HKCR,"bmpfile","",0x00000000,"Bitmap Image"
-HKCR,"bmpfile","FriendlyTypeName",0x00020000,"@%SystemRoot%\system32\shimgvw.dll,-304"
-HKCR,"bmpfile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shimgvw.dll,1"
-HKCR,"bmpfile\shell\open\command","",0x00020000,"rundll32.exe %SystemRoot%\system32\shimgvw.dll,ImageView_Fullscreen %1"
+HKCR,"bmpfile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shell32.dll,-226"
+HKCR,"bmpfile\shell\open\command","",0x00020000,"%SystemRoot%\system32\mspaint.exe ""%1"""
 HKCR,"bmpfile\shell\edit\command","",0x00020000,"%SystemRoot%\system32\mspaint.exe ""%1"""
 
 ; PNG Images
@@ -364,8 +362,8 @@ HKCR,".png","Content Type",0x00000000,"image/png"
 HKCR,".png","PerceivedType",0x00000000,"image"
 HKCR,"pngfile","",0x00000000,"PNG Image"
 HKCR,"pngfile","FriendlyTypeName",0x00020000,"@%SystemRoot%\system32\shell32.dll,-30598"
-HKCR,"pngfile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shimgvw.dll,2"
-HKCR,"pngfile\shell\open\command","",0x00020000,"rundll32.exe %SystemRoot%\system32\shimgvw.dll,ImageView_Fullscreen %1"
+HKCR,"pngfile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shell32.dll,-226"
+HKCR,"pngfile\shell\open\command","",0x00020000,"%SystemRoot%\system32\mspaint.exe ""%1"""
 HKCR,"pngfile\shell\edit\command","",0x00020000,"%SystemRoot%\system32\mspaint.exe ""%1"""
 
 ; TIF Images
@@ -376,18 +374,16 @@ HKCR,".tiff","",0x00000000,"TIFImage.Document"
 HKCR,".tiff","Content Type",0x00000000,"image/tiff"
 HKCR,".tiff","PerceivedType",0x00000000,"image"
 HKCR,"TIFImage.Document","",0x00000000,"TIF Image"
-HKCR,"TIFImage.Document","FriendlyTypeName",0x00020000,"@%SystemRoot%\system32\shimgvw.dll,-306"
-HKCR,"TIFImage.Document\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shimgvw.dll,0"
-HKCR,"TIFImage.Document\shell\open\command","",0x00020000,"rundll32.exe %SystemRoot%\system32\shimgvw.dll,ImageView_Fullscreen %1"
+HKCR,"TIFImage.Document\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shell32.dll,-226"
+HKCR,"TIFImage.Document\shell\open\command","",0x00020000,"%SystemRoot%\system32\mspaint.exe ""%1"""
 HKCR,"TIFImage.Document\shell\edit\command","",0x00020000,"%SystemRoot%\system32\mspaint.exe ""%1"""
 
 ; WMF Images
 HKCR,".wmf","",0x00000000,"wmffile"
 HKCR,".wmf","PerceivedType",0x00000000,"image"
 HKCR,"wmffile","",0x00000000,"WMF Image"
-HKCR,"wmffile","FriendlyTypeName",0x00020000,"@%SystemRoot%\system32\shimgvw.dll,-307"
-HKCR,"wmffile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shimgvw.dll,0"
-HKCR,"wmffile\shell\open\command","",0x00020000,"rundll32.exe %SystemRoot%\system32\shimgvw.dll,ImageView_Fullscreen %1"
+HKCR,"wmffile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shell32.dll,-226"
+; TODO: open WMF files once LiberNT has a metafile viewer
 
 ; Configuration Files
 HKCR,".ini","",0x00000000,"inifile"
