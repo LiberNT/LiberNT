@@ -392,6 +392,17 @@ ULONG FindBuild(const std::wstring &entry, const NamedBuild (&table)[Count], ULO
     return fallback;
 }
 
+template <size_t Count>
+bool ContainsAny(const std::wstring &entry, const WCHAR *const (&names)[Count])
+{
+    for (const WCHAR *name : names)
+    {
+        if (entry.find(name) != std::wstring::npos)
+            return true;
+    }
+    return false;
+}
+
 void CopyDetails(CatalogUpdate &update, const CatalogUpdate &details)
 {
     update.Architecture = details.Architecture;
@@ -1773,11 +1784,8 @@ int ProductFit(const std::wstring &products, const SystemTarget &system)
         pos = next;
         if (entry.find(L"SERVER") != std::wstring::npos)
         {
-            if (std::any_of(std::begin(LegacyServers), std::end(LegacyServers),
-                            [&entry](const WCHAR *year) { return entry.find(year) != std::wstring::npos; }))
-            {
+            if (ContainsAny(entry, LegacyServers))
                 continue;
-            }
             server = true;
             build = FindBuild(entry, Servers, 14393);
         }
