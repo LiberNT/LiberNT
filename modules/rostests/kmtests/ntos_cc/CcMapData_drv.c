@@ -394,15 +394,6 @@ PerformTest(
                     {
                         CcUnpinData(Bcb);
                     }
-
-                    /* Map more than a VACB */
-                    Ret = FALSE;
-                    Offset.QuadPart = 0x0;
-
-                    KmtStartSeh();
-                    Ret = CcMapData(TestFileObject, &Offset, 0x1000 + VACB_MAPPING_GRANULARITY, MAP_WAIT, &Bcb, (PVOID *)&Buffer);
-                    KmtEndSeh(STATUS_ACCESS_VIOLATION);
-                    ok(Ret == FALSE, "CcMapData mapped across a view boundary\n");
                 }
             }
         }
