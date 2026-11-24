@@ -1487,6 +1487,7 @@ KiCompleteThreadSwitch(
     if (ReadyTransition)
     {
         KiDeferredReadyThread(OldThread);
+        KiCheckDeferredReadyList(Prcb);
         if (Prcb->NextThread != NULL)
             KiRequestDispatchInterrupt(Prcb);
     }
@@ -1620,6 +1621,7 @@ KxQueueReadyThread(
         Thread->State = DeferredReady;
         KiReleasePrcbLock(Prcb);
         KiDeferredReadyThread(Thread);
+        KiCheckDeferredReadyList(Prcb);
         return;
     }
 
