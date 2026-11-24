@@ -537,3 +537,136 @@ Cleanup:
     if (SevenZipInstalled() && RunTool(L"uninstall --id 7zip.7zip -e --source winget --silent --disable-interactivity", &ExitCode))
         trace("cleanup uninstall returned 0x%08lx\n", ExitCode);
 }
+
+static BOOL
+PingtInstalled(void)
+{
+    WCHAR Path[MAX_PATH];
+
+    ExpandEnvironmentStringsW(L"%LOCALAPPDATA%\\Microsoft\\WinGet\\Links\\pingt.exe", Path, _countof(Path));
+    return GetFileAttributesW(Path) != INVALID_FILE_ATTRIBUTES;
+}
+
+static BOOL CALLBACK
+AppendStaticTextProc(HWND Window, LPARAM Parameter)
+{
+    PWSTR Text = (PWSTR)Parameter;
+    WCHAR ClassName[16], Part[1024];
+
+    if (GetClassNameW(Window, ClassName, _countof(ClassName)) && !_wcsicmp(ClassName, L"Static") &&
+        GetWindowTextW(Window, Part, _countof(Part)))
+        StringCchCatW(Text, 4096, Part);
+    return TRUE;
+}
+
+static HWND
+WaitForAgreementPrompt(HANDLE Process, HWND Catalog, PWSTR Text)
+{
+    HWND Prompt = WaitForWindow(Process, L"#32770", Catalog, 60000);
+
+    Text[0] = L'\0';
+    if (Prompt)
+        EnumChildWindows(Prompt, AppendStaticTextProc, (LPARAM)Text);
+    return Prompt;
+}
+
+START_TEST(guiagreements)
+{
+    static WCHAR PromptText[4096];
+    SECURITY_ATTRIBUTES Inherit = { sizeof(Inherit), NULL, TRUE };
+    WCHAR CommandLine[1024], OutputPath[MAX_PATH], Directory[MAX_PATH], Text[256];
+    STARTUPINFOW Startup = { sizeof(Startup) };
+    PROCESS_INFORMATION Process;
+    HWND Catalog, Notice, Install, Title, Prompt;
+    HANDLE File;
+    DWORD ExitCode, Read = 0;
+    char Output[4096];
+
+    if (wcsstr(GetTool(), L"winget"))
+    {
+        skip("winget has no catalog window\n");
+        return;
+    }
+    if (PingtInstalled())
+    {
+        skip("Pingt is already installed\n");
+        return;
+    }
+    if (!RunTool(L"search --id Speed-Soft.Pingt -e --source winget", &ExitCode) || ExitCode != 0)
+    {
+        skip("the winget source is unavailable: 0x%08lx\n", ExitCode);
+        return;
+    }
+
+    GetTempPathW(_countof(Directory), Directory);
+    GetTempFileNameW(Directory, L"lng", 0, OutputPath);
+    File = CreateFileW(OutputPath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &Inherit,
+                       CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "cannot create %ls: %lu\n", OutputPath, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    StringCchPrintfW(CommandLine, _countof(CommandLine), L"\"%s\" gui Speed-Soft.Pingt", GetTool());
+    Startup.dwFlags = STARTF_USESTDHANDLES;
+    Startup.hStdOutput = File;
+    Startup.hStdError = File;
+    if (!CreateProcessW(NULL, CommandLine, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &Startup, &Process))
+    {
+        ok(0, "CreateProcess(%ls) failed with %lu\n", CommandLine, GetLastError());
+        CloseHandle(File);
+        return;
+    }
+    CloseHandle(Process.hThread);
+
+    Catalog = WaitForWindow(Process.hProcess, L"LntGetCatalog", NULL, 60000);
+    ok(Catalog != NULL, "the catalog window did not open\n");
+    if (!Catalog)
+        goto Exit;
+    Notice = WaitForWindow(Process.hProcess, L"#32770", Catalog, 30000);
+    ok(Notice != NULL, "the compatibility notice did not open\n");
+    if (Notice)
+        PostMessageW(Notice, WM_COMMAND, IDOK, 0);
+    ok(WaitForText(Catalog, L" packages)", Text, _countof(Text), GUI_TIMEOUT), "catalog title is '%ls'\n", Text);
+
+    Install = GetDlgItem(Catalog, ID_INSTALL);
+    Title = GetDlgItem(Catalog, ID_OPERATION_TITLE);
+    ok(WaitForEnabled(Install, 30000), "Install stays disabled\n");
+    PostMessageW(Install, BM_CLICK, 0, 0);
+    Prompt = WaitForAgreementPrompt(Process.hProcess, Catalog, PromptText);
+    GetWindowTextW(Title, Text, _countof(Text));
+    ok(Prompt != NULL, "no agreement prompt opened; operation title is '%ls'\n", Text);
+    if (!Prompt)
+        goto Close;
+    ok(wcsstr(PromptText, L"https://www.speed-soft.de/go/pingt-license") != NULL, "the prompt does not show the agreement: '%ls'\n", PromptText);
+    PostMessageW(Prompt, WM_COMMAND, IDNO, 0);
+    ok(WaitForText(Title, L"Installation cancelled", Text, _countof(Text), 30000), "operation title is '%ls'\n", Text);
+    ok(!PingtInstalled(), "Pingt was installed with its agreements declined\n");
+
+    ok(WaitForEnabled(Install, 30000), "Install stays disabled after the agreements were declined\n");
+    PostMessageW(Install, BM_CLICK, 0, 0);
+    Prompt = WaitForAgreementPrompt(Process.hProcess, Catalog, PromptText);
+    ok(Prompt != NULL, "no agreement prompt opened the second time\n");
+    if (!Prompt)
+        goto Close;
+    PostMessageW(Prompt, WM_COMMAND, IDYES, 0);
+    ok(WaitForText(Title, L"Installation complete", Text, _countof(Text), GUI_TIMEOUT), "operation title is '%ls'\n", Text);
+    ok(PingtInstalled(), "Pingt is not installed after its agreements were accepted\n");
+
+Close:
+    PostMessageW(Catalog, WM_CLOSE, 0, 0);
+
+Exit:
+    ok(WaitForSingleObject(Process.hProcess, 30000) == WAIT_OBJECT_0, "lntget did not exit after its window closed\n");
+    TerminateProcess(Process.hProcess, ERROR_TIMEOUT);
+    GetExitCodeProcess(Process.hProcess, &ExitCode);
+    ok(ExitCode == 0, "lntget gui returned 0x%08lx\n", ExitCode);
+    CloseHandle(Process.hProcess);
+
+    SetFilePointer(File, 0, NULL, FILE_BEGIN);
+    ReadFile(File, Output, sizeof(Output) - 1, &Read, NULL);
+    Output[Read] = '\0';
+    CloseHandle(File);
+    ok(strstr(Output, "LNTGET_GUI_INSTALL_DONE id=Speed-Soft.Pingt") != NULL, "output:\n%s\n", Output);
+
+    if (PingtInstalled() && RunTool(L"uninstall --id Speed-Soft.Pingt -e --source winget", &ExitCode))
+        ok(ExitCode == 0, "uninstall returned 0x%08lx\n", ExitCode);
+}
