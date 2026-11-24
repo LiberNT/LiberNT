@@ -7,6 +7,7 @@
  */
 
 #include "precomp.h"
+#include <libernt/drivers/qosmark.h>
 
 TDI_STATUS SetAddressFileInfo(TDIObjectID *ID,
                               PADDRESS_FILE AddrFile,
@@ -153,6 +154,19 @@ TDI_STATUS SetAddressFileInfo(TDIObjectID *ID,
 
          LockObject(AddrFile);
          AddrFile->TTL = *((PUCHAR)Buffer);
+         UnlockObject(AddrFile);
+
+         return TDI_SUCCESS;
+
+      case AO_OPTION_QOS_DSCP:
+         if (BufferSize < sizeof(ULONG) ||
+             (*(PULONG)Buffer != QOS_MARK_UNMARKED && *(PULONG)Buffer > QOS_MARK_DSCP_LAST))
+         {
+             return TDI_INVALID_PARAMETER;
+         }
+
+         LockObject(AddrFile);
+         AddrFile->QosTos = (*(PULONG)Buffer == QOS_MARK_UNMARKED) ? 0 : (UCHAR)(*(PULONG)Buffer << 2);
          UnlockObject(AddrFile);
 
          return TDI_SUCCESS;

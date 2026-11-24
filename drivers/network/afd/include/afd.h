@@ -24,6 +24,7 @@
 #include <afd/shared.h>
 #include <pseh/pseh2.h>
 
+#include <libernt/drivers/qosmark.h>
 #include "tdi_proto.h"
 #include "tdiconn.h"
 #include "debug.h"
@@ -310,6 +311,7 @@ typedef struct _AFD_FCB {
     LIST_ENTRY DatagramList;
     LIST_ENTRY PendingConnections;
     LIST_ENTRY AddressListChangeEntry;
+    ULONG QosDscp;
 } AFD_FCB, *PAFD_FCB;
 
 /* bind.c */
@@ -372,6 +374,12 @@ AfdSetInfo( PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
 BOOLEAN
 AfdTryApplyPendingReceiveWindow(PAFD_FCB FCB);
+
+NTSTATUS
+AfdApplyQosMarking(PAFD_FCB FCB);
+
+NTSTATUS NTAPI
+AfdSetQosDscp(PDEVICE_OBJECT DeviceObject, PIRP Irp, PIO_STACK_LOCATION IrpSp);
 
 NTSTATUS
 AfdRearmDatagram(PAFD_FCB FCB);

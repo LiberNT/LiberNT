@@ -10,6 +10,7 @@
 #define COM_NO_WINDOWS_H
 #include <windef.h>
 #include <winbase.h>
+#include <winsvc.h>
 #include <ws2tcpip.h>
 #include <qos2.h>
 #define NTOS_MODE_USER
@@ -28,6 +29,23 @@ C_ASSERT(QOSFlowRateUserCaused == QWAVE_FLOWRATE_REASON_LAST);
 C_ASSERT(sizeof(QOS_FLOWRATE_OUTGOING) == sizeof(QWAVE_FLOWRATE));
 C_ASSERT(FIELD_OFFSET(QOS_FLOWRATE_OUTGOING, ShapingBehavior) == FIELD_OFFSET(QWAVE_FLOWRATE, ShapingBehavior));
 C_ASSERT(FIELD_OFFSET(QOS_FLOWRATE_OUTGOING, Reason) == FIELD_OFFSET(QWAVE_FLOWRATE, Reason));
+C_ASSERT(QOSQueryFlowFundamentals == QWAVE_QUERY_FUNDAMENTALS);
+C_ASSERT(QOSQueryPacketPriority == QWAVE_QUERY_PACKET_PRIORITY);
+C_ASSERT(QOSQueryOutgoingRate == QWAVE_QUERY_OUTGOING_RATE);
+C_ASSERT(QOS_QUERYFLOW_FRESH == QWAVE_QUERYFLOW_FRESH);
+C_ASSERT(sizeof(QOS_PACKET_PRIORITY) == sizeof(QWAVE_PACKET_PRIORITY));
+C_ASSERT(sizeof(QOS_FLOW_FUNDAMENTALS) == sizeof(QWAVE_FUNDAMENTALS));
+C_ASSERT(FIELD_OFFSET(QOS_FLOW_FUNDAMENTALS, BottleneckBandwidth) == FIELD_OFFSET(QWAVE_FUNDAMENTALS, BottleneckBandwidth));
+C_ASSERT(FIELD_OFFSET(QOS_FLOW_FUNDAMENTALS, AvailableBandwidthSet) == FIELD_OFFSET(QWAVE_FUNDAMENTALS, AvailableBandwidthSet));
+C_ASSERT(FIELD_OFFSET(QOS_FLOW_FUNDAMENTALS, AvailableBandwidth) == FIELD_OFFSET(QWAVE_FUNDAMENTALS, AvailableBandwidth));
+C_ASSERT(FIELD_OFFSET(QOS_FLOW_FUNDAMENTALS, RTTSet) == FIELD_OFFSET(QWAVE_FUNDAMENTALS, RttSet));
+C_ASSERT(FIELD_OFFSET(QOS_FLOW_FUNDAMENTALS, RTT) == FIELD_OFFSET(QWAVE_FUNDAMENTALS, Rtt));
+
+#define QWAVE_SERVICE_NAME L"QWAVE"
+#define QWAVE_SERVICE_START_POLLS 200
+#define QWAVE_SERVICE_START_POLL_MS 10
+
+static SERVICE_STATUS_HANDLE QwaveServiceStatusHandle;
 
 static
 BOOL
@@ -54,26 +72,93 @@ QwaveControl(
     return DeviceIoControl(QOSHandle, Code, Input, InputSize, Output, OutputSize, &Returned, Overlapped);
 }
 
+static
+NTSTATUS
+QwaveOpenDevice(
+    _Out_ PHANDLE Handle)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(QWAVE_DEVICE_NAME);
+    OBJECT_ATTRIBUTES Attributes;
+    IO_STATUS_BLOCK Iosb;
+
+    InitializeObjectAttributes(&Attributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    return NtCreateFile(Handle, GENERIC_READ, &Attributes, &Iosb, NULL, 0, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                        FILE_OPEN, 0, NULL, 0);
+}
+
+static
+DWORD
+QwaveWaitForService(
+    _In_ SC_HANDLE Service)
+{
+    SERVICE_STATUS_PROCESS Status;
+    DWORD Needed, Poll;
+
+    for (Poll = 0; Poll < QWAVE_SERVICE_START_POLLS; Poll++)
+    {
+        if (!QueryServiceStatusEx(Service, SC_STATUS_PROCESS_INFO, (LPBYTE)&Status, sizeof(Status), &Needed))
+            return GetLastError();
+        if (Status.dwCurrentState == SERVICE_RUNNING)
+            return ERROR_SUCCESS;
+        if (Status.dwCurrentState == SERVICE_STOPPED)
+        {
+            if (Status.dwWin32ExitCode == ERROR_SERVICE_SPECIFIC_ERROR)
+                return Status.dwServiceSpecificExitCode;
+            return Status.dwWin32ExitCode ? Status.dwWin32ExitCode : ERROR_SERVICE_DEPENDENCY_FAIL;
+        }
+        Sleep(QWAVE_SERVICE_START_POLL_MS);
+    }
+    return ERROR_SERVICE_REQUEST_TIMEOUT;
+}
+
+static
+DWORD
+QwaveStartService(VOID)
+{
+    SC_HANDLE Scm, Service;
+    DWORD Error = ERROR_SUCCESS;
+
+    Scm = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
+    if (!Scm)
+        return ERROR_SERVICE_DEPENDENCY_FAIL;
+    Service = OpenServiceW(Scm, QWAVE_SERVICE_NAME, SERVICE_START | SERVICE_QUERY_STATUS);
+    if (!Service)
+    {
+        CloseServiceHandle(Scm);
+        return ERROR_SERVICE_DEPENDENCY_FAIL;
+    }
+    if (!StartServiceW(Service, 0, NULL) && GetLastError() != ERROR_SERVICE_ALREADY_RUNNING)
+        Error = GetLastError();
+    if (Error == ERROR_SUCCESS)
+        Error = QwaveWaitForService(Service);
+    CloseServiceHandle(Service);
+    CloseServiceHandle(Scm);
+    return Error;
+}
+
 BOOL
 WINAPI
 QOSCreateHandle(
     _In_ PQOS_VERSION Version,
     _Out_ PHANDLE QOSHandle)
 {
-    UNICODE_STRING Name = RTL_CONSTANT_STRING(QWAVE_DEVICE_NAME);
-    OBJECT_ATTRIBUTES Attributes;
-    IO_STATUS_BLOCK Iosb;
     HANDLE Handle;
     NTSTATUS Status;
+    DWORD Error;
 
     if (!Version || !QOSHandle || Version->MajorVersion != 1 || Version->MinorVersion != 0)
         return QwaveFail(ERROR_INVALID_PARAMETER);
 
-    InitializeObjectAttributes(&Attributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
-    Status = NtCreateFile(&Handle, GENERIC_READ, &Attributes, &Iosb, NULL, 0, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                          FILE_OPEN, 0, NULL, 0);
+    Status = QwaveOpenDevice(&Handle);
     if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
-        return QwaveFail(ERROR_SERVICE_DEPENDENCY_FAIL);
+    {
+        Error = QwaveStartService();
+        if (Error != ERROR_SUCCESS)
+            return QwaveFail(Error);
+        Status = QwaveOpenDevice(&Handle);
+        if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
+            return QwaveFail(ERROR_SERVICE_DEPENDENCY_FAIL);
+    }
     if (!NT_SUCCESS(Status))
         return QwaveFail(RtlNtStatusToDosError(Status));
 
@@ -208,11 +293,36 @@ QOSEnumerateFlows(
     _Inout_ PULONG Size,
     _Out_writes_bytes_(*Size) PVOID Buffer)
 {
-    UNREFERENCED_PARAMETER(QOSHandle);
-    UNREFERENCED_PARAMETER(Size);
-    UNREFERENCED_PARAMETER(Buffer);
-    /* TODO: enumerate the flows of every process for an administrator */
-    return QwaveFail(ERROR_NOT_SUPPORTED);
+    PQWAVE_FLOW_LIST List;
+    ULONG Capacity, Length, Total, Returned;
+
+    if (!Size || (*Size != 0 && !Buffer))
+        return QwaveFail(ERROR_INVALID_PARAMETER);
+
+    Capacity = min(*Size / sizeof(QOS_FLOWID), (MAXULONG - FIELD_OFFSET(QWAVE_FLOW_LIST, FlowIds)) / sizeof(ULONG));
+    Length = FIELD_OFFSET(QWAVE_FLOW_LIST, FlowIds) + Capacity * sizeof(ULONG);
+    List = HeapAlloc(GetProcessHeap(), 0, Length);
+    if (!List)
+        return QwaveFail(ERROR_NOT_ENOUGH_MEMORY);
+    if (!QwaveControl(QOSHandle, IOCTL_QWAVE_ENUMERATE_FLOWS, NULL, 0, List, Length, NULL))
+    {
+        DWORD Error = GetLastError();
+
+        HeapFree(GetProcessHeap(), 0, List);
+        return QwaveFail(Error);
+    }
+    Total = List->Total;
+    Returned = List->Returned;
+    if (Total > Capacity)
+    {
+        HeapFree(GetProcessHeap(), 0, List);
+        *Size = Total * sizeof(QOS_FLOWID);
+        return QwaveFail(ERROR_INSUFFICIENT_BUFFER);
+    }
+    RtlCopyMemory(Buffer, List->FlowIds, Returned * sizeof(QOS_FLOWID));
+    HeapFree(GetProcessHeap(), 0, List);
+    *Size = Returned * sizeof(QOS_FLOWID);
+    return TRUE;
 }
 
 BOOL
@@ -226,15 +336,39 @@ QOSQueryFlow(
     _In_opt_ DWORD Flags,
     _Out_opt_ LPOVERLAPPED Overlapped)
 {
-    UNREFERENCED_PARAMETER(QOSHandle);
-    UNREFERENCED_PARAMETER(FlowId);
-    UNREFERENCED_PARAMETER(Operation);
-    UNREFERENCED_PARAMETER(Size);
-    UNREFERENCED_PARAMETER(Buffer);
-    UNREFERENCED_PARAMETER(Flags);
-    UNREFERENCED_PARAMETER(Overlapped);
-    /* TODO: QOSQueryPacketPriority; the fundamentals and the outgoing rate need adaptive flows */
-    return QwaveFail(ERROR_NOT_SUPPORTED);
+    QWAVE_QUERY_FLOW_INPUT Input;
+    ULONG Needed;
+
+    if (!Size)
+        return QwaveFail(ERROR_INVALID_PARAMETER);
+    switch (Operation)
+    {
+        case QOSQueryFlowFundamentals:
+            Needed = sizeof(QOS_FLOW_FUNDAMENTALS);
+            break;
+        case QOSQueryPacketPriority:
+            Needed = sizeof(QOS_PACKET_PRIORITY);
+            break;
+        case QOSQueryOutgoingRate:
+            Needed = sizeof(UINT64);
+            break;
+        default:
+            return QwaveFail(ERROR_INVALID_PARAMETER);
+    }
+    if (*Size < Needed)
+    {
+        *Size = Needed;
+        return QwaveFail(ERROR_INSUFFICIENT_BUFFER);
+    }
+    if (!Buffer)
+        return QwaveFail(ERROR_INVALID_PARAMETER);
+
+    Input.FlowId = FlowId;
+    Input.Operation = (ULONG)Operation;
+    Input.Flags = Flags;
+    Input.Reserved = 0;
+    *Size = Needed;
+    return QwaveControl(QOSHandle, IOCTL_QWAVE_QUERY_FLOW, &Input, sizeof(Input), Buffer, Needed, Overlapped);
 }
 
 BOOL
@@ -285,4 +419,60 @@ QOSStopTrackingClient(
     UNREFERENCED_PARAMETER(Flags);
     /* TODO: client tracking needs the network experiments of the qWAVE service */
     return QwaveFail(ERROR_NOT_SUPPORTED);
+}
+
+static
+VOID
+QwaveReportServiceStatus(
+    _In_ DWORD State,
+    _In_ DWORD ExitCode)
+{
+    SERVICE_STATUS Status = { 0 };
+
+    Status.dwServiceType = SERVICE_WIN32_SHARE_PROCESS;
+    Status.dwCurrentState = State;
+    Status.dwControlsAccepted = (State == SERVICE_RUNNING) ? (SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN) : 0;
+    Status.dwWin32ExitCode = ExitCode;
+    SetServiceStatus(QwaveServiceStatusHandle, &Status);
+}
+
+static
+DWORD
+WINAPI
+QwaveServiceControl(
+    _In_ DWORD Control,
+    _In_ DWORD EventType,
+    _In_ LPVOID EventData,
+    _In_ LPVOID Context)
+{
+    UNREFERENCED_PARAMETER(EventType);
+    UNREFERENCED_PARAMETER(EventData);
+    UNREFERENCED_PARAMETER(Context);
+
+    switch (Control)
+    {
+        case SERVICE_CONTROL_STOP:
+        case SERVICE_CONTROL_SHUTDOWN:
+            QwaveReportServiceStatus(SERVICE_STOPPED, ERROR_SUCCESS);
+            return NO_ERROR;
+        case SERVICE_CONTROL_INTERROGATE:
+            return NO_ERROR;
+        default:
+            return ERROR_CALL_NOT_IMPLEMENTED;
+    }
+}
+
+VOID
+WINAPI
+ServiceMain(
+    _In_ DWORD Argc,
+    _In_ LPWSTR *Argv)
+{
+    UNREFERENCED_PARAMETER(Argc);
+    UNREFERENCED_PARAMETER(Argv);
+
+    QwaveServiceStatusHandle = RegisterServiceCtrlHandlerExW(QWAVE_SERVICE_NAME, QwaveServiceControl, NULL);
+    if (!QwaveServiceStatusHandle)
+        return;
+    QwaveReportServiceStatus(SERVICE_RUNNING, ERROR_SUCCESS);
 }

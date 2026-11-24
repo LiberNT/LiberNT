@@ -8,6 +8,7 @@
 
 #include "ntdef.h"
 #include "precomp.h"
+#include <libernt/drivers/qosmark.h>
 
 typedef struct tcp_keepalive {
   ULONG onoff;
@@ -161,6 +162,17 @@ TDI_STATUS SetConnectionEndpointInfo(TDIObjectID *ID,
 
         case TCP_SOCKET_KEEPALIVECOUNT:
             Status = (BufferSize < sizeof(ULONG)) ? TDI_INVALID_PARAMETER : TCPSetKeepAliveCount(Connection, *(ULONG *)Buffer);
+            break;
+
+        case TCP_SOCKET_QOS_DSCP:
+            if (BufferSize < sizeof(ULONG) ||
+                (*(PULONG)Buffer != QOS_MARK_UNMARKED && *(PULONG)Buffer > QOS_MARK_DSCP_LAST))
+            {
+                Status = TDI_INVALID_PARAMETER;
+                break;
+            }
+            Status = TCPSetQosTos(Connection,
+                                  (*(PULONG)Buffer == QOS_MARK_UNMARKED) ? 0 : (UCHAR)(*(PULONG)Buffer << 2));
             break;
 
         default:

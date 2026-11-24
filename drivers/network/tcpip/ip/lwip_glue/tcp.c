@@ -1245,6 +1245,14 @@ LibTCPSetNoDelay(
 }
 
 void
+LibTCPSetQosTos(
+    PTCP_PCB pcb,
+    UCHAR QosTos)
+{
+    pcb->tos = (u8_t)((pcb->tos & 3) | QosTos);
+}
+
+void
 LibTCPSetKeepAlive(
     PTCP_PCB pcb,
     BOOLEAN Set)

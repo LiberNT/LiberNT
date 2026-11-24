@@ -332,6 +332,9 @@ WarmSocketForConnection(PAFD_FCB FCB) {
                                           FCB->Connection.Object );
     }
 
+    if (NT_SUCCESS(Status) && FCB->QosDscp != QOS_MARK_UNMARKED && !NT_SUCCESS(AfdApplyQosMarking(FCB)))
+        AFD_DbgPrint(MIN_TRACE,("QoS marking of the new connection failed\n"));
+
     return Status;
 }
 

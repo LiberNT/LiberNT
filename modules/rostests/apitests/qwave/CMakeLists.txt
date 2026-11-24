@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     QosFlows.c
+    QosMarking.c
     testlist.c)
 
 add_executable(qwave_apitest ${SOURCE})

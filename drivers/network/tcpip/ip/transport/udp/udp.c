@@ -540,14 +540,17 @@ static NTSTATUS UDPRoutePktInfo(
 static VOID UDPApplySendControl(
     PIP_PACKET Packet,
     const UDP_SEND_CONTROL *Control,
-    BOOLEAN DontFragment)
+    BOOLEAN DontFragment,
+    UCHAR QosTos)
 {
     PIPv4_HEADER Header = (PIPv4_HEADER)Packet->Header;
 
     ASSERT(Packet->Type == IP_ADDRESS_V4);
     ASSERT(Header->FlagsFragOfs == 0);
+    ASSERT((QosTos & 3) == 0);
     if (DontFragment)
         Header->FlagsFragOfs = WH2N(IPv4_DF_MASK);
+    Header->Tos = (UCHAR)((Header->Tos & 3) | QosTos);
     if (!Control)
         return;
     ASSERT(Control->Ecn <= 2);
@@ -575,6 +578,7 @@ static NTSTATUS UDPSendToAddress(
     BOOLEAN IsBroadcast;
     BOOLEAN IsMulticast;
     BOOLEAN DontFragment;
+    UCHAR QosTos;
 
     IsBroadcast = UDPIsBroadcastAddress(&RemoteAddress);
     IsMulticast = ((DN2H(RemoteAddress.Address.IPv4Address) & 0xf0000000) == 0xe0000000);
@@ -711,6 +715,7 @@ static NTSTATUS UDPSendToAddress(
         }
     }
 
+    QosTos = AddrFile->QosTos;
     UnlockObject(AddrFile);
 
     if( !NT_SUCCESS(Status) ) {
@@ -718,9 +723,9 @@ static NTSTATUS UDPSendToAddress(
 	return Status;
     }
 
-    UDPApplySendControl(&Packet, Control, DontFragment);
+    UDPApplySendControl(&Packet, Control, DontFragment, QosTos);
     if (LoopNCE != NULL)
-        UDPApplySendControl(&LoopPacket, Control, DontFragment);
+        UDPApplySendControl(&LoopPacket, Control, DontFragment, QosTos);
 
     Packet.WfpTag = *Tag;
     Status = IPSendDatagram(&Packet, NCE);
