@@ -94,6 +94,7 @@ list(APPEND SOURCE
     NtCreateFile.c
     NtCreateKey.c
     NtCreateKeyCached.c
+    NtCreateNamedPipeFile.c
     NtCreateProfile.c
     NtCreateSection.c
     NtCreateSection_CachedRead.c
