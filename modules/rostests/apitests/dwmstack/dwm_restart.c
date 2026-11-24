@@ -12,6 +12,16 @@
 #define DWM_EXIT_WAIT_MS 2000
 #define DWM_RESTART_WAIT_MS 3000
 
+typedef HRESULT (WINAPI *PFN_DWM_IS_COMPOSITION_ENABLED)(BOOL *);
+
+static BOOL
+IsComposed(_In_ PFN_DWM_IS_COMPOSITION_ENABLED IsCompositionEnabled)
+{
+    BOOL Enabled = FALSE;
+
+    return SUCCEEDED(IsCompositionEnabled(&Enabled)) && Enabled;
+}
+
 static DWORD
 FindCompositor(_In_ DWORD SessionId, _In_ DWORD ExcludedId)
 {
@@ -46,6 +56,9 @@ START_TEST(dwm_restart)
     DWORD New = 0;
     DWORD Start;
     HANDLE Process;
+    HMODULE DwmApi;
+    PFN_DWM_IS_COMPOSITION_ENABLED IsCompositionEnabled;
+    BOOL Composed = FALSE;
 
     ok(ProcessIdToSessionId(GetCurrentProcessId(), &SessionId), "ProcessIdToSessionId failed with %lu\n", GetLastError());
     Old = FindCompositor(SessionId, 0);
@@ -60,6 +73,11 @@ START_TEST(dwm_restart)
         skip("dwm.exe %lu cannot be terminated (error %lu)\n", Old, GetLastError());
         return;
     }
+    DwmApi = LoadLibraryW(L"dwmapi.dll");
+    IsCompositionEnabled = DwmApi != NULL ? (PFN_DWM_IS_COMPOSITION_ENABLED)GetProcAddress(DwmApi, "DwmIsCompositionEnabled") : NULL;
+    ok(IsCompositionEnabled != NULL, "no DwmIsCompositionEnabled\n");
+    if (IsCompositionEnabled != NULL)
+        ok(IsComposed(IsCompositionEnabled), "the desktop is not composed before dwm.exe %lu exits\n", Old);
     ok(TerminateProcess(Process, 1), "TerminateProcess failed with %lu\n", GetLastError());
     ok(WaitForSingleObject(Process, DWM_EXIT_WAIT_MS) == WAIT_OBJECT_0, "dwm.exe %lu did not exit\n", Old);
     CloseHandle(Process);
@@ -74,4 +92,16 @@ START_TEST(dwm_restart)
     ok(New != 0, "no dwm.exe in session %lu %lu ms after %lu exited\n", SessionId, GetTickCount() - Start, Old);
     if (New != 0)
         trace("dwm.exe %lu replaced %lu after %lu ms\n", New, Old, GetTickCount() - Start);
+    if (IsCompositionEnabled != NULL)
+    {
+        Composed = IsComposed(IsCompositionEnabled);
+        while (!Composed && GetTickCount() - Start < DWM_RESTART_WAIT_MS)
+        {
+            Sleep(50);
+            Composed = IsComposed(IsCompositionEnabled);
+        }
+        ok(Composed, "the desktop is not composed %lu ms after dwm.exe %lu exited\n", GetTickCount() - Start, Old);
+    }
+    if (DwmApi != NULL)
+        FreeLibrary(DwmApi);
 }
