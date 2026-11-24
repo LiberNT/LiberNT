@@ -397,6 +397,59 @@ static BOOL d3d11_swapchain_composition_rects(struct d3d11_swapchain *swapchain,
     target->bottom = d3d11_swapchain_round(transform->_32 + source->bottom * transform->_22);
     return !IsRectEmpty(source);
 }
+
+/* Present1 copies each dirty rectangle onto itself, so their union in far fewer rectangles updates the same pixels. */
+static RECT *d3d11_swapchain_merge_rects(const RECT *rects, unsigned int *count)
+{
+    unsigned int i, j, chunk;
+    RGNDATA *data;
+    HRGN region, part;
+    RECT *merged;
+    DWORD size;
+
+    if (!(region = CreateRectRgn(0, 0, 0, 0)))
+        return NULL;
+    for (i = 0; i < *count; i += chunk)
+    {
+        chunk = min(*count - i, 4096u);
+        if (!(data = malloc(sizeof(data->rdh) + chunk * sizeof(RECT))))
+        {
+            DeleteObject(region);
+            return NULL;
+        }
+        data->rdh.dwSize = sizeof(data->rdh);
+        data->rdh.iType = RDH_RECTANGLES;
+        data->rdh.nCount = chunk;
+        data->rdh.nRgnSize = chunk * sizeof(RECT);
+        data->rdh.rcBound = rects[i];
+        for (j = 0; j < chunk; ++j)
+            UnionRect(&data->rdh.rcBound, &data->rdh.rcBound, &rects[i + j]);
+        memcpy(data->Buffer, &rects[i], chunk * sizeof(RECT));
+        part = ExtCreateRegion(NULL, sizeof(data->rdh) + chunk * sizeof(RECT), data);
+        free(data);
+        if (!part || CombineRgn(region, region, part, RGN_OR) == ERROR)
+        {
+            if (part)
+                DeleteObject(part);
+            DeleteObject(region);
+            return NULL;
+        }
+        DeleteObject(part);
+    }
+    merged = NULL;
+    if ((size = GetRegionData(region, 0, NULL)) && (data = malloc(size)))
+    {
+        if (GetRegionData(region, size, data) == size && data->rdh.nCount
+                && (merged = malloc(data->rdh.nCount * sizeof(RECT))))
+        {
+            memcpy(merged, data->Buffer, data->rdh.nCount * sizeof(RECT));
+            *count = data->rdh.nCount;
+        }
+        free(data);
+    }
+    DeleteObject(region);
+    return merged;
+}
 #endif
 
 static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
@@ -409,7 +462,7 @@ static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
     bool partial = dirty_count || scroll_rect;
 #ifdef __REACTOS__
     RECT unscaled_rect, composition_source, composition_target, source_rect;
-    RECT mapped_stack[16], *mapped = mapped_stack;
+    RECT mapped_stack[16], *mapped = mapped_stack, *merged = NULL;
 #endif
     HRESULT hr;
 
@@ -521,6 +574,9 @@ static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
         }
         wined3d_mutex_unlock();
     }
+    if (!swapchain->composition && src_rects == dst_rects && rect_count > 64
+            && (merged = d3d11_swapchain_merge_rects(src_rects, &rect_count)))
+        src_rects = dst_rects = merged;
 #endif
 
     if (partial)
@@ -532,6 +588,7 @@ static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
 #ifdef __REACTOS__
     if (mapped != mapped_stack)
         free(mapped);
+    free(merged);
 #endif
     if (SUCCEEDED(hr))
         InterlockedIncrement(&swapchain->present_count);
