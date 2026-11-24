@@ -1162,7 +1162,7 @@ MiPfnZeroFreePages(
                     break;
 
                 MI_SPIN_ACQUIRE(&Db->Shard[Shard].Lock, &OldIrql);
-                Frame = List->Head;
+                Frame = List->Tail;
                 MI_SPIN_RELEASE(&Db->Shard[Shard].Lock, OldIrql);
 
                 if (Frame == MI_FRAME_INVALID || !MiPfnListRemove(Db, Frame, MiPageFree))
