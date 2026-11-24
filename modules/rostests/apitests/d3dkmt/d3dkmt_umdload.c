@@ -120,6 +120,8 @@ static void Test_LoadUserModeDriver(void)
     AdapterCallbacks.pfnQueryAdapterInfoCb2 = UmdLoadQueryAdapterInfo2;
     memset(&Open, 0, sizeof(Open));
     Open.hRTAdapter.handle = (HANDLE)(ULONG_PTR)hAdapter;
+    Open.Interface = D3D11_0_DDI_INTERFACE_VERSION;
+    Open.Version = D3D11_0_DDI_BUILD_VERSION << 16;
     Open.pAdapterCallbacks = (const D3DDDI_ADAPTERCALLBACKS *)&AdapterCallbacks;
     Open.pAdapterFuncs_2 = &AdapterFuncs;
     /* OpenAdapter10_2 negotiates DDI versions through GetSupportedVersions;
