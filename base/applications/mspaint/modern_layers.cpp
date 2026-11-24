@@ -288,7 +288,7 @@ namespace
 
     HBITMAP CreateBGRA(const uint32_t *src, int width, int height)
     {
-        BITMAPINFO bmi = { 0 };
+        BITMAPINFO bmi = {};
         bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
         bmi.bmiHeader.biWidth = width;
         bmi.bmiHeader.biHeight = -height;
@@ -309,7 +309,7 @@ namespace
         dest.resize((size_t)g.width * g.height);
         HBITMAP copy = imageModel.CopyBitmap();
         if (!copy) return false;
-        BITMAPINFO bmi = { 0 };
+        BITMAPINFO bmi = {};
         bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
         bmi.bmiHeader.biWidth = g.width;
         bmi.bmiHeader.biHeight = -g.height;
@@ -893,7 +893,6 @@ namespace
     int s_scroll = 0;
     int s_hover = -1;
     bool s_dragOpacity = false;
-    bool s_dragChanged = false;
     bool s_dragUndo = false;
 
     RECT ActionRect(int i) { return Rc(10 + i*35, 48, 31, 31); }
@@ -1020,7 +1019,6 @@ namespace
         if(!s_dragUndo){PushUndo();s_dragUndo=true;}
         layer->opacity=(BYTE)value;
         g_imageSaved=FALSE;
-        s_dragChanged=true;
         Refresh();
     }
     void DoAction(HWND hwnd,int cmd)
@@ -1069,12 +1067,12 @@ namespace
             case WM_LBUTTONUP:
                 if(s_dragOpacity)
                 {
-                    s_dragOpacity=false;s_dragUndo=false;s_dragChanged=false;
+                    s_dragOpacity=false;s_dragUndo=false;
                     ReleaseCapture();Refresh();
                 }
                 return 0;
             case WM_CAPTURECHANGED:
-                s_dragOpacity=false;s_dragUndo=false;s_dragChanged=false;return 0;
+                s_dragOpacity=false;s_dragUndo=false;return 0;
             case WM_MOUSEWHEEL:
             {
                 RECT b;GetClientRect(hwnd,&b);
@@ -1182,7 +1180,7 @@ namespace
                 RECT hit=track;InflateRect(&hit,3,12);
                 if(PtInRect(&hit,pt) && ActiveLayer())
                 {
-                    s_dragOpacity=true;s_dragUndo=false;s_dragChanged=false;
+                    s_dragOpacity=true;s_dragUndo=false;
                     SetCapture(hwnd);SetOpacityFromMouse(hwnd,pt.x);return 0;
                 }
                 RECT list=ListRect(b);

@@ -18,13 +18,10 @@ namespace
     const COLORREF kBorder = RGB(217, 222, 228);
     const COLORREF kSelected = RGB(219, 233, 250);
     const int kHeight = 155;
-    const int kTabBottom = 36;
     const int kTop = 50;
-    const int kIconStep = 30;
     const int kRowStep = 36;
     const int kColorStep = 19;
     const UINT kSizeCommandBase = 49500;
-    const UINT kLayersCommand = 49600;
     const UINT kWandCommand = 49601;
     const UINT kWandIconResource = 52001;
 
