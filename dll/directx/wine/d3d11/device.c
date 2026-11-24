@@ -1027,6 +1027,11 @@ static void STDMETHODCALLTYPE d3d11_device_context_Begin(ID3D11DeviceContext4 *i
 
     TRACE("iface %p, asynchronous %p.\n", iface, asynchronous);
 
+#ifdef __REACTOS__
+    if (context->type == D3D11_DEVICE_CONTEXT_IMMEDIATE &&
+            query->desc.Query != D3D11_QUERY_EVENT && query->desc.Query != D3D11_QUERY_TIMESTAMP)
+        query->building = TRUE;
+#endif
     wined3d_device_context_issue_query(context->wined3d_context, query->wined3d_query, WINED3DISSUE_BEGIN);
 }
 
@@ -1038,6 +1043,10 @@ static void STDMETHODCALLTYPE d3d11_device_context_End(ID3D11DeviceContext4 *ifa
 
     TRACE("iface %p, asynchronous %p.\n", iface, asynchronous);
 
+#ifdef __REACTOS__
+    if (context->type == D3D11_DEVICE_CONTEXT_IMMEDIATE)
+        query->building = FALSE;
+#endif
     wined3d_device_context_issue_query(context->wined3d_context, query->wined3d_query, WINED3DISSUE_END);
 }
 
@@ -1058,6 +1067,10 @@ static HRESULT STDMETHODCALLTYPE d3d11_device_context_GetData(ID3D11DeviceContex
     if (!data && data_size)
         return E_INVALIDARG;
 
+#ifdef __REACTOS__
+    if (query->building)
+        return DXGI_ERROR_INVALID_CALL;
+#endif
     wined3d_flags = wined3d_getdata_flags_from_d3d11_async_getdata_flags(data_flags);
 
     wined3d_mutex_lock();

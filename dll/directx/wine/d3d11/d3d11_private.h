@@ -517,6 +517,9 @@ struct d3d_query
     BOOL predicate;
     D3D11_QUERY_DESC desc;
     ID3D11Device5 *device;
+#ifdef __REACTOS__
+    BOOL building;
+#endif
 };
 
 HRESULT d3d_query_create(struct d3d_device *device, const D3D11_QUERY_DESC *desc, BOOL predicate,
