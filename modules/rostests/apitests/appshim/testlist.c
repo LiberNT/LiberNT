@@ -3,6 +3,7 @@
 #define STANDALONE
 #include <wine/test.h>
 
+extern void func_disablethemes(void);
 extern void func_dispmode(void);
 extern void func_forcedxsetup(void);
 extern void func_genral_hooks(void);
@@ -14,6 +15,7 @@ extern void func_versionlie(void);
 
 const struct test winetest_testlist[] =
 {
+    { "disablethemes", func_disablethemes },
     { "dispmode", func_dispmode },
     { "forcedxsetup", func_forcedxsetup },
     { "genral_hooks", func_genral_hooks },
