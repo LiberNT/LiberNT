@@ -18,6 +18,7 @@
 #include <ndk/obfuncs.h>
 #include <ndk/rtlfuncs.h>
 #include <libernt/qwavedrv.h>
+#include "qwave_private.h"
 
 C_ASSERT(QOS_NON_ADAPTIVE_FLOW == QWAVE_NON_ADAPTIVE_FLOW);
 C_ASSERT(QOSTrafficTypeControl == QWAVE_TRAFFIC_TYPE_LAST);
@@ -45,7 +46,12 @@ C_ASSERT(FIELD_OFFSET(QOS_FLOW_FUNDAMENTALS, RTT) == FIELD_OFFSET(QWAVE_FUNDAMEN
 #define QWAVE_SERVICE_START_POLLS 200
 #define QWAVE_SERVICE_START_POLL_MS 10
 
+C_ASSERT(QOSNotifyCongested == QWAVE_NOTIFY_CONGESTED);
+C_ASSERT(QOSNotifyUncongested == QWAVE_NOTIFY_UNCONGESTED);
+C_ASSERT(QOSNotifyAvailable == QWAVE_NOTIFY_AVAILABLE);
+
 static SERVICE_STATUS_HANDLE QwaveServiceStatusHandle;
+static HANDLE QwaveController;
 
 static
 BOOL
@@ -53,6 +59,34 @@ QwaveFail(
     _In_ DWORD Error)
 {
     SetLastError(Error);
+    return FALSE;
+}
+
+BOOL
+QwaveToAddress(
+    _In_ const SOCKADDR *Address,
+    _Out_ PQWAVE_ADDRESS Out)
+{
+    RtlZeroMemory(Out, sizeof(*Out));
+    if (Address->sa_family == AF_INET)
+    {
+        const SOCKADDR_IN *In = (const SOCKADDR_IN *)Address;
+
+        Out->Family = AF_INET;
+        Out->Port = In->sin_port;
+        RtlCopyMemory(Out->Address, &In->sin_addr, sizeof(In->sin_addr));
+        return TRUE;
+    }
+    if (Address->sa_family == AF_INET6)
+    {
+        const SOCKADDR_IN6 *In6 = (const SOCKADDR_IN6 *)Address;
+
+        Out->Family = AF_INET6;
+        Out->Port = In6->sin6_port;
+        Out->ScopeId = In6->sin6_scope_id;
+        RtlCopyMemory(Out->Address, &In6->sin6_addr, sizeof(In6->sin6_addr));
+        return TRUE;
+    }
     return FALSE;
 }
 
@@ -214,7 +248,10 @@ QOSAddSocketToFlow(
         Length = sizeof(Peer);
         if (getpeername(Socket, (PSOCKADDR)&Peer, &Length) != 0)
             return QwaveFail(ERROR_INVALID_PARAMETER);
+        DestAddr = (PSOCKADDR)&Peer;
     }
+    if (!QwaveToAddress(DestAddr, &Input.Destination))
+        return QwaveFail(ERROR_INVALID_PARAMETER);
 
     Input.Socket = (ULONG64)Socket;
     Input.FlowId = *FlowId;
@@ -382,15 +419,54 @@ QOSNotifyFlow(
     _Reserved_ DWORD Flags,
     _Out_opt_ LPOVERLAPPED Overlapped)
 {
-    UNREFERENCED_PARAMETER(QOSHandle);
-    UNREFERENCED_PARAMETER(FlowId);
-    UNREFERENCED_PARAMETER(Operation);
-    UNREFERENCED_PARAMETER(Size);
-    UNREFERENCED_PARAMETER(Buffer);
-    UNREFERENCED_PARAMETER(Flags);
-    UNREFERENCED_PARAMETER(Overlapped);
-    /* TODO: congestion and bandwidth notifications need adaptive flows */
-    return QwaveFail(ERROR_NOT_SUPPORTED);
+    QWAVE_NOTIFY_INPUT Input = { 0 };
+    ULONG OutputSize = 0;
+
+    if (Operation == QOSNotifyAvailable)
+    {
+        if (!Size || *Size < sizeof(UINT64) || !Buffer)
+        {
+            if (Size)
+                *Size = sizeof(UINT64);
+            return QwaveFail((Size && *Size < sizeof(UINT64)) ? ERROR_INSUFFICIENT_BUFFER : ERROR_INVALID_PARAMETER);
+        }
+        Input.Threshold = *(PUINT64)Buffer;
+        OutputSize = sizeof(UINT64);
+    }
+    else if (Operation == QOSNotifyCongested || Operation == QOSNotifyUncongested)
+    {
+        if (Buffer)
+            return QwaveFail(ERROR_INVALID_PARAMETER);
+    }
+    else
+    {
+        return QwaveFail(ERROR_INVALID_PARAMETER);
+    }
+
+    Input.FlowId = FlowId;
+    Input.Operation = (ULONG)Operation;
+    Input.Flags = Flags;
+    if (Size)
+        *Size = OutputSize;
+    return QwaveControl(QOSHandle, IOCTL_QWAVE_NOTIFY_FLOW, &Input, sizeof(Input), OutputSize ? Buffer : NULL,
+                        OutputSize, Overlapped);
+}
+
+static
+BOOL
+QwaveTrackClient(
+    _In_ HANDLE QOSHandle,
+    _In_ PSOCKADDR DestAddr,
+    _In_ DWORD Flags,
+    _In_ BOOL Start)
+{
+    QWAVE_TRACK_INPUT Input = { 0 };
+
+    if (!DestAddr || !QwaveToAddress(DestAddr, &Input.Client))
+        return QwaveFail(ERROR_INVALID_PARAMETER);
+    Input.Start = Start;
+    Input.Flags = Flags;
+    return QwaveControl(QOSHandle, IOCTL_QWAVE_TRACK_CLIENT, &Input, sizeof(Input), NULL, 0, NULL);
 }
 
 BOOL
@@ -400,11 +476,7 @@ QOSStartTrackingClient(
     _In_ PSOCKADDR DestAddr,
     _Reserved_ DWORD Flags)
 {
-    UNREFERENCED_PARAMETER(QOSHandle);
-    UNREFERENCED_PARAMETER(DestAddr);
-    UNREFERENCED_PARAMETER(Flags);
-    /* TODO: client tracking needs the network experiments of the qWAVE service */
-    return QwaveFail(ERROR_NOT_SUPPORTED);
+    return QwaveTrackClient(QOSHandle, DestAddr, Flags, TRUE);
 }
 
 BOOL
@@ -414,14 +486,9 @@ QOSStopTrackingClient(
     _In_ PSOCKADDR DestAddr,
     _Reserved_ DWORD Flags)
 {
-    UNREFERENCED_PARAMETER(QOSHandle);
-    UNREFERENCED_PARAMETER(DestAddr);
-    UNREFERENCED_PARAMETER(Flags);
-    /* TODO: client tracking needs the network experiments of the qWAVE service */
-    return QwaveFail(ERROR_NOT_SUPPORTED);
+    return QwaveTrackClient(QOSHandle, DestAddr, Flags, FALSE);
 }
 
-static
 VOID
 QwaveReportServiceStatus(
     _In_ DWORD State,
@@ -453,7 +520,8 @@ QwaveServiceControl(
     {
         case SERVICE_CONTROL_STOP:
         case SERVICE_CONTROL_SHUTDOWN:
-            QwaveReportServiceStatus(SERVICE_STOPPED, ERROR_SUCCESS);
+            QwaveReportServiceStatus(SERVICE_STOP_PENDING, ERROR_SUCCESS);
+            QwaveStopController(QwaveController);
             return NO_ERROR;
         case SERVICE_CONTROL_INTERROGATE:
             return NO_ERROR;
@@ -471,8 +539,17 @@ ServiceMain(
     UNREFERENCED_PARAMETER(Argc);
     UNREFERENCED_PARAMETER(Argv);
 
+    DWORD Error;
+
     QwaveServiceStatusHandle = RegisterServiceCtrlHandlerExW(QWAVE_SERVICE_NAME, QwaveServiceControl, NULL);
     if (!QwaveServiceStatusHandle)
         return;
+    QwaveReportServiceStatus(SERVICE_START_PENDING, ERROR_SUCCESS);
+    Error = QwaveStartController(QwaveReportServiceStatus, &QwaveController);
+    if (Error != ERROR_SUCCESS)
+    {
+        QwaveReportServiceStatus(SERVICE_STOPPED, Error);
+        return;
+    }
     QwaveReportServiceStatus(SERVICE_RUNNING, ERROR_SUCCESS);
 }

@@ -27,11 +27,34 @@
 #define IOCTL_QWAVE_QUERY_FLOW          _QWAVE_CTL(0x03)
 /* OUT: QWAVE_FLOW_LIST with room for the caller's flow ids */
 #define IOCTL_QWAVE_ENUMERATE_FLOWS     _QWAVE_CTL(0x04)
+/* IN: QWAVE_NOTIFY_INPUT, OUT: ULONG64 available bandwidth; pends until the condition holds */
+#define IOCTL_QWAVE_NOTIFY_FLOW         _QWAVE_CTL(0x05)
+/* IN: QWAVE_TRACK_INPUT */
+#define IOCTL_QWAVE_TRACK_CLIENT        _QWAVE_CTL(0x06)
+
+/* The qWAVE service: OUT: QWAVE_WORK; pends until the driver has work */
+#define IOCTL_QWAVE_SERVICE_GET_WORK    _QWAVE_CTL(0x10)
+/* The qWAVE service: IN: QWAVE_WORK_RESULT */
+#define IOCTL_QWAVE_SERVICE_COMPLETE    _QWAVE_CTL(0x11)
+/* The qWAVE service: IN: QWAVE_WORK_RESULT for a monitored flow, WorkId 0 */
+#define IOCTL_QWAVE_SERVICE_UPDATE      _QWAVE_CTL(0x12)
+/* The qWAVE service: makes the handle the service channel; LocalService or LocalSystem only */
+#define IOCTL_QWAVE_SERVICE_REGISTER    _QWAVE_CTL(0x13)
 
 /* An NTSTATUS that DeviceIoControl reports as the Win32 error itself */
 #define QWAVE_STATUS_FROM_WIN32(Error)  ((NTSTATUS)(0x80070000 | ((Error) & 0xFFFF)))
 
 /* The layouts do not depend on the pointer width, so 32-bit callers share them. */
+
+/* An IPv4 or IPv6 address and port, addresses in network byte order */
+typedef struct _QWAVE_ADDRESS
+{
+    USHORT Family;
+    USHORT Port;
+    ULONG ScopeId;
+    UCHAR Address[16];
+} QWAVE_ADDRESS, *PQWAVE_ADDRESS;
+
 typedef struct _QWAVE_ADD_SOCKET_INPUT
 {
     ULONG64 Socket;
@@ -39,6 +62,7 @@ typedef struct _QWAVE_ADD_SOCKET_INPUT
     ULONG TrafficType;
     ULONG Flags;
     ULONG Reserved;
+    QWAVE_ADDRESS Destination;
 } QWAVE_ADD_SOCKET_INPUT, *PQWAVE_ADD_SOCKET_INPUT;
 
 typedef struct _QWAVE_REMOVE_SOCKET_INPUT
@@ -86,6 +110,46 @@ typedef struct _QWAVE_FUNDAMENTALS
     ULONG Rtt;
 } QWAVE_FUNDAMENTALS, *PQWAVE_FUNDAMENTALS;
 
+typedef struct _QWAVE_NOTIFY_INPUT
+{
+    ULONG FlowId;
+    ULONG Operation;
+    ULONG Flags;
+    ULONG Reserved;
+    ULONG64 Threshold;
+} QWAVE_NOTIFY_INPUT, *PQWAVE_NOTIFY_INPUT;
+
+typedef struct _QWAVE_TRACK_INPUT
+{
+    ULONG Start;
+    ULONG Flags;
+    QWAVE_ADDRESS Client;
+} QWAVE_TRACK_INPUT, *PQWAVE_TRACK_INPUT;
+
+/* Network test session work the driver hands to the qWAVE service */
+#define QWAVE_WORK_START_SESSION        1
+#define QWAVE_WORK_MEASURE              2
+#define QWAVE_WORK_STOP_SESSION         3
+#define QWAVE_WORK_MONITOR              4
+
+typedef struct _QWAVE_WORK
+{
+    ULONG WorkId;
+    ULONG Type;
+    ULONG FlowId;
+    ULONG Reserved;
+    QWAVE_ADDRESS Destination;
+} QWAVE_WORK, *PQWAVE_WORK;
+
+typedef struct _QWAVE_WORK_RESULT
+{
+    ULONG WorkId;
+    ULONG FlowId;
+    ULONG Error;
+    ULONG Reserved;
+    QWAVE_FUNDAMENTALS Fundamentals;
+} QWAVE_WORK_RESULT, *PQWAVE_WORK_RESULT;
+
 typedef struct _QWAVE_FLOW_LIST
 {
     ULONG Total;
@@ -103,6 +167,9 @@ typedef struct _QWAVE_FLOW_LIST
 #define QWAVE_QUERY_PACKET_PRIORITY     1
 #define QWAVE_QUERY_OUTGOING_RATE       2
 #define QWAVE_QUERYFLOW_FRESH           0x00000001
+#define QWAVE_NOTIFY_CONGESTED          0
+#define QWAVE_NOTIFY_UNCONGESTED        1
+#define QWAVE_NOTIFY_AVAILABLE          2
 #define QWAVE_SHAPING_LAST              2
 #define QWAVE_FLOWRATE_REASON_LAST      4
 #define QWAVE_DSCP_LAST                 63
@@ -125,7 +192,12 @@ C_ASSERT(FIELD_OFFSET(QWAVE_FUNDAMENTALS, BottleneckBandwidth) == 8);
 C_ASSERT(FIELD_OFFSET(QWAVE_FUNDAMENTALS, AvailableBandwidth) == 24);
 C_ASSERT(FIELD_OFFSET(QWAVE_FUNDAMENTALS, Rtt) == 36);
 C_ASSERT(FIELD_OFFSET(QWAVE_FLOW_LIST, FlowIds) == 8);
-C_ASSERT(sizeof(QWAVE_ADD_SOCKET_INPUT) == 24);
+C_ASSERT(sizeof(QWAVE_ADDRESS) == 24);
+C_ASSERT(sizeof(QWAVE_ADD_SOCKET_INPUT) == 48);
+C_ASSERT(sizeof(QWAVE_NOTIFY_INPUT) == 24);
+C_ASSERT(sizeof(QWAVE_TRACK_INPUT) == 32);
+C_ASSERT(sizeof(QWAVE_WORK) == 40);
+C_ASSERT(sizeof(QWAVE_WORK_RESULT) == 56);
 C_ASSERT(sizeof(QWAVE_REMOVE_SOCKET_INPUT) == 16);
 C_ASSERT(FIELD_OFFSET(QWAVE_SET_FLOW_INPUT, Buffer) == 16);
 

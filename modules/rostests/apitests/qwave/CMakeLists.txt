@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    QosAdaptive.c
     QosFlows.c
     QosMarking.c
     testlist.c)
