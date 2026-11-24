@@ -121,6 +121,9 @@ KdpNetQueryAttached(
     _Out_opt_ PULONG Columns,
     _Out_opt_ PULONG Rows);
 
+BOOLEAN
+KdpNetIsReady(VOID);
+
 VOID
 KdpNetSendCommand(
     _In_ PCSTR Command);

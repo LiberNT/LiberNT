@@ -42,7 +42,11 @@ static
 BOOLEAN
 KdpFileIoNetAttached(VOID)
 {
-    return KdpDebugMode.Net && KdpNetQueryAttached(NULL, NULL);
+    if (!KdpDebugMode.Net)
+        return FALSE;
+
+    /* Without a session (LOCAL_BROADCAST) a host answers only the requests typed at kdb:> */
+    return KdpNetQueryAttached(NULL, NULL) || (KdpNetIsReady() && KdpFileRequestInProgress());
 }
 
 static

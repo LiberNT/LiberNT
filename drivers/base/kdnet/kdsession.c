@@ -662,7 +662,7 @@ KdSessionAttached(
     _Out_opt_ PULONG Columns,
     _Out_opt_ PULONG Rows)
 {
-    /* TODO: LOCAL_BROADCAST has no session, so .kdfiles driver replacement is not offered in that mode */
+    /* TODO: LOCAL_BROADCAST has no session, so drivers are replaced only through !kdpull and !kdreload, not at every load */
     if (!KdpSession.Active)
         return FALSE;
 
