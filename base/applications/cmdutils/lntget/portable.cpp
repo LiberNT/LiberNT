@@ -167,6 +167,90 @@ Status LinkAlias(const std::wstring &target, const std::wstring &alias)
     return CopyIntoPackage(target, link);
 }
 
+bool PathExists(const std::wstring &path)
+{
+    return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+Status RemovePackageEntry(const std::wstring &path)
+{
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES)
+        return Status::Ok();
+    if ((attributes & FILE_ATTRIBUTE_DIRECTORY) && !(attributes & FILE_ATTRIBUTE_REPARSE_POINT))
+        DeleteDirectoryTree(path);
+    else
+    {
+        SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_NORMAL);
+        if (attributes & FILE_ATTRIBUTE_DIRECTORY)
+            RemoveDirectoryW(path.c_str());
+        else
+            DeleteFileW(path.c_str());
+    }
+    if (PathExists(path))
+        return Status::Fail(ERROR_SHARING_VIOLATION, "cannot remove " + Utf8FromWide(path) + "; close the application and retry");
+    return Status::Ok();
+}
+
+bool InsidePackage(const std::wstring &path, const std::wstring &directory)
+{
+    return !directory.empty() && path.size() > directory.size() + 1 &&
+           _wcsnicmp(path.c_str(), directory.c_str(), directory.size()) == 0 && path[directory.size()] == L'\\' &&
+           (path + L"\\").find(L"\\..\\", directory.size()) == std::wstring::npos && path.find(L'/') == std::wstring::npos;
+}
+
+Status RemovePackageEntries(const std::vector<std::wstring> &entries, const std::wstring &directory)
+{
+    for (const std::wstring &entry : entries)
+    {
+        if (!InsidePackage(entry, directory))
+        {
+            TracePortable("ignoring the recorded file " + Utf8FromWide(entry) + " outside " + Utf8FromWide(directory));
+            continue;
+        }
+        const Status status = RemovePackageEntry(entry);
+        if (!status) return status;
+    }
+    return Status::Ok();
+}
+
+bool PreviousInstallation(bool machineScope, const std::string &productCode, ArpEntry &previous)
+{
+    const std::wstring keyName = WideFromUtf8(productCode);
+    for (const ArpEntry &entry : EnumerateArpEntries())
+    {
+        if (entry.portable && entry.machine == machineScope && _wcsicmp(entry.keyName.c_str(), keyName.c_str()) == 0)
+        {
+            previous = entry;
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<std::wstring> TopLevelEntries(const std::wstring &directory)
+{
+    std::vector<std::wstring> names;
+    WIN32_FIND_DATAW data{};
+    HANDLE find = FindFirstFileW(JoinPath(directory, L"*").c_str(), &data);
+    if (find == INVALID_HANDLE_VALUE)
+        return names;
+    do
+    {
+        if (wcscmp(data.cFileName, L".") && wcscmp(data.cFileName, L".."))
+            names.push_back(data.cFileName);
+    } while (FindNextFileW(find, &data));
+    FindClose(find);
+    return names;
+}
+
+void AddTrackedEntry(std::vector<std::wstring> &entries, const std::wstring &path)
+{
+    if (std::find_if(entries.begin(), entries.end(),
+                     [&path](const std::wstring &entry) { return _wcsicmp(entry.c_str(), path.c_str()) == 0; }) == entries.end())
+        entries.push_back(path);
+}
+
 } // namespace
 
 std::string PortableProductCode(const std::string &packageId)
@@ -192,18 +276,37 @@ Status InstallPortable(const PackageRecord &package, const InstallerEntry &insta
     status = EnsureDirectoryPath(linksDirectory);
     if (!status) return status;
 
+    ArpEntry previous;
+    const bool previousInstalled = PreviousInstallation(machineScope, productCode, previous);
+    const bool previousTracked = previousInstalled && previous.filesTracked;
+    const bool directoryCreated = !directoryExisted || (previousInstalled && previous.installDirectoryCreated);
+    std::vector<std::wstring> trackedFiles;
     std::vector<PortableLink> links;
     if (AsciiEquals(installer.type, "zip"))
     {
-        /* TODO: remove only the files of the previous version, as WinGet does, instead of the whole directory */
-        if (directoryExisted)
-        {
-            DeleteDirectoryTree(installDirectory);
-            if (GetFileAttributesW(installDirectory.c_str()) != INVALID_FILE_ATTRIBUTES)
-                return Status::Fail(ERROR_SHARING_VIOLATION, "cannot replace " + Utf8FromWide(installDirectory) + "; close the application and retry");
-        }
+        const std::wstring staging = installDirectory + L".lntget-new";
         std::printf("Extracting archive...\n");
-        status = ExtractArchiveInto(downloadPath, installDirectory);
+        status = ExtractArchiveInto(downloadPath, staging);
+        if (!status)
+        {
+            DeleteDirectoryTree(staging);
+            return status;
+        }
+        const std::vector<std::wstring> names = TopLevelEntries(staging);
+        for (const std::wstring &name : names)
+            trackedFiles.push_back(JoinPath(installDirectory, name));
+        status = RemovePackageEntries(previousTracked ? previous.files : trackedFiles, installDirectory);
+        if (status && previousTracked)
+            status = RemovePackageEntries(trackedFiles, installDirectory);
+        for (std::size_t index = 0; status && index < names.size(); ++index)
+        {
+            if (!MoveFileExW(JoinPath(staging, names[index]).c_str(), trackedFiles[index].c_str(), MOVEFILE_WRITE_THROUGH))
+            {
+                const DWORD error = GetLastError();
+                status = Status::Fail(error, "cannot move " + Utf8FromWide(names[index]) + " into the package: " + WindowsErrorMessage(error));
+            }
+        }
+        DeleteDirectoryTree(staging);
         if (!status) return status;
         for (const NestedInstallerFile &file : installer.nestedFiles)
         {
@@ -225,8 +328,14 @@ Status InstallPortable(const PackageRecord &package, const InstallerEntry &insta
         const std::wstring fileName = WithExecutableExtension(FileNamePart(downloadPath));
         link.target = JoinPath(installDirectory, fileName);
         link.alias = WithExecutableExtension(installer.commands.empty() ? fileName : WideFromUtf8(installer.commands[0]));
+        if (previousTracked)
+        {
+            status = RemovePackageEntries(previous.files, installDirectory);
+            if (!status) return status;
+        }
         status = CopyIntoPackage(downloadPath, link.target);
         if (!status) return status;
+        trackedFiles.push_back(link.target);
         links.push_back(link);
     }
 
@@ -239,6 +348,9 @@ Status InstallPortable(const PackageRecord &package, const InstallerEntry &insta
             return Status::Fail(ERROR_BAD_FORMAT, "the manifest names an invalid command alias: " + Utf8FromWide(link.alias));
         status = LinkAlias(link.target, link.alias);
         if (!status) return status;
+        const std::wstring aliasPath = JoinPath(ParentPath(link.target), link.alias);
+        if (_wcsicmp(aliasPath.c_str(), link.target.c_str()) != 0)
+            AddTrackedEntry(trackedFiles, aliasPath);
         if (firstTarget.empty()) firstTarget = link.target;
         const std::wstring symlink = JoinPath(linksDirectory, link.alias);
         DeleteFileW(symlink.c_str());
@@ -282,7 +394,8 @@ Status InstallPortable(const PackageRecord &package, const InstallerEntry &insta
     if (status && !symlinks.empty()) status = SetString(key, L"SymlinkFullPath", symlinks[0]);
     if (status) status = SetMultiString(key, L"LntGetSymlinks", symlinks);
     if (status) status = SetMultiString(key, L"LntGetPathEntries", pathEntries);
-    if (status) status = SetDword(key, L"InstallDirectoryCreated", directoryExisted ? 0 : 1);
+    if (status) status = SetMultiString(key, L"LntGetFiles", trackedFiles);
+    if (status) status = SetDword(key, L"InstallDirectoryCreated", directoryCreated ? 1 : 0);
     if (status) status = SetDword(key, L"InstallDirectoryAddedToPath", pathEntries.empty() ? 0 : 1);
     RegCloseKey(key);
     if (!status) return status;
@@ -315,10 +428,18 @@ Status UninstallPortable(const ArpEntry &entry)
         const Status status = RemovePathVariable(entry.machine, entry.location);
         if (!status) return status;
     }
-    if (entry.installDirectoryCreated && !entry.location.empty())
+    if (entry.filesTracked)
+    {
+        const Status status = RemovePackageEntries(entry.files, entry.location);
+        if (!status) return status;
+        if (entry.installDirectoryCreated && !entry.location.empty() && PathExists(entry.location) &&
+            !RemoveDirectoryW(entry.location.c_str()))
+            std::printf("Files remain in install directory: %s\n", Utf8FromWide(entry.location).c_str());
+    }
+    else if (entry.installDirectoryCreated && !entry.location.empty())
     {
         DeleteDirectoryTree(entry.location);
-        if (GetFileAttributesW(entry.location.c_str()) != INVALID_FILE_ATTRIBUTES)
+        if (PathExists(entry.location))
             return Status::Fail(ERROR_SHARING_VIOLATION, "cannot remove " + Utf8FromWide(entry.location) + "; close the application and retry");
     }
     const std::wstring subKey = std::wstring(ArpUninstallKey) + L"\\" + entry.keyName;
@@ -337,6 +458,11 @@ Status RunPortableSelfTests()
     if (WithExecutableExtension(L"tool") != L"tool.exe" || WithExecutableExtension(L"Tool.EXE") != L"Tool.EXE" ||
         WithExecutableExtension(L"tool-1.2") != L"tool-1.2.exe")
         return Status::Fail(ERROR_ASSERTION_FAILURE, "portable alias extension self-test failed");
+    if (!InsidePackage(L"C:\\P\\pkg\\tool.exe", L"C:\\P\\pkg") || InsidePackage(L"C:\\P\\pkg", L"C:\\P\\pkg") ||
+        InsidePackage(L"C:\\P\\pkg2\\tool.exe", L"C:\\P\\pkg") || InsidePackage(L"C:\\P\\pkg\\..\\x", L"C:\\P\\pkg") || InsidePackage(L"C:\\P\\pkg\\a\\..", L"C:\\P\\pkg") ||
+        !InsidePackage(L"C:\\P\\pkg\\..x", L"C:\\P\\pkg") ||
+        InsidePackage(L"C:\\Users", L""))
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "portable package containment self-test failed");
     if (RelativeNestedPath(".\\bin/tool.exe") != L"bin\\tool.exe" || !RelativeNestedPath("..\\tool.exe").empty() ||
         !RelativeNestedPath("C:\\tool.exe").empty() || SafeAlias(L"..\\x.exe") || !SafeAlias(L"tool.exe"))
         return Status::Fail(ERROR_ASSERTION_FAILURE, "portable path validation self-test failed");

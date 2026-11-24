@@ -138,6 +138,8 @@ void EnumerateView(bool machine, bool wow64View, std::vector<ArpEntry> &entries)
             entry.installDirectoryAddedToPath = ReadDword(key, L"InstallDirectoryAddedToPath") != 0;
             entry.symlinks = ReadArpMultiString(key, L"LntGetSymlinks");
             entry.pathEntries = ReadArpMultiString(key, L"LntGetPathEntries");
+            entry.filesTracked = HasValue(key, L"LntGetFiles");
+            entry.files = ReadArpMultiString(key, L"LntGetFiles");
             std::wstring symlink;
             if (entry.symlinks.empty() && ReadString(key, L"SymlinkFullPath", symlink))
                 entry.symlinks.push_back(symlink);

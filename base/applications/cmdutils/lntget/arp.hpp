@@ -32,6 +32,8 @@ struct ArpEntry
     bool installDirectoryAddedToPath = false;
     std::vector<std::wstring> symlinks;
     std::vector<std::wstring> pathEntries;
+    bool filesTracked = false;
+    std::vector<std::wstring> files;
     unsigned long long estimatedBytes = 0;
 
     std::string Identity() const;

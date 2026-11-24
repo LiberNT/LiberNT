@@ -266,12 +266,15 @@ typedef struct _UPGRADE_PACKAGE
     PCWSTR DisplayName;
     PCWSTR OldVersion;
     PCWSTR Directory;
+    PCWSTR Alias;
 } UPGRADE_PACKAGE;
 
 static const UPGRADE_PACKAGE UpgradePackages[] =
 {
-    { L"jqlang.jq", L"jq", L"1.8.1", L"%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\jqlang.jq_Microsoft.Winget.Source_8wekyb3d8bbwe" },
-    { L"sharkdp.fd", L"fd", L"10.4.2", L"%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\sharkdp.fd_Microsoft.Winget.Source_8wekyb3d8bbwe" },
+    { L"jqlang.jq", L"jq", L"1.8.1", L"%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\jqlang.jq_Microsoft.Winget.Source_8wekyb3d8bbwe",
+      L"%LOCALAPPDATA%\\Microsoft\\WinGet\\Links\\jq.exe" },
+    { L"sharkdp.fd", L"fd", L"10.4.2", L"%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\sharkdp.fd_Microsoft.Winget.Source_8wekyb3d8bbwe",
+      L"%LOCALAPPDATA%\\Microsoft\\WinGet\\Links\\fd.exe" },
 };
 
 static BOOL
@@ -448,5 +451,95 @@ START_TEST(upgradeall)
 
         for (i = 0; i < _countof(UpgradePackages); i++)
             UninstallPackage(UpgradePackages[i].Id);
+    }
+}
+
+static ULONG
+CountEntries(PCWSTR Directory, PWSTR Name, DWORD NameSize)
+{
+    WCHAR Pattern[MAX_PATH];
+    WIN32_FIND_DATAW Data;
+    HANDLE Find;
+    ULONG Count = 0;
+
+    StringCchPrintfW(Pattern, _countof(Pattern), L"%s\\*", Directory);
+    Find = FindFirstFileW(Pattern, &Data);
+    if (Find == INVALID_HANDLE_VALUE)
+        return 0;
+    do
+    {
+        if (!wcscmp(Data.cFileName, L".") || !wcscmp(Data.cFileName, L".."))
+            continue;
+        if (!Count)
+            StringCchCopyW(Name, NameSize, Data.cFileName);
+        Count++;
+    } while (FindNextFileW(Find, &Data));
+    FindClose(Find);
+    return Count;
+}
+
+static BOOL
+UserFileIntact(PCWSTR Path)
+{
+    char Buffer[32] = "";
+    DWORD Read = 0;
+    HANDLE File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+
+    if (File == INVALID_HANDLE_VALUE)
+        return FALSE;
+    ReadFile(File, Buffer, sizeof(Buffer) - 1, &Read, NULL);
+    CloseHandle(File);
+    return Read == 8 && !memcmp(Buffer, "settings", 8);
+}
+
+START_TEST(portablefiles)
+{
+    WCHAR Directory[MAX_PATH], UserFile[MAX_PATH], Alias[MAX_PATH], Arguments[512], Version[64], Name[MAX_PATH];
+    const UPGRADE_PACKAGE *Package;
+    HANDLE File;
+    DWORD ExitCode, Written;
+    ULONG i;
+
+    if (PackagesInstalled())
+    {
+        skip("an upgrade test package is already installed\n");
+        return;
+    }
+    if (!SourceAvailable(UpgradePackages[0].Id))
+        return;
+
+    for (i = 0; i < _countof(UpgradePackages); i++)
+    {
+        Package = &UpgradePackages[i];
+        if (!InstallVersion(Package, Package->OldVersion))
+            return;
+        ExpandEnvironmentStringsW(Package->Directory, Directory, _countof(Directory));
+        ExpandEnvironmentStringsW(Package->Alias, Alias, _countof(Alias));
+        StringCchPrintfW(UserFile, _countof(UserFile), L"%s\\lntget-user.ini", Directory);
+        File = CreateFileW(UserFile, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+        ok(File != INVALID_HANDLE_VALUE, "cannot create %ls: %lu\n", UserFile, GetLastError());
+        if (File == INVALID_HANDLE_VALUE)
+            return;
+        WriteFile(File, "settings", 8, &Written, NULL);
+        CloseHandle(File);
+
+        StringCchPrintfW(Arguments, _countof(Arguments),
+                         L"upgrade --id %s -e --source winget --silent --accept-package-agreements --disable-interactivity", Package->Id);
+        if (RunTool(Arguments, &ExitCode))
+            ok(ExitCode == 0, "upgrade %ls returned 0x%08lx:\n%s\n", Package->Id, ExitCode, Output);
+        ok(InstalledVersion(Package, Version, sizeof(Version)) && wcscmp(Version, Package->OldVersion) != 0,
+           "%ls is version '%ls' after the upgrade\n", Package->Id, Version);
+        ok(UserFileIntact(UserFile), "the upgrade of %ls removed or changed %ls\n", Package->Id, UserFile);
+        ok(GetFileAttributesW(Alias) != INVALID_FILE_ATTRIBUTES, "%ls is missing after the upgrade\n", Alias);
+
+        UninstallPackage(Package->Id);
+        ok(!InstalledVersion(Package, Version, sizeof(Version)), "%ls is still installed\n", Package->Id);
+        ok(GetFileAttributesW(Alias) == INVALID_FILE_ATTRIBUTES, "%ls remains after the uninstall\n", Alias);
+        ok(UserFileIntact(UserFile), "the uninstall of %ls removed or changed %ls\n", Package->Id, UserFile);
+        Name[0] = L'\0';
+        ok(CountEntries(Directory, Name, _countof(Name)) == 1 && !_wcsicmp(Name, L"lntget-user.ini"),
+           "%ls holds more than the user file after the uninstall (first entry '%ls')\n", Directory, Name);
+        DeleteFileW(UserFile);
+        RemoveDirectoryW(Directory);
     }
 }
