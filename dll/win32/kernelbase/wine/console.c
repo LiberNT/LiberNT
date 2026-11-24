@@ -402,7 +402,7 @@ static BOOL create_console_connection( HANDLE root )
 
 static BOOL init_console_std_handles( BOOL override_all )
 {
-    HANDLE std_out = NULL, std_err = NULL, handle;
+    HANDLE handle, cur_in, cur_out, cur_err;
     OBJECT_ATTRIBUTES attr = {sizeof(attr)};
     IO_STATUS_BLOCK iosb;
     UNICODE_STRING name;
@@ -411,7 +411,12 @@ static BOOL init_console_std_handles( BOOL override_all )
     attr.ObjectName = &name;
     attr.Attributes = OBJ_INHERIT;
 
-    if (override_all || !GetStdHandle( STD_INPUT_HANDLE ))
+    cur_in  = GetStdHandle( STD_INPUT_HANDLE );
+    cur_out = GetStdHandle( STD_OUTPUT_HANDLE );
+    cur_err = GetStdHandle( STD_ERROR_HANDLE );
+
+    /* override_all replaces missing and stale console handles only; inherited pipes and files survive */
+    if (!cur_in || (override_all && is_console_handle( cur_in )))
     {
         RtlInitUnicodeString( &name, L"\\Device\\ConDrv\\Input" );
         status = NtCreateFile( &handle, FILE_READ_DATA | FILE_WRITE_DATA | SYNCHRONIZE | FILE_READ_ATTRIBUTES |
@@ -423,12 +428,9 @@ static BOOL init_console_std_handles( BOOL override_all )
         SetStdHandle( STD_INPUT_HANDLE, handle );
     }
 
-    if (!override_all)
-    {
-        std_out = GetStdHandle( STD_OUTPUT_HANDLE );
-        std_err = GetStdHandle( STD_ERROR_HANDLE );
-        if (std_out && std_err) return TRUE;
-    }
+    if (cur_out && cur_err &&
+        !(override_all && (is_console_handle( cur_out ) || is_console_handle( cur_err ))))
+        return TRUE;
 
     RtlInitUnicodeString( &name, L"\\Device\\ConDrv\\Output" );
     status = NtCreateFile( &handle, FILE_READ_DATA | FILE_WRITE_DATA | SYNCHRONIZE | FILE_READ_ATTRIBUTES |
@@ -436,15 +438,16 @@ static BOOL init_console_std_handles( BOOL override_all )
                            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_CREATE,
                            FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0 );
     if (!set_ntstatus( status )) return FALSE;
-    if (!std_out)
+    if (!cur_out || (override_all && is_console_handle( cur_out )))
     {
         console_flags |= CONSOLE_OUTPUT_HANDLE;
         SetStdHandle( STD_OUTPUT_HANDLE, handle );
+        cur_out = NULL;
     }
 
-    if (!std_err)
+    if (!cur_err || (override_all && is_console_handle( cur_err )))
     {
-        if (!std_out && !DuplicateHandle( GetCurrentProcess(), handle, GetCurrentProcess(),
+        if (!cur_out && !DuplicateHandle( GetCurrentProcess(), handle, GetCurrentProcess(),
                                           &handle, 0, TRUE, DUPLICATE_SAME_ACCESS ))
             return FALSE;
         console_flags |= CONSOLE_ERROR_HANDLE;
