@@ -448,7 +448,8 @@ Status ParsePackageAgreements(const YamlNode *node, std::vector<PackageAgreement
 
 Status SelectInstallerForMachine(const Manifest &manifest, const SelectionOptions &options, MachineArchitecture machine, InstallerEntry &installer)
 {
-    if (options.hasArchitecture && ArchitectureRank(options.architecture, machine) < 0)
+    if (options.hasArchitecture && !options.skipArchitectureApplicability &&
+        ArchitectureRank(options.architecture, machine) < 0)
         return Status::Fail(ERROR_NOT_SUPPORTED, "requested architecture " + options.architecture +
                             " cannot run on " + ArchitectureName(machine));
 
@@ -798,6 +799,14 @@ Status RunManifestSelfTests()
     status = SelectInstallerForMachine(manifest, options, MachineArchitecture::X64, installer);
     if (status)
         return Status::Fail(ERROR_ASSERTION_FAILURE, "incompatible explicit architecture self-test failed");
+    options.skipArchitectureApplicability = true;
+    status = SelectInstallerForMachine(manifest, options, MachineArchitecture::X64, installer);
+    if (!status || installer.architecture != "arm64")
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "explicit architecture without applicability self-test failed");
+    status = SelectInstallerForMachine(manifest, options, MachineArchitecture::X86, installer);
+    if (status)
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "unsupported OS architecture without applicability self-test failed");
+    options.skipArchitectureApplicability = false;
     options.architecture = "x86";
     status = SelectInstallerForMachine(manifest, options, MachineArchitecture::X64, installer);
     if (!status || installer.architecture != "x86")

@@ -137,10 +137,17 @@ ArpHasDisplayName(PCWSTR DisplayName)
 static BOOL
 PackageFileExists(const PACKAGE *Package)
 {
-    WCHAR Path[MAX_PATH];
+    static const WCHAR ProgramFilesX86[] = L"%ProgramFiles(x86)%";
+    WCHAR Path[MAX_PATH], Native[MAX_PATH];
 
     if (!ExpandEnvironmentStringsW(Package->File, Path, _countof(Path)))
         return FALSE;
+    if (!_wcsnicmp(Path, ProgramFilesX86, _countof(ProgramFilesX86) - 1))
+    {
+        StringCchPrintfW(Native, _countof(Native), L"%%ProgramFiles%%%s", Path + _countof(ProgramFilesX86) - 1);
+        if (!ExpandEnvironmentStringsW(Native, Path, _countof(Path)))
+            return FALSE;
+    }
     return GetFileAttributesW(Path) != INVALID_FILE_ATTRIBUTES;
 }
 
@@ -746,7 +753,24 @@ START_TEST(options)
         if (Find != INVALID_HANDLE_VALUE)
             FindClose(Find);
     }
+    StringCchPrintfW(Arguments, _countof(Arguments),
+                     L"download --id 7zip.7zip -e -s winget -a arm64 --installer-type exe -d \"%s\" --accept-source-agreements --accept-package-agreements",
+                     Directory);
+    if (RunTool(Arguments, &ExitCode))
+    {
+        ok(ExitCode == 0, "download for another architecture returned 0x%08lx:\n%s\n", ExitCode, Output);
+        StringCchPrintfW(Pattern, _countof(Pattern), L"%s\\*.exe", Directory);
+        Find = FindFirstFileW(Pattern, &Data);
+        ok(Find != INVALID_HANDLE_VALUE, "no arm64 installer was downloaded to %ls\n", Directory);
+        if (Find != INVALID_HANDLE_VALUE)
+            FindClose(Find);
+    }
     RemoveDirectoryFiles(Directory);
+    if (RunTool(L"show --id 7zip.7zip -e -s winget -a arm64 --installer-type exe --disable-interactivity", &ExitCode))
+    {
+        ok(ExitCode == 0, "show for another architecture returned 0x%08lx:\n%s\n", ExitCode, Output);
+        ok(strstr(Output, "-arm64.exe") != NULL, "show did not select the arm64 installer:\n%s\n", Output);
+    }
 
     if (!RunTool(L"install --id 7zip.7zip -e -s winget --installer-type wix -h --accept-source-agreements --accept-package-agreements --disable-interactivity", &ExitCode))
         return;
