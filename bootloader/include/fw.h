@@ -96,6 +96,19 @@ FwGetVolumeDiskNumber(
 PCWSTR
 FwGetRemovableMediaPath(VOID);
 
+PCWSTR
+FwGetSystemManagerPath(
+    _In_ BOOLEAN Windows);
+
+PCWSTR
+FwGetSystemStorePath(
+    _In_ BOOLEAN Windows);
+
+BOOLEAN
+FwIsLiberNTManager(
+    _In_ PVOID Device,
+    _In_ PCWSTR Path);
+
 BOOLEAN
 FwStartFirmwareApplication(
     _In_ PVOID Device,

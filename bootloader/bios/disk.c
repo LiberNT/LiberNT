@@ -22,6 +22,13 @@
 #define BIOS_MBR_SIGNATURE      0x1B8
 #define BIOS_DAP_OFFSET         0x100
 #define BIOS_PARAMETERS_OFFSET  0x200
+#define BIOS_MAX_VOLUMES        32
+#define BIOS_MANAGER_PATH       L"\\bootmgr"
+#define BIOS_STORE_PATH         L"\\Boot\\BCD"
+#define BIOS_CHAIN_VECTOR       0x66
+#define BIOS_CHAIN_MBR          0x600
+#define BIOS_CHAIN_SECTOR       0x7C00
+#define BIOS_MBR_IS_EXTENDED(Type) ((Type) == 0x05 || (Type) == 0x0F || (Type) == 0x85)
 
 typedef struct _BIOS_DISK
 {
@@ -31,8 +38,27 @@ typedef struct _BIOS_DISK
     ULONGLONG BlockCount;
 } BIOS_DISK, *PBIOS_DISK;
 
+typedef enum _BIOS_MANAGER
+{
+    BiosManagerUnknown,
+    BiosManagerNone,
+    BiosManagerLiberNT,
+    BiosManagerOther
+} BIOS_MANAGER;
+
+typedef struct _BIOS_VOLUME
+{
+    ULONG DiskIndex;
+    ULONG PartitionNumber;
+    ULONG Slot;
+    BIOS_MANAGER Manager;
+} BIOS_VOLUME, *PBIOS_VOLUME;
+
 static BIOS_DISK BiosDisks[BIOS_MAX_DISKS];
 static ULONG BiosDiskCount;
+static BIOS_VOLUME BiosVolumes[BIOS_MAX_VOLUMES];
+static ULONG BiosVolumeCount;
+static BOOLEAN BiosVolumesListed;
 
 static
 BOOLEAN
@@ -424,16 +450,103 @@ FwWriteBootFile(
     return FALSE;
 }
 
+static
+PBIOS_VOLUME
+BiosVolume(
+    _In_ PVOID Device)
+{
+    PBIOS_VOLUME Volume = Device;
+
+    ASSERT(Volume >= BiosVolumes && Volume < BiosVolumes + BiosVolumeCount);
+    ASSERT(Volume->DiskIndex < BiosDiskCount && Volume->PartitionNumber != 0);
+    return Volume;
+}
+
+static
+VOID
+BiosListVolumes(VOID)
+{
+    UCHAR Sector[BIOS_SECTOR];
+    PUCHAR Entry;
+    DK_DEVICE Disk;
+    ULONG Index, Slot, Number;
+
+    BiosVolumesListed = TRUE;
+    for (Index = 0; Index < BiosDiskCount; Index++)
+    {
+        if (BiosDisks[Index].Cdrom ||
+            !FwGetDisk(Index, &Disk) ||
+            !DkRead(&Disk, 0, sizeof(Sector), Sector) ||
+            Sector[510] != 0x55 ||
+            Sector[511] != 0xAA)
+        {
+            continue;
+        }
+
+        for (Slot = 0, Number = 0; Slot < BIOS_MBR_PARTITIONS; Slot++)
+        {
+            Entry = Sector + BIOS_MBR_TABLE + Slot * BIOS_MBR_ENTRY_SIZE;
+            if (Entry[4] == 0)
+                continue;
+
+            Number++;
+            if (BIOS_MBR_IS_EXTENDED(Entry[4]) || BiosVolumeCount == BIOS_MAX_VOLUMES)
+                continue;
+
+            BiosVolumes[BiosVolumeCount].DiskIndex = Index;
+            BiosVolumes[BiosVolumeCount].PartitionNumber = Number;
+            BiosVolumes[BiosVolumeCount].Slot = Slot;
+            BiosVolumes[BiosVolumeCount].Manager = BiosManagerUnknown;
+            BiosVolumeCount++;
+        }
+    }
+
+    /* TODO: the volumes in extended partitions and on GPT disks */
+}
+
+static
+BIOS_MANAGER
+BiosVolumeManager(
+    _Inout_ PBIOS_VOLUME Volume)
+{
+    DK_DEVICE Partition;
+    PUCHAR Data;
+    ULONG Size;
+
+    if (Volume->Manager != BiosManagerUnknown)
+        return Volume->Manager;
+
+    Volume->Manager = BiosManagerNone;
+    if (!BiosOpenPartition(Volume->DiskIndex, Volume->PartitionNumber, &Partition))
+        return Volume->Manager;
+
+    Data = FsReadFile(&Partition, BIOS_MANAGER_PATH, &Size);
+    if (Data)
+    {
+        Volume->Manager = (Size >= BIOS_STARTUP_INFO_OFFSET + sizeof(ULONG) &&
+                           LeUlong(Data + BIOS_STARTUP_INFO_OFFSET) == BIOS_STARTUP_MAGIC) ? BiosManagerLiberNT
+                                                                                          : BiosManagerOther;
+        FwFreePages(Data, Size);
+    }
+
+    ASSERT(Volume->Manager != BiosManagerUnknown);
+    return Volume->Manager;
+}
+
 PVOID
 FwReadDeviceFile(
     _In_ PVOID Device,
     _In_ PCWSTR Path,
     _Out_ PULONG Size)
 {
-    UNREFERENCED_PARAMETER(Device);
-    UNREFERENCED_PARAMETER(Path);
+    PBIOS_VOLUME Volume = BiosVolume(Device);
+    DK_DEVICE Partition;
+
     *Size = 0;
-    return NULL;
+    if (!BiosOpenPartition(Volume->DiskIndex, Volume->PartitionNumber, &Partition))
+        return NULL;
+
+    return FsReadFile(&Partition, Path, Size);
 }
 
 BOOLEAN
@@ -442,10 +555,32 @@ FwScanFileVolumes(
     _Inout_ PFW_VOLUME_SCAN Scan,
     _Out_ PVOID* Device)
 {
-    UNREFERENCED_PARAMETER(Path);
-    /* TODO: list the volumes of the BIOS disks for the boot menu's other-system entries */
-    Scan->State = FwVolumeScanDone;
+    PBIOS_VOLUME Volume;
+
     *Device = NULL;
+    if (Scan->State == FwVolumeScanDone)
+        return FALSE;
+
+    if (!BiosVolumesListed)
+        BiosListVolumes();
+
+    if (Scan->State == FwVolumeScanConnect)
+    {
+        Scan->State = FwVolumeScanVolumes;
+        Scan->Index = 0;
+        return TRUE;
+    }
+
+    ASSERT(Scan->State == FwVolumeScanVolumes);
+    if (Scan->Index < BiosVolumeCount)
+    {
+        Volume = &BiosVolumes[Scan->Index++];
+        if (!Path || FwFileExists(Volume, Path))
+            *Device = Volume;
+        return TRUE;
+    }
+
+    Scan->State = FwVolumeScanDone;
     return FALSE;
 }
 
@@ -454,9 +589,19 @@ FwFileExists(
     _In_ PVOID Device,
     _In_ PCWSTR Path)
 {
-    UNREFERENCED_PARAMETER(Device);
-    UNREFERENCED_PARAMETER(Path);
-    return FALSE;
+    PBIOS_VOLUME Volume = BiosVolume(Device);
+    PVOID Data;
+    ULONG Size;
+
+    if (_wcsicmp(Path, BIOS_MANAGER_PATH) == 0)
+        return BiosVolumeManager(Volume) != BiosManagerNone;
+
+    Data = FwReadDeviceFile(Device, Path, &Size);
+    if (!Data)
+        return FALSE;
+
+    FwFreePages(Data, Size);
+    return TRUE;
 }
 
 BOOLEAN
@@ -471,8 +616,10 @@ BOOLEAN
 FwIsBootVolume(
     _In_ PVOID Device)
 {
-    UNREFERENCED_PARAMETER(Device);
-    return FALSE;
+    PBIOS_VOLUME Volume = BiosVolume(Device);
+
+    return Volume->DiskIndex == BiosParameters->BootDisk &&
+           Volume->PartitionNumber == BiosParameters->BootPartition;
 }
 
 BOOLEAN
@@ -500,9 +647,8 @@ FwGetVolumeDiskNumber(
     _In_ PVOID Device,
     _Out_ PULONG Number)
 {
-    UNREFERENCED_PARAMETER(Device);
-    *Number = MAXULONG;
-    return FALSE;
+    *Number = BiosVolume(Device)->DiskIndex;
+    return TRUE;
 }
 
 PCWSTR
@@ -511,15 +657,69 @@ FwGetRemovableMediaPath(VOID)
     return NULL;
 }
 
+PCWSTR
+FwGetSystemManagerPath(
+    _In_ BOOLEAN Windows)
+{
+    UNREFERENCED_PARAMETER(Windows);
+    return BIOS_MANAGER_PATH;
+}
+
+PCWSTR
+FwGetSystemStorePath(
+    _In_ BOOLEAN Windows)
+{
+    UNREFERENCED_PARAMETER(Windows);
+    return BIOS_STORE_PATH;
+}
+
+BOOLEAN
+FwIsLiberNTManager(
+    _In_ PVOID Device,
+    _In_ PCWSTR Path)
+{
+    return _wcsicmp(Path, BIOS_MANAGER_PATH) == 0 && BiosVolumeManager(BiosVolume(Device)) == BiosManagerLiberNT;
+}
+
+/* A system's boot manager starts from its partition's boot record, run in real mode at 0:7C00 like the MBR would */
 BOOLEAN
 FwStartFirmwareApplication(
     _In_ PVOID Device,
     _In_ PCWSTR Path,
     _In_opt_ PCWSTR LoadOptions)
 {
-    UNREFERENCED_PARAMETER(Device);
+    PBIOS_VOLUME Volume = BiosVolume(Device);
+    UCHAR Mbr[BIOS_SECTOR], Boot[BIOS_SECTOR];
+    BIOS_REGISTERS Registers;
+    DK_DEVICE Disk, Partition;
+
     UNREFERENCED_PARAMETER(Path);
+    /* TODO: hand the load options to a boot manager started through its boot record */
     UNREFERENCED_PARAMETER(LoadOptions);
+
+    if (BiosDisks[Volume->DiskIndex].BlockSize != BIOS_SECTOR ||
+        !FwGetDisk(Volume->DiskIndex, &Disk) ||
+        !DkRead(&Disk, 0, sizeof(Mbr), Mbr) ||
+        !BiosOpenPartition(Volume->DiskIndex, Volume->PartitionNumber, &Partition) ||
+        !DkRead(&Partition, 0, sizeof(Boot), Boot) ||
+        Boot[510] != 0x55 ||
+        Boot[511] != 0xAA)
+    {
+        return FALSE;
+    }
+
+    RtlZeroMemory(&Registers, sizeof(Registers));
+    Registers.Eax = 0x0003;
+    BiosCall(0x10, &Registers);
+
+    RtlCopyMemory((PVOID)(ULONG_PTR)BIOS_CHAIN_MBR, Mbr, sizeof(Mbr));
+    RtlCopyMemory((PVOID)(ULONG_PTR)BIOS_CHAIN_SECTOR, Boot, sizeof(Boot));
+    *(volatile ULONG *)(ULONG_PTR)(BIOS_CHAIN_VECTOR * sizeof(ULONG)) = BIOS_CHAIN_SECTOR;
+
+    RtlZeroMemory(&Registers, sizeof(Registers));
+    Registers.Edx = BiosDisks[Volume->DiskIndex].Drive;
+    Registers.Esi = BIOS_CHAIN_MBR + BIOS_MBR_TABLE + Volume->Slot * BIOS_MBR_ENTRY_SIZE;
+    BiosCall(BIOS_CHAIN_VECTOR, &Registers);
     return FALSE;
 }
 

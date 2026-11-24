@@ -14,11 +14,7 @@
 #define BM_STORE_NAME      L"BCD"
 #define BM_DEFAULT_TITLE   L"Boot Manager"
 #define BM_BOOT_TIMEOUT    3
-#define BM_WINDOWS_MANAGER L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi"
-#define BM_WINDOWS_STORE   L"\\EFI\\Microsoft\\Boot\\BCD"
 #define BM_WINDOWS_TITLE   L"Windows Boot Manager"
-#define BM_LIBERNT_MANAGER L"\\EFI\\LiberNT\\Boot\\bootmgfw.efi"
-#define BM_LIBERNT_STORE   L"\\EFI\\LiberNT\\Boot\\BCD"
 #define BM_LIBERNT_TITLE   L"LiberNT"
 #define BM_LIBERNT_ENTRY   L"{354fa6e5-5e45-49af-91bf-1fd2754e470a}"
 #define BM_INSTALL_IMAGE_OPTION L"INSTALLIMAGE="
@@ -119,7 +115,7 @@ BmGetStoreDescription(
 
     RtlStringCchCopyW(Description, Chars, Windows ? BM_WINDOWS_TITLE : BM_LIBERNT_TITLE);
 
-    Store = BcdReadStoreFile(Device, Windows ? BM_WINDOWS_STORE : BM_LIBERNT_STORE, &Size);
+    Store = BcdReadStoreFile(Device, FwGetSystemStorePath(Windows), &Size);
     if (!Store)
         return;
 
@@ -340,7 +336,7 @@ BOOLEAN
 BmExamineVolume(
     _In_ PVOID Device)
 {
-    PCWSTR Removable;
+    PCWSTR Removable, LiberNTManager, WindowsManager;
     BOOLEAN Usb, Boot, Added = FALSE;
 
     if (BmPassCount < RTL_NUMBER_OF(BmPassVolumes))
@@ -350,14 +346,16 @@ BmExamineVolume(
 
     Usb = FwIsUsbVolume(Device);
     Boot = FwIsBootVolume(Device);
-    if (!Boot && FwFileExists(Device, BM_LIBERNT_MANAGER) &&
-        BmAddFoundEntry(Device, Usb, BmFoundLiberNT, BM_LIBERNT_MANAGER))
+    LiberNTManager = FwGetSystemManagerPath(FALSE);
+    WindowsManager = FwGetSystemManagerPath(TRUE);
+    if (!Boot && FwFileExists(Device, LiberNTManager) && FwIsLiberNTManager(Device, LiberNTManager) &&
+        BmAddFoundEntry(Device, Usb, BmFoundLiberNT, LiberNTManager))
     {
         Added = TRUE;
     }
 
-    if (FwFileExists(Device, BM_WINDOWS_MANAGER) &&
-        BmAddFoundEntry(Device, Usb, BmFoundWindows, BM_WINDOWS_MANAGER))
+    if (FwFileExists(Device, WindowsManager) && !FwIsLiberNTManager(Device, WindowsManager) &&
+        BmAddFoundEntry(Device, Usb, BmFoundWindows, WindowsManager))
     {
         Added = TRUE;
     }
@@ -456,8 +454,7 @@ BmBuildMenu(VOID)
     {
         BmMenuName(BmEntries[i].Description, BmNames[i]);
         BmMenuNames[i] = BmNames[i];
-        BmMenuIcons[i] = (!BmEntries[i].FirmwareDevice ||
-                          _wcsicmp(BmEntries[i].FirmwarePath, BM_LIBERNT_MANAGER) == 0) ? UiMenuIconLiberNT :
+        BmMenuIcons[i] = (!BmEntries[i].FirmwareDevice || BmEntries[i].FirmwareOptions != NULL) ? UiMenuIconLiberNT :
                          BmLogos[i].Pixels ? UiMenuIconImage : UiMenuIconDesktop;
         BmMenuImages[i] = BmLogos[i].Pixels ? &BmLogos[i] : NULL;
     }

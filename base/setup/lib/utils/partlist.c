@@ -4058,7 +4058,6 @@ IsSupportedActivePartition(
             Owner = GetPcatBootManagerOwner(Volume->Info.DeviceName);
             if (Owner == BootManagerForeign)
             {
-                /* TODO: start this boot manager from LiberNT's boot menu */
                 DPRINT1("System partition %lu in disk %lu holds another system's boot manager\n",
                         PartEntry->PartitionNumber, PartEntry->DiskEntry->DiskNumber);
                 return FALSE;
