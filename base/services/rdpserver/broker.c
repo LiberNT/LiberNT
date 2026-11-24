@@ -1,17 +1,20 @@
 /*
  * PROJECT:     LiberNT RDP console server
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Accept RDP connections in session 0 and hand each one to the server of its session
+ * PURPOSE:     Accept RDP connections in session 0 and give each signed-in user the agent of its session
  * COPYRIGHT:   Copyright 2026 mikuta0407 <mikuta0407@mikuta0407.net>
  */
 
 #define WIN32_NO_STATUS
 #include "broker.h"
+#include "agent.h"
 #include <ws2tcpip.h>
 #include <wtsapi32.h>
 #include <cfgmgr32.h>
 #include <swdevice.h>
 #include <stdio.h>
+#include <assert.h>
+#include <bcrypt.h>
 #undef WIN32_NO_STATUS
 #include <ntstatus.h>
 #define NTOS_MODE_USER
@@ -20,71 +23,110 @@
 
 #define MAX_AGENTS 16
 
-typedef struct AGENT
+struct AGENT
 {
+    LONG References;
+    CRITICAL_SECTION Lock;
     DWORD Session;
+    BOOL Console;
     HANDLE Process;
+    HANDLE Pipe, PipeEvent;
+    WCHAR PipeKey[AGENT_PIPE_KEY_CHARS + 1];
+    volatile LONG Broken;
+    volatile LONG Owner;
+    LONG Connections;
     HSWDEVICE Display;
     WCHAR DisplayInstance[MAX_DEVICE_ID_LEN];
+    BYTE Sid[SECURITY_MAX_SID_SIZE];
     WCHAR User[257];
     HANDLE Winlogon;
-} AGENT;
+};
 
 static BROKER_LOG Log;
 static BROKER_START_AGENT StartAgent;
 static BROKER_ALLOWED Allowed;
+static BROKER_ACCEPTED Accepted;
 static HANDLE BrokerThread, BrokerStopEvent;
-static CRITICAL_SECTION AgentLock;
-static HANDLE ConsoleAgent;
+static CRITICAL_SECTION TableLock;
+static AGENT *Console;
 static DWORD ConsoleSession;
-static AGENT Agents[MAX_AGENTS];
-static LONG NextDisplay;
+static AGENT *Agents[MAX_AGENTS];
+static LONG NextDisplay, NextOwner;
 
-static BOOL ReadCookie(SOCKET client, WCHAR *user, DWORD count, BOOL *routed)
+static AGENT *NewAgent(DWORD session, BOOL console)
 {
-    BYTE data[512];
-    fd_set readable;
-    struct timeval timeout = {10, 0};
-    DWORD start = GetTickCount();
-    int got;
-    for (;;)
+    AGENT *agent = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*agent));
+    if (!agent) return NULL;
+    agent->References = 1;
+    agent->Session = session;
+    agent->Console = console;
+    agent->PipeEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!agent->PipeEvent)
     {
-        FD_ZERO(&readable);
-        FD_SET(client, &readable);
-        if (select(0, &readable, NULL, NULL, &timeout) != 1) return FALSE;
-        got = recv(client, (char *)data, sizeof(data), MSG_PEEK);
-        if (got <= 0) return FALSE;
-        if (got >= 4 && ((data[2] << 8) | data[3]) <= got) return BrokerCookieUser(data, got, user, count, routed);
-        if (got == sizeof(data) || GetTickCount() - start > 10000) return FALSE;
-        Sleep(20);
+        HeapFree(GetProcessHeap(), 0, agent);
+        return NULL;
     }
+    InitializeCriticalSection(&agent->Lock);
+    return agent;
 }
 
-static BOOL AgentAlive(HANDLE process)
+static BOOL ProcessAlive(HANDLE process)
 {
     return process && WaitForSingleObject(process, 0) == WAIT_TIMEOUT;
 }
 
-/* winpr links its own WTS functions; the session's user comes from the system's wtsapi32 */
-static BOOL SessionUser(DWORD session, WCHAR *user, DWORD count)
+static void StopAgentProcess(AGENT *agent)
 {
-    typedef BOOL (WINAPI *QUERY)(HANDLE, DWORD, WTS_INFO_CLASS, WCHAR **, DWORD *);
-    typedef void (WINAPI *FREE)(void *);
-    static QUERY Query;
-    static FREE Free;
-    HMODULE wtsapi;
-    WCHAR *name = NULL;
-    DWORD size = 0;
-    *user = 0;
-    if (!Query && (wtsapi = LoadLibraryW(L"wtsapi32.dll")))
+    if (agent->Pipe) CloseHandle(agent->Pipe);
+    agent->Pipe = NULL;
+    if (agent->Process)
     {
-        Free = (FREE)(void *)GetProcAddress(wtsapi, "WTSFreeMemory");
-        Query = Free ? (QUERY)(void *)GetProcAddress(wtsapi, "WTSQuerySessionInformationW") : NULL;
+        if (WaitForSingleObject(agent->Process, 10000) == WAIT_TIMEOUT) TerminateProcess(agent->Process, 1);
+        CloseHandle(agent->Process);
     }
-    if (!Query || !Query(WTS_CURRENT_SERVER_HANDLE, session, WTSUserName, &name, &size) || !name) return FALSE;
-    lstrcpynW(user, name, count);
-    Free(name);
-    return TRUE;
+    agent->Process = NULL;
+    InterlockedExchange(&agent->Owner, 0);
+    InterlockedExchange(&agent->Broken, TRUE);
+}
+
+static void ReleaseAgent(AGENT *agent)
+{
+    if (InterlockedDecrement(&agent->References)) return;
+    assert(!agent->Connections);
+    StopAgentProcess(agent);
+    if (agent->Display) SwDeviceClose(agent->Display);
+    if (agent->Winlogon) CloseHandle(agent->Winlogon);
+    CloseHandle(agent->PipeEvent);
+    DeleteCriticalSection(&agent->Lock);
+    HeapFree(GetProcessHeap(), 0, agent);
+}
+
+/* winpr links its own WTS functions; the user of a session comes from the system's wtsapi32 */
+static BOOL SessionUserSid(DWORD session, BYTE *sid)
+{
+    typedef BOOL (WINAPI *QUERY_TOKEN)(ULONG, PHANDLE);
+    static QUERY_TOKEN Query;
+    BYTE buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    HMODULE wtsapi;
+    HANDLE token;
+    DWORD length;
+    BOOL found;
+    if (!Query && (wtsapi = LoadLibraryW(L"wtsapi32.dll")))
+        Query = (QUERY_TOKEN)(void *)GetProcAddress(wtsapi, "WTSQueryUserToken");
+    if (!Query || !Query(session, &token)) return FALSE;
+    found = GetTokenInformation(token, TokenUser, buffer, sizeof(buffer), &length) &&
+            CopySid(SECURITY_MAX_SID_SIZE, sid, ((TOKEN_USER *)buffer)->User.Sid);
+    CloseHandle(token);
+    return found;
+}
+
+static NTSTATUS StopSession(DWORD session)
+{
+    HANDLE port = NULL;
+    NTSTATUS status = SmConnectToSm(NULL, NULL, 0, &port);
+    if (NT_SUCCESS(status)) status = SmStopCsr(port, session);
+    if (port) NtClose(port);
+    return status;
 }
 
 typedef struct DISPLAY_CREATION
@@ -120,36 +162,31 @@ static BOOL DisplayStarted(const WCHAR *instance)
            CM_Get_DevNode_Status(&status, &problem, node, 0) == CR_SUCCESS && (status & DN_STARTED);
 }
 
-static void CloseAgent(AGENT *agent)
-{
-    if (agent->Process)
-    {
-        if (AgentAlive(agent->Process)) TerminateProcess(agent->Process, 1);
-        CloseHandle(agent->Process);
-    }
-    if (agent->Display) SwDeviceClose(agent->Display);
-    if (agent->Winlogon) CloseHandle(agent->Winlogon);
-    ZeroMemory(agent, sizeof(*agent));
-}
-
 /* A new session's win32k needs its display before csrss initializes, so the adapter is made first */
-static AGENT *StartNewSession(const WCHAR *user)
+static AGENT *StartNewSession(const BYTE *sid, const WCHAR *user)
 {
     static const WCHAR hardwareIds[] = L"RdpVdd_RemoteDisplay\0";
     SW_DEVICE_CREATE_INFO info = {sizeof(info)};
     WCHAR name[64];
     HANDLE port = NULL, csrss = NULL, initial = NULL;
-    AGENT *agent = NULL;
+    AGENT *agent;
+    AGENT **slot = NULL;
     DISPLAY_CREATION *creation;
     NTSTATUS status;
     ULONG session = 0;
     DWORD i, wait;
     BOOL created;
-    for (i = 0; i < MAX_AGENTS && !agent; ++i)
-        if (!Agents[i].Process && !Agents[i].Display) agent = &Agents[i];
-    if (!agent)
+    for (i = 0; i < MAX_AGENTS && !slot; ++i)
+        if (!Agents[i]) slot = &Agents[i];
+    if (!slot)
     {
         Log("No room for another session");
+        return NULL;
+    }
+    agent = NewAgent(0, FALSE);
+    if (!agent)
+    {
+        Log("Cannot start a new session: out of memory");
         return NULL;
     }
     _snwprintf(name, ARRAYSIZE(name), BROKER_DISPLAY_PREFIX L"%ld", InterlockedIncrement(&NextDisplay));
@@ -199,115 +236,207 @@ static AGENT *StartNewSession(const WCHAR *user)
     }
     agent->Session = session;
     agent->Winlogon = OpenProcess(SYNCHRONIZE, FALSE, HandleToUlong(initial));
+    if (!agent->Winlogon)
+    {
+        Log("Cannot watch Winlogon of session %lu error=%lu: 0x%08lx", session, GetLastError(), StopSession(session));
+        goto failed;
+    }
+    CopySid(sizeof(agent->Sid), agent->Sid, (PSID)sid);
     lstrcpynW(agent->User, user, ARRAYSIZE(agent->User));
+    *slot = agent;
     Log("Session %lu started for %ls on %ls", session, user, agent->DisplayInstance);
     return agent;
 failed:
-    CloseAgent(agent);
+    ReleaseAgent(agent);
     return NULL;
 }
 
-static BOOL HandOff(SOCKET client, HANDLE *process, DWORD session, const WCHAR *display, BOOL restart, BOOL named)
+static BOOL SessionBelongsTo(AGENT *agent, const BYTE *sid)
 {
-    WCHAR pipe[64];
-    BROKER_HANDOFF message;
-    HANDLE handle = INVALID_HANDLE_VALUE;
-    DWORD written = 0, tries, server = 0;
-    _snwprintf(pipe, ARRAYSIZE(pipe), BROKER_PIPE_FORMAT, session);
-    pipe[ARRAYSIZE(pipe) - 1] = 0;
-    for (tries = 0; tries < 300 && handle == INVALID_HANDLE_VALUE; ++tries)
+    BYTE user[SECURITY_MAX_SID_SIZE];
+    if (SessionUserSid(agent->Session, user)) return EqualSid(user, (PSID)sid);
+    return EqualSid(agent->Sid, (PSID)sid);
+}
+
+/* A user with a session of its own gets it back; the console's user, or anyone while nobody is signed in there, gets the console session */
+static AGENT *FindSession(const BYTE *sid, const WCHAR *user)
+{
+    BYTE consoleUser[SECURITY_MAX_SID_SIZE];
+    DWORD i;
+    for (i = 0; i < MAX_AGENTS; ++i)
+        if (Agents[i] && SessionBelongsTo(Agents[i], sid)) return Agents[i];
+    if (ConsoleSession != 0 &&
+        (!SessionUserSid(ConsoleSession, consoleUser) || EqualSid(consoleUser, (PSID)sid)))
     {
-        if (!AgentAlive(*process))
-        {
-            if (!restart) return FALSE;
-            if (*process) CloseHandle(*process);
-            *process = tries < 200 ? StartAgent(session, display) : NULL;
-            if (!*process) return FALSE;
-        }
-        handle = CreateFileW(pipe, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
-                             SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, NULL);
-        if (handle == INVALID_HANDLE_VALUE) Sleep(100);
+        if (!Console) Console = NewAgent(ConsoleSession, TRUE);
+        return Console;
     }
-    if (handle == INVALID_HANDLE_VALUE)
-    {
-        Log("The server of session %lu does not take connections", session);
-        return FALSE;
-    }
-    if (!GetNamedPipeServerProcessId(handle, &server) || server != GetProcessId(*process))
-    {
-        Log("The pipe of session %lu belongs to process %lu, not to its server", session, server);
-        CloseHandle(handle);
-        return FALSE;
-    }
-    message.Named = named;
-    if (WSADuplicateSocketW(client, GetProcessId(*process), &message.Socket) ||
-        !WriteFile(handle, &message, sizeof(message), &written, NULL) || written != sizeof(message))
-    {
-        Log("Cannot hand the connection to session %lu error=%lu", session, GetLastError());
-        CloseHandle(handle);
-        return FALSE;
-    }
-    CloseHandle(handle);
+    return StartNewSession(sid, user);
+}
+
+/* Any user can make a pipe, so the name of each agent's pipe cannot be guessed */
+static BOOL NewPipeKey(AGENT *agent)
+{
+    BYTE key[AGENT_PIPE_KEY_CHARS / 2];
+    DWORD i;
+    if (!BCRYPT_SUCCESS(BCryptGenRandom(NULL, key, sizeof(key), BCRYPT_USE_SYSTEM_PREFERRED_RNG))) return FALSE;
+    for (i = 0; i < sizeof(key); ++i)
+        _snwprintf(agent->PipeKey + i * 2, 3, L"%02x", key[i]);
+    agent->PipeKey[AGENT_PIPE_KEY_CHARS] = 0;
     return TRUE;
 }
 
-static void Route(SOCKET client)
+static BOOL RunAgent(AGENT *agent)
 {
-    WCHAR user[257], consoleUser[257];
-    AGENT *agent = NULL;
-    BOOL handed, routed, ambiguous = FALSE;
-    DWORD i;
-    if (!ReadCookie(client, user, ARRAYSIZE(user), &routed))
+    WCHAR pipe[128];
+    DWORD tries, server = 0, mode = PIPE_READMODE_MESSAGE;
+    if (agent->Pipe && !agent->Broken && ProcessAlive(agent->Process)) return TRUE;
+    StopAgentProcess(agent);
+    if (!NewPipeKey(agent)) return FALSE;
+    agent->Process = StartAgent(agent->Session, agent->PipeKey, agent->Console ? NULL : agent->DisplayInstance);
+    if (!agent->Process) return FALSE;
+    _snwprintf(pipe, ARRAYSIZE(pipe), AGENT_PIPE_FORMAT, agent->Session, agent->PipeKey);
+    pipe[ARRAYSIZE(pipe) - 1] = 0;
+    for (tries = 0; tries < 300 && ProcessAlive(agent->Process); ++tries)
     {
-        Log("Dropped a connection without a connection request");
-        return;
+        agent->Pipe = CreateFileW(pipe, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+                                  FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, NULL);
+        if (agent->Pipe != INVALID_HANDLE_VALUE) break;
+        agent->Pipe = NULL;
+        Sleep(100);
     }
-    EnterCriticalSection(&AgentLock);
-    if (*user && SessionUser(ConsoleSession, consoleUser, ARRAYSIZE(consoleUser)) && *consoleUser &&
-        !BrokerSameUser(consoleUser, user, routed))
+    if (!agent->Pipe)
     {
-        for (i = 0; i < MAX_AGENTS; ++i)
-        {
-            if (!Agents[i].Display || !BrokerSameUser(Agents[i].User, user, routed)) continue;
-            if (agent) ambiguous = TRUE;
-            agent = &Agents[i];
-        }
-        if (ambiguous) agent = NULL;
-        if (!agent && (routed || wcslen(user) < BROKER_COOKIE_CHARS))
-        {
-            agent = StartNewSession(user);
-            if (!agent)
-            {
-                LeaveCriticalSection(&AgentLock);
-                return;
-            }
-        }
+        Log("The agent of session %lu does not take connections", agent->Session);
+        StopAgentProcess(agent);
+        return FALSE;
     }
-    if (agent)
+    if (!GetNamedPipeServerProcessId(agent->Pipe, &server) || server != GetProcessId(agent->Process) ||
+        !SetNamedPipeHandleState(agent->Pipe, &mode, NULL, NULL))
     {
-        handed = HandOff(client, &agent->Process, agent->Session, agent->DisplayInstance, TRUE, routed);
+        Log("The pipe of session %lu belongs to process %lu, not to its agent", agent->Session, server);
+        StopAgentProcess(agent);
+        return FALSE;
     }
-    else if (ConsoleAgent)
-    {
-        handed = HandOff(client, &ConsoleAgent, ConsoleSession, NULL, FALSE, routed);
-    }
-    else
-    {
-        handed = FALSE;
-        Log("No server runs in the console session");
-    }
-    LeaveCriticalSection(&AgentLock);
-    if (handed) Log("Connection of %ls handed to session %lu", *user ? user : L"an unnamed user", agent ? agent->Session : ConsoleSession);
-    if (!handed) Log("Dropped a connection for %ls", *user ? user : L"an unnamed user");
+    InterlockedExchange(&agent->Broken, FALSE);
+    return TRUE;
 }
 
-static NTSTATUS StopSession(DWORD session)
+AGENT *BrokerConnect(const BYTE *sid, const WCHAR *user)
 {
-    HANDLE port = NULL;
-    NTSTATUS status = SmConnectToSm(NULL, NULL, 0, &port);
-    if (NT_SUCCESS(status)) status = SmStopCsr(port, session);
-    if (port) NtClose(port);
-    return status;
+    AGENT *agent;
+    BOOL running;
+    EnterCriticalSection(&TableLock);
+    agent = FindSession(sid, user);
+    if (agent) InterlockedIncrement(&agent->References);
+    LeaveCriticalSection(&TableLock);
+    if (!agent) return NULL;
+    EnterCriticalSection(&agent->Lock);
+    ++agent->Connections;
+    running = RunAgent(agent);
+    LeaveCriticalSection(&agent->Lock);
+    if (running)
+    {
+        Log("Connection of %ls goes to session %lu", user, agent->Session);
+        return agent;
+    }
+    BrokerDisconnect(agent);
+    return NULL;
+}
+
+void BrokerDisconnect(AGENT *agent)
+{
+    EnterCriticalSection(&agent->Lock);
+    assert(agent->Connections > 0);
+    if (!--agent->Connections) StopAgentProcess(agent);
+    LeaveCriticalSection(&agent->Lock);
+    ReleaseAgent(agent);
+}
+
+BOOL AgentEnter(AGENT *agent, LONG owner)
+{
+    EnterCriticalSection(&agent->Lock);
+    if (agent->Pipe && !agent->Broken && (!owner || agent->Owner == owner)) return TRUE;
+    LeaveCriticalSection(&agent->Lock);
+    return FALSE;
+}
+
+void AgentLeave(AGENT *agent)
+{
+    LeaveCriticalSection(&agent->Lock);
+}
+
+LONG AgentTakeOver(AGENT *agent)
+{
+    LONG owner = InterlockedIncrement(&NextOwner);
+    InterlockedExchange(&agent->Owner, owner);
+    return owner;
+}
+
+BOOL AgentOwnedBy(AGENT *agent, LONG owner)
+{
+    return owner && InterlockedCompareExchange(&agent->Owner, 0, 0) == owner;
+}
+
+BOOL AgentBroken(AGENT *agent)
+{
+    return InterlockedCompareExchange(&agent->Broken, 0, 0) != 0;
+}
+
+DWORD AgentSession(AGENT *agent)
+{
+    return agent->Session;
+}
+
+void AgentAbandon(AGENT *agent)
+{
+    InterlockedExchange(&agent->Broken, TRUE);
+}
+
+/* An agent that does not answer in time is given up, so no connection or service stop waits on it forever */
+static BOOL Transfer(AGENT *agent, BOOL write, void *buffer, DWORD size, DWORD *done, DWORD timeout)
+{
+    OVERLAPPED overlapped = {0};
+    BOOL finished;
+    *done = 0;
+    overlapped.hEvent = agent->PipeEvent;
+    ResetEvent(agent->PipeEvent);
+    finished = write ? WriteFile(agent->Pipe, buffer, size, done, &overlapped)
+                     : ReadFile(agent->Pipe, buffer, size, done, &overlapped);
+    if (!finished && GetLastError() == ERROR_IO_PENDING)
+    {
+        if (WaitForSingleObject(agent->PipeEvent, timeout) != WAIT_OBJECT_0)
+        {
+            Log("The agent of session %lu did not answer in %lu ms", agent->Session, timeout);
+            CancelIo(agent->Pipe);
+        }
+        finished = GetOverlappedResult(agent->Pipe, &overlapped, done, TRUE);
+    }
+    if (!finished) AgentAbandon(agent);
+    return finished;
+}
+
+BOOL AgentWrite(AGENT *agent, const void *message, DWORD size)
+{
+    DWORD written;
+    if (Transfer(agent, TRUE, (void *)message, size, &written, AGENT_TIMEOUT) && written == size) return TRUE;
+    AgentAbandon(agent);
+    return FALSE;
+}
+
+BOOL AgentRead(AGENT *agent, void *buffer, DWORD capacity, DWORD *size, DWORD timeout)
+{
+    if (Transfer(agent, FALSE, buffer, capacity, size, timeout) && *size >= sizeof(ULONG)) return TRUE;
+    AgentAbandon(agent);
+    return FALSE;
+}
+
+HANDLE AgentDuplicate(AGENT *agent, ULONG64 handle, DWORD access)
+{
+    HANDLE duplicate = NULL;
+    if (!DuplicateHandle(agent->Process, (HANDLE)(ULONG_PTR)handle, GetCurrentProcess(), &duplicate, access, FALSE, 0))
+        return NULL;
+    return duplicate;
 }
 
 /* Winlogon of a session started for a user leaves when the user signs out, and the session ends with it */
@@ -315,15 +444,17 @@ static void EndSignedOutSessions(void)
 {
     NTSTATUS status;
     DWORD i;
-    EnterCriticalSection(&AgentLock);
+    EnterCriticalSection(&TableLock);
     for (i = 0; i < MAX_AGENTS; ++i)
     {
-        if (!Agents[i].Winlogon || WaitForSingleObject(Agents[i].Winlogon, 0) != WAIT_OBJECT_0) continue;
-        status = StopSession(Agents[i].Session);
-        Log("Session %lu of %ls ended after its user signed out: 0x%08lx", Agents[i].Session, Agents[i].User, status);
-        CloseAgent(&Agents[i]);
+        AGENT *agent = Agents[i];
+        if (!agent || !agent->Winlogon || WaitForSingleObject(agent->Winlogon, 0) != WAIT_OBJECT_0) continue;
+        status = StopSession(agent->Session);
+        Log("Session %lu of %ls ended after its user signed out: 0x%08lx", agent->Session, agent->User, status);
+        Agents[i] = NULL;
+        ReleaseAgent(agent);
     }
-    LeaveCriticalSection(&AgentLock);
+    LeaveCriticalSection(&TableLock);
 }
 
 static SOCKET Listen(void)
@@ -393,8 +524,7 @@ static DWORD WINAPI BrokerMain(void *unused)
         WSAResetEvent(accepted);
         while ((client = accept(listener, NULL, NULL)) != INVALID_SOCKET)
         {
-            if (Allowed()) Route(client);
-            closesocket(client);
+            if (!Allowed() || !Accepted(client)) closesocket(client);
         }
     }
     if (listener != INVALID_SOCKET) closesocket(listener);
@@ -402,52 +532,64 @@ static DWORD WINAPI BrokerMain(void *unused)
     return 0;
 }
 
-BOOL BrokerStart(BROKER_LOG log, BROKER_START_AGENT start, BROKER_ALLOWED allowed)
+BOOL BrokerStart(BROKER_LOG log, BROKER_START_AGENT start, BROKER_ALLOWED allowed, BROKER_ACCEPTED accepted)
 {
-    WSADATA winsock;
     Log = log;
     StartAgent = start;
     Allowed = allowed;
-    InitializeCriticalSection(&AgentLock);
-    if (WSAStartup(MAKEWORD(2, 2), &winsock)) return FALSE;
+    Accepted = accepted;
+    InitializeCriticalSection(&TableLock);
     BrokerStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!BrokerStopEvent) return FALSE;
     BrokerThread = CreateThread(NULL, 0, BrokerMain, NULL, 0, NULL);
     return BrokerThread != NULL;
 }
 
-void BrokerStop(void)
+void BrokerClose(void)
 {
-    DWORD i;
     if (!BrokerThread) return;
     SetEvent(BrokerStopEvent);
     WaitForSingleObject(BrokerThread, INFINITE);
     CloseHandle(BrokerThread);
     BrokerThread = NULL;
-    EnterCriticalSection(&AgentLock);
-    for (i = 0; i < MAX_AGENTS; ++i)
-    {
-        /* The display of a session goes away with this process, so a session left behind could never be shown again */
-        if (Agents[i].Session)
-            Log("Session %lu of %ls ended with the service: 0x%08lx", Agents[i].Session, Agents[i].User,
-                StopSession(Agents[i].Session));
-        CloseAgent(&Agents[i]);
-    }
-    if (ConsoleAgent) CloseHandle(ConsoleAgent);
-    ConsoleAgent = NULL;
-    LeaveCriticalSection(&AgentLock);
-    WSACleanup();
 }
 
-void BrokerSetConsoleAgent(HANDLE process, DWORD session)
+void BrokerStop(void)
 {
-    if (!BrokerThread) return;
-    EnterCriticalSection(&AgentLock);
-    if (ConsoleAgent) CloseHandle(ConsoleAgent);
-    ConsoleAgent = NULL;
-    if (process && !DuplicateHandle(GetCurrentProcess(), process, GetCurrentProcess(), &ConsoleAgent, 0, FALSE,
-                                    DUPLICATE_SAME_ACCESS))
-        ConsoleAgent = NULL;
-    ConsoleSession = session;
-    LeaveCriticalSection(&AgentLock);
+    DWORD i;
+    BrokerClose();
+    EnterCriticalSection(&TableLock);
+    for (i = 0; i < MAX_AGENTS; ++i)
+    {
+        AGENT *agent = Agents[i];
+        if (!agent) continue;
+        /* The display of a session goes away with this process, so a session left behind could never be shown again */
+        Log("Session %lu of %ls ended with the service: 0x%08lx", agent->Session, agent->User,
+            StopSession(agent->Session));
+        Agents[i] = NULL;
+        ReleaseAgent(agent);
+    }
+    if (Console) ReleaseAgent(Console);
+    Console = NULL;
+    LeaveCriticalSection(&TableLock);
+}
+
+void BrokerSetConsoleSession(DWORD session)
+{
+    AGENT *old = NULL;
+    /* The console has no session while its session is shown remotely */
+    if (session == 0xFFFFFFFF) return;
+    EnterCriticalSection(&TableLock);
+    if (session != ConsoleSession)
+    {
+        old = Console;
+        Console = NULL;
+        ConsoleSession = session;
+    }
+    LeaveCriticalSection(&TableLock);
+    if (!old) return;
+    EnterCriticalSection(&old->Lock);
+    StopAgentProcess(old);
+    LeaveCriticalSection(&old->Lock);
+    ReleaseAgent(old);
 }

@@ -28,9 +28,12 @@ START_TEST(OtherUser)
         {
             Sleep(3000);
             RdpClientStart(&Other, SECOND_USER, FIRST_USER);
-            RdpClientWaitConnected(&Other);
-            for (Wait = 0; Wait < 50 && !Owner.Disconnected; Wait++)
+            ok(RdpClientWaitConnected(&Other), "%s naming %s could not connect: 0x%08x\n", SECOND_USER, FIRST_USER,
+               Other.Error);
+            for (Wait = 0; Wait < 50 && !Owner.Disconnected && !Other.Disconnected; Wait++)
                 Sleep(100);
+            ok(!Other.Disconnected && Other.Alive, "%s naming %s did not get a session of its own: 0x%08x\n",
+               SECOND_USER, FIRST_USER, Other.Error);
             ok(!Owner.Disconnected, "%s was disconnected by %s: 0x%08x\n", FIRST_USER, SECOND_USER, Owner.Error);
             ok(Owner.Alive, "%s is no longer connected\n", FIRST_USER);
             RdpClientStop(&Other);

@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT RDP console server
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Accept RDP connections in session 0 and hand each one to the server of its session
+ * PURPOSE:     Accept RDP connections in session 0 and give each signed-in user the agent of its session
  * COPYRIGHT:   Copyright 2026 mikuta0407 <mikuta0407@mikuta0407.net>
  */
 
@@ -10,24 +10,30 @@
 #include <winsock2.h>
 #include <windows.h>
 
-#define BROKER_PIPE_FORMAT L"\\\\.\\pipe\\LiberNT-RDPServer-%lu"
 #define BROKER_DISPLAY_PREFIX L"RdpVdd_RemoteDisplay&NewSession_"
+#define AGENT_TIMEOUT 10000
+#define AGENT_ATTACH_TIMEOUT 90000
 
+typedef struct AGENT AGENT;
 typedef void (*BROKER_LOG)(const char *fmt, ...);
-typedef HANDLE (*BROKER_START_AGENT)(DWORD session, const WCHAR *display);
+typedef HANDLE (*BROKER_START_AGENT)(DWORD session, const WCHAR *pipe, const WCHAR *display);
 typedef BOOL (*BROKER_ALLOWED)(void);
+typedef BOOL (*BROKER_ACCEPTED)(SOCKET client);
 
-typedef struct BROKER_HANDOFF
-{
-    WSAPROTOCOL_INFOW Socket;
-    BOOL Named;
-} BROKER_HANDOFF;
-
-BOOL BrokerStart(BROKER_LOG log, BROKER_START_AGENT start, BROKER_ALLOWED allowed);
+BOOL BrokerStart(BROKER_LOG log, BROKER_START_AGENT start, BROKER_ALLOWED allowed, BROKER_ACCEPTED accepted);
+void BrokerClose(void);
 void BrokerStop(void);
-void BrokerSetConsoleAgent(HANDLE process, DWORD session);
-#define BROKER_ROUTING_USER "user="
-#define BROKER_COOKIE_CHARS 9
+void BrokerSetConsoleSession(DWORD session);
+AGENT *BrokerConnect(const BYTE *sid, const WCHAR *user);
+void BrokerDisconnect(AGENT *agent);
 
-BOOL BrokerCookieUser(const BYTE *data, int length, WCHAR *user, DWORD count, BOOL *routed);
-BOOL BrokerSameUser(const WCHAR *name, const WCHAR *cookie, BOOL routed);
+BOOL AgentEnter(AGENT *agent, LONG owner);
+void AgentLeave(AGENT *agent);
+LONG AgentTakeOver(AGENT *agent);
+BOOL AgentOwnedBy(AGENT *agent, LONG owner);
+BOOL AgentBroken(AGENT *agent);
+DWORD AgentSession(AGENT *agent);
+BOOL AgentWrite(AGENT *agent, const void *message, DWORD size);
+BOOL AgentRead(AGENT *agent, void *buffer, DWORD capacity, DWORD *size, DWORD timeout);
+void AgentAbandon(AGENT *agent);
+HANDLE AgentDuplicate(AGENT *agent, ULONG64 handle, DWORD access);

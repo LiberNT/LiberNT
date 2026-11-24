@@ -38,26 +38,20 @@
 #include <freerdp/channels/wtsvc.h>
 #include <freerdp/channels/channels.h>
 #include <freerdp/server/disp.h>
-#include <freerdp/redirection.h>
 #include <ntsecapi.h>
-#include <swdevice.h>
 #include <cfgmgr32.h>
-#include <initguid.h>
-#include <ntddvdeo.h>
-#include <d3dkmthk.h>
-#include <drivers/directx/rdpvdd.h>
-#include <remoteconsole.h>
 #include "transfer.h"
 #include "gfx.h"
-#include "experience.h"
 #include "broker.h"
+#include "agent.h"
+#include "desktop.h"
 #include "openh264.h"
 #include "secret.h"
 
 typedef ULONG (__cdecl *DEBUG_PRINT)(const char *, ...);
 static DEBUG_PRINT DebugPrint;
 static HANDLE StopEvent;
-static volatile LONG ClientCount, ClientGeneration;
+static volatile LONG ClientCount, RemoteAllowed = TRUE;
 static char Certificate[MAX_PATH], PrivateKey[MAX_PATH];
 static WCHAR TransferRoot[MAX_PATH];
 static SERVICE_STATUS_HANDLE ServiceHandle;
@@ -65,18 +59,7 @@ static SERVICE_STATUS ServiceState;
 static HANDLE ServiceStopEvent, SessionStopEvent;
 static char ServiceConfig[MAX_PATH];
 static DWORD FrameInterval;
-static CRITICAL_SECTION RemoteDisplayLock;
-static volatile LONG ConsoleTakeover, ConnectionNumber;
-static HSWDEVICE RemoteDisplay;
-static LONG RemoteDisplayUsers;
-static HANDLE RemoteDisplayReady;
-static WCHAR RemoteDisplayInstance[MAX_DEVICE_ID_LEN];
-static BOOL RemoteDisplayShown;
-static BYTE RemoteDisplaySid[SECURITY_MAX_SID_SIZE];
-static RDP_EXPERIENCE_STATE Experience;
-static HANDLE RemoteConsole;
 static BOOL ControllerMode;
-static WCHAR AdoptedDisplay[MAX_DEVICE_ID_LEN];
 static volatile LONG ControllerConnected;
 static char BindAddress[64], AllowedPeer[64], Username[128], Password[256];
 #define MAX_INTERFACE_MACS 8
@@ -100,41 +83,32 @@ static BOOL AddressAdded;
 /* TS_UPDATE_BITMAP_DATA header, and TS_BITMAP_DATA fields with its TS_CD_HEADER */
 #define UPDATE_HEADER_BYTES 4
 #define TILE_HEADER_BYTES 26
+#define AGENT_STATUS_INTERVAL 500
 
 typedef struct DESKTOP_CONTEXT
 {
     rdpContext rdp;
-    BOOL Authorized, Active, Suppressed, Refresh, NlaLogon, RemoteDisplay;
-    DWORD ConsoleStatus;
-    BOOL Named;
+    BOOL Authorized, Active, Suppressed, Refresh, NlaLogon;
     char NlaUser[128], NlaDomain[256], NlaPassword[256];
     BYTE NlaSid[SECURITY_MAX_SID_SIZE];
-    LONG Generation;
     int Width, Height, ClientWidth, ClientHeight, TileColumns, TileRows;
     HDC ScreenDC, MemoryDC;
     HBITMAP Bitmap;
     HGDIOBJ OldBitmap;
-    HDESK Desktop, HomeDesktop;
-    BYTE *Pixels, *Previous, *Frame, *TileMask;
+    DESKTOP_THREAD Thread;
+    DESKTOP_INPUT Input;
+    BYTE *Pixels, *Previous, *TileMask;
     GFX_TILE *GfxTiles;
-    D3DKMT_HANDLE FrameAdapter;
-    HANDLE FrameEvent;
-    BOOL FramePending;
-    int FrameWidth, FrameHeight;
-    HCURSOR Pointer;
-    BOOL PointerSent, PointerCached;
-    UINT32 PointerSteps, PointerStep;
-    DWORD PointerStepTick, PointerStepTime;
-    UINT32 PointerPixels[RDPVDD_POINTER_MAX * RDPVDD_POINTER_MAX];
-    BYTE PointerTransparent[RDPVDD_POINTER_MAX * RDPVDD_POINTER_MAX];
-    BYTE PointerMask[RDPVDD_POINTER_MAX * 2 * (RDPVDD_POINTER_MAX / 8)];
-    BYTE PointerXor[RDPVDD_POINTER_MAX * RDPVDD_POINTER_MAX * 4];
-    BYTE PointerAnd[RDPVDD_POINTER_MAX * RDPVDD_POINTER_MAX / 8];
+    AGENT *Agent;
+    LONG Owner;
+    BOOL TakenOver;
+    ULONG Serial;
+    AGENT_FRAME_REPLY Frame;
+    AGENT_POINTER_REPLY *PointerReply;
+    BOOL PointerSent;
     BITMAP_DATA Batch[TILE_BATCH];
     BYTE Tiles[TILE_BATCH][TILE_BYTES];
     BITMAP_PLANAR_CONTEXT *Planar;
-    BOOL Keys[512];
-    DWORD MouseButtons;
     ULONGLONG Frames, Updates, Inputs;
     HANDLE Vcm;
     RDP_TRANSFER *Transfer;
@@ -147,8 +121,6 @@ typedef struct DESKTOP_CONTEXT
     UINT32 DispChannelId;
     volatile LONG RequestedSize;
 } DESKTOP_CONTEXT;
-
-HCURSOR WINAPI GetCursorFrameInfo(HCURSOR, DWORD, DWORD, PINT, PDWORD);
 
 static void Log(const char *fmt, ...)
 {
@@ -175,74 +147,55 @@ static ULONGLONG Milliseconds(void)
 
 static BOOL Superseded(DESKTOP_CONTEXT *ctx)
 {
-    return ctx->Authorized && ctx->Generation != InterlockedCompareExchange(&ClientGeneration, 0, 0);
+    return ctx->Owner && !AgentOwnedBy(ctx->Agent, ctx->Owner);
 }
 
 /* A client may send input before the connection is active; that input is dropped, not the connection */
 static BOOL InputReady(rdpInput *input)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)input->context;
-    return ctx->Authorized && ctx->Active && !Superseded(ctx) && FollowInputDesktop(ctx);
+    if (!ctx->Authorized || !ctx->Active || Superseded(ctx)) return FALSE;
+    return !ControllerMode || FollowInputDesktop(ctx);
+}
+
+static BOOL SendAgentInput(DESKTOP_CONTEXT *ctx, ULONG kind, UINT16 flags, UINT16 value, UINT16 x, UINT16 y)
+{
+    AGENT_INPUT_REQUEST request = {AGENT_INPUT};
+    BOOL sent;
+    request.Kind = kind;
+    request.Flags = flags;
+    request.Value = value;
+    request.X = x;
+    request.Y = y;
+    if (!AgentEnter(ctx->Agent, ctx->Owner)) return !AgentBroken(ctx->Agent);
+    sent = AgentWrite(ctx->Agent, &request, sizeof(request));
+    AgentLeave(ctx->Agent);
+    if (sent) ++ctx->Inputs;
+    return sent;
 }
 
 static BOOL Keyboard(rdpInput *input, UINT16 flags, UINT8 code)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)input->context;
-    INPUT event = {0};
-    unsigned index = code | ((flags & KBD_FLAGS_EXTENDED) ? 256 : 0);
     if (!InputReady(input)) return TRUE;
-    event.type = INPUT_KEYBOARD;
-    event.ki.wScan = code;
-    event.ki.dwFlags = KEYEVENTF_SCANCODE;
-    if (flags & KBD_FLAGS_EXTENDED) event.ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
-    if (flags & KBD_FLAGS_RELEASE) event.ki.dwFlags |= KEYEVENTF_KEYUP;
-    if (SendInput(1, &event, sizeof(event)) != 1) return FALSE;
-    ctx->Keys[index] = !(flags & KBD_FLAGS_RELEASE);
-    ++ctx->Inputs;
-    return TRUE;
+    if (!ControllerMode) return SendAgentInput(ctx, AGENT_KEYBOARD, flags, code, 0, 0);
+    return DesktopKeyboard(&ctx->Input, flags, code);
 }
 
 static BOOL UnicodeKeyboard(rdpInput *input, UINT16 flags, UINT16 code)
 {
-    INPUT event = {0};
+    DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)input->context;
     if (!InputReady(input)) return TRUE;
-    event.type = INPUT_KEYBOARD;
-    event.ki.wScan = code;
-    event.ki.dwFlags = KEYEVENTF_UNICODE;
-    if (flags & KBD_FLAGS_RELEASE) event.ki.dwFlags |= KEYEVENTF_KEYUP;
-    return SendInput(1, &event, sizeof(event)) == 1;
+    if (!ControllerMode) return SendAgentInput(ctx, AGENT_UNICODE, flags, code, 0, 0);
+    return DesktopUnicode(flags, code);
 }
 
 static BOOL Mouse(rdpInput *input, UINT16 flags, UINT16 x, UINT16 y)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)input->context;
-    INPUT event = {0};
-    BOOL down = (flags & PTR_FLAGS_DOWN) != 0;
     if (!InputReady(input)) return TRUE;
-    event.type = INPUT_MOUSE;
-    if (x >= ctx->Width) x = ctx->Width - 1;
-    if (y >= ctx->Height) y = ctx->Height - 1;
-    event.mi.dx = MulDiv(x, 65535, ctx->Width - 1);
-    event.mi.dy = MulDiv(y, 65535, ctx->Height - 1);
-    event.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
-    if (flags & (PTR_FLAGS_WHEEL | PTR_FLAGS_HWHEEL))
-    {
-        LONG delta = flags & 0x1ff;
-        if (flags & PTR_FLAGS_WHEEL_NEGATIVE) delta -= 0x200;
-        event.mi.mouseData = (DWORD)delta;
-        event.mi.dwFlags |= (flags & PTR_FLAGS_HWHEEL) ? MOUSEEVENTF_HWHEEL : MOUSEEVENTF_WHEEL;
-    }
-    else
-    {
-        if (flags & PTR_FLAGS_BUTTON1) event.mi.dwFlags |= down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP;
-        if (flags & PTR_FLAGS_BUTTON2) event.mi.dwFlags |= down ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP;
-        if (flags & PTR_FLAGS_BUTTON3) event.mi.dwFlags |= down ? MOUSEEVENTF_MIDDLEDOWN : MOUSEEVENTF_MIDDLEUP;
-        if (down) ctx->MouseButtons |= flags & (PTR_FLAGS_BUTTON1 | PTR_FLAGS_BUTTON2 | PTR_FLAGS_BUTTON3);
-        else ctx->MouseButtons &= ~(flags & (PTR_FLAGS_BUTTON1 | PTR_FLAGS_BUTTON2 | PTR_FLAGS_BUTTON3));
-    }
-    if (SendInput(1, &event, sizeof(event)) != 1) return FALSE;
-    ++ctx->Inputs;
-    return TRUE;
+    if (!ControllerMode) return SendAgentInput(ctx, AGENT_MOUSE, flags, 0, x, y);
+    return DesktopMouse(&ctx->Input, ctx->Width, ctx->Height, flags, x, y);
 }
 
 static BOOL Synchronize(rdpInput *input, UINT32 flags)
@@ -258,75 +211,37 @@ static void FreeDesktopCapture(DESKTOP_CONTEXT *ctx)
     if (ctx->Bitmap) DeleteObject(ctx->Bitmap);
     if (ctx->MemoryDC) DeleteDC(ctx->MemoryDC);
     if (ctx->ScreenDC) ReleaseDC(NULL, ctx->ScreenDC);
+    if (ctx->Agent && ctx->Pixels) UnmapViewOfFile(ctx->Pixels);
     free(ctx->Previous);
-    free(ctx->Frame);
     free(ctx->TileMask);
     free(ctx->GfxTiles);
     ctx->GfxTiles = NULL;
     ctx->OldBitmap = NULL; ctx->Bitmap = NULL;
     ctx->MemoryDC = ctx->ScreenDC = NULL;
-    ctx->Previous = ctx->Pixels = ctx->Frame = ctx->TileMask = NULL;
+    ctx->Previous = ctx->Pixels = ctx->TileMask = NULL;
     ctx->MoveCount = 0;
 }
 
-static NTSTATUS FrameEscape(D3DKMT_HANDLE adapter, RDPVDD_FRAME_ESCAPE *request)
+static BOOL AllocateTiles(DESKTOP_CONTEXT *ctx)
 {
-    D3DKMT_ESCAPE escape = {0};
-    escape.hAdapter = adapter;
-    escape.Type = D3DKMT_ESCAPE_DRIVERPRIVATE;
-    escape.pPrivateDriverData = request;
-    escape.PrivateDriverDataSize = sizeof(*request);
-    return D3DKMTEscape(&escape);
-}
-
-static void CloseRemoteFrames(DESKTOP_CONTEXT *ctx)
-{
-    D3DKMT_CLOSEADAPTER close = {0};
-    if (!ctx->FrameAdapter) return;
-    close.hAdapter = ctx->FrameAdapter;
-    D3DKMTCloseAdapter(&close);
-    if (ctx->FrameEvent) CloseHandle(ctx->FrameEvent);
-    ctx->FrameAdapter = 0;
-    ctx->FrameEvent = NULL;
-    ctx->FramePending = FALSE;
-    free(ctx->Frame);
-    ctx->Frame = NULL;
-}
-
-static BOOL SyncRemoteFrames(DESKTOP_CONTEXT *ctx)
-{
-    RDPVDD_FRAME_ESCAPE request = {0};
-    NTSTATUS status;
-    request.Code = RDPVDD_ESCAPE_OPEN_FRAME;
-    request.Event = (ULONG64)(ULONG_PTR)ctx->FrameEvent;
-    status = FrameEscape(ctx->FrameAdapter, &request);
-    if (!NT_SUCCESS(status))
-    {
-        Log("Cannot read the remote display: 0x%08lx", status);
-        CloseRemoteFrames(ctx);
-        return FALSE;
-    }
-    ctx->FramePending = TRUE;
-    return TRUE;
-}
-
-static BOOL AllocateCapture(DESKTOP_CONTEXT *ctx)
-{
-    BITMAPINFO info = {0};
-    FreeDesktopCapture(ctx);
-    ctx->Width = ctx->FrameAdapter ? ctx->FrameWidth : GetSystemMetrics(SM_CXSCREEN);
-    ctx->Height = ctx->FrameAdapter ? ctx->FrameHeight : GetSystemMetrics(SM_CYSCREEN);
     if (ctx->Width < 2 || ctx->Height < 2 || ctx->Width > 8192 || ctx->Height > 8192) return FALSE;
     ctx->TileColumns = (ctx->Width + TILE_WIDTH - 1) / TILE_WIDTH;
     ctx->TileRows = (ctx->Height + TILE_HEIGHT - 1) / TILE_HEIGHT;
     ctx->TileMask = calloc((size_t)ctx->TileColumns * ctx->TileRows, 1);
     ctx->GfxTiles = calloc((size_t)ctx->TileColumns * ctx->TileRows, sizeof(*ctx->GfxTiles));
-    if (!ctx->TileMask || !ctx->GfxTiles) return FALSE;
-    if (ctx->FrameAdapter)
-    {
-        ctx->Frame = calloc((size_t)ctx->Width * ctx->Height, 4);
-        if (!ctx->Frame) return FALSE;
-    }
+    ctx->Previous = calloc((size_t)ctx->Width * ctx->Height, 4);
+    ctx->Refresh = TRUE;
+    return ctx->TileMask && ctx->GfxTiles && ctx->Previous;
+}
+
+static BOOL AllocateCapture(DESKTOP_CONTEXT *ctx)
+{
+    BITMAPINFO info = {0};
+    assert(ControllerMode && !ctx->Agent);
+    FreeDesktopCapture(ctx);
+    ctx->Width = GetSystemMetrics(SM_CXSCREEN);
+    ctx->Height = GetSystemMetrics(SM_CYSCREEN);
+    if (!AllocateTiles(ctx)) return FALSE;
     ctx->ScreenDC = GetDC(NULL);
     if (!ctx->ScreenDC) return FALSE;
     ctx->MemoryDC = CreateCompatibleDC(ctx->ScreenDC);
@@ -342,40 +257,31 @@ static BOOL AllocateCapture(DESKTOP_CONTEXT *ctx)
     if (!ctx->Bitmap) return FALSE;
     ctx->OldBitmap = SelectObject(ctx->MemoryDC, ctx->Bitmap);
     if (!ctx->OldBitmap || ctx->OldBitmap == HGDI_ERROR) { ctx->OldBitmap = NULL; return FALSE; }
-    ctx->Previous = calloc((size_t)ctx->Width * ctx->Height, 4);
-    ctx->Refresh = TRUE;
-    if (!ctx->Previous) return FALSE;
-    if (ctx->FrameAdapter) SyncRemoteFrames(ctx);
     return TRUE;
 }
 
-/* Winlogon owns input before logon and while locked; follow the input desktop. */
+/* The agent made a new surface for its desktop; its pixels are read where the agent wrote them */
+static BOOL MapSurface(DESKTOP_CONTEXT *ctx, const AGENT_FRAME_REPLY *frame)
+{
+    HANDLE section;
+    if (!frame->Width || frame->Serial == ctx->Serial) return TRUE;
+    FreeDesktopCapture(ctx);
+    ctx->Serial = frame->Serial;
+    ctx->Width = frame->Width;
+    ctx->Height = frame->Height;
+    section = AgentDuplicate(ctx->Agent, frame->Section, FILE_MAP_READ);
+    if (!section) return FALSE;
+    ctx->Pixels = MapViewOfFile(section, FILE_MAP_READ, 0, 0, (SIZE_T)ctx->Width * ctx->Height * 4);
+    CloseHandle(section);
+    return ctx->Pixels && AllocateTiles(ctx);
+}
+
 static BOOL FollowInputDesktop(DESKTOP_CONTEXT *ctx)
 {
-    char inputName[64], currentName[64];
-    DWORD length;
-    HDESK current = GetThreadDesktop(GetCurrentThreadId());
-    HDESK input = OpenInputDesktop(0, FALSE, GENERIC_ALL);
-    if (!input) return ctx->ScreenDC || AllocateCapture(ctx);
-    if (GetUserObjectInformationA(input, UOI_NAME, inputName, sizeof(inputName), &length) &&
-        GetUserObjectInformationA(current, UOI_NAME, currentName, sizeof(currentName), &length) &&
-        !_stricmp(inputName, currentName))
-    {
-        CloseDesktop(input);
-        return ctx->ScreenDC || AllocateCapture(ctx);
-    }
-    FreeDesktopCapture(ctx);
-    if (!ctx->HomeDesktop) ctx->HomeDesktop = current;
-    if (!SetThreadDesktop(input))
-    {
-        Log("Cannot switch to the input desktop error=%lu", GetLastError());
-        CloseDesktop(input);
-        return FALSE;
-    }
-    if (ctx->Desktop) CloseDesktop(ctx->Desktop);
-    ctx->Desktop = input;
-    Log("Following input desktop %s", inputName);
-    return AllocateCapture(ctx);
+    int switched = DesktopFollowInput(&ctx->Thread, Log);
+    if (switched < 0) return FALSE;
+    if (switched) FreeDesktopCapture(ctx);
+    return ctx->ScreenDC || AllocateCapture(ctx);
 }
 
 static BOOL Capabilities(freerdp_peer *peer)
@@ -386,6 +292,13 @@ static BOOL Capabilities(freerdp_peer *peer)
     ctx->ClientHeight = (int)freerdp_settings_get_uint32(peer->context->settings, FreeRDP_DesktopHeight);
     if (ctx->ClientWidth >= RDPVDD_MIN_WIDTH && ctx->ClientWidth <= RDPVDD_MAX_WIDTH &&
         ctx->ClientHeight >= RDPVDD_MIN_HEIGHT && ctx->ClientHeight <= RDPVDD_MAX_HEIGHT) return TRUE;
+    if (!ControllerMode)
+    {
+        ctx->ClientWidth = min(max(ctx->ClientWidth, RDPVDD_MIN_WIDTH), RDPVDD_MAX_WIDTH);
+        ctx->ClientHeight = min(max(ctx->ClientHeight, RDPVDD_MIN_HEIGHT), RDPVDD_MAX_HEIGHT);
+        return freerdp_settings_set_uint32(peer->context->settings, FreeRDP_DesktopWidth, ctx->ClientWidth) &&
+               freerdp_settings_set_uint32(peer->context->settings, FreeRDP_DesktopHeight, ctx->ClientHeight);
+    }
     return freerdp_settings_set_uint32(peer->context->settings, FreeRDP_DesktopWidth,
                                        GetSystemMetrics(SM_CXSCREEN)) &&
            freerdp_settings_set_uint32(peer->context->settings, FreeRDP_DesktopHeight,
@@ -411,26 +324,6 @@ static BOOL TokenUserSid(HANDLE token, BYTE *sid, DWORD size)
     DWORD length;
     if (!GetTokenInformation(token, TokenUser, buffer, sizeof(buffer), &length)) return FALSE;
     return CopySid(size, sid, ((TOKEN_USER *)buffer)->User.Sid);
-}
-
-static BOOL PipeServerIsSystem(HANDLE pipe, DWORD session)
-{
-    BYTE sid[SECURITY_MAX_SID_SIZE];
-    DWORD server = 0, serverSession = (DWORD)-1;
-    HANDLE process, token;
-    BOOL system = FALSE;
-    if (!GetNamedPipeServerProcessId(pipe, &server) || !ProcessIdToSessionId(server, &serverSession) ||
-        serverSession != session)
-        return FALSE;
-    process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, server);
-    if (!process) return FALSE;
-    if (OpenProcessToken(process, TOKEN_QUERY, &token))
-    {
-        system = TokenUserSid(token, sid, sizeof(sid)) && IsWellKnownSid(sid, WinLocalSystemSid);
-        CloseHandle(token);
-    }
-    CloseHandle(process);
-    return system;
 }
 
 static BOOL RemoteLogonAllowed(HANDLE token)
@@ -511,389 +404,47 @@ static BOOL Logon(freerdp_peer *peer, const SEC_WINNT_AUTH_IDENTITY *identity, B
     return ctx->NlaLogon;
 }
 
-static VOID WINAPI RemoteDisplayCreated(HSWDEVICE device, HRESULT result, PVOID context, PCWSTR instance)
+/* The agent of the user's session shows its desktop; the agent signs the user in through Winlogon with the NLA credentials */
+static UINT32 AttachAgent(DESKTOP_CONTEXT *ctx)
 {
-    (void)device; (void)context;
-    Log("Remote display adapter %ls: 0x%08lx", instance ? instance : L"", result);
-    if (SUCCEEDED(result) && instance)
+    rdpSettings *settings = ctx->rdp.settings;
+    AGENT_ATTACH_REQUEST *request;
+    AGENT_FRAME_REPLY *reply = &ctx->Frame;
+    WCHAR user[ARRAYSIZE(request->UserName)];
+    DWORD read;
+    UINT32 error = ERRINFO_CLOSE_STACK_ON_DRIVER_FAILURE;
+    if (!MultiByteToWideChar(CP_UTF8, 0, ctx->NlaUser, -1, user, ARRAYSIZE(user)))
+        return ERRINFO_SERVER_DENIED_CONNECTION;
+    ctx->Agent = BrokerConnect(ctx->NlaSid, user);
+    if (!ctx->Agent) return ERRINFO_SERVER_DENIED_CONNECTION;
+    request = calloc(1, sizeof(*request));
+    if (!request) return ERRINFO_OUT_OF_MEMORY;
+    request->Code = AGENT_ATTACH;
+    request->ClientWidth = ctx->ClientWidth;
+    request->ClientHeight = ctx->ClientHeight;
+    request->PerformanceFlags = freerdp_settings_get_uint32(settings, FreeRDP_PerformanceFlags);
+    request->ConnectionType = freerdp_settings_get_uint32(settings, FreeRDP_ConnectionType);
+    CopySid(sizeof(request->Sid), request->Sid, ctx->NlaSid);
+    lstrcpynW(request->UserName, user, ARRAYSIZE(request->UserName));
+    MultiByteToWideChar(CP_UTF8, 0, ctx->NlaDomain, -1, request->Domain, ARRAYSIZE(request->Domain) - 1);
+    MultiByteToWideChar(CP_UTF8, 0, ctx->NlaPassword, -1, request->Password, ARRAYSIZE(request->Password) - 1);
+    if (AgentEnter(ctx->Agent, 0))
     {
-        lstrcpynW(RemoteDisplayInstance, instance, ARRAYSIZE(RemoteDisplayInstance));
-        SetEvent(RemoteDisplayReady);
-    }
-}
-
-static BOOL FindRemoteDisplay(WCHAR *name)
-{
-    DISPLAY_DEVICEW device;
-    DWORD index;
-    for (index = 0;; ++index)
-    {
-        device.cb = sizeof(device);
-        if (!EnumDisplayDevicesW(NULL, index, &device, 0)) return FALSE;
-        if (!lstrcmpiW(device.DeviceID, L"RdpVdd_RemoteDisplay"))
+        if (AgentWrite(ctx->Agent, request, sizeof(*request)) &&
+            AgentRead(ctx->Agent, reply, sizeof(*reply), &read, AGENT_ATTACH_TIMEOUT))
         {
-            lstrcpynW(name, device.DeviceName, ARRAYSIZE(device.DeviceName));
-            return TRUE;
+            if (read == sizeof(*reply) && reply->Code == AGENT_ATTACH) error = reply->Error;
+            else AgentAbandon(ctx->Agent);
         }
+        if (!error && !MapSurface(ctx, reply)) error = ERRINFO_CLOSE_STACK_ON_DRIVER_FAILURE;
+        if (!error) ctx->Owner = AgentTakeOver(ctx->Agent);
+        AgentLeave(ctx->Agent);
     }
-}
-
-static BOOL RemoteDisplayListsMode(int width, int height)
-{
-    WCHAR name[ARRAYSIZE(((DISPLAY_DEVICEW *)0)->DeviceName)];
-    DEVMODEW mode;
-    DWORD index;
-    if (!FindRemoteDisplay(name)) return FALSE;
-    if (!width) return TRUE;
-    for (index = 0;; ++index)
-    {
-        ZeroMemory(&mode, sizeof(mode));
-        mode.dmSize = sizeof(mode);
-        if (!EnumDisplaySettingsW(name, index, &mode)) return FALSE;
-        if ((int)mode.dmPelsWidth == width && (int)mode.dmPelsHeight == height) return TRUE;
-    }
-}
-
-static BOOL WaitForRemoteDisplay(int width, int height)
-{
-    DWORD start = GetTickCount();
-    while (!RemoteDisplayListsMode(width, height))
-    {
-        if (GetTickCount() - start > 15000) return FALSE;
-        Sleep(100);
-    }
-    return TRUE;
-}
-
-static BOOL WaitForRemoteDisplayMode(int width, int height)
-{
-    WCHAR name[ARRAYSIZE(((DISPLAY_DEVICEW *)0)->DeviceName)];
-    DEVMODEW mode;
-    DWORD start = GetTickCount();
-    for (;;)
-    {
-        ZeroMemory(&mode, sizeof(mode));
-        mode.dmSize = sizeof(mode);
-        if (FindRemoteDisplay(name) && EnumDisplaySettingsW(name, ENUM_CURRENT_SETTINGS, &mode) &&
-            (int)mode.dmPelsWidth == width && (int)mode.dmPelsHeight == height) return TRUE;
-        if (GetTickCount() - start > 5000) return FALSE;
-        Sleep(50);
-    }
-}
-
-static BOOL OpenRemoteAdapter(D3DKMT_HANDLE *adapter)
-{
-    WCHAR interfaces[512];
-    D3DKMT_OPENADAPTERFROMDEVICENAME open = {0};
-    CONFIGRET cr;
-    NTSTATUS status;
-    cr = CM_Get_Device_Interface_ListW((LPGUID)&GUID_DISPLAY_DEVICE_ARRIVAL, RemoteDisplayInstance, interfaces,
-                                       ARRAYSIZE(interfaces), CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
-    if (cr != CR_SUCCESS || !interfaces[0])
-    {
-        Log("No display interface for %ls: %lu", RemoteDisplayInstance, cr);
-        return FALSE;
-    }
-    open.pDeviceName = interfaces;
-    status = D3DKMTOpenAdapterFromDeviceName(&open);
-    if (!NT_SUCCESS(status))
-    {
-        Log("Cannot open the remote display adapter: 0x%08lx", status);
-        return FALSE;
-    }
-    *adapter = open.hAdapter;
-    return TRUE;
-}
-
-static BOOL SetRemoteDisplayMode(int width, int height)
-{
-    D3DKMT_HANDLE adapter;
-    D3DKMT_CLOSEADAPTER close = {0};
-    D3DKMT_ESCAPE escape = {0};
-    RDPVDD_ESCAPE request = {0};
-    NTSTATUS status;
-    if (width < RDPVDD_MIN_WIDTH || width > RDPVDD_MAX_WIDTH ||
-        height < RDPVDD_MIN_HEIGHT || height > RDPVDD_MAX_HEIGHT || !OpenRemoteAdapter(&adapter)) return FALSE;
-    request.Code = RDPVDD_ESCAPE_SET_MODE;
-    request.Width = width;
-    request.Height = height;
-    escape.hAdapter = adapter;
-    escape.Type = D3DKMT_ESCAPE_DRIVERPRIVATE;
-    escape.pPrivateDriverData = &request;
-    escape.PrivateDriverDataSize = sizeof(request);
-    status = D3DKMTEscape(&escape);
-    Log("Remote display mode %dx%d: 0x%08lx", width, height, status);
-    close.hAdapter = adapter;
-    D3DKMTCloseAdapter(&close);
-    return NT_SUCCESS(status);
-}
-
-static BOOL CallRemoteConsole(REMOTE_CONSOLE_MESSAGE *message)
-{
-    REMOTE_CONSOLE_MESSAGE reply;
-    DWORD bytes;
-    while (ReadFile(RemoteConsole, &reply, sizeof(reply), &bytes, NULL) && bytes == sizeof(reply))
-    {
-        if (reply.Code == REMOTE_CONSOLE_TAKEOVER)
-        {
-            InterlockedExchange(&ConsoleTakeover, TRUE);
-            continue;
-        }
-        *message = reply;
-        return reply.Code == message->Code;
-    }
-    return FALSE;
-}
-
-static BOOL ConnectRemoteConsole(DESKTOP_CONTEXT *ctx)
-{
-    REMOTE_CONSOLE_MESSAGE message = {0};
-    WCHAR pipe[64];
-    DWORD session = 0, bytes, mode = PIPE_READMODE_MESSAGE;
-    const char *user = freerdp_settings_get_string(ctx->rdp.settings, FreeRDP_Username);
-    const char *domain = freerdp_settings_get_string(ctx->rdp.settings, FreeRDP_Domain);
-    const char *password = freerdp_settings_get_string(ctx->rdp.settings, FreeRDP_Password);
-    if (ctx->NlaLogon)
-    {
-        user = ctx->NlaUser;
-        domain = ctx->NlaDomain;
-        password = ctx->NlaPassword;
-    }
-    ProcessIdToSessionId(GetCurrentProcessId(), &session);
-    _snwprintf(pipe, ARRAYSIZE(pipe), REMOTE_CONSOLE_PIPE_FORMAT, session);
-    pipe[ARRAYSIZE(pipe) - 1] = 0;
-    RemoteConsole = CreateFileW(pipe, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
-                                SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, NULL);
-    if (RemoteConsole == INVALID_HANDLE_VALUE && GetLastError() == ERROR_PIPE_BUSY && WaitNamedPipeW(pipe, 10000))
-        RemoteConsole = CreateFileW(pipe, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
-                                    SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, NULL);
-    if (RemoteConsole == INVALID_HANDLE_VALUE)
-    {
-        Log("Cannot reach Winlogon: %lu", GetLastError());
-        RemoteConsole = NULL;
-        return FALSE;
-    }
-    if (!PipeServerIsSystem(RemoteConsole, session))
-    {
-        Log("The pipe of Winlogon was not made by the system in this session");
-        CloseHandle(RemoteConsole);
-        RemoteConsole = NULL;
-        SecureZeroMemory(ctx->NlaPassword, sizeof(ctx->NlaPassword));
-        ctx->ConsoleStatus = ERROR_ACCESS_DENIED;
-        return FALSE;
-    }
-    SetNamedPipeHandleState(RemoteConsole, &mode, NULL, NULL);
-    message.Code = REMOTE_CONSOLE_CONNECT;
-    message.Connection = (ULONG)InterlockedIncrement(&ConnectionNumber) - 1;
-    if (user) MultiByteToWideChar(CP_UTF8, 0, user, -1, message.UserName, ARRAYSIZE(message.UserName) - 1);
-    if (domain) MultiByteToWideChar(CP_UTF8, 0, domain, -1, message.Domain, ARRAYSIZE(message.Domain) - 1);
-    if (password) MultiByteToWideChar(CP_UTF8, 0, password, -1, message.Password, ARRAYSIZE(message.Password) - 1);
-    if (!WriteFile(RemoteConsole, &message, sizeof(message), &bytes, NULL) || !CallRemoteConsole(&message))
-        message.Status = ERROR_BROKEN_PIPE;
-    SecureZeroMemory(message.Password, sizeof(message.Password));
-    SecureZeroMemory(ctx->NlaPassword, sizeof(ctx->NlaPassword));
-    ctx->ConsoleStatus = message.Status;
-    Log("Session handed to RDP-Tcp#%lu: %lu", message.Connection, message.Status);
-    if (message.Status == ERROR_SUCCESS) return TRUE;
-    CloseHandle(RemoteConsole);
-    RemoteConsole = NULL;
-    return FALSE;
-}
-
-static void DisconnectRemoteConsole(BOOL takenOver)
-{
-    REMOTE_CONSOLE_MESSAGE message = {0};
-    DWORD bytes;
-    if (!RemoteConsole) return;
-    message.Code = REMOTE_CONSOLE_DISCONNECT;
-    message.TakenOver = takenOver;
-    if (!WriteFile(RemoteConsole, &message, sizeof(message), &bytes, NULL) || !CallRemoteConsole(&message))
-        message.Status = ERROR_BROKEN_PIPE;
-    Log("Session back on the console display%s: %lu", takenOver ? " after a console sign-in" : "", message.Status);
-    CloseHandle(RemoteConsole);
-    RemoteConsole = NULL;
-}
-
-static BOOL ConsoleSignedIn(void)
-{
-    REMOTE_CONSOLE_MESSAGE message;
-    DWORD bytes, available = 0;
-    if (InterlockedCompareExchange(&ConsoleTakeover, 0, 0)) return TRUE;
-    EnterCriticalSection(&RemoteDisplayLock);
-    if (RemoteConsole && PeekNamedPipe(RemoteConsole, NULL, 0, NULL, &available, NULL) && available &&
-        ReadFile(RemoteConsole, &message, sizeof(message), &bytes, NULL) && bytes == sizeof(message) &&
-        message.Code == REMOTE_CONSOLE_TAKEOVER)
-    {
-        InterlockedExchange(&ConsoleTakeover, TRUE);
-    }
-    LeaveCriticalSection(&RemoteDisplayLock);
-    return InterlockedCompareExchange(&ConsoleTakeover, 0, 0) != 0;
-}
-
-static UINT32 AcquireRemoteDisplay(DESKTOP_CONTEXT *ctx)
-{
-    static const WCHAR hardwareIds[] = L"RdpVdd_RemoteDisplay\0";
-    SW_DEVICE_CREATE_INFO info = {0};
-    WCHAR instance[64];
-    DWORD session = 0;
-    int width = GetSystemMetrics(SM_CXSCREEN), height = GetSystemMetrics(SM_CYSCREEN);
-    UINT32 error = ERRINFO_SUCCESS;
-    HRESULT hr;
-
-    EnterCriticalSection(&RemoteDisplayLock);
-    if (!RemoteDisplayUsers)
-    {
-        ProcessIdToSessionId(GetCurrentProcessId(), &session);
-        _snwprintf(instance, ARRAYSIZE(instance), L"RdpVdd_RemoteDisplay&SessionId_%04lu", session);
-        instance[ARRAYSIZE(instance) - 1] = 0;
-        info.cbSize = sizeof(info);
-        info.pszInstanceId = instance;
-        info.pszzHardwareIds = hardwareIds;
-        info.pszzCompatibleIds = hardwareIds;
-        info.CapabilityFlags = SWDeviceCapabilitiesRemovable | SWDeviceCapabilitiesSilentInstall |
-                               SWDeviceCapabilitiesDriverRequired;
-        info.pszDeviceDescription = L"LiberNT Remote Display Adapter";
-        ResetEvent(RemoteDisplayReady);
-        InterlockedExchange(&ConsoleTakeover, FALSE);
-        if (*AdoptedDisplay)
-        {
-            /* The service made this session's display before the session existed */
-            lstrcpynW(RemoteDisplayInstance, AdoptedDisplay, ARRAYSIZE(RemoteDisplayInstance));
-            SetEvent(RemoteDisplayReady);
-            hr = S_OK;
-        }
-        else
-        {
-            hr = SwDeviceCreate(L"RemoteDisplayEnum", L"HTREE\\ROOT\\0", &info, 0, NULL,
-                                RemoteDisplayCreated, NULL, &RemoteDisplay);
-        }
-        if (FAILED(hr))
-        {
-            Log("Cannot create the remote display adapter: 0x%08lx", hr);
-            RemoteDisplay = NULL;
-            error = ERRINFO_CLOSE_STACK_ON_DRIVER_FAILURE;
-        }
-        else if (WaitForSingleObject(RemoteDisplayReady, 15000) == WAIT_OBJECT_0 && WaitForRemoteDisplay(0, 0))
-        {
-            if (!RemoteDisplayListsMode(width, height) && SetRemoteDisplayMode(width, height) &&
-                !WaitForRemoteDisplay(width, height))
-                Log("The remote display does not list %dx%d", width, height);
-            RemoteDisplayShown = ConnectRemoteConsole(ctx);
-            if (RemoteDisplayShown)
-                CopySid(sizeof(RemoteDisplaySid), RemoteDisplaySid, ctx->NlaSid);
-            if (!RemoteDisplayShown)
-                error = ERRINFO_SERVER_DENIED_CONNECTION;
-            else if (SetRemoteDisplayMode(ctx->ClientWidth, ctx->ClientHeight) &&
-                     !WaitForRemoteDisplayMode(ctx->ClientWidth, ctx->ClientHeight))
-                Log("The desktop did not take the %dx%d mode", ctx->ClientWidth, ctx->ClientHeight);
-        }
-        else
-        {
-            Log("The remote display adapter did not start");
-            error = ERRINFO_CLOSE_STACK_ON_DRIVER_NOT_READY;
-        }
-        if (error && RemoteDisplay)
-        {
-            SwDeviceClose(RemoteDisplay);
-            RemoteDisplay = NULL;
-            Log("Remote display adapter closed");
-        }
-    }
-    else if (RemoteDisplayShown && !EqualSid(RemoteDisplaySid, ctx->NlaSid))
-    {
-        Log("The remote display belongs to another user");
-        ctx->ConsoleStatus = ERROR_ACCESS_DENIED;
-        error = ERRINFO_SERVER_DENIED_CONNECTION;
-    }
-    else if (RemoteDisplayShown)
-    {
-        SetRemoteDisplayMode(ctx->ClientWidth, ctx->ClientHeight);
-    }
-    if (!error)
-    {
-        RemoteDisplayUsers++;
-        ctx->RemoteDisplay = TRUE;
-        ctx->Generation = InterlockedIncrement(&ClientGeneration);
-    }
-    LeaveCriticalSection(&RemoteDisplayLock);
+    SecureZeroMemory(request, sizeof(*request));
+    free(request);
+    if (error == ERRINFO_SERVER_DENIED_CONNECTION && reply->ConsoleStatus == ERROR_ACCESS_DENIED)
+        Log("Session %lu refused %s", AgentSession(ctx->Agent), ctx->NlaUser);
     return error;
-}
-
-static BOOL OpenRemoteFrames(DESKTOP_CONTEXT *ctx)
-{
-    RDPVDD_FRAME_ESCAPE request = {0};
-    NTSTATUS status = STATUS_UNSUCCESSFUL;
-    EnterCriticalSection(&RemoteDisplayLock);
-    if (RemoteDisplayShown && OpenRemoteAdapter(&ctx->FrameAdapter))
-    {
-        ctx->FrameEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
-        request.Code = RDPVDD_ESCAPE_READ_FRAME;
-        status = ctx->FrameEvent ? FrameEscape(ctx->FrameAdapter, &request) : STATUS_NO_MEMORY;
-        if (!NT_SUCCESS(status))
-        {
-            CloseRemoteFrames(ctx);
-        }
-        else if (!request.Width || !request.Height)
-        {
-            Log("The remote display has no frame yet");
-            ctx->FrameWidth = ctx->ClientWidth;
-            ctx->FrameHeight = ctx->ClientHeight;
-        }
-        else
-        {
-            ctx->FrameWidth = (int)request.Width;
-            ctx->FrameHeight = (int)request.Height;
-        }
-    }
-    LeaveCriticalSection(&RemoteDisplayLock);
-    if (!ctx->FrameAdapter)
-    {
-        Log("Cannot read the remote display: 0x%08lx", status);
-        return FALSE;
-    }
-    Log("Sending the remote display");
-    return TRUE;
-}
-
-static void ReleaseRemoteDisplay(DESKTOP_CONTEXT *ctx)
-{
-    if (!ctx->RemoteDisplay) return;
-    ctx->RemoteDisplay = FALSE;
-    EnterCriticalSection(&RemoteDisplayLock);
-    if (!--RemoteDisplayUsers)
-    {
-        if (!ExperienceRestore(&Experience)) Log("Cannot restore the console's visual settings");
-        RemoteDisplayShown = FALSE;
-        ZeroMemory(RemoteDisplaySid, sizeof(RemoteDisplaySid));
-        DisconnectRemoteConsole(InterlockedExchange(&ConsoleTakeover, FALSE) != 0);
-        if (RemoteDisplay)
-        {
-            SwDeviceClose(RemoteDisplay);
-            RemoteDisplay = NULL;
-            Log("Remote display adapter closed");
-        }
-    }
-    LeaveCriticalSection(&RemoteDisplayLock);
-}
-
-/* Another user is signed in here: the client comes back with load balancing information that names its user (MS-RDPBCGR 2.2.13.1), and the service gives it that user's session */
-static BOOL RedirectToOwnSession(DESKTOP_CONTEXT *ctx)
-{
-    const char *user = ctx->NlaUser;
-    char token[160];
-    rdpRedirection *redirection;
-    int length;
-    BOOL sent = FALSE;
-    if (!*user) return FALSE;
-    length = snprintf(token, sizeof(token), BROKER_ROUTING_USER "%s", user);
-    if (length <= 0 || length >= (int)sizeof(token)) return FALSE;
-    redirection = redirection_new();
-    if (redirection && redirection_set_flags(redirection, LB_LOAD_BALANCE_INFO) &&
-        redirection_set_byte_option(redirection, LB_LOAD_BALANCE_INFO, (const BYTE *)token, (size_t)length))
-        sent = ctx->rdp.peer->SendServerRedirection(ctx->rdp.peer, redirection);
-    if (redirection) redirection_free(redirection);
-    Log("Peer %s redirected to the session of %s: %d", ctx->rdp.peer->hostname, user, sent);
-    return sent;
 }
 
 static BOOL OpenH264Ready(void)
@@ -924,7 +475,7 @@ static BOOL ControllerPostConnect(freerdp_peer *peer)
     rdpSettings *settings = ctx->rdp.settings;
     const char *user = freerdp_settings_get_string(settings, FreeRDP_Username);
     const char *password = freerdp_settings_get_string(settings, FreeRDP_Password);
-    assert(ControllerMode && !ctx->RemoteDisplay);
+    assert(ControllerMode && !ctx->Agent);
     if (!user || !password || !SecretEqual(user, Username) || !SecretEqual(password, Password))
     {
         Log("Authentication rejected for peer %s", peer->hostname);
@@ -934,23 +485,6 @@ static BOOL ControllerPostConnect(freerdp_peer *peer)
     if (!FollowInputDesktop(ctx) || !StartTransfer(ctx)) return FALSE;
     Log("Authenticated peer %s; desktop %dx%d", peer->hostname, ctx->Width, ctx->Height);
     return TRUE;
-}
-
-static void ApplyExperience(DESKTOP_CONTEXT *ctx)
-{
-    rdpSettings *settings = ctx->rdp.settings;
-    UINT32 flags = freerdp_settings_get_uint32(settings, FreeRDP_PerformanceFlags);
-    UINT32 type = freerdp_settings_get_uint32(settings, FreeRDP_ConnectionType);
-    RDP_EXPERIENCE experience;
-    BOOL applied = FALSE;
-    assert(!ControllerMode && ctx->RemoteDisplay);
-    ExperienceFromClient(flags, type, &experience);
-    EnterCriticalSection(&RemoteDisplayLock);
-    if (RemoteDisplayShown) applied = ExperienceApply(&Experience, &experience);
-    LeaveCriticalSection(&RemoteDisplayLock);
-    Log("Experience flags 0x%08lx connection type %lu: wallpaper %d, full window drag %d, effects %d%s",
-        (ULONG)flags, (ULONG)type, experience.Wallpaper, experience.DragFullWindows, experience.Effects,
-        applied ? "" : " (not applied)");
 }
 
 static BOOL PostConnect(freerdp_peer *peer)
@@ -971,11 +505,8 @@ static BOOL PostConnect(freerdp_peer *peer)
         return FALSE;
     }
     ctx->Authorized = TRUE;
-    error = AcquireRemoteDisplay(ctx);
+    error = AttachAgent(ctx);
     ForgetPassword(ctx);
-    if (!error && !OpenRemoteFrames(ctx)) error = ERRINFO_CLOSE_STACK_ON_DRIVER_FAILURE;
-    if (error && ctx->ConsoleStatus == ERROR_ACCESS_DENIED && !ctx->Named && !*AdoptedDisplay && RedirectToOwnSession(ctx))
-        return FALSE;
     if (error)
     {
         Log("Peer %s refused: the session has no remote display", peer->hostname);
@@ -983,8 +514,7 @@ static BOOL PostConnect(freerdp_peer *peer)
         if (!freerdp_send_error_info(ctx->rdp.rdp)) Log("Cannot tell peer %s why it is disconnected", peer->hostname);
         return FALSE;
     }
-    ApplyExperience(ctx);
-    if (!FollowInputDesktop(ctx) || !StartTransfer(ctx)) return FALSE;
+    if (!StartTransfer(ctx)) return FALSE;
     Log("Authenticated peer %s; desktop %dx%d", peer->hostname, ctx->Width, ctx->Height);
     return TRUE;
 }
@@ -1089,15 +619,6 @@ static void OpenDisplayControl(DESKTOP_CONTEXT *ctx)
     if (ctx->Disp->Open(ctx->Disp) != CHANNEL_RC_OK) Log("Cannot open the display control channel");
 }
 
-static void ApplyRequestedMode(DESKTOP_CONTEXT *ctx)
-{
-    LONG size = InterlockedExchange(&ctx->RequestedSize, 0);
-    if (!size || !ctx->FrameAdapter) return;
-    EnterCriticalSection(&RemoteDisplayLock);
-    SetRemoteDisplayMode(HIWORD(size), LOWORD(size));
-    LeaveCriticalSection(&RemoteDisplayLock);
-}
-
 static void MarkTiles(DESKTOP_CONTEXT *ctx, const RECT *rect)
 {
     int x, y, left = max(rect->left, 0), top = max(rect->top, 0);
@@ -1106,114 +627,6 @@ static void MarkTiles(DESKTOP_CONTEXT *ctx, const RECT *rect)
     for (y = top / TILE_HEIGHT; y <= (bottom - 1) / TILE_HEIGHT; ++y)
         for (x = left / TILE_WIDTH; x <= (right - 1) / TILE_WIDTH; ++x)
             ctx->TileMask[y * ctx->TileColumns + x] = 1;
-}
-
-static void CopyFrameRect(DESKTOP_CONTEXT *ctx, const RECT *rect)
-{
-    int y, left = max(rect->left, 0), top = max(rect->top, 0);
-    int right = min(rect->right, ctx->Width), bottom = min(rect->bottom, ctx->Height);
-    if (left >= right || top >= bottom) return;
-    for (y = top; y < bottom; ++y)
-    {
-        size_t offset = ((size_t)y * ctx->Width + left) * 4;
-        memcpy(ctx->Pixels + offset, ctx->Frame + offset, (size_t)(right - left) * 4);
-    }
-    MarkTiles(ctx, rect);
-}
-
-static BOOL MaskBit(const BYTE *rows, int width, int x, int y)
-{
-    return (rows[(size_t)y * ((width + 31) / 32 * 4) + x / 8] & (0x80 >> (x % 8))) != 0;
-}
-
-static BOOL ReadPointer(DESKTOP_CONTEXT *ctx, HCURSOR handle, UINT16 cacheIndex, POINTER_LARGE_UPDATE *update)
-{
-    struct { BITMAPINFOHEADER Header; RGBQUAD Colors[2]; } info = {0};
-    UINT32 flags = freerdp_settings_get_uint32(ctx->rdp.settings, FreeRDP_LargePointerFlag);
-    int limit = (flags & LARGE_POINTER_FLAG_384x384) ? RDPVDD_POINTER_MAX : (flags & LARGE_POINTER_FLAG_96x96) ? 96 : 32;
-    ICONINFO icon = {0};
-    BITMAP bitmap = {0};
-    BOOL ok = FALSE, alpha = FALSE;
-    int width, height, targetWidth, targetHeight, stride, x, y;
-    HDC dc;
-    if (!GetIconInfo(handle, &icon)) return FALSE;
-    dc = GetDC(NULL);
-    GetObjectW(icon.hbmMask, sizeof(bitmap), &bitmap);
-    width = bitmap.bmWidth;
-    height = icon.hbmColor ? bitmap.bmHeight : bitmap.bmHeight / 2;
-    info.Header.biSize = sizeof(info.Header);
-    info.Header.biWidth = width;
-    info.Header.biHeight = bitmap.bmHeight;
-    info.Header.biPlanes = 1;
-    info.Header.biBitCount = 1;
-    if (dc && width > 0 && height > 0 && width <= RDPVDD_POINTER_MAX && height <= RDPVDD_POINTER_MAX &&
-        GetDIBits(dc, icon.hbmMask, 0, bitmap.bmHeight, ctx->PointerMask, (BITMAPINFO *)&info, DIB_RGB_COLORS) == bitmap.bmHeight)
-    {
-        if (icon.hbmColor)
-        {
-            info.Header.biHeight = height;
-            info.Header.biBitCount = 32;
-            ok = GetDIBits(dc, icon.hbmColor, 0, height, ctx->PointerPixels, (BITMAPINFO *)&info, DIB_RGB_COLORS) == height;
-            for (x = 0; ok && x < width * height; ++x) alpha |= (ctx->PointerPixels[x] >> 24) != 0;
-            for (y = 0; ok && y < height; ++y)
-                for (x = 0; x < width; ++x)
-                {
-                    UINT32 *pixel = &ctx->PointerPixels[y * width + x];
-                    BOOL transparent = MaskBit(ctx->PointerMask, width, x, y);
-                    if (alpha) ctx->PointerTransparent[y * width + x] = FALSE;
-                    else
-                    {
-                        ctx->PointerTransparent[y * width + x] = transparent;
-                        *pixel = transparent ? *pixel & 0xFFFFFF : *pixel | 0xFF000000;
-                    }
-                }
-        }
-        else
-        {
-            for (y = 0; y < height; ++y)
-                for (x = 0; x < width; ++x)
-                {
-                    BOOL transparent = MaskBit(ctx->PointerMask, width, x, y + height);
-                    BOOL white = MaskBit(ctx->PointerMask, width, x, y);
-                    ctx->PointerTransparent[y * width + x] = transparent;
-                    ctx->PointerPixels[y * width + x] = white ? 0xFFFFFFFF : transparent ? 0 : 0xFF000000;
-                }
-            ok = TRUE;
-        }
-    }
-    if (ok)
-    {
-        targetWidth = width;
-        targetHeight = height;
-        if (max(width, height) > limit)
-        {
-            targetWidth = max(1, width * limit / max(width, height));
-            targetHeight = max(1, height * limit / max(width, height));
-        }
-        stride = (targetWidth + 15) / 16 * 2;
-        ZeroMemory(ctx->PointerAnd, (size_t)stride * targetHeight);
-        for (y = 0; y < targetHeight; ++y)
-            for (x = 0; x < targetWidth; ++x)
-            {
-                int source = (y * height / targetHeight) * width + x * width / targetWidth;
-                memcpy(ctx->PointerXor + ((size_t)y * targetWidth + x) * 4, &ctx->PointerPixels[source], 4);
-                if (ctx->PointerTransparent[source]) ctx->PointerAnd[y * stride + x / 8] |= 0x80 >> (x % 8);
-            }
-        update->xorBpp = 32;
-        update->cacheIndex = cacheIndex;
-        update->hotSpotX = (UINT16)(icon.xHotspot * targetWidth / width);
-        update->hotSpotY = (UINT16)(icon.yHotspot * targetHeight / height);
-        update->width = (UINT16)targetWidth;
-        update->height = (UINT16)targetHeight;
-        update->lengthAndMask = (UINT32)(stride * targetHeight);
-        update->lengthXorMask = (UINT32)(targetWidth * 4 * targetHeight);
-        update->andMaskData = ctx->PointerAnd;
-        update->xorMaskData = ctx->PointerXor;
-    }
-    if (dc) ReleaseDC(NULL, dc);
-    if (icon.hbmColor) DeleteObject(icon.hbmColor);
-    if (icon.hbmMask) DeleteObject(icon.hbmMask);
-    return ok;
 }
 
 static BOOL SendPointer(DESKTOP_CONTEXT *ctx, const POINTER_LARGE_UPDATE *pointer)
@@ -1231,80 +644,6 @@ static BOOL SendPointer(DESKTOP_CONTEXT *ctx, const POINTER_LARGE_UPDATE *pointe
     update.colorPtrAttr.andMaskData = pointer->andMaskData;
     update.colorPtrAttr.xorMaskData = pointer->xorMaskData;
     return ctx->rdp.update->pointer->PointerNew(&ctx->rdp, &update);
-}
-
-static BOOL ShowPointerStep(DESKTOP_CONTEXT *ctx, UINT32 step)
-{
-    POINTER_CACHED_UPDATE cached = {0};
-    POINTER_LARGE_UPDATE update = {0};
-    INT rate = 0;
-    DWORD steps = 0;
-    HCURSOR frame = GetCursorFrameInfo(ctx->Pointer, 0, step, &rate, &steps);
-    ctx->PointerStep = step;
-    ctx->PointerStepTick = GetTickCount();
-    ctx->PointerStepTime = rate > 0 ? (DWORD)rate * 1000 / 60 : 1000 / 60;
-    if (ctx->PointerCached)
-    {
-        cached.cacheIndex = step;
-        return ctx->rdp.update->pointer->PointerCached(&ctx->rdp, &cached);
-    }
-    return !frame || !ReadPointer(ctx, frame, 0, &update) || SendPointer(ctx, &update);
-}
-
-static BOOL UpdatePointer(DESKTOP_CONTEXT *ctx)
-{
-    POINTER_SYSTEM_UPDATE hidden = {0};
-    POINTER_LARGE_UPDATE update = {0};
-    CURSORINFO cursor = {0};
-    UINT32 cacheSize = freerdp_settings_get_uint32(ctx->rdp.settings, FreeRDP_PointerCacheSize);
-    INT rate = 0;
-    DWORD steps = 0, step;
-    cursor.cbSize = sizeof(cursor);
-    if (!GetCursorInfo(&cursor) || !(cursor.flags & CURSOR_SHOWING)) cursor.hCursor = NULL;
-    if (ctx->PointerSent && cursor.hCursor == ctx->Pointer)
-    {
-        if (ctx->PointerSteps > 1 && GetTickCount() - ctx->PointerStepTick >= ctx->PointerStepTime)
-            return ShowPointerStep(ctx, (ctx->PointerStep + 1) % ctx->PointerSteps);
-        return TRUE;
-    }
-    ctx->Pointer = cursor.hCursor;
-    ctx->PointerSent = TRUE;
-    ctx->PointerSteps = 0;
-    ctx->PointerCached = FALSE;
-    if (cursor.hCursor && !GetCursorFrameInfo(cursor.hCursor, 0, 0, &rate, &steps)) steps = 1;
-    if (steps > 1 && steps <= cacheSize)
-    {
-        for (step = 0; step < steps; ++step)
-        {
-            HCURSOR frame = GetCursorFrameInfo(cursor.hCursor, 0, step, &rate, &steps);
-            if (!frame || !ReadPointer(ctx, frame, (UINT16)step, &update)) break;
-            if (!SendPointer(ctx, &update)) return FALSE;
-        }
-        ctx->PointerCached = step == steps;
-    }
-    if (steps > 1 && (ctx->PointerCached || steps > cacheSize))
-    {
-        ctx->PointerSteps = steps;
-        return ShowPointerStep(ctx, 0);
-    }
-    if (cursor.hCursor && ReadPointer(ctx, cursor.hCursor, 0, &update)) return SendPointer(ctx, &update);
-    hidden.type = SYSPTR_NULL;
-    return ctx->rdp.update->pointer->PointerSystem(&ctx->rdp, &hidden);
-}
-
-static BOOL ReadRemoteFrame(DESKTOP_CONTEXT *ctx, RDPVDD_FRAME_ESCAPE *frame)
-{
-    NTSTATUS status;
-    memset(frame, 0, sizeof(*frame));
-    frame->Code = RDPVDD_ESCAPE_READ_FRAME;
-    frame->Buffer = (ULONG64)(ULONG_PTR)ctx->Frame;
-    frame->BufferWidth = ctx->Frame ? ctx->Width : 0;
-    frame->BufferHeight = ctx->Frame ? ctx->Height : 0;
-    status = FrameEscape(ctx->FrameAdapter, frame);
-    if (NT_SUCCESS(status)) return TRUE;
-    Log("The remote display is gone: 0x%08lx", status);
-    CloseRemoteFrames(ctx);
-    return FALSE;
 }
 
 static BOOL TileChanged(DESKTOP_CONTEXT *ctx, int x, int y, int width, int height, RECT *changed)
@@ -1347,15 +686,15 @@ static BOOL ComposeMove(DESKTOP_CONTEXT *ctx, const FRAME_MOVE *move)
     return FALSE;
 }
 
-static void QueueMoves(DESKTOP_CONTEXT *ctx, const RDPVDD_FRAME_ESCAPE *frame)
+static void QueueMoves(DESKTOP_CONTEXT *ctx, const RDPVDD_MOVE *moves, UINT32 count)
 {
     UINT32 i;
-    for (i = 0; i < frame->MoveCount && i < RDPVDD_FRAME_MAX_MOVES; ++i)
+    for (i = 0; i < count && i < RDPVDD_FRAME_MAX_MOVES; ++i)
     {
         FRAME_MOVE move;
-        move.SourceLeft = frame->Moves[i].SourcePoint.x;
-        move.SourceTop = frame->Moves[i].SourcePoint.y;
-        move.Dest = frame->Moves[i].DestRect;
+        move.SourceLeft = moves[i].SourcePoint.x;
+        move.SourceTop = moves[i].SourcePoint.y;
+        move.Dest = moves[i].DestRect;
         if (!FrameMoveClip(&move, ctx->Width, ctx->Height) || ComposeMove(ctx, &move)) continue;
         if (ctx->MoveCount == RDPVDD_FRAME_MAX_MOVES) memmove(ctx->Moves, ctx->Moves + 1, --ctx->MoveCount * sizeof(move));
         ctx->Moves[ctx->MoveCount++] = move;
@@ -1461,7 +800,7 @@ static BOOL SendDesktop(DESKTOP_CONTEXT *ctx, BOOL masked)
 static BOOL CaptureConsole(DESKTOP_CONTEXT *ctx)
 {
     CURSORINFO cursor = {0};
-    assert(ControllerMode && !ctx->RemoteDisplay && !ctx->FrameAdapter);
+    assert(ControllerMode && !ctx->Agent);
     if (!FollowInputDesktop(ctx)) return FALSE;
     if (ctx->Width != GetSystemMetrics(SM_CXSCREEN) || ctx->Height != GetSystemMetrics(SM_CYSCREEN))
     {
@@ -1494,57 +833,131 @@ static BOOL CaptureConsole(DESKTOP_CONTEXT *ctx)
     return SendDesktop(ctx, FALSE);
 }
 
-static BOOL Capture(DESKTOP_CONTEXT *ctx)
+static BOOL ShowAgentPointer(DESKTOP_CONTEXT *ctx, const AGENT_POINTER_REPLY *reply, DWORD size)
 {
-    int width, height;
+    POINTER_SYSTEM_UPDATE hidden = {0};
+    POINTER_CACHED_UPDATE cached = {0};
+    POINTER_LARGE_UPDATE update = {0};
+    if (reply->Kind == AGENT_POINTER_HIDDEN)
+    {
+        hidden.type = SYSPTR_NULL;
+        return ctx->rdp.update->pointer->PointerSystem(&ctx->rdp, &hidden);
+    }
+    if (reply->Kind == AGENT_POINTER_CACHED)
+    {
+        cached.cacheIndex = reply->CacheIndex;
+        return ctx->rdp.update->pointer->PointerCached(&ctx->rdp, &cached);
+    }
+    if (reply->Kind != AGENT_POINTER_SHAPE || !reply->Width || !reply->Height ||
+        reply->Width > RDPVDD_POINTER_MAX || reply->Height > RDPVDD_POINTER_MAX ||
+        reply->AndLength != (UINT32)(reply->Width + 15) / 16 * 2 * reply->Height ||
+        reply->XorLength != (UINT32)reply->Width * 4 * reply->Height ||
+        size != FIELD_OFFSET(AGENT_POINTER_REPLY, Data) + reply->AndLength + reply->XorLength)
+        return FALSE;
+    update.xorBpp = 32;
+    update.cacheIndex = reply->CacheIndex;
+    update.hotSpotX = reply->HotSpotX;
+    update.hotSpotY = reply->HotSpotY;
+    update.width = reply->Width;
+    update.height = reply->Height;
+    update.lengthAndMask = reply->AndLength;
+    update.lengthXorMask = reply->XorLength;
+    update.andMaskData = (BYTE *)reply->Data;
+    update.xorMaskData = (BYTE *)reply->Data + reply->AndLength;
+    return SendPointer(ctx, &update);
+}
+
+static BOOL ShowAgentFrame(DESKTOP_CONTEXT *ctx, const AGENT_FRAME_REPLY *frame, int width, int height)
+{
     UINT32 i;
-    RDPVDD_FRAME_ESCAPE frame = {0};
-    if (!ctx->Authorized || !ctx->Active || ctx->Suppressed) return TRUE;
-    if (ControllerMode) return CaptureConsole(ctx);
-    if (!FollowInputDesktop(ctx) || !ctx->FrameAdapter) return FALSE;
-    ApplyRequestedMode(ctx);
-    if (WaitForSingleObject(ctx->FrameEvent, 0) == WAIT_OBJECT_0) ctx->FramePending = TRUE;
-    frame.Width = ctx->Width;
-    frame.Height = ctx->Height;
-    if (ctx->FramePending)
+    if (width != ctx->Width || height != ctx->Height)
     {
-        ctx->FramePending = FALSE;
-        if (!ReadRemoteFrame(ctx, &frame)) return FALSE;
-    }
-    if (!frame.Width)
-    {
-        ctx->FramePending = TRUE;
-        return TRUE;
-    }
-    ctx->FrameWidth = width = (int)frame.Width;
-    ctx->FrameHeight = height = (int)frame.Height;
-    if (ctx->Width != width || ctx->Height != height)
-    {
-        if (!AllocateCapture(ctx) ||
-            !freerdp_settings_set_uint32(ctx->rdp.settings, FreeRDP_DesktopWidth, ctx->Width) ||
+        if (!freerdp_settings_set_uint32(ctx->rdp.settings, FreeRDP_DesktopWidth, ctx->Width) ||
             !freerdp_settings_set_uint32(ctx->rdp.settings, FreeRDP_DesktopHeight, ctx->Height)) return FALSE;
         Log("Desktop resized to %dx%d", ctx->Width, ctx->Height);
         if (GfxActive(ctx->Gfx)) return TRUE;
         ctx->Active = FALSE;
         return ctx->rdp.update->DesktopResize(&ctx->rdp);
     }
-    if (!UpdatePointer(ctx)) return FALSE;
+    if (frame->Status != AGENT_FRAME_CHANGED) return TRUE;
     if (GfxActive(ctx->Gfx))
     {
         RECT ended;
         if (GfxPoll(ctx->Gfx, &ended)) UnionRect(&ctx->RefreshRect, &ctx->RefreshRect, &ended);
     }
-    if (!frame.RectCount && !ctx->Refresh && !ctx->Deferred && IsRectEmpty(&ctx->RefreshRect)) return TRUE;
-    for (i = 0; i < frame.RectCount; ++i) CopyFrameRect(ctx, &frame.Rects[i]);
-    QueueMoves(ctx, &frame);
+    if (!frame->RectCount && !ctx->Refresh && !ctx->Deferred && IsRectEmpty(&ctx->RefreshRect)) return TRUE;
+    for (i = 0; i < frame->RectCount && i < RDPVDD_FRAME_MAX_RECTS; ++i) MarkTiles(ctx, &frame->Rects[i]);
+    QueueMoves(ctx, frame->Moves, frame->MoveCount);
     return SendDesktop(ctx, TRUE);
+}
+
+/* The agent answers a capture with pointer updates, then the frame it copied to the shared surface; the frame goes to the client after the agent is released, so a slow client holds up no other connection */
+static BOOL CaptureAgent(DESKTOP_CONTEXT *ctx, BOOL frame)
+{
+    AGENT_CAPTURE_REQUEST request = {AGENT_CAPTURE};
+    AGENT_FRAME_REPLY *reply = &ctx->Frame;
+    int width = ctx->Width, height = ctx->Height;
+    DWORD read;
+    BOOL ok, shown = TRUE;
+    request.Frame = frame;
+    request.RequestedSize = frame ? InterlockedExchange(&ctx->RequestedSize, 0) : 0;
+    request.LargePointerFlag = freerdp_settings_get_uint32(ctx->rdp.settings, FreeRDP_LargePointerFlag);
+    request.PointerCacheSize = freerdp_settings_get_uint32(ctx->rdp.settings, FreeRDP_PointerCacheSize);
+    request.ResendPointer = !ctx->PointerSent;
+    if (!AgentEnter(ctx->Agent, ctx->Owner)) return !AgentBroken(ctx->Agent);
+    ok = AgentWrite(ctx->Agent, &request, sizeof(request));
+    while (ok)
+    {
+        ok = AgentRead(ctx->Agent, ctx->PointerReply, sizeof(*ctx->PointerReply), &read, AGENT_TIMEOUT);
+        if (!ok) break;
+        if (ctx->PointerReply->Code == AGENT_FRAME && read == sizeof(*reply))
+        {
+            memcpy(reply, ctx->PointerReply, sizeof(*reply));
+            break;
+        }
+        if (ctx->PointerReply->Code != AGENT_POINTER || read < FIELD_OFFSET(AGENT_POINTER_REPLY, Data))
+        {
+            AgentAbandon(ctx->Agent);
+            ok = FALSE;
+            break;
+        }
+        if (shown && !ShowAgentPointer(ctx, ctx->PointerReply, read)) shown = FALSE;
+    }
+    if (ok && frame && reply->Status != AGENT_FRAME_GONE && !MapSurface(ctx, reply)) ok = FALSE;
+    AgentLeave(ctx->Agent);
+    if (!ok || !shown) return FALSE;
+    ctx->TakenOver = reply->TakenOver;
+    if (!frame) return TRUE;
+    if (reply->Status == AGENT_FRAME_GONE) return FALSE;
+    if (reply->Status == AGENT_FRAME_CHANGED) ctx->PointerSent = TRUE;
+    return ShowAgentFrame(ctx, reply, width, height);
+}
+
+static void DetachAgent(DESKTOP_CONTEXT *ctx)
+{
+    AGENT_FRAME_REPLY reply;
+    ULONG code = AGENT_DETACH;
+    DWORD read;
+    if (!ctx->Agent) return;
+    if (ctx->Owner && AgentEnter(ctx->Agent, ctx->Owner))
+    {
+        if (!AgentWrite(ctx->Agent, &code, sizeof(code)) ||
+            !AgentRead(ctx->Agent, &reply, sizeof(reply), &read, AGENT_TIMEOUT) ||
+            read != sizeof(reply) || reply.Code != AGENT_DETACH)
+        {
+            AgentAbandon(ctx->Agent);
+            Log("The agent of session %lu did not leave the display", AgentSession(ctx->Agent));
+        }
+        AgentLeave(ctx->Agent);
+    }
+    FreeDesktopCapture(ctx);
+    BrokerDisconnect(ctx->Agent);
+    ctx->Agent = NULL;
 }
 
 static void ContextFree(freerdp_peer *peer, rdpContext *rdp)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)rdp;
-    unsigned i;
-    INPUT event = {0};
     (void)peer;
     SecureZeroMemory(ctx->NlaPassword, sizeof(ctx->NlaPassword));
     TransferStop(ctx->Transfer);
@@ -1552,27 +965,21 @@ static void ContextFree(freerdp_peer *peer, rdpContext *rdp)
     GfxFree(ctx->Gfx);
     freerdp_bitmap_planar_context_free(ctx->Planar);
     if (ctx->Vcm) WTSCloseServer(ctx->Vcm);
-    /* A disconnected controller must not leave Ctrl/Alt or mouse buttons held. */
-    for (i = 0; i < 512; ++i)
-        if (ctx->Keys[i])
-        {
-            event.type = INPUT_KEYBOARD;
-            event.ki.wScan = i & 255;
-            event.ki.dwFlags = KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP;
-            if (i & 256) event.ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
-            SendInput(1, &event, sizeof(event));
-        }
-    memset(&event, 0, sizeof(event));
-    event.type = INPUT_MOUSE;
-    if (ctx->MouseButtons & PTR_FLAGS_BUTTON1) event.mi.dwFlags |= MOUSEEVENTF_LEFTUP;
-    if (ctx->MouseButtons & PTR_FLAGS_BUTTON2) event.mi.dwFlags |= MOUSEEVENTF_RIGHTUP;
-    if (ctx->MouseButtons & PTR_FLAGS_BUTTON3) event.mi.dwFlags |= MOUSEEVENTF_MIDDLEUP;
-    if (event.mi.dwFlags) SendInput(1, &event, sizeof(event));
-    Log("Session closed: frames=%llu updates=%llu input events=%llu", ctx->Frames, ctx->Updates, ctx->Inputs);
-    CloseRemoteFrames(ctx);
+    if (ControllerMode) DesktopReleaseInput(&ctx->Input);
+    Log("Session closed: frames=%llu updates=%llu input events=%llu", ctx->Frames,
+        ctx->Updates, ControllerMode ? ctx->Input.Inputs : ctx->Inputs);
+    DetachAgent(ctx);
     FreeDesktopCapture(ctx);
-    if (ctx->Desktop && SetThreadDesktop(ctx->HomeDesktop)) CloseDesktop(ctx->Desktop);
-    ReleaseRemoteDisplay(ctx);
+    DesktopLeave(&ctx->Thread);
+    free(ctx->PointerReply);
+}
+
+static BOOL Disconnected(DESKTOP_CONTEXT *ctx, const char *reason)
+{
+    Log("Peer %s %s", ctx->rdp.peer->hostname, reason);
+    freerdp_set_error_info(ctx->rdp.rdp, ERRINFO_DISCONNECTED_BY_OTHER_CONNECTION);
+    if (!freerdp_send_error_info(ctx->rdp.rdp)) Log("Cannot tell peer %s why it is disconnected", ctx->rdp.peer->hostname);
+    return TRUE;
 }
 
 static DWORD WINAPI ClientThread(void *arg)
@@ -1581,15 +988,15 @@ static DWORD WINAPI ClientThread(void *arg)
     rdpSettings *settings;
     rdpPrivateKey *key;
     rdpCertificate *cert;
-    DWORD count, status, started = GetTickCount(), wait, frameIndex;
-    ULONGLONG lastFrame = 0, elapsed;
+    DWORD count, status, started = GetTickCount(), wait;
+    ULONGLONG lastFrame = 0, lastStatus = 0, elapsed;
     HANDLE events[32];
     DESKTOP_CONTEXT *ctx;
     peer->ContextSize = sizeof(DESKTOP_CONTEXT);
     peer->ContextFree = ContextFree;
     if (!freerdp_peer_context_new(peer)) goto done;
     ctx = (DESKTOP_CONTEXT *)peer->context;
-    ctx->Named = peer->ContextExtra != NULL;
+    if (!ControllerMode && !(ctx->PointerReply = malloc(sizeof(*ctx->PointerReply)))) goto cleanup;
     ctx->Vcm = WTSOpenServerA((LPSTR)peer->context);
     if (!ctx->Vcm) goto cleanup;
     settings = ctx->rdp.settings;
@@ -1623,12 +1030,11 @@ static DWORD WINAPI ClientThread(void *arg)
     timeBeginPeriod(1);
     for (;;)
     {
+        BOOL capture;
         events[0] = StopEvent;
         count = peer->GetEventHandles(peer, events + 1, 30);
         if (!count) break;
         events[++count] = WTSVirtualChannelManagerGetEventHandle(ctx->Vcm);
-        frameIndex = 0;
-        if (ctx->FrameEvent) events[frameIndex = ++count] = ctx->FrameEvent;
         if (ctx->Gfx && GfxEventHandle(ctx->Gfx)) events[++count] = GfxEventHandle(ctx->Gfx);
         wait = 100;
         if (ctx->Active && peer->activated)
@@ -1638,7 +1044,7 @@ static DWORD WINAPI ClientThread(void *arg)
         }
         status = WaitForMultipleObjects(count + 1, events, FALSE, wait);
         if (status == WAIT_OBJECT_0 || status == WAIT_FAILED) break;
-        if (frameIndex && status == WAIT_OBJECT_0 + frameIndex) ctx->FramePending = TRUE;
+        if (!InterlockedCompareExchange(&RemoteAllowed, 0, 0)) break;
         if (!peer->CheckFileDescriptor(peer)) break;
         if (!WTSVirtualChannelManagerCheckFileDescriptorEx(ctx->Vcm, peer->activated)) break;
         if (ctx->Gfx && !GfxHandleMessages(ctx->Gfx)) break;
@@ -1647,25 +1053,16 @@ static DWORD WINAPI ClientThread(void *arg)
         if (!ControllerMode && ctx->Authorized && !ctx->Disp &&
             WTSVirtualChannelManagerGetDrdynvcState(ctx->Vcm) == DRDYNVC_STATE_READY) OpenDisplayControl(ctx);
         if (!ctx->Authorized && GetTickCount() - started > 30000) break;
-        if (ctx->RemoteDisplay && ConsoleSignedIn())
+        capture = ctx->Active && peer->activated && Milliseconds() - lastFrame >= FrameInterval;
+        if (capture) lastFrame = Milliseconds();
+        if (ctx->Agent && (capture || Milliseconds() - lastStatus >= AGENT_STATUS_INTERVAL))
         {
-            Log("Peer %s disconnected by a sign-in at the console", peer->hostname);
-            freerdp_set_error_info(ctx->rdp.rdp, ERRINFO_DISCONNECTED_BY_OTHER_CONNECTION);
-            if (!freerdp_send_error_info(ctx->rdp.rdp)) Log("Cannot tell peer %s why it is disconnected", peer->hostname);
-            break;
+            lastStatus = Milliseconds();
+            if (!CaptureAgent(ctx, capture && !ctx->Suppressed)) break;
         }
-        if (Superseded(ctx))
-        {
-            Log("Peer %s replaced by a newer connection", peer->hostname);
-            freerdp_set_error_info(ctx->rdp.rdp, ERRINFO_DISCONNECTED_BY_OTHER_CONNECTION);
-            if (!freerdp_send_error_info(ctx->rdp.rdp)) Log("Cannot tell peer %s why it is disconnected", peer->hostname);
-            break;
-        }
-        if (ctx->Active && peer->activated && Milliseconds() - lastFrame >= FrameInterval)
-        {
-            lastFrame = Milliseconds();
-            if (!Capture(ctx)) break;
-        }
+        if (ctx->TakenOver && Disconnected(ctx, "disconnected by a sign-in at the console")) break;
+        if (Superseded(ctx) && Disconnected(ctx, "replaced by a newer connection")) break;
+        if (capture && ControllerMode && ctx->Authorized && !ctx->Suppressed && !CaptureConsole(ctx)) break;
     }
     timeEndPeriod(1);
     peer->Disconnect(peer);
@@ -1922,34 +1319,51 @@ static DWORD WINAPI ServiceControl(DWORD control, DWORD type, void *data, void *
     return NO_ERROR;
 }
 
-/* Session 0 has no interactive desktop; serve the console session as SYSTEM. */
-static HANDLE StartSessionServer(DWORD session, const WCHAR *display)
+/* Session 0 has no interactive desktop; a process of the service runs in the session as SYSTEM. */
+static HANDLE StartSessionProcess(DWORD session, const char *arguments)
 {
-    char path[MAX_PATH], command[3 * MAX_PATH + 32], instance[MAX_DEVICE_ID_LEN];
+    char path[MAX_PATH], command[3 * MAX_PATH + 64];
     HANDLE token = NULL, primary = NULL;
     STARTUPINFOA startup = {0};
     PROCESS_INFORMATION process = {0};
     BOOL started = FALSE;
     startup.cb = sizeof(startup);
     startup.lpDesktop = "winsta0\\default";
-    if (!display) *instance = 0;
-    else if (!WideCharToMultiByte(CP_UTF8, 0, display, -1, instance, sizeof(instance), NULL, NULL)) return NULL;
     if (GetModuleFileNameA(NULL, path, sizeof(path)) &&
-        snprintf(command, sizeof(command), *ServiceConfig ? "\"%s\" %s%s%s \"%s\"" : "\"%s\" %s%s%s",
-                 path, display ? "/newsession \"" : "/session", instance, display ? "\"" : "",
-                 ServiceConfig) < (int)sizeof(command) &&
+        snprintf(command, sizeof(command), "\"%s\" %s", path, arguments) < (int)sizeof(command) &&
         OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE, &token) &&
         DuplicateTokenEx(token, TOKEN_ALL_ACCESS, NULL, SecurityImpersonation, TokenPrimary, &primary) &&
         SetTokenInformation(primary, TokenSessionId, &session, sizeof(session)))
         started = CreateProcessAsUserA(primary, path, command, NULL, NULL, FALSE, CREATE_NO_WINDOW,
                                        NULL, NULL, &startup, &process);
-    if (!started) Log("Cannot start the server in session %lu error=%lu", session, GetLastError());
+    if (!started) Log("Cannot start %s in session %lu error=%lu", arguments, session, GetLastError());
     if (primary) CloseHandle(primary);
     if (token) CloseHandle(token);
     if (!started) return NULL;
     CloseHandle(process.hThread);
-    Log("Server started in %s session %lu", display ? "new" : "console", session);
     return process.hProcess;
+}
+
+static HANDLE StartSessionServer(DWORD session)
+{
+    char arguments[MAX_PATH + 16];
+    HANDLE server;
+    if (snprintf(arguments, sizeof(arguments), "/session \"%s\"", ServiceConfig) >= (int)sizeof(arguments)) return NULL;
+    server = StartSessionProcess(session, arguments);
+    if (server) Log("Server started in console session %lu", session);
+    return server;
+}
+
+static HANDLE StartAgent(DWORD session, const WCHAR *pipe, const WCHAR *display)
+{
+    char arguments[MAX_DEVICE_ID_LEN + AGENT_PIPE_KEY_CHARS + 48], instance[MAX_DEVICE_ID_LEN];
+    HANDLE agent;
+    if (display && !WideCharToMultiByte(CP_UTF8, 0, display, -1, instance, sizeof(instance), NULL, NULL)) return NULL;
+    if (snprintf(arguments, sizeof(arguments), display ? "/agent %lu %ls \"%s\"" : "/agent %lu %ls",
+                 GetCurrentProcessId(), pipe, display ? instance : "") >= (int)sizeof(arguments)) return NULL;
+    agent = StartSessionProcess(session, arguments);
+    if (agent) Log("Agent started in %s session %lu", display ? "new" : "console", session);
+    return agent;
 }
 
 static void StopSessionServer(HANDLE *server)
@@ -1986,27 +1400,135 @@ static BOOL RemoteDesktopAllowed(HKEY key)
 
 static BOOL BrokerAllowed(void)
 {
-    HKEY key;
-    BOOL allowed = FALSE;
-    if (!RegOpenKeyExA(HKEY_LOCAL_MACHINE, TERMINAL_SERVER_KEY, 0, KEY_QUERY_VALUE, &key))
-    {
-        allowed = RemoteDesktopAllowed(key);
-        RegCloseKey(key);
-    }
-    return allowed;
+    return InterlockedCompareExchange(&RemoteAllowed, 0, 0) != 0;
 }
 
-static HANDLE StartNewSessionServer(DWORD session, const WCHAR *display)
+static BOOL ReadTransferRoot(const char *config)
 {
-    return StartSessionServer(session, display);
+    char root[MAX_PATH];
+    if (!*config) return TRUE;
+    GetPrivateProfileStringA("server", "transfer_root", "", root, sizeof(root), config);
+    return !*root || MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, root, -1, TransferRoot, MAX_PATH);
+}
+
+static int StartServer(const char *config)
+{
+    char directory[MAX_PATH], *separator;
+    WSADATA winsock;
+    if (!ReadTransferRoot(config)) return 2;
+    if (!GetModuleFileNameA(NULL, directory, sizeof(directory))) return 1;
+    separator = strrchr(directory, '\\');
+    if (!separator) return 1;
+    *separator = 0;
+    if (!ControllerMode &&
+        (snprintf(Certificate, sizeof(Certificate), "%s\\server.crt", directory) >= (int)sizeof(Certificate) ||
+         snprintf(PrivateKey, sizeof(PrivateKey), "%s\\server.key", directory) >= (int)sizeof(PrivateKey))) return 1;
+    if (WSAStartup(MAKEWORD(2, 2), &winsock)) return 1;
+    if (!winpr_InitializeSSL(WINPR_SSL_INIT_DEFAULT)) return 1;
+    if (!ControllerMode && !EnsureCertificate()) return 2;
+    StopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (!StopEvent) return 1;
+    FrameInterval = ReadFrameInterval();
+    if (!WTSRegisterWtsApiFunctionTable(FreeRDP_InitWtsApi())) return 1;
+    return 0;
+}
+
+static void TakePeer(freerdp_peer *peer, struct sockaddr_storage *address)
+{
+    if (address->ss_family == AF_INET6 && IN6_IS_ADDR_V4MAPPED(&((struct sockaddr_in6 *)address)->sin6_addr))
+    {
+        struct sockaddr_in mapped = {0};
+        mapped.sin_family = AF_INET;
+        mapped.sin_port = ((struct sockaddr_in6 *)address)->sin6_port;
+        memcpy(&mapped.sin_addr, &((struct sockaddr_in6 *)address)->sin6_addr.s6_addr[12], 4);
+        ZeroMemory(address, sizeof(*address));
+        memcpy(address, &mapped, sizeof(mapped));
+    }
+    if (!freerdp_peer_set_local_and_hostname(peer, address) || !Accepted(NULL, peer)) freerdp_peer_free(peer);
+}
+
+/* The service authenticates every connection in session 0 before it reaches any session */
+static BOOL AcceptConnection(SOCKET socket)
+{
+    struct sockaddr_storage address;
+    u_long nonblocking = 1;
+    int length = sizeof(address);
+    freerdp_peer *peer;
+    if (WSAEventSelect(socket, NULL, 0) || ioctlsocket(socket, FIONBIO, &nonblocking) ||
+        getpeername(socket, (struct sockaddr *)&address, &length))
+        return FALSE;
+    peer = freerdp_peer_new((int)socket);
+    if (!peer)
+    {
+        Log("Cannot take a connection error=%lu", WSAGetLastError());
+        return FALSE;
+    }
+    TakePeer(peer, &address);
+    return TRUE;
+}
+
+static void RunController(HKEY key, HANDLE changed)
+{
+    HANDLE server = NULL, waits[2] = {ServiceStopEvent, changed};
+    DWORD session = 0, console, code = 0, wait;
+    BOOL armed = FALSE, failed = FALSE;
+    for (;;)
+    {
+        if (!armed)
+            armed = !RegNotifyChangeKeyValue(key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, changed, TRUE);
+        console = WTSGetActiveConsoleSessionId();
+        if (server && WaitForSingleObject(server, 0) == WAIT_OBJECT_0)
+        {
+            GetExitCodeProcess(server, &code);
+            CloseHandle(server);
+            server = NULL;
+            Log("Server in console session %lu exited with %lu", session, code);
+            failed = code == 2;
+        }
+        if (server && console != session && console != 0xFFFFFFFF) StopSessionServer(&server);
+        if (!server && !failed && console != 0 && console != 0xFFFFFFFF)
+        {
+            server = StartSessionServer(console);
+            session = console;
+        }
+        wait = WaitForMultipleObjects(2, waits, FALSE, 2000);
+        if (wait == WAIT_OBJECT_0 || wait == WAIT_FAILED) break;
+        if (wait == WAIT_OBJECT_0 + 1) armed = failed = FALSE;
+    }
+    if (server) StopSessionServer(&server);
+}
+
+static DWORD RunBroker(HKEY key, HANDLE changed)
+{
+    HANDLE waits[2] = {ServiceStopEvent, changed};
+    DWORD code = StartServer(ServiceConfig), wait;
+    BOOL armed = FALSE;
+    if (code) return code;
+    InterlockedExchange(&RemoteAllowed, RemoteDesktopAllowed(key));
+    if (!BrokerStart(Log, StartAgent, BrokerAllowed, AcceptConnection)) return GetLastError();
+    ReportService(SERVICE_RUNNING, NO_ERROR);
+    for (;;)
+    {
+        if (!armed)
+            armed = !RegNotifyChangeKeyValue(key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, changed, TRUE);
+        InterlockedExchange(&RemoteAllowed, RemoteDesktopAllowed(key));
+        BrokerSetConsoleSession(WTSGetActiveConsoleSessionId());
+        wait = WaitForMultipleObjects(2, waits, FALSE, 2000);
+        if (wait == WAIT_OBJECT_0 || wait == WAIT_FAILED) break;
+        if (wait == WAIT_OBJECT_0 + 1) armed = FALSE;
+    }
+    BrokerClose();
+    SetEvent(StopEvent);
+    while (InterlockedCompareExchange(&ClientCount, 0, 0)) Sleep(50);
+    BrokerStop();
+    return NO_ERROR;
 }
 
 static void WINAPI ServiceMain(DWORD argc, char **argv)
 {
-    HANDLE server = NULL, changed, waits[2];
+    HANDLE changed;
     HKEY key = NULL;
-    DWORD session = 0, console, code = 0, wait;
-    BOOL armed = FALSE, failed = FALSE, allowed;
+    DWORD code = 0;
     (void)argc; (void)argv;
     ServiceHandle = RegisterServiceCtrlHandlerExA(SERVICE_NAME, ServiceControl, NULL);
     if (!ServiceHandle) return;
@@ -2019,125 +1541,22 @@ static void WINAPI ServiceMain(DWORD argc, char **argv)
         code = GetLastError();
         goto done;
     }
-    waits[0] = ServiceStopEvent;
-    waits[1] = changed;
     /* The controller connects to the console session's server directly */
-    if (!ControllerEnabled(ServiceConfig) && !BrokerStart(Log, StartNewSessionServer, BrokerAllowed))
+    if (ControllerEnabled(ServiceConfig))
     {
-        code = GetLastError();
-        goto done;
+        ReportService(SERVICE_RUNNING, NO_ERROR);
+        RunController(key, changed);
     }
-    ReportService(SERVICE_RUNNING, NO_ERROR);
-    for (;;)
+    else
     {
-        if (!armed)
-            armed = !RegNotifyChangeKeyValue(key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, changed, TRUE);
-        allowed = ControllerEnabled(ServiceConfig) || RemoteDesktopAllowed(key);
-        console = WTSGetActiveConsoleSessionId();
-        if (server && WaitForSingleObject(server, 0) == WAIT_OBJECT_0)
-        {
-            GetExitCodeProcess(server, &code);
-            BrokerSetConsoleAgent(NULL, 0);
-            CloseHandle(server);
-            server = NULL;
-            Log("Server in console session %lu exited with %lu", session, code);
-            failed = code == 2;
-        }
-        if (server && (!allowed || (console != session && console != 0xFFFFFFFF)))
-        {
-            BrokerSetConsoleAgent(NULL, 0);
-            StopSessionServer(&server);
-        }
-        if (!server && !failed && allowed && console != 0 && console != 0xFFFFFFFF)
-        {
-            server = StartSessionServer(console, NULL);
-            session = console;
-            BrokerSetConsoleAgent(server, session);
-        }
-        wait = WaitForMultipleObjects(2, waits, FALSE, 2000);
-        if (wait == WAIT_OBJECT_0 || wait == WAIT_FAILED) break;
-        if (wait == WAIT_OBJECT_0 + 1) armed = failed = FALSE;
+        code = RunBroker(key, changed);
     }
-    BrokerSetConsoleAgent(NULL, 0);
-    if (server) StopSessionServer(&server);
-    BrokerStop();
-    code = NO_ERROR;
 done:
     if (key) RegCloseKey(key);
     if (changed) CloseHandle(changed);
     if (SessionStopEvent) CloseHandle(SessionStopEvent);
     if (ServiceStopEvent) CloseHandle(ServiceStopEvent);
     ReportService(SERVICE_STOPPED, code);
-}
-
-/* The service accepts connections in session 0 and duplicates each socket into this session's server */
-static DWORD WINAPI TakeConnections(void *unused)
-{
-    SECURITY_ATTRIBUTES security = {sizeof(security), NULL, FALSE};
-    BROKER_HANDOFF message;
-    struct sockaddr_storage address;
-    WCHAR name[64];
-    DWORD session = 0, read;
-    HANDLE pipe;
-    SOCKET socket;
-    u_long nonblocking = 1;
-    int length;
-    freerdp_peer *peer;
-    (void)unused;
-    ProcessIdToSessionId(GetCurrentProcessId(), &session);
-    _snwprintf(name, ARRAYSIZE(name), BROKER_PIPE_FORMAT, session);
-    name[ARRAYSIZE(name) - 1] = 0;
-    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(L"D:P(A;;GA;;;SY)", SDDL_REVISION_1,
-                                                              &security.lpSecurityDescriptor, NULL))
-        return 1;
-    pipe = CreateNamedPipeW(name, PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE,
-                            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT, 1, 0, sizeof(message), 0,
-                            &security);
-    LocalFree(security.lpSecurityDescriptor);
-    if (pipe == INVALID_HANDLE_VALUE)
-    {
-        Log("Cannot take connections from the service error=%lu", GetLastError());
-        SetEvent(StopEvent);
-        return 1;
-    }
-    Log("Taking connections for session %lu", session);
-    while (WaitForSingleObject(StopEvent, 0) == WAIT_TIMEOUT)
-    {
-        if (!ConnectNamedPipe(pipe, NULL) && GetLastError() != ERROR_PIPE_CONNECTED) break;
-        if (ReadFile(pipe, &message, sizeof(message), &read, NULL) && read == sizeof(message))
-        {
-            socket = WSASocketW(FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, &message.Socket, 0,
-                                WSA_FLAG_OVERLAPPED);
-            peer = NULL;
-            length = sizeof(address);
-            if (socket != INVALID_SOCKET && !ioctlsocket(socket, FIONBIO, &nonblocking) &&
-                !getpeername(socket, (struct sockaddr *)&address, &length))
-                peer = freerdp_peer_new((int)socket);
-            if (peer && address.ss_family == AF_INET6 &&
-                IN6_IS_ADDR_V4MAPPED(&((struct sockaddr_in6 *)&address)->sin6_addr))
-            {
-                struct sockaddr_in mapped = {0};
-                mapped.sin_family = AF_INET;
-                mapped.sin_port = ((struct sockaddr_in6 *)&address)->sin6_port;
-                memcpy(&mapped.sin_addr, &((struct sockaddr_in6 *)&address)->sin6_addr.s6_addr[12], 4);
-                ZeroMemory(&address, sizeof(address));
-                memcpy(&address, &mapped, sizeof(mapped));
-            }
-            if (peer) peer->ContextExtra = message.Named ? peer : NULL;
-            if (!peer)
-            {
-                Log("Cannot take a connection from the service error=%lu", WSAGetLastError());
-                if (socket != INVALID_SOCKET) closesocket(socket);
-            }
-            else if (!freerdp_peer_set_local_and_hostname(peer, &address) || !Accepted(NULL, peer))
-            {
-                freerdp_peer_free(peer);
-            }
-        }
-        DisconnectNamedPipe(pipe);
-    }
-    CloseHandle(pipe);
-    return 0;
 }
 
 static DWORD WINAPI WaitServiceStop(void *event)
@@ -2148,54 +1567,40 @@ static DWORD WINAPI WaitServiceStop(void *event)
 
 int main(int argc, char **argv)
 {
-    char config[MAX_PATH] = "", directory[MAX_PATH], *separator;
+    char config[MAX_PATH] = "";
     freerdp_listener *listener;
     HANDLE events[32], singleton;
     DWORD count, status;
-    WSADATA winsock;
     HANDLE serviceStop = NULL, thread;
+    WCHAR display[MAX_DEVICE_ID_LEN], pipe[AGENT_PIPE_KEY_CHARS + 1];
     BOOL serviceMode = argc >= 2 && !_stricmp(argv[1], "/service");
-    BOOL newSession = argc >= 3 && !_stricmp(argv[1], "/newsession");
-    BOOL sessionMode = newSession || (argc >= 2 && !_stricmp(argv[1], "/session"));
-    int first = newSession ? 3 : (serviceMode || sessionMode) ? 2 : 1;
+    BOOL sessionMode = argc >= 2 && !_stricmp(argv[1], "/session");
+    int first = (serviceMode || sessionMode) ? 2 : 1, code;
     DebugPrint = (DEBUG_PRINT)(void *)GetProcAddress(GetModuleHandleA("ntdll.dll"), "DbgPrint");
+    if (argc >= 4 && argc <= 5 && !_stricmp(argv[1], "/agent"))
+    {
+        if (strlen(argv[3]) != AGENT_PIPE_KEY_CHARS || strspn(argv[3], "0123456789abcdef") != AGENT_PIPE_KEY_CHARS ||
+            !MultiByteToWideChar(CP_UTF8, 0, argv[3], -1, pipe, ARRAYSIZE(pipe)) ||
+            (argc == 5 && !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, argv[4], -1, display, ARRAYSIZE(display))))
+            return 2;
+        return AgentMain(strtoul(argv[2], NULL, 10), pipe, argc == 5 ? display : NULL, Log);
+    }
     if (argc > first + 1 || (argc == first + 1 && !GetFullPathNameA(argv[first], sizeof(config), config, NULL)))
     { Log("Usage: rdpserver.exe [/service] [rdpserver.ini]"); return 2; }
-    if (newSession && !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, argv[2], -1, AdoptedDisplay,
-                                           ARRAYSIZE(AdoptedDisplay))) return 2;
     if (serviceMode)
     {
         SERVICE_TABLE_ENTRYA table[] = {{(char *)SERVICE_NAME, ServiceMain}, {NULL, NULL}};
         strcpy(ServiceConfig, config);
         return StartServiceCtrlDispatcherA(table) ? 0 : 1;
     }
-    if (ControllerEnabled(config) && ReadControllerConfig(config)) return 2;
-    if (*config)
-    {
-        char root[MAX_PATH];
-        GetPrivateProfileStringA("server", "transfer_root", "", root, sizeof(root), config);
-        if (*root && !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, root, -1,
-                                         TransferRoot, MAX_PATH)) return 2;
-    }
-    if (!GetModuleFileNameA(NULL, directory, sizeof(directory))) return 1;
-    separator = strrchr(directory, '\\');
-    if (!separator) return 1;
-    *separator = 0;
-    if (!ControllerMode &&
-        (snprintf(Certificate, sizeof(Certificate), "%s\\server.crt", directory) >= (int)sizeof(Certificate) ||
-         snprintf(PrivateKey, sizeof(PrivateKey), "%s\\server.key", directory) >= (int)sizeof(PrivateKey))) return 1;
+    if (!ControllerEnabled(config))
+    { Log("A server started by hand needs a controller configuration"); return 2; }
+    if (ReadControllerConfig(config)) return 2;
     singleton = CreateMutexA(NULL, FALSE, "Local\\LiberNT-RDPServer-Console");
     if (!singleton || GetLastError() == ERROR_ALREADY_EXISTS) { if (singleton) CloseHandle(singleton); return 1; }
-    if (WSAStartup(MAKEWORD(2, 2), &winsock)) return 1;
-    if (!winpr_InitializeSSL(WINPR_SSL_INIT_DEFAULT)) return 1;
-    if (!ControllerMode && !EnsureCertificate()) return 2;
-    InitializeCriticalSection(&RemoteDisplayLock);
-    RemoteDisplayReady = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (!RemoteDisplayReady) return 1;
-    StopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (!StopEvent) return 1;
-    FrameInterval = ReadFrameInterval();
-    if (sessionMode && !newSession)
+    code = StartServer(config);
+    if (code) return code;
+    if (sessionMode)
     {
         serviceStop = OpenEventA(SYNCHRONIZE, FALSE, SERVICE_STOP_EVENT);
         thread = serviceStop ? CreateThread(NULL, 0, WaitServiceStop, serviceStop, 0, NULL) : NULL;
@@ -2206,30 +1611,10 @@ int main(int argc, char **argv)
     listener = freerdp_listener_new();
     if (!listener) return 1;
     listener->PeerAccepted = Accepted;
-    if (!WTSRegisterWtsApiFunctionTable(FreeRDP_InitWtsApi())) return 1;
-    if (sessionMode && !ControllerMode)
-    {
-        thread = CreateThread(NULL, 0, TakeConnections, NULL, 0, NULL);
-        if (!thread) return 1;
-        WaitForSingleObject(StopEvent, INFINITE);
-        CloseHandle(thread);
-        goto done;
-    }
-    if (ControllerMode)
-    {
-        Log("Starting console server; waiting for %s:3389", BindAddress);
-        while (!EnsureAddress() || !listener->Open(listener, BindAddress, 3389))
-            if (WaitForSingleObject(StopEvent, 2000) != WAIT_TIMEOUT) goto done;
-        Log("Listening on %s:3389; TLS; allowed controller %s", BindAddress, AllowedPeer);
-    }
-    else
-    {
-        Log("Starting console server on port 3389");
-        /* Autostart may run before PnP has finished configuring the network. */
-        while (!listener->Open(listener, NULL, 3389))
-            if (WaitForSingleObject(StopEvent, 2000) != WAIT_TIMEOUT) goto done;
-        Log("Listening on port 3389 with NLA");
-    }
+    Log("Starting console server; waiting for %s:3389", BindAddress);
+    while (!EnsureAddress() || !listener->Open(listener, BindAddress, 3389))
+        if (WaitForSingleObject(StopEvent, 2000) != WAIT_TIMEOUT) goto done;
+    Log("Listening on %s:3389; TLS; allowed controller %s", BindAddress, AllowedPeer);
     for (;;)
     {
         events[0] = StopEvent;

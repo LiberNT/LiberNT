@@ -23,31 +23,35 @@ OpenSSL licenses in `licenses`.
 The service (`rdpserver.exe /service [ini]`) runs in session 0, which has no
 interactive desktop. While `fDenyTSConnections` under
 `HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server` is 0, it listens on
-port 3389 and starts a server (`/session`) as SYSTEM in the active console
-session, restarting it when it exits or when the console session changes; it
-closes the port and stops the server within seconds when the value changes
-back to 1. For each connection it reads the user name from the
-`Cookie: mstshash=` field of the client's X.224 Connection Request, which
-holds at most the first nine characters of the name, or from the routing
-token `Cookie: msts=user=<name>` that a redirected client sends back. A
-connection without a name, from the console's user, made while nobody is
-signed in at the console, or whose nine characters match no single session
-goes to the console session; when NLA then shows that the client belongs to
-another user, the server sends it a Server Redirection PDU whose load
-balancing information names that user (MS-RDPBCGR 2.2.13.1), and the client
-connects again with it. Any other user goes to
-the session the service started for them, or to a new one: the service
-creates a `RdpVdd_RemoteDisplay&NewSession_<n>` adapter, starts the session
-through the session manager and runs a server in it
-(`/newsession <adapter instance>`). The service duplicates the socket into
-that session's server, which authenticates the client and signs it in through
-Winlogon. NLA and Winlogon still check the credentials, so a wrong name only
-picks a session the client cannot enter. *Settings > System > Remote Desktop* sets
-this value, and it is 1 on a new installation, as on Windows 11.
-The server follows the desktop that receives input, so a client sees and
-drives the logon screen and the lock screen as well as the user's desktop.
-Started by hand, the server ignores `fDenyTSConnections`, runs in the
-caller's session and reaches the Winlogon desktop only when it runs as SYSTEM.
+port 3389 and runs the whole protocol itself: TLS, Network Level
+Authentication, the codecs and the channels. It closes the port and drops its
+connections within seconds when the value changes back to 1. A connection
+reaches a session only after NLA has signed its user in, and the service picks
+the session from that user's account, never from anything the client sends
+before:
+
+- the user signed in at the console, or any user while nobody is signed in
+  there, gets the console session;
+- a user with a session the service started earlier gets that session back;
+- any other user gets a new session: the service creates a
+  `RdpVdd_RemoteDisplay&NewSession_<n>` adapter and starts the session through
+  the session manager.
+
+In the chosen session the service starts an agent (`/agent`) as SYSTEM. The
+agent shows the session on a remote display adapter, signs the user in through
+Winlogon with the NLA credentials, copies each changed region of the display
+to a section it shares with the service, reads the pointer and injects the
+client's keyboard and mouse input with `SendInput`. The service and the agent
+talk over the pipe `\\.\pipe\LiberNT-RDPServer-<session>`, which only SYSTEM
+can open; each side checks that the other end is the process it expects. A new
+connection of the same user replaces the one already connected; the agent
+leaves the display when the last connection of its session ends. A session the
+service started ends when its user signs out or when the service stops.
+*Settings > System > Remote Desktop* sets the value, and it is 1 on a new
+installation, as on Windows 11. The agent follows the desktop that receives
+input, so a client sees and drives the logon screen and the lock screen as well
+as the user's desktop. Started by hand, the server needs a controller
+configuration (see below).
 
 Port 3389 listens on every address and only accepts Network
 Level Authentication (CredSSP): a client that offers only TLS or standard

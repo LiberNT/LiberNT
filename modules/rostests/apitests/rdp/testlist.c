@@ -5,7 +5,6 @@ extern void func_Avc420(void);
 extern void func_ClearCodec(void);
 extern void func_ControllerMode(void);
 extern void func_ControllerSecret(void);
-extern void func_Cookie(void);
 extern void func_Experience(void);
 extern void func_FrameMove(void);
 extern void func_GfxBatch(void);
@@ -14,6 +13,7 @@ extern void func_OpenH264(void);
 extern void func_OtherUser(void);
 extern void func_PasswordMemory(void);
 extern void func_PipeSquat(void);
+extern void func_PreAuthSession(void);
 extern void func_RemoteDesktop(void);
 extern void func_RemoteLogonType(void);
 extern void func_ServiceStop(void);
@@ -27,7 +27,6 @@ const struct test winetest_testlist[] =
     { "ClearCodec", func_ClearCodec },
     { "ControllerMode", func_ControllerMode },
     { "ControllerSecret", func_ControllerSecret },
-    { "Cookie", func_Cookie },
     { "Experience", func_Experience },
     { "FrameMove", func_FrameMove },
     { "GfxBatch", func_GfxBatch },
@@ -36,6 +35,7 @@ const struct test winetest_testlist[] =
     { "OtherUser", func_OtherUser },
     { "PasswordMemory", func_PasswordMemory },
     { "PipeSquat", func_PipeSquat },
+    { "PreAuthSession", func_PreAuthSession },
     { "RemoteDesktop", func_RemoteDesktop },
     { "RemoteLogonType", func_RemoteLogonType },
     { "ServiceStop", func_ServiceStop },

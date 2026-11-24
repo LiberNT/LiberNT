@@ -103,7 +103,8 @@ START_TEST(ServiceStop)
         Before = NewestSession();
         RdpClientStart(&Client, UserA, UserA);
         ok(RdpClientWaitConnected(&Client), "%s could not connect: 0x%08x\n", UserA, Client.Error);
-        Session = NewestSession();
+        for (Wait = 0; Wait < 100 && (Session = NewestSession()) <= Before; Wait++)
+            Sleep(200);
         ok(Session > Before && Session != Own, "No new session started (newest %lu, before %lu)\n", Session, Before);
         RdpClientStop(&Client);
         if (Session > Before && Session != Own)

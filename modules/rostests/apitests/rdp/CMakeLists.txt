@@ -1,11 +1,10 @@
 
 add_executable(rdp_apitest Avc420.c ClearCodec.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/clearenc.c ControllerMode.c
                ControllerSecret.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/secret.c
-               ${REACTOS_SOURCE_DIR}/base/services/rdpserver/cookie.c Cookie.c
                ${REACTOS_SOURCE_DIR}/base/services/rdpserver/experience.c Experience.c
                ${REACTOS_SOURCE_DIR}/base/services/rdpserver/openh264.c OpenH264.c
                FrameMove.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/framemove.c GfxBatch.c
-               GfxCaps.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/gfxcaps.c OtherUser.c PasswordMemory.c PipeSquat.c rdpclient.c RemoteDesktop.c RemoteLogonType.c ServiceStop.c
+               GfxCaps.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/gfxcaps.c OtherUser.c PasswordMemory.c PipeSquat.c PreAuthSession.c rdpclient.c RemoteDesktop.c RemoteLogonType.c ServiceStop.c
                TileKey.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/tilekey.c
                VideoDetect.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/videodetect.c Zgfx.c testlist.c)
 target_include_directories(rdp_apitest PRIVATE ${REACTOS_SOURCE_DIR}/base/services/rdpserver)

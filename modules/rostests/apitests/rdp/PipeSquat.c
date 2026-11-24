@@ -11,6 +11,7 @@
 #include "rdpclient.h"
 
 #define AGENT_PIPE_FORMAT   L"\\\\.\\pipe\\LiberNT-RDPServer-%lu"
+#define AGENT_GUESS_FORMAT  L"\\\\.\\pipe\\LiberNT-RDPServer-%lu-00000000000000000000000000000000"
 #define CONSOLE_PIPE_FORMAT L"\\\\.\\pipe\\LiberNT-RemoteConsole-%lu"
 #define LAST_SESSION 32
 
@@ -82,6 +83,25 @@ ClientLevel(HANDLE Pipe)
     return Level;
 }
 
+/* The service names each agent's pipe with a random key, so a pipe made in advance is never opened */
+static VOID
+TestUnusedPipes(PCWSTR Format, const char *User)
+{
+    RDP_CLIENT Client;
+    SQUAT Squat;
+    DWORD Index;
+
+    SquatPipes(&Squat, Format);
+    ok(Squat.Count != 0, "No agent pipe name was free\n");
+    RdpClientStart(&Client, User, NULL);
+    ok(RdpClientWaitConnected(&Client), "%s could not connect with the pipes taken: 0x%08x\n", User, Client.Error);
+    Index = Squat.Count ? WaitForMultipleObjects(Squat.Count, Squat.Event, FALSE, 0) : WAIT_TIMEOUT;
+    ok(Index == WAIT_TIMEOUT, "The service opened the agent pipe %lu made by another process\n",
+       Index < Squat.Count ? Squat.Session[Index] : Index);
+    ReleasePipes(&Squat);
+    RdpClientStop(&Client);
+}
+
 static VOID
 TestSquattedPipes(PCWSTR Format, PCWSTR Kind, const char *User)
 {
@@ -145,7 +165,8 @@ START_TEST(PipeSquat)
         return;
     if (RdpTestAddUser(First) && RdpTestAddUser(Second))
     {
-        TestSquattedPipes(AGENT_PIPE_FORMAT, L"session server", FirstA);
+        TestUnusedPipes(AGENT_PIPE_FORMAT, FirstA);
+        TestUnusedPipes(AGENT_GUESS_FORMAT, FirstA);
         TestSquattedPipes(CONSOLE_PIPE_FORMAT, L"Winlogon", SecondA);
     }
     NetUserDel(NULL, First);
