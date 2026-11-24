@@ -563,12 +563,7 @@ private:
         Catalog catalog;
         Status status = refresh ? source_->Update() : source_->EnsureReady();
         if (status)
-        {
-            SQLiteIndex index;
-            status = index.Open(source_->IndexPath());
-            if (status)
-                status = index.LoadCatalog(catalog);
-        }
+            status = source_->LoadCatalog(catalog);
         if (!status)
         {
             result->error = status.message;

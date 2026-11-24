@@ -26,7 +26,7 @@ public:
     Status FetchInstallerManifest(const PackageRecord &package, std::string &yaml);
     Status LoadArpCorrelation(std::map<std::string, PackageRecord> &productCodes,
                               std::map<std::string, PackageRecord> &packages);
-    const std::wstring &IndexPath() const { return indexPath_; }
+    Status LoadCatalog(Catalog &catalog);
 
 private:
     Status ActivateSource(const std::wstring &sourcePackage, bool copyPackage);
