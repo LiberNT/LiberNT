@@ -160,6 +160,7 @@ CcNtDereferenceMap(
 {
     PCC_NT_MAP_BUCKET Bucket;
     BOOLEAN Destroy = FALSE;
+    BOOLEAN Reusable;
     KIRQL OldIrql;
     LONG Count = CC_ATOMIC_READ32(&NtMap->ReferenceCount);
 
@@ -172,12 +173,15 @@ CcNtDereferenceMap(
         Count = Previous;
     }
 
+    ASSERT(NtMap->Control != NULL);
+    Reusable = (KeGetCurrentIrql() > APC_LEVEL) || MiSegmentHoldsFrames(NtMap->Control->Segment);
+
     Bucket = CcNtMapBucket(NtMap->Pointers);
     CC_LOCK_ACQUIRE(&Bucket->Lock, &OldIrql);
     if (CC_ATOMIC_ADD32(&NtMap->ReferenceCount, -1) == 1 && NtMap->Map.OpenCount == 0 &&
         CC_ATOMIC_READ64(&NtMap->Map.DirtyPages) == 0)
     {
-        if (NtMap->UninitializeEvent == NULL && !NtMap->PurgeOnClose && NtMap->Map.FileSize != 0 &&
+        if (Reusable && NtMap->UninitializeEvent == NULL && !NtMap->PurgeOnClose && NtMap->Map.FileSize != 0 &&
             (NtMap->Closing || CC_ATOMIC_READ32(&CcNtClosedMapCount) < 128))
         {
             if (!NtMap->Closing)
