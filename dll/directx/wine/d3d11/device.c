@@ -4648,9 +4648,16 @@ static HRESULT STDMETHODCALLTYPE d3d11_device_CreatePredicate(ID3D11Device5 *ifa
 static HRESULT STDMETHODCALLTYPE d3d11_device_CreateCounter(ID3D11Device5 *iface, const D3D11_COUNTER_DESC *desc,
         ID3D11Counter **counter)
 {
+#ifdef __REACTOS__
+    TRACE("iface %p, desc %p, counter %p.\n", iface, desc, counter);
+
+    /* wined3d exposes no device-dependent counter, so no counter ID is valid */
+    return E_INVALIDARG;
+#else
     FIXME("iface %p, desc %p, counter %p stub!\n", iface, desc, counter);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT d3d11_deferred_context_create(struct d3d_device *device,
@@ -4972,19 +4979,36 @@ static HRESULT STDMETHODCALLTYPE d3d11_device_CheckMultisampleQualityLevels(ID3D
 
 static void STDMETHODCALLTYPE d3d11_device_CheckCounterInfo(ID3D11Device5 *iface, D3D11_COUNTER_INFO *info)
 {
+#ifdef __REACTOS__
+    TRACE("iface %p, info %p.\n", iface, info);
+
+    if (info)
+        memset(info, 0, sizeof(*info));
+#else
     FIXME("iface %p, info %p stub!\n", iface, info);
+#endif
 }
 
 static HRESULT STDMETHODCALLTYPE d3d11_device_CheckCounter(ID3D11Device5 *iface, const D3D11_COUNTER_DESC *desc,
         D3D11_COUNTER_TYPE *type, UINT *active_counter_count, char *name, UINT *name_length,
         char *units, UINT *units_length, char *description, UINT *description_length)
 {
+#ifdef __REACTOS__
+    TRACE("iface %p, desc %p, type %p, active_counter_count %p, name %p, name_length %p, "
+            "units %p, units_length %p, description %p, description_length %p.\n",
+            iface, desc, type, active_counter_count, name, name_length,
+            units, units_length, description, description_length);
+
+    /* wined3d exposes no device-dependent counter, so no counter ID is valid */
+    return E_INVALIDARG;
+#else
     FIXME("iface %p, desc %p, type %p, active_counter_count %p, name %p, name_length %p, "
             "units %p, units_length %p, description %p, description_length %p stub!\n",
             iface, desc, type, active_counter_count, name, name_length,
             units, units_length, description, description_length);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT STDMETHODCALLTYPE d3d11_device_CheckFeatureSupport(ID3D11Device5 *iface, D3D11_FEATURE feature,
