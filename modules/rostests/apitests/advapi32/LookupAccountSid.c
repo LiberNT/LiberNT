@@ -32,10 +32,23 @@ static const SID_TEST Tests[] =
     { L"S-1-15-3-12", L"Your Contacts" },
 };
 
+static const SID_TEST LabelTests[] =
+{
+    { L"S-1-16-0", L"Untrusted Mandatory Level" },
+    { L"S-1-16-4096", L"Low Mandatory Level" },
+    { L"S-1-16-8192", L"Medium Mandatory Level" },
+    { L"S-1-16-8448", L"Medium Plus Mandatory Level" },
+    { L"S-1-16-12288", L"High Mandatory Level" },
+    { L"S-1-16-16384", L"System Mandatory Level" },
+    { L"S-1-16-20480", L"Protected Process Mandatory Level" },
+};
+
 static const PCWSTR UnmappedSids[] =
 {
     L"S-1-15-2-3",
     L"S-1-15-3-1024",
+    L"S-1-16-12289",
+    L"S-1-16-28672",
 };
 
 static void
@@ -83,6 +96,63 @@ TestUnmappedSid(PCWSTR SidString)
     Ret = LookupAccountSidW(NULL, Sid, Name, &cchName, Domain, &cchDomain, &Use);
     ok(!Ret, "%s: lookup succeeded\n", wine_dbgstr_w(SidString));
     ok(GetLastError() == ERROR_NONE_MAPPED, "%s: error %lu\n", wine_dbgstr_w(SidString), GetLastError());
+    LocalFree(Sid);
+}
+
+static VOID
+TestLabelSid(const SID_TEST *Test)
+{
+    WCHAR Name[256], Domain[256];
+    DWORD cchName = ARRAYSIZE(Name), cchDomain = ARRAYSIZE(Domain), cbSid;
+    BYTE SidBuffer[SECURITY_MAX_SID_SIZE];
+    WCHAR Qualified[256];
+    SID_NAME_USE Use = SidTypeUnknown;
+    PSID Sid = NULL;
+    BOOL Ret;
+
+    ok(ConvertStringSidToSidW(Test->Sid, &Sid), "%s: ConvertStringSidToSidW failed: %lu\n",
+       wine_dbgstr_w(Test->Sid), GetLastError());
+    if (!Sid)
+        return;
+
+    SetLastError(0xdeadbeef);
+    Ret = LookupAccountSidW(NULL, Sid, Name, &cchName, Domain, &cchDomain, &Use);
+    ok(Ret, "%s: lookup failed with error %lu\n", wine_dbgstr_w(Test->Sid), GetLastError());
+    if (Ret)
+    {
+        ok(!wcscmp(Name, Test->Name), "%s: name is %s\n", wine_dbgstr_w(Test->Sid), wine_dbgstr_w(Name));
+        ok(!wcscmp(Domain, L"Mandatory Label"), "%s: domain is %s\n", wine_dbgstr_w(Test->Sid), wine_dbgstr_w(Domain));
+        ok(Use == SidTypeLabel, "%s: use is %d\n", wine_dbgstr_w(Test->Sid), Use);
+        ok(cchName == wcslen(Test->Name), "%s: name length %lu\n", wine_dbgstr_w(Test->Sid), cchName);
+        ok(cchDomain == wcslen(L"Mandatory Label"), "%s: domain length %lu\n", wine_dbgstr_w(Test->Sid), cchDomain);
+    }
+
+    StringCchPrintfW(Qualified, ARRAYSIZE(Qualified), L"Mandatory Label\\%s", Test->Name);
+    cbSid = sizeof(SidBuffer);
+    cchDomain = ARRAYSIZE(Domain);
+    Use = SidTypeUnknown;
+    SetLastError(0xdeadbeef);
+    Ret = LookupAccountNameW(NULL, Qualified, SidBuffer, &cbSid, Domain, &cchDomain, &Use);
+    ok(Ret, "%s: qualified name lookup failed with error %lu\n", wine_dbgstr_w(Test->Sid), GetLastError());
+    if (Ret)
+    {
+        ok(EqualSid(SidBuffer, Sid), "%s: qualified name gives another SID\n", wine_dbgstr_w(Test->Sid));
+        ok(!wcscmp(Domain, L"Mandatory Label"), "%s: qualified name domain is %s\n", wine_dbgstr_w(Test->Sid), wine_dbgstr_w(Domain));
+        ok(Use == SidTypeLabel, "%s: qualified name use is %d\n", wine_dbgstr_w(Test->Sid), Use);
+    }
+
+    cbSid = sizeof(SidBuffer);
+    cchDomain = ARRAYSIZE(Domain);
+    Use = SidTypeUnknown;
+    SetLastError(0xdeadbeef);
+    Ret = LookupAccountNameW(NULL, Test->Name, SidBuffer, &cbSid, Domain, &cchDomain, &Use);
+    ok(Ret, "%s: isolated name lookup failed with error %lu\n", wine_dbgstr_w(Test->Sid), GetLastError());
+    if (Ret)
+    {
+        ok(EqualSid(SidBuffer, Sid), "%s: isolated name gives another SID\n", wine_dbgstr_w(Test->Sid));
+        ok(!wcscmp(Domain, L"Mandatory Label"), "%s: isolated name domain is %s\n", wine_dbgstr_w(Test->Sid), wine_dbgstr_w(Domain));
+        ok(Use == SidTypeLabel, "%s: isolated name use is %d\n", wine_dbgstr_w(Test->Sid), Use);
+    }
     LocalFree(Sid);
 }
 
@@ -229,6 +299,8 @@ START_TEST(LookupAccountSid)
 
     for (i = 0; i < ARRAYSIZE(Tests); i++)
         TestSid(&Tests[i]);
+    for (i = 0; i < ARRAYSIZE(LabelTests); i++)
+        TestLabelSid(&LabelTests[i]);
     for (i = 0; i < ARRAYSIZE(UnmappedSids); i++)
         TestUnmappedSid(UnmappedSids[i]);
     TestLookupAccountSidLocal();
