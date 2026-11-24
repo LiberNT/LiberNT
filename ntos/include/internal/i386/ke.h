@@ -1,6 +1,7 @@
 #pragma once
 
 #define KI_EMULATED_USER_MACHINE 0
+#define KI_ARCH_THREAD_HANDOFF_USES_RUNNING 1
 #define KI_EMPTY_YIELD_STALL_NS 700
 #define KiEmulationProcessorArchitecture(Process) KeProcessorArchitecture
 
