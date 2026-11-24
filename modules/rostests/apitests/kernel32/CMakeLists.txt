@@ -140,6 +140,7 @@ list(APPEND SOURCE
     TimeZoneKeepsTime.c
     StdHandleInheritance.c
     StreamRename.c
+    StrippedImageLayout.c
     PosixRename.c
     LocaleNameToLCID.c
     lstrcpynW.c

@@ -132,6 +132,7 @@ extern void func_MapFlush(void);
 extern void func_StarvationBoost(void);
 extern void func_StdHandleInheritance(void);
 extern void func_StreamRename(void);
+extern void func_StrippedImageLayout(void);
 extern void func_PosixRename(void);
 extern void func_LocaleNameToLCID(void);
 extern void func_lstrcpynW(void);
@@ -369,6 +370,7 @@ const struct test winetest_testlist[] =
     { "StarvationBoost",             func_StarvationBoost },
     { "StdHandleInheritance",        func_StdHandleInheritance },
     { "StreamRename",                func_StreamRename },
+    { "StrippedImageLayout",         func_StrippedImageLayout },
     { "PosixRename",                 func_PosixRename },
     { "LocaleNameToLCID",            func_LocaleNameToLCID },
     { "lstrcpynW",                   func_lstrcpynW },

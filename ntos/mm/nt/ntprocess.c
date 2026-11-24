@@ -245,7 +245,8 @@ MiSelectBottomUpBase(
     ULONG64 HighEntropyLimit;
     ULONG Seed;
 
-    if (!Control->Image || !(DllCharacteristics & IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE))
+    if (!Control->Image || !(DllCharacteristics & IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE) ||
+        (Control->ImageInformation.ImageCharacteristics & IMAGE_FILE_RELOCS_STRIPPED))
     {
         Process->MitigationFlagsValues.StackRandomizationDisabled = 1;
         return;
