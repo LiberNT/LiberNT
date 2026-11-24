@@ -111,3 +111,22 @@ GetApplicationUserModelIdFromToken(
 
     return APPMODEL_ERROR_NO_APPLICATION;
 }
+
+LONG
+WINAPI
+GetApplicationUserModelId(
+    _In_ HANDLE hProcess,
+    _Inout_ UINT32 *applicationUserModelIdLength,
+    _Out_writes_opt_(*applicationUserModelIdLength) PWSTR applicationUserModelId)
+{
+    HANDLE Token;
+    LONG Error;
+
+    if (!hProcess || !applicationUserModelIdLength)
+        return ERROR_INVALID_PARAMETER;
+    if (!OpenProcessToken(hProcess, TOKEN_QUERY, &Token))
+        return GetLastError();
+    Error = GetApplicationUserModelIdFromToken(Token, applicationUserModelIdLength, applicationUserModelId);
+    CloseHandle(Token);
+    return Error == APPMODEL_ERROR_NO_PACKAGE ? APPMODEL_ERROR_NO_APPLICATION : Error;
+}

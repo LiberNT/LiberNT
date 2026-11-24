@@ -128,7 +128,8 @@ VOID
 CheckProcessString(
     _In_ HMODULE Module,
     _In_ PCSTR ModuleName,
-    _In_ PCSTR Name)
+    _In_ PCSTR Name,
+    _In_ LONG Expected)
 {
     PFN_PROCESS_STRING Function;
     WCHAR Buffer[32];
@@ -144,7 +145,7 @@ CheckProcessString(
     Length = 0;
     SetLastError(0x33333333);
     Result = Function(GetCurrentProcess(), &Length, NULL);
-    ok(Result == APPMODEL_ERROR_NO_PACKAGE, "%s!%s(self) returned %ld\n", ModuleName, Name, Result);
+    ok(Result == Expected, "%s!%s(self) returned %ld\n", ModuleName, Name, Result);
     ok(Length == 0, "%s!%s length %u\n", ModuleName, Name, Length);
     ok(GetLastError() == 0x33333333, "%s!%s last error %lu\n", ModuleName, Name, GetLastError());
 
@@ -163,7 +164,7 @@ CheckProcessString(
         wcscpy(Buffer, L"unchanged");
         Length = _countof(Buffer);
         Result = Function(Process, &Length, Buffer);
-        ok(Result == APPMODEL_ERROR_NO_PACKAGE, "%s!%s(limited handle) returned %ld\n", ModuleName, Name, Result);
+        ok(Result == Expected, "%s!%s(limited handle) returned %ld\n", ModuleName, Name, Result);
         ok(Length == _countof(Buffer), "%s!%s length %u\n", ModuleName, Name, Length);
         ok(!wcscmp(Buffer, L"unchanged"), "%s!%s wrote %ls\n", ModuleName, Name, Buffer);
         CloseHandle(Process);
@@ -262,8 +263,9 @@ CheckModule(
     CheckCurrentString(Module, ModuleName, "GetCurrentPackagePath", APPMODEL_ERROR_NO_PACKAGE);
     CheckCurrentPackageId(Module, ModuleName);
     CheckCurrentPackageInfo(Module, ModuleName);
-    CheckProcessString(Module, ModuleName, "GetPackageFamilyName");
-    CheckProcessString(Module, ModuleName, "GetPackageFullName");
+    CheckProcessString(Module, ModuleName, "GetApplicationUserModelId", APPMODEL_ERROR_NO_APPLICATION);
+    CheckProcessString(Module, ModuleName, "GetPackageFamilyName", APPMODEL_ERROR_NO_PACKAGE);
+    CheckProcessString(Module, ModuleName, "GetPackageFullName", APPMODEL_ERROR_NO_PACKAGE);
     CheckProcessPackageId(Module, ModuleName);
     CheckLoadPackagedLibrary(Module, ModuleName);
 }

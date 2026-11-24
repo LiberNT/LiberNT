@@ -622,6 +622,7 @@
 @ stdcall -thunk -version=0x602+ GetPackageFamilyNameFromToken(ptr ptr ptr) kernelbase.GetPackageFamilyNameFromToken
 @ stdcall -thunk -version=0x602+ GetPackageFullNameFromToken(ptr ptr ptr) kernelbase.GetPackageFullNameFromToken
 @ stdcall -version=0x602+ GetPackageId(ptr ptr ptr) kernelbase.GetPackageId
+@ stdcall -thunk -version=0x602+ GetApplicationUserModelId(ptr ptr ptr) kernelbase.GetApplicationUserModelId
 @ stdcall -thunk -version=0x602+ GetApplicationUserModelIdFromToken(ptr ptr ptr) kernelbase.GetApplicationUserModelIdFromToken
 @ stdcall -version=0x602+ GetPackagePathByFullName(wstr ptr wstr)
 @ stdcall -version=0x602+ GetPackagesByPackageFamily(wstr ptr ptr ptr ptr)
