@@ -290,8 +290,8 @@ SoftGpuAllocateFrameBuffer(
     }
     if (NewFrameBuffer == NULL)
     {
-        DPRINT1("SOFTGPU: failed to allocate %Iu-byte framebuffer\n",
-                AllocationSize);
+        DPRINT("SOFTGPU: failed to allocate %Iu-byte framebuffer\n",
+               AllocationSize);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
@@ -1292,7 +1292,11 @@ SoftGpuStartDevice(
                      PlatformConfig.HighestFrameBufferAddress);
     }
     if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("SOFTGPU: no framebuffer of %Iu bytes or more could be allocated (0x%08lX)\n",
+                RequiredFrameBufferSize, Status);
         goto CleanupStart;
+    }
     SoftGpuDropUnbackedModes(Device);
 
     Status = SoftGpuPlatformStartScanout(Device);
