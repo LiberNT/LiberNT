@@ -419,7 +419,7 @@ static void RunShell(client_t *client)
                       NULL,                      // process security attributes 
                       NULL,                      // primary thread security attributes 
                       TRUE,                      // handles are inherited 
-                      DETACHED_PROCESS +         // creation flags 
+                      CREATE_NO_WINDOW +         // creation flags 
                       CREATE_NEW_PROCESS_GROUP,
                       NULL,                      // use parent's environment 
                       NULL,                      // use parent's current directory 
