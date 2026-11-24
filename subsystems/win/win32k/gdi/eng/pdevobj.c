@@ -755,10 +755,14 @@ PDEVOBJ_bDynamicModeChange(
     /* Exchange DEVMODE */
     SwitchPointer(&ppdev->pdmwDev, &ppdev2->pdmwDev);
 
-    /* Exchange state flags */
-    temp.StateFlags = ppdev->pGraphicsDevice->StateFlags;
-    ppdev->pGraphicsDevice->StateFlags = ppdev2->pGraphicsDevice->StateFlags;
-    ppdev2->pGraphicsDevice->StateFlags = temp.StateFlags;
+    /* Exchange state flags; the desktop of several displays has no graphics device */
+    ASSERT((ppdev->pGraphicsDevice == NULL) == (ppdev2->pGraphicsDevice == NULL));
+    if (ppdev->pGraphicsDevice != NULL && ppdev2->pGraphicsDevice != NULL)
+    {
+        temp.StateFlags = ppdev->pGraphicsDevice->StateFlags;
+        ppdev->pGraphicsDevice->StateFlags = ppdev2->pGraphicsDevice->StateFlags;
+        ppdev2->pGraphicsDevice->StateFlags = temp.StateFlags;
+    }
 
     /* Notify each driver instance of its new HDEV association */
     ppdev->pfn.CompletePDEV(ppdev->dhpdev, (HDEV)ppdev);
@@ -867,6 +871,66 @@ leave:
     return retval;
 }
 
+/* Switches one display of a multi-display desktop, then rebuilds the desktop surface for the new layout */
+BOOL
+NTAPI
+PDEVOBJ_bSwitchMultiDisplayMode(
+    _Inout_ PMDEVOBJ pmdev,
+    _Inout_ PPDEVOBJ ppdevDisplay,
+    _In_ PDEVMODEW pdm)
+{
+    PPDEVOBJ ppdevGlobal = pmdev->ppdevGlobal;
+    PPDEVOBJ ppdevTmp;
+    PDEVMODEW pdmOld = NULL;
+    BOOL bSuccess = FALSE;
+    ULONG i;
+
+    ASSERT(pmdev->cDev > 1);
+    ASSERT(ppdevGlobal != ppdevDisplay);
+    ASSERT(ppdevGlobal->pGraphicsDevice == NULL);
+    ASSERT(ppdevDisplay->pGraphicsDevice != NULL);
+    for (i = 0; i < pmdev->cDev && pmdev->dev[i].ppdev != ppdevDisplay; i++)
+        ;
+    ASSERT(i < pmdev->cDev);
+    if (i == pmdev->cDev || ppdevDisplay->pdmwDev == NULL)
+        return FALSE;
+
+    pdmOld = ExAllocatePoolWithTag(PagedPool, ppdevDisplay->pdmwDev->dmSize + ppdevDisplay->pdmwDev->dmDriverExtra, GDITAG_DEVMODE);
+    if (pdmOld == NULL)
+        return FALSE;
+    RtlCopyMemory(pdmOld, ppdevDisplay->pdmwDev, ppdevDisplay->pdmwDev->dmSize + ppdevDisplay->pdmwDev->dmDriverExtra);
+
+    /* Drawing to the desktop waits on its device lock until the new desktop surface is in place */
+    EngAcquireSemaphore(ppdevGlobal->hsemDevLock);
+    EngAcquireSemaphore(ghsemPDEV);
+    if (PDEVOBJ_bSwitchMode(ppdevDisplay, pdm))
+    {
+        ppdevTmp = PDEVOBJ_Create(NULL, (PDEVMODEW)pmdev, 0, LDEV_DEVICE_META);
+        if (ppdevTmp != NULL)
+        {
+            if (PDEVOBJ_pSurface(ppdevTmp) != NULL)
+            {
+                PDEVOBJ_vSuspendDirectDraw(ppdevGlobal);
+                PDEVOBJ_vSuspendDirectDraw(ppdevTmp);
+                bSuccess = PDEVOBJ_bDynamicModeChange(ppdevGlobal, ppdevTmp);
+                PDEVOBJ_vResumeDirectDraw(ppdevGlobal);
+                PDEVOBJ_vResumeDirectDraw(ppdevTmp);
+            }
+            PDEVOBJ_vRelease(ppdevTmp);
+        }
+        if (!bSuccess && !PDEVOBJ_bSwitchMode(ppdevDisplay, pdmOld))
+        {
+            /* FIXME: the display keeps its new mode while the desktop surface keeps the old layout */
+            ERR("Failed to restore the mode of display %p\n", ppdevDisplay);
+        }
+    }
+    if (bSuccess)
+        PDEVOBJ_vGetDeviceCaps(ppdevGlobal, &GdiHandleTable->DevCaps);
+    EngReleaseSemaphore(ghsemPDEV);
+    EngReleaseSemaphore(ppdevGlobal->hsemDevLock);
+    ExFreePoolWithTag(pdmOld, GDITAG_DEVMODE);
+    return bSuccess;
+}
 
 NTSTATUS
 NTAPI
