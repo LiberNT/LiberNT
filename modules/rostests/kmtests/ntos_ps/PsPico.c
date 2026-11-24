@@ -18,6 +18,25 @@ NTAPI
 PsGetProcessSectionBaseAddress(
     _In_ PEPROCESS Process);
 
+typedef NTSTATUS (NTAPI *PKMT_PICO_REGISTER_PROVIDER)(_In_ const PICO_PROVIDER_ROUTINES *Routines);
+typedef NTSTATUS (NTAPI *PKMT_PICO_CREATE_PROCESS)(_In_ BOOLEAN CloneCurrent, _In_opt_ PVOID PicoContext,
+                                                  _Out_ PHANDLE ProcessHandle);
+typedef NTSTATUS (NTAPI *PKMT_PICO_CREATE_THREAD)(_In_ HANDLE ProcessHandle, _In_ PCONTEXT Context,
+                                                 _In_opt_ PVOID PicoContext, _Out_ PHANDLE ThreadHandle,
+                                                 _Out_opt_ PCLIENT_ID ClientId);
+typedef DECLSPEC_NORETURN VOID (NTAPI *PKMT_PICO_TERMINATE_CURRENT_THREAD)(_In_ NTSTATUS ExitStatus);
+typedef NTSTATUS (NTAPI *PKMT_PICO_TERMINATE_THREAD)(_In_ PETHREAD Thread, _In_ NTSTATUS ExitStatus);
+typedef PVOID (NTAPI *PKMT_PICO_GET_PROCESS_CONTEXT)(_In_ PEPROCESS Process);
+typedef PVOID (NTAPI *PKMT_PICO_GET_THREAD_CONTEXT)(_In_ PETHREAD Thread);
+
+static PKMT_PICO_REGISTER_PROVIDER pPsPicoRegisterProvider;
+static PKMT_PICO_CREATE_PROCESS pPsPicoCreateProcess;
+static PKMT_PICO_CREATE_THREAD pPsPicoCreateThread;
+static PKMT_PICO_TERMINATE_CURRENT_THREAD pPsPicoTerminateCurrentThread;
+static PKMT_PICO_TERMINATE_THREAD pPsPicoTerminateThread;
+static PKMT_PICO_GET_PROCESS_CONTEXT pPsPicoGetProcessContext;
+static PKMT_PICO_GET_THREAD_CONTEXT pPsPicoGetThreadContext;
+
 #define PICO_PARENT_EXIT_STATUS ((NTSTATUS)0x0000BEEF)
 #define PICO_CHILD_EXIT_STATUS  ((NTSTATUS)0x0000CAFE)
 #define PICO_WAITER_EXIT_STATUS ((NTSTATUS)0x0000D00D)
@@ -82,7 +101,7 @@ TestPicoSystemCall(
     _Inout_ PKTRAP_FRAME TrapFrame,
     _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame)
 {
-    PPICO_TEST_THREAD Record = PsPicoGetThreadContext(PsGetCurrentThread());
+    PPICO_TEST_THREAD Record = pPsPicoGetThreadContext(PsGetCurrentThread());
 
     UNREFERENCED_PARAMETER(TrapFrame);
     UNREFERENCED_PARAMETER(ExceptionFrame);
@@ -97,7 +116,7 @@ TestPicoSystemCall(
 #endif
     }
 
-    PsPicoTerminateCurrentThread(PICO_CHILD_EXIT_STATUS);
+    pPsPicoTerminateCurrentThread(PICO_CHILD_EXIT_STATUS);
 }
 
 static
@@ -181,7 +200,7 @@ TestPicoParentStart(
 
     *(volatile ULONG *)Page = PICO_PAGE_BEFORE_CLONE;
 
-    Record->CloneStatus = PsPicoCreateProcess(TRUE, &ChildProcess, &CloneHandle);
+    Record->CloneStatus = pPsPicoCreateProcess(TRUE, &ChildProcess, &CloneHandle);
     if (!NT_SUCCESS(Record->CloneStatus))
         return;
 
@@ -190,7 +209,7 @@ TestPicoParentStart(
     ChildThread.Child = TRUE;
     ChildThread.Page = Page;
     TestPicoInitialContext(&Context);
-    Record->CloneThreadStatus = PsPicoCreateThread(CloneHandle,
+    Record->CloneThreadStatus = pPsPicoCreateThread(CloneHandle,
                                                    &Context,
                                                    &ChildThread,
                                                    &CloneThreadHandle,
@@ -216,14 +235,14 @@ TestPicoThreadStart(
     _Inout_ PKTRAP_FRAME TrapFrame,
     _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame)
 {
-    PPICO_TEST_THREAD Record = PsPicoGetThreadContext(PsGetCurrentThread());
+    PPICO_TEST_THREAD Record = pPsPicoGetThreadContext(PsGetCurrentThread());
     PROCESS_BASIC_INFORMATION Basic;
     LARGE_INTEGER Timeout;
 
     UNREFERENCED_PARAMETER(ExceptionFrame);
 
     if (Record == NULL)
-        PsPicoTerminateCurrentThread(STATUS_UNSUCCESSFUL);
+        pPsPicoTerminateCurrentThread(STATUS_UNSUCCESSFUL);
 
     InterlockedIncrement(&Record->StartCalls);
     Record->StartThread = PsGetCurrentThread();
@@ -247,13 +266,13 @@ TestPicoThreadStart(
         /* A thread ends on its way back to user mode, so only an alertable user wait is cut short */
         if (KeWaitForSingleObject(&WaiterRelease, Executive, UserMode, TRUE, &Timeout) == STATUS_USER_APC)
             return;
-        PsPicoTerminateCurrentThread(STATUS_TIMEOUT);
+        pPsPicoTerminateCurrentThread(STATUS_TIMEOUT);
     }
 
     if (!Record->Child)
     {
         TestPicoParentStart(Record);
-        PsPicoTerminateCurrentThread(PICO_PARENT_EXIT_STATUS);
+        pPsPicoTerminateCurrentThread(PICO_PARENT_EXIT_STATUS);
     }
 
     _SEH2_TRY
@@ -270,7 +289,7 @@ TestPicoThreadStart(
     if (TestPicoEnterUserMode(Record, TrapFrame))
         return;
 
-    PsPicoTerminateCurrentThread(PICO_CHILD_EXIT_STATUS);
+    pPsPicoTerminateCurrentThread(PICO_CHILD_EXIT_STATUS);
 }
 
 static
@@ -279,7 +298,7 @@ NTAPI
 TestPicoThreadExit(
     _In_ PETHREAD Thread)
 {
-    PPICO_TEST_THREAD Record = PsPicoGetThreadContext(Thread);
+    PPICO_TEST_THREAD Record = pPsPicoGetThreadContext(Thread);
 
     if (Record == NULL)
         return;
@@ -294,7 +313,7 @@ NTAPI
 TestPicoProcessExit(
     _In_ PEPROCESS Process)
 {
-    PPICO_TEST_PROCESS Record = PsPicoGetProcessContext(Process);
+    PPICO_TEST_PROCESS Record = pPsPicoGetProcessContext(Process);
 
     if (Record == NULL)
         return;
@@ -324,20 +343,34 @@ TestPicoRegistration(
 
     *Registered = FALSE;
 
-    Status = PsPicoRegisterProvider(NULL);
+    pPsPicoRegisterProvider = (PKMT_PICO_REGISTER_PROVIDER)KmtGetSystemRoutineAddress(L"PsPicoRegisterProvider");
+    pPsPicoCreateProcess = (PKMT_PICO_CREATE_PROCESS)KmtGetSystemRoutineAddress(L"PsPicoCreateProcess");
+    pPsPicoCreateThread = (PKMT_PICO_CREATE_THREAD)KmtGetSystemRoutineAddress(L"PsPicoCreateThread");
+    pPsPicoTerminateCurrentThread =
+        (PKMT_PICO_TERMINATE_CURRENT_THREAD)KmtGetSystemRoutineAddress(L"PsPicoTerminateCurrentThread");
+    pPsPicoTerminateThread = (PKMT_PICO_TERMINATE_THREAD)KmtGetSystemRoutineAddress(L"PsPicoTerminateThread");
+    pPsPicoGetProcessContext = (PKMT_PICO_GET_PROCESS_CONTEXT)KmtGetSystemRoutineAddress(L"PsPicoGetProcessContext");
+    pPsPicoGetThreadContext = (PKMT_PICO_GET_THREAD_CONTEXT)KmtGetSystemRoutineAddress(L"PsPicoGetThreadContext");
+    if (skip(pPsPicoRegisterProvider != NULL && pPsPicoCreateProcess != NULL && pPsPicoCreateThread != NULL &&
+             pPsPicoTerminateCurrentThread != NULL && pPsPicoTerminateThread != NULL &&
+             pPsPicoGetProcessContext != NULL && pPsPicoGetThreadContext != NULL,
+             "no pico provider routines\n"))
+        return;
+
+    Status = pPsPicoRegisterProvider(NULL);
     ok_eq_hex(Status, STATUS_INVALID_PARAMETER);
 
     Routines = TestPicoRoutines;
     Routines.Size--;
-    Status = PsPicoRegisterProvider(&Routines);
+    Status = pPsPicoRegisterProvider(&Routines);
     ok_eq_hex(Status, STATUS_INVALID_PARAMETER);
 
     Routines = TestPicoRoutines;
     Routines.ThreadStart = NULL;
-    Status = PsPicoRegisterProvider(&Routines);
+    Status = pPsPicoRegisterProvider(&Routines);
     ok_eq_hex(Status, STATUS_INVALID_PARAMETER);
 
-    Status = PsPicoRegisterProvider(&TestPicoRoutines);
+    Status = pPsPicoRegisterProvider(&TestPicoRoutines);
     if (Status == STATUS_ALREADY_REGISTERED)
     {
         skip(FALSE, "Another pico provider is registered\n");
@@ -347,7 +380,7 @@ TestPicoRegistration(
     if (!NT_SUCCESS(Status))
         return;
 
-    Status = PsPicoRegisterProvider(&TestPicoRoutines);
+    Status = pPsPicoRegisterProvider(&TestPicoRoutines);
     ok_eq_hex(Status, STATUS_ALREADY_REGISTERED);
 
     *Registered = TRUE;
@@ -365,7 +398,7 @@ TestPicoProcessShape(
     NTSTATUS Status;
     ULONG Length;
 
-    ok_eq_pointer(PsPicoGetProcessContext(Process), &ParentProcess);
+    ok_eq_pointer(pPsPicoGetProcessContext(Process), &ParentProcess);
     ok_eq_pointer(PsGetProcessSectionBaseAddress(Process), NULL);
 
     Status = ZwQueryInformationProcess(ProcessHandle,
@@ -488,7 +521,7 @@ TestPicoThreadlessExit(VOID)
     NTSTATUS Status;
 
     RtlZeroMemory(&ThreadlessProcess, sizeof(ThreadlessProcess));
-    Status = PsPicoCreateProcess(FALSE, &ThreadlessProcess, &ProcessHandle);
+    Status = pPsPicoCreateProcess(FALSE, &ThreadlessProcess, &ProcessHandle);
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (!NT_SUCCESS(Status))
         return;
@@ -530,13 +563,13 @@ TestPicoTerminateThread(VOID)
     KeInitializeEvent(&WaiterRelease, NotificationEvent, FALSE);
     WaiterThread.Waiter = TRUE;
 
-    Status = PsPicoCreateProcess(FALSE, &WaiterProcess, &ProcessHandle);
+    Status = pPsPicoCreateProcess(FALSE, &WaiterProcess, &ProcessHandle);
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (!NT_SUCCESS(Status))
         return;
 
     TestPicoInitialContext(&Context);
-    Status = PsPicoCreateThread(ProcessHandle, &Context, &WaiterThread, &ThreadHandle, NULL);
+    Status = pPsPicoCreateThread(ProcessHandle, &Context, &WaiterThread, &ThreadHandle, NULL);
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (!NT_SUCCESS(Status))
     {
@@ -558,7 +591,7 @@ TestPicoTerminateThread(VOID)
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (NT_SUCCESS(Status))
     {
-        Status = PsPicoTerminateThread(Thread, PICO_WAITER_EXIT_STATUS);
+        Status = pPsPicoTerminateThread(Thread, PICO_WAITER_EXIT_STATUS);
         ok_eq_hex(Status, STATUS_SUCCESS);
         ObDereferenceObject(Thread);
     }
@@ -606,10 +639,10 @@ START_TEST(PsPico)
     if (!Registered)
         return;
 
-    Status = PsPicoCreateProcess(TRUE, &ParentProcess, &Unused);
+    Status = pPsPicoCreateProcess(TRUE, &ParentProcess, &Unused);
     ok_eq_hex(Status, STATUS_INVALID_PARAMETER);
 
-    Status = PsPicoCreateProcess(FALSE, &ParentProcess, &ProcessHandle);
+    Status = pPsPicoCreateProcess(FALSE, &ParentProcess, &ProcessHandle);
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (!NT_SUCCESS(Status))
         return;
@@ -632,7 +665,7 @@ START_TEST(PsPico)
 
     TestPicoInitialContext(&Context);
     RtlZeroMemory(&ClientId, sizeof(ClientId));
-    Status = PsPicoCreateThread(ProcessHandle, &Context, &ParentThread, &ThreadHandle, &ClientId);
+    Status = pPsPicoCreateThread(ProcessHandle, &Context, &ParentThread, &ThreadHandle, &ClientId);
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (!NT_SUCCESS(Status))
     {
@@ -711,10 +744,10 @@ START_TEST(PsPico)
     if (NT_SUCCESS(Status))
     {
         ok_eq_pointer(Thread, ParentThread.StartThread);
-        ok_eq_pointer(PsPicoGetThreadContext(Thread), NULL);
+        ok_eq_pointer(pPsPicoGetThreadContext(Thread), NULL);
         ObDereferenceObject(Thread);
     }
-    ok_eq_pointer(PsPicoGetProcessContext(Process), NULL);
+    ok_eq_pointer(pPsPicoGetProcessContext(Process), NULL);
 
     TestPicoSubsystem(ProcessHandle, ThreadHandle);
 

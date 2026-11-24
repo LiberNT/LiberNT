@@ -9,11 +9,13 @@
 #define _WMIKM_
 #include <ntwmi.h>
 
-NTSTATUS NTAPI WmiStartTrace(_Inout_ PWMI_LOGGER_INFORMATION LoggerInformation);
-NTSTATUS NTAPI WmiStopTrace(_Inout_ PWMI_LOGGER_INFORMATION LoggerInformation);
+typedef NTSTATUS (NTAPI *PKMT_WMI_TRACE)(_Inout_ PWMI_LOGGER_INFORMATION LoggerInformation);
 LONGLONG FASTCALL WmiGetClock(_In_ ULONG ClockType, _In_opt_ PVOID Context);
 NTSTATUS __cdecl WmiTraceMessage(_In_ TRACEHANDLE LoggerHandle, _In_ ULONG MessageFlags,
                                  _In_ LPGUID MessageGuid, _In_ USHORT MessageNumber, ...);
+
+static PKMT_WMI_TRACE pWmiStartTrace;
+static PKMT_WMI_TRACE pWmiStopTrace;
 
 static GUID KmtEtwMessageGuid = { 0x5d2f7a10, 0x83c4, 0x4e1b, { 0x9a, 0x61, 0x2b, 0x7e, 0x0c, 0x44, 0xd9, 0x31 } };
 
@@ -51,7 +53,7 @@ KmtStartSession(
     Session->Info.LoggerName.Length = (USHORT)(wcslen(Session->Name) * sizeof(WCHAR));
     Session->Info.LoggerName.MaximumLength = sizeof(Session->Name);
 
-    Status = WmiStartTrace(&Session->Info);
+    Status = pWmiStartTrace(&Session->Info);
     if (NT_SUCCESS(Status))
         Session->LoggerId = (ULONG)Session->Info.Wnode.HistoricalContext;
 
@@ -71,7 +73,7 @@ KmtStopSession(
     Session->Info.LoggerName.Length = (USHORT)(wcslen(Session->Name) * sizeof(WCHAR));
     Session->Info.LoggerName.MaximumLength = sizeof(Session->Name);
 
-    Status = WmiStopTrace(&Session->Info);
+    Status = pWmiStopTrace(&Session->Info);
     ok_eq_hex(Status, STATUS_SUCCESS);
 }
 
@@ -146,6 +148,9 @@ TestClocks(VOID)
     KeQuerySystemTime(&After);
     ok(Value >= Before.QuadPart && Value <= After.QuadPart,
        "system clock %I64d outside [%I64d, %I64d]\n", Value, Before.QuadPart, After.QuadPart);
+
+    if (skip(pWmiStartTrace != NULL, "no kernel trace sessions\n"))
+        return;
 
     /* A session keeps the cycle counter clock it was started with */
     Status = KmtStartSession(&Session, L"KmtEtwCycleClock", EVENT_TRACE_CLOCK_CPUCYCLE);
@@ -318,9 +323,23 @@ TestTracedWmiEvents(VOID)
     KmtStopSession(&Session);
 }
 
+static
+BOOLEAN
+KmtResolveTraceRoutines(VOID)
+{
+    pWmiStartTrace = (PKMT_WMI_TRACE)KmtGetSystemRoutineAddress(L"WmiStartTrace");
+    pWmiStopTrace = (PKMT_WMI_TRACE)KmtGetSystemRoutineAddress(L"WmiStopTrace");
+    if (pWmiStartTrace == NULL || pWmiStopTrace == NULL)
+        pWmiStartTrace = pWmiStopTrace = NULL;
+    return (BOOLEAN)(pWmiStartTrace != NULL);
+}
+
 START_TEST(EtwSessionKM)
 {
+    KmtResolveTraceRoutines();
     TestClocks();
+    if (skip(pWmiStartTrace != NULL, "no kernel trace sessions\n"))
+        return;
     TestTraceInformation();
     TestTracedWmiEvents();
 }
@@ -334,6 +353,9 @@ START_TEST(EtwSessionIrqlKM)
     ULONG Value = 0xCAFE;
     KIRQL OldIrql;
     NTSTATUS Status;
+
+    if (skip(KmtResolveTraceRoutines(), "no kernel trace sessions\n"))
+        return;
 
     Status = KmtStartSession(&Session, L"KmtEtwRaisedIrql", EVENT_TRACE_CLOCK_PERFCOUNTER);
     ok_eq_hex(Status, STATUS_SUCCESS);
