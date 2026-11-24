@@ -5,6 +5,7 @@ extern void func_agreements(void);
 extern void func_dependency(void);
 extern void func_exe(void);
 extern void func_gui(void);
+extern void func_guiagreements(void);
 extern void func_guiuninstall(void);
 extern void func_inno(void);
 extern void func_nullsoft(void);
@@ -20,6 +21,7 @@ const struct test winetest_testlist[] =
     { "dependency", func_dependency },
     { "exe", func_exe },
     { "gui", func_gui },
+    { "guiagreements", func_guiagreements },
     { "guiuninstall", func_guiuninstall },
     { "inno", func_inno },
     { "nullsoft", func_nullsoft },

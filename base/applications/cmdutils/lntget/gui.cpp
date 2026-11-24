@@ -22,6 +22,7 @@
 #include "util.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 
 namespace lntget
@@ -145,6 +146,7 @@ enum class OperationStage
     Installing,
     Complete,
     Failed,
+    NeedsAgreement,
 };
 
 struct OperationUpdate
@@ -158,6 +160,7 @@ struct OperationUpdate
     std::wstring packageName;
     std::wstring path;
     std::string error;
+    std::vector<PackageAgreement> agreements;
 };
 
 COLORREF Blend(COLORREF front, COLORREF back, int weight)
@@ -372,13 +375,14 @@ public:
 
     void CancelDetails() { InterlockedIncrement(&generation_); }
 
-    uint32_t RequestOperation(const PackageRecord &package, bool install)
+    uint32_t RequestOperation(const PackageRecord &package, bool install, bool acceptAgreements)
     {
         const uint32_t generation = static_cast<uint32_t>(InterlockedIncrement(&operationGeneration_));
         EnterCriticalSection(&lock_);
         operationPending_ = true;
         operationPackage_ = package;
         operationInstall_ = install;
+        operationAcceptAgreements_ = acceptAgreements;
         pendingOperationGeneration_ = generation;
         LeaveCriticalSection(&lock_);
         SetEvent(signal_);
@@ -516,6 +520,7 @@ private:
                 bool details = false;
                 bool operation = false;
                 bool install = false;
+                bool acceptAgreements = false;
                 PackageRecord package;
                 uint32_t generation = 0;
                 EnterCriticalSection(&lock_);
@@ -525,6 +530,7 @@ private:
                     operationPending_ = false;
                     package = operationPackage_;
                     install = operationInstall_;
+                    acceptAgreements = operationAcceptAgreements_;
                     generation = pendingOperationGeneration_;
                     operation = true;
                 }
@@ -546,7 +552,7 @@ private:
                 if (quit)
                     return;
                 if (operation)
-                    RunOperationJob(package, install, generation);
+                    RunOperationJob(package, install, acceptAgreements, generation);
                 else if (catalog)
                     RunCatalogJob(refresh);
                 else if (details)
@@ -591,7 +597,7 @@ private:
             delete copy;
     }
 
-    void RunOperationJob(const PackageRecord &package, bool install, uint32_t generation)
+    void RunOperationJob(const PackageRecord &package, bool install, bool acceptAgreements, uint32_t generation)
     {
         OperationUpdate update;
         update.generation = generation;
@@ -606,8 +612,13 @@ private:
         if (status) status = ParseInstallerManifest(yaml, manifest);
         if (status && (!AsciiEquals(package.id, manifest.id) || package.version != manifest.version))
             status = Status::Fail(ERROR_BAD_FORMAT, "manifest identity does not match the source index");
-        if (status && manifest.hasAgreements)
-            status = Status::Fail(ERROR_CANCELLED, "review this package's agreements in the details pane, then use the command line with --accept-package-agreements");
+        if (status && manifest.hasAgreements && !acceptAgreements)
+        {
+            update.stage = OperationStage::NeedsAgreement;
+            update.agreements = manifest.agreements;
+            PostOperation(update);
+            return;
+        }
 
         SelectionOptions options;
         options.downloadOnly = !install;
@@ -750,6 +761,7 @@ private:
     bool detailsPending_ = false;
     bool operationPending_ = false;
     bool operationInstall_ = false;
+    bool operationAcceptAgreements_ = false;
 };
 
 struct Theme
@@ -1251,6 +1263,8 @@ struct CatalogWindow
     int selected = -1;
     uint32_t generation = 0;
     uint32_t operationGeneration = 0;
+    PackageRecord operationPackage;
+    bool operationInstall = false;
     bool loading = true;
     bool operationVisible = false;
     bool operationBusy = false;
@@ -1949,6 +1963,26 @@ void HideBackgroundProgress(CatalogWindow &state)
     InvalidateRect(state.window, nullptr, TRUE);
 }
 
+void StartOperation(CatalogWindow &state, const PackageRecord &record, bool install, bool acceptAgreements)
+{
+    assert(!state.operationBusy);
+    state.backgroundProgress = false;
+    state.operationVisible = true;
+    state.operationBusy = true;
+    state.operationPackage = record;
+    state.operationInstall = install;
+    SetWindowTextW(state.operationTitle, (L"Preparing " + WideFromUtf8(record.name)).c_str());
+    SetWindowTextW(state.operationDetail, L"Checking signed package metadata…");
+    SetWindowTextW(state.operationPercent, L"");
+    SendMessageW(state.operationProgress, PBM_SETBARCOLOR, 0, state.theme.accent);
+    SetOperationMarquee(state, true);
+    state.operationGeneration = state.worker.RequestOperation(record, install, acceptAgreements);
+    UpdateActionButtons(state);
+    UpdateStatusBar(state);
+    LayoutWindow(state);
+    InvalidateRect(state.window, nullptr, TRUE);
+}
+
 void BeginOperation(CatalogWindow &state, bool install)
 {
     if (state.operationBusy || state.selected < 0 || static_cast<std::size_t>(state.selected) >= state.filtered.size())
@@ -1959,20 +1993,29 @@ void BeginOperation(CatalogWindow &state, bool install)
     record.name = package.utf8Name;
     record.version = package.utf8Version;
     std::memcpy(record.manifestHash, package.manifestHash, sizeof(record.manifestHash));
+    StartOperation(state, record, install, false);
+}
 
-    state.backgroundProgress = false;
-    state.operationVisible = true;
-    state.operationBusy = true;
-    SetWindowTextW(state.operationTitle, (std::wstring(L"Preparing ") + package.name).c_str());
-    SetWindowTextW(state.operationDetail, L"Checking signed package metadata…");
-    SetWindowTextW(state.operationPercent, L"");
-    SendMessageW(state.operationProgress, PBM_SETBARCOLOR, 0, state.theme.accent);
-    SetOperationMarquee(state, true);
-    state.operationGeneration = state.worker.RequestOperation(record, install);
-    UpdateActionButtons(state);
-    UpdateStatusBar(state);
-    LayoutWindow(state);
-    InvalidateRect(state.window, nullptr, TRUE);
+bool ConfirmPackageAgreements(HWND owner, const std::wstring &name, const std::vector<PackageAgreement> &agreements)
+{
+    constexpr std::size_t MaximumPromptText = 3000;
+    std::wstring terms;
+    for (const PackageAgreement &agreement : agreements)
+    {
+        std::wstring entry;
+        if (!agreement.label.empty()) entry += WideFromUtf8(agreement.label) + L"\n";
+        if (!agreement.text.empty()) entry += WideFromUtf8(agreement.text) + L"\n";
+        if (!agreement.url.empty()) entry += WideFromUtf8(agreement.url) + L"\n";
+        if (!entry.empty()) terms += entry + L"\n";
+    }
+    if (terms.size() > MaximumPromptText)
+    {
+        terms.resize(IS_HIGH_SURROGATE(terms[MaximumPromptText - 1]) ? MaximumPromptText - 1 : MaximumPromptText);
+        terms += L"…\n\nThe full terms are shown in the details pane.\n\n";
+    }
+    const std::wstring text = name + L" comes with the following package agreements.\n\n" + terms +
+                              L"Do you accept them?";
+    return MessageBoxW(owner, text.c_str(), L"Package agreements", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) == IDYES;
 }
 
 void ApplyOperationUpdate(CatalogWindow &state, const OperationUpdate &update)
@@ -2047,6 +2090,28 @@ void ApplyOperationUpdate(CatalogWindow &state, const OperationUpdate &update)
             UpdateActionButtons(state);
             UpdateStatusBar(state);
             break;
+        case OperationStage::NeedsAgreement:
+        {
+            state.operationBusy = false;
+            SetWindowTextW(state.operationTitle, (L"Package agreements for " + name).c_str());
+            SetWindowTextW(state.operationDetail, L"Waiting for the package agreements to be accepted…");
+            SetOperationMarquee(state, false);
+            const bool accepted = ConfirmPackageAgreements(state.window, name, update.agreements);
+            if (!IsWindow(state.window))
+                break;
+            if (accepted && !state.operationBusy)
+            {
+                StartOperation(state, state.operationPackage, state.operationInstall, true);
+                break;
+            }
+            SetWindowTextW(state.operationTitle, update.install ? L"Installation cancelled" : L"Download cancelled");
+            SetWindowTextW(state.operationDetail, L"The package agreements were not accepted.");
+            SetWindowTextW(state.operationPercent, L"");
+            SendMessageW(state.operationProgress, PBM_SETPOS, 0, 0);
+            UpdateActionButtons(state);
+            UpdateStatusBar(state);
+            break;
+        }
     }
 }
 
