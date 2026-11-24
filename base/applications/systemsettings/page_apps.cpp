@@ -158,7 +158,7 @@ BuildApps(PageBuilder &page)
     page.Navigate(Str(IDS_PAGE_DEFAULT_APPS), Str(IDS_DEFAULT_APPS_DESC), L"apps_add_in_20_regular", PageId::DefaultApps);
     page.Navigate(Str(IDS_PAGE_STARTUP), Str(IDS_STARTUP_DESC), L"rocket_20_regular", PageId::Startup);
     page.Group(Str(IDS_RELATED));
-    page.Link(Str(IDS_APP_STORE), Str(IDS_APP_STORE_DESC), L"arrow_download_20_regular", [](int) { Launch(L"lntget.exe gui"); });
+    page.Link(Str(IDS_APP_STORE), Str(IDS_APP_STORE_DESC), L"arrow_download_20_regular", [](int) { Launch(L"lntget.exe", L"gui"); });
 }
 
 void
