@@ -1361,6 +1361,16 @@ static void STDMETHODCALLTYPE d3d11_device_context_RSSetViewports(ID3D11DeviceCo
         wined3d_vp[i].height = viewports[i].Height;
         wined3d_vp[i].min_z = viewports[i].MinDepth;
         wined3d_vp[i].max_z = viewports[i].MaxDepth;
+#ifdef __REACTOS__
+        /* Hardware below feature level 11_0 takes integer viewports */
+        if (context->device->state->feature_level < D3D_FEATURE_LEVEL_11_0)
+        {
+            wined3d_vp[i].x = (float)(int)wined3d_vp[i].x;
+            wined3d_vp[i].y = (float)(int)wined3d_vp[i].y;
+            wined3d_vp[i].width = (float)(int)wined3d_vp[i].width;
+            wined3d_vp[i].height = (float)(int)wined3d_vp[i].height;
+        }
+#endif
     }
 
     wined3d_device_context_set_viewports(context->wined3d_context, viewport_count, wined3d_vp);
