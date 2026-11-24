@@ -1439,7 +1439,7 @@ GetPwrDiskSpindownRange(PUINT RangeMax, PUINT RangeMin)
 BOOLEAN WINAPI
 IsAdminOverrideActive(PADMINISTRATOR_POWER_POLICY p)
 {
-    FIXME("( %p) stub!\n", p);
+    TRACE("(%p)\n", p);
     return FALSE;
 }
 
