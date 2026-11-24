@@ -418,6 +418,74 @@ TestModeChange(void)
         CheckDisplaySize(Device.DeviceName, Original.dmPelsWidth, Original.dmPelsHeight, "restored");
 }
 
+static LONG
+ApplyStored(PCWSTR Device, DEVMODEW *Mode)
+{
+    LONG Result = ChangeDisplaySettingsExW(Device, Mode, NULL, CDS_UPDATEREGISTRY | CDS_NORESET, NULL);
+
+    if (Result != DISP_CHANGE_SUCCESSFUL)
+        return Result;
+    return ChangeDisplaySettingsExW(NULL, NULL, NULL, 0, NULL);
+}
+
+static void
+TestAttachDetach(void)
+{
+    DISPLAY_DEVICEW Device;
+    DEVMODEW Original, Detach;
+    POINT Center;
+    RECT Desktop;
+    DWORD Index;
+    LONG Result;
+    int Monitors = GetSystemMetrics(SM_CMONITORS);
+    BOOL Found = FALSE;
+
+    for (Index = 0; !Found; Index++)
+    {
+        Device.cb = sizeof(Device);
+        if (!EnumDisplayDevicesW(NULL, Index, &Device, 0))
+            break;
+        Found = (Device.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) &&
+                !(Device.StateFlags & (DISPLAY_DEVICE_PRIMARY_DEVICE | DISPLAY_DEVICE_MIRRORING_DRIVER));
+    }
+    if (!Found)
+    {
+        skip("no display beside the primary one\n");
+        return;
+    }
+    ZeroMemory(&Original, sizeof(Original));
+    Original.dmSize = sizeof(Original);
+    ok(EnumDisplaySettingsW(Device.DeviceName, ENUM_CURRENT_SETTINGS, &Original), "%ls has no current settings\n", Device.DeviceName);
+    Center.x = Original.dmPosition.x + (LONG)Original.dmPelsWidth / 2;
+    Center.y = Original.dmPosition.y + (LONG)Original.dmPelsHeight / 2;
+
+    ZeroMemory(&Detach, sizeof(Detach));
+    Detach.dmSize = sizeof(Detach);
+    Detach.dmFields = DM_POSITION | DM_PELSWIDTH | DM_PELSHEIGHT;
+    Result = ApplyStored(Device.DeviceName, &Detach);
+    ok(Result == DISP_CHANGE_SUCCESSFUL, "detaching %ls returned %ld\n", Device.DeviceName, Result);
+    ok(GetSystemMetrics(SM_CMONITORS) == Monitors - 1, "%d monitors after detaching %ls, expected %d\n",
+       GetSystemMetrics(SM_CMONITORS), Device.DeviceName, Monitors - 1);
+    ok(MonitorFromPoint(Center, MONITOR_DEFAULTTONULL) == NULL, "a monitor is left at (%ld,%ld)\n", Center.x, Center.y);
+    Device.cb = sizeof(Device);
+    ok(EnumDisplayDevicesW(NULL, Index - 1, &Device, 0) && !(Device.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP),
+       "%ls is still attached: %#lx\n", Device.DeviceName, Device.StateFlags);
+    ok(GetWindowRect(GetDesktopWindow(), &Desktop) && Desktop.right - Desktop.left == GetSystemMetrics(SM_CXVIRTUALSCREEN),
+       "the desktop window is %s after the detach\n", wine_dbgstr_rect(&Desktop));
+
+    Original.dmFields = DM_POSITION | DM_PELSWIDTH | DM_PELSHEIGHT | DM_BITSPERPEL;
+    Result = ApplyStored(Device.DeviceName, &Original);
+    ok(Result == DISP_CHANGE_SUCCESSFUL, "attaching %ls again returned %ld\n", Device.DeviceName, Result);
+    ok(GetSystemMetrics(SM_CMONITORS) == Monitors, "%d monitors after attaching %ls again, expected %d\n",
+       GetSystemMetrics(SM_CMONITORS), Device.DeviceName, Monitors);
+    if (Result == DISP_CHANGE_SUCCESSFUL)
+    {
+        CheckDisplaySize(Device.DeviceName, Original.dmPelsWidth, Original.dmPelsHeight, "attached again");
+        if (MonitorFromPoint(Center, MONITOR_DEFAULTTONULL) != NULL)
+            TestDrawingOnMonitor(MonitorFromPoint(Center, MONITOR_DEFAULTTONULL));
+    }
+}
+
 START_TEST(MultiMonitor)
 {
     MONITOR_LIST List;
@@ -460,6 +528,7 @@ START_TEST(MultiMonitor)
     TestDisplayConfig(&List);
     TestModeLists();
     TestModeChange();
+    TestAttachDetach();
 
     if (List.Count < 2)
     {
