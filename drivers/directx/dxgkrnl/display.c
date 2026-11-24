@@ -4603,7 +4603,7 @@ DxgkpDisplayDispatch(
                      g_DisplayAdapter->MiniportContext->BasicDisplayNegotiatesModes))
                 {
                     DxgkVidPnDestroyDisplayModeCache(g_DisplayAdapter);
-                    Status = DxgkVidPnQueryVideoModes(g_DisplayAdapter, NULL, 0, &NumModes->NumModes, FALSE);
+                    Status = DxgkVidPnQueryVideoModes(g_DisplayAdapter, D3DDDI_ID_ALL, NULL, 0, &NumModes->NumModes, FALSE);
                     if (!NT_SUCCESS(Status) && !g_DisplayAdapter->MiniportContext->IsDisplayOnlyDriver &&
                         !DxgkResetHoldsMiniport(g_DisplayAdapter))
                         break;
@@ -4643,7 +4643,7 @@ DxgkpDisplayDispatch(
                 {
                     ULONG ModeCount;
 
-                    Status = DxgkVidPnQueryVideoModes(g_DisplayAdapter, ModeInfo,
+                    Status = DxgkVidPnQueryVideoModes(g_DisplayAdapter, D3DDDI_ID_ALL, ModeInfo,
                                 Stack->Parameters.DeviceIoControl.OutputBufferLength / sizeof(*ModeInfo),
                                 &ModeCount, Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_VIDEO_QUERY_CURRENT_MODE);
                     if (NT_SUCCESS(Status))
@@ -4702,7 +4702,7 @@ DxgkpDisplayDispatch(
                 Status = STATUS_BUFFER_TOO_SMALL;
                 break;
             }
-            Status = DxgkVidPnSetVideoMode(g_DisplayAdapter, Mode->RequestedMode);
+            Status = DxgkVidPnSetVideoMode(g_DisplayAdapter, D3DDDI_ID_ALL, Mode->RequestedMode);
             break;
         }
 
@@ -5713,10 +5713,12 @@ DxgkpSourceDisplayControl(
 
             if (NumModes == NULL || OutputLength < sizeof(*NumModes))
                 return STATUS_BUFFER_TOO_SMALL;
-            /* TODO: the other source modes of the path; a further source offers its pinned mode */
-            NumModes->NumModes = Live ? 1 : 0;
             NumModes->ModeInformationLength = sizeof(VIDEO_MODE_INFORMATION);
             *BytesReturned = sizeof(*NumModes);
+            if (Live && NT_SUCCESS(DxgkVidPnQueryVideoModes(Adapter, Display->VidPnSourceId, NULL, 0, &NumModes->NumModes, FALSE)))
+                return STATUS_SUCCESS;
+            /* TODO: the source modes of a further source on an adapter whose mode list belongs to another source */
+            NumModes->NumModes = Live ? 1 : 0;
             return STATUS_SUCCESS;
         }
 
@@ -5726,6 +5728,22 @@ DxgkpSourceDisplayControl(
                 return STATUS_BUFFER_TOO_SMALL;
             if (!Live)
                 return IoControlCode == IOCTL_VIDEO_QUERY_AVAIL_MODES ? STATUS_SUCCESS : STATUS_DEVICE_NOT_READY;
+            if (IoControlCode == IOCTL_VIDEO_QUERY_AVAIL_MODES)
+            {
+                ULONG ModeCount;
+                NTSTATUS QueryStatus;
+
+                QueryStatus = DxgkVidPnQueryVideoModes(Adapter, Display->VidPnSourceId, (PVIDEO_MODE_INFORMATION)Buffer,
+                                                       OutputLength / sizeof(VIDEO_MODE_INFORMATION), &ModeCount, FALSE);
+                if (NT_SUCCESS(QueryStatus))
+                {
+                    ASSERT(ModeCount <= OutputLength / sizeof(VIDEO_MODE_INFORMATION));
+                    *BytesReturned = ModeCount * sizeof(VIDEO_MODE_INFORMATION);
+                    return STATUS_SUCCESS;
+                }
+                if (QueryStatus == STATUS_BUFFER_TOO_SMALL)
+                    return QueryStatus;
+            }
             DxgkpFillSourceDisplayMode((PVIDEO_MODE_INFORMATION)Buffer, Width, Height);
             *BytesReturned = sizeof(VIDEO_MODE_INFORMATION);
             return STATUS_SUCCESS;
@@ -5738,10 +5756,10 @@ DxgkpSourceDisplayControl(
                 return STATUS_BUFFER_TOO_SMALL;
             if (!Live)
                 return STATUS_DEVICE_NOT_READY;
-            /* TODO: a mode change on a further source commits a VidPN; only its current mode is accepted */
-            if ((Mode->RequestedMode & ~(VIDEO_MODE_NO_ZERO_MEMORY | VIDEO_MODE_MAP_MEM_LINEAR)) != 0)
-                return STATUS_INVALID_PARAMETER;
-            return STATUS_SUCCESS;
+            if ((Mode->RequestedMode & ~(VIDEO_MODE_NO_ZERO_MEMORY | VIDEO_MODE_MAP_MEM_LINEAR)) == 0)
+                return STATUS_SUCCESS;
+            /* TODO: a mode change on a further source whose adapter mode list belongs to another source */
+            return DxgkVidPnSetVideoMode(Adapter, Display->VidPnSourceId, Mode->RequestedMode);
         }
 
         case IOCTL_VIDEO_MAP_VIDEO_MEMORY:
