@@ -65,6 +65,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(winlogon);
 #include "resource.h"
 
 #define WL_WM_SETUP_DONE (WM_USER + 0x0100)
+#define WL_WM_DWM_EXITED (WM_USER + 0x0101)
 
 typedef BOOL (WINAPI * PFWLXNEGOTIATE)  (DWORD, DWORD *);
 typedef BOOL (WINAPI * PFWLXINITIALIZE) (LPWSTR, HANDLE, PVOID, PVOID, PVOID *);
@@ -260,6 +261,11 @@ typedef struct _WLSESSION
     DWORD Options;
     WLX_MPR_NOTIFY_INFO MprNotifyInfo;
     PWLX_PROFILE_V2_0 Profile;
+
+    /* Desktop Window Manager of the logged-on user */
+    HANDLE DwmProcess;
+    HANDLE DwmWait;
+    ULONG DwmGeneration;
 } WLSESSION, *PWLSESSION;
 
 typedef enum _NOTIFICATION_TYPE

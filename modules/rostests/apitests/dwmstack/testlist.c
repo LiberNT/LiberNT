@@ -10,6 +10,7 @@
 #include <apitest.h>
 
 extern void func_dwmstack(void);
+extern void func_dwm_restart(void);
 extern void func_caption_cache(void);
 extern void func_client_format(void);
 extern void func_event_poll(void);
@@ -24,6 +25,7 @@ extern void func_scene_cache(void);
 const struct test winetest_testlist[] =
 {
     { "dwmstack", func_dwmstack },
+    { "dwm_restart", func_dwm_restart },
     { "caption_cache", func_caption_cache },
     { "client_format", func_client_format },
     { "event_poll", func_event_poll },

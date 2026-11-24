@@ -209,6 +209,147 @@ WaitForUserDesktopReady(
 }
 
 static BOOL
+IsConsoleBoot(VOID)
+{
+    PWSTR Options = NULL;
+    PWSTR Option;
+    PWSTR Next;
+    DWORD Size = 0;
+    DWORD Type;
+    HKEY hKey;
+    BOOL Console = FALSE;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control", 0, KEY_QUERY_VALUE, &hKey) != ERROR_SUCCESS)
+        return FALSE;
+    if (RegQueryValueExW(hKey, L"SystemStartOptions", NULL, &Type, NULL, &Size) == ERROR_SUCCESS && Type == REG_SZ)
+        Options = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Size + sizeof(WCHAR));
+    if (Options != NULL && RegQueryValueExW(hKey, L"SystemStartOptions", NULL, &Type, (LPBYTE)Options, &Size) != ERROR_SUCCESS)
+        Options[0] = UNICODE_NULL;
+    RegCloseKey(hKey);
+    for (Option = Options; Option != NULL && !Console; Option = Next)
+    {
+        Next = wcschr(Option, L' ');
+        if (Next != NULL)
+            *Next++ = UNICODE_NULL;
+        Console = _wcsicmp(Option, L"CONSOLE") == 0;
+    }
+    HeapFree(GetProcessHeap(), 0, Options);
+    return Console;
+}
+
+static VOID CALLBACK
+DesktopCompositorExited(
+    _In_ PVOID Context,
+    _In_ BOOLEAN TimedOut)
+{
+    UNREFERENCED_PARAMETER(TimedOut);
+    ASSERT(WLSession != NULL);
+    PostMessageW(WLSession->SASWindow, WL_WM_DWM_EXITED, (WPARAM)Context, 0);
+}
+
+static VOID
+StopDesktopCompositorWatch(
+    _Inout_ PWLSESSION Session)
+{
+    if (Session->DwmWait != NULL)
+    {
+        UnregisterWaitEx(Session->DwmWait, INVALID_HANDLE_VALUE);
+        Session->DwmWait = NULL;
+    }
+    if (Session->DwmProcess != NULL)
+    {
+        CloseHandle(Session->DwmProcess);
+        Session->DwmProcess = NULL;
+    }
+    Session->DwmGeneration++;
+}
+
+static BOOL
+StartDesktopCompositor(
+    _Inout_ PWLSESSION Session,
+    _In_opt_ PVOID Environment)
+{
+    WCHAR Path[MAX_PATH];
+    STARTUPINFOW StartupInfo;
+    PROCESS_INFORMATION ProcessInformation;
+    HANDLE hToken;
+    UINT Length;
+    BOOL ret;
+
+    ASSERT(Session->UserToken != NULL);
+    ASSERT(Session->DwmProcess == NULL);
+    ASSERT(Session->DwmWait == NULL);
+    if (IsConsoleBoot())
+        return FALSE;
+    Length = GetSystemDirectoryW(Path, ARRAYSIZE(Path));
+    if (Length == 0 || Length >= ARRAYSIZE(Path) ||
+        FAILED(StringCchCatW(Path, ARRAYSIZE(Path), L"\\dwm.exe")))
+    {
+        ERR("WL: Failed to build the desktop compositor path\n");
+        return FALSE;
+    }
+    /* TODO: run the compositor under its own Window Manager account instead of the user's token */
+    if (!DuplicateTokenEx(Session->UserToken, MAXIMUM_ALLOWED, NULL, SecurityImpersonation, TokenPrimary, &hToken))
+    {
+        ERR("WL: DuplicateTokenEx() failed with error %lu\n", GetLastError());
+        return FALSE;
+    }
+    ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+    StartupInfo.cb = sizeof(StartupInfo);
+    StartupInfo.lpDesktop = L"WinSta0\\Default";
+    ret = CreateProcessAsUserW(hToken,
+                               Path,
+                               NULL,
+                               NULL,
+                               NULL,
+                               FALSE,
+                               CREATE_UNICODE_ENVIRONMENT,
+                               Environment,
+                               NULL,
+                               &StartupInfo,
+                               &ProcessInformation);
+    CloseHandle(hToken);
+    if (!ret)
+    {
+        ERR("WL: Failed to start the desktop compositor %s (error %lu)\n", debugstr_w(Path), GetLastError());
+        return FALSE;
+    }
+    CloseHandle(ProcessInformation.hThread);
+    Session->DwmProcess = ProcessInformation.hProcess;
+    Session->DwmGeneration++;
+    if (!RegisterWaitForSingleObject(&Session->DwmWait,
+                                     Session->DwmProcess,
+                                     DesktopCompositorExited,
+                                     (PVOID)(ULONG_PTR)Session->DwmGeneration,
+                                     INFINITE,
+                                     WT_EXECUTEONLYONCE))
+    {
+        ERR("WL: Failed to watch the desktop compositor (error %lu)\n", GetLastError());
+        Session->DwmWait = NULL;
+    }
+    return TRUE;
+}
+
+static VOID
+RestartDesktopCompositor(
+    _Inout_ PWLSESSION Session)
+{
+    LPVOID lpEnvironment = NULL;
+    BOOLEAN Old;
+
+    if (Session->UserToken == NULL || Session->DwmProcess != NULL)
+        return;
+    if (!CreateEnvironmentBlock(&lpEnvironment, Session->UserToken, TRUE))
+    {
+        ERR("WL: CreateEnvironmentBlock() failed with error %lu\n", GetLastError());
+        return;
+    }
+    RtlAdjustPrivilege(SE_ASSIGNPRIMARYTOKEN_PRIVILEGE, TRUE, FALSE, &Old);
+    StartDesktopCompositor(Session, lpEnvironment);
+    DestroyEnvironmentBlock(lpEnvironment);
+}
+
+static BOOL
 StartUserShell(
     IN OUT PWLSESSION Session)
 {
@@ -232,6 +373,8 @@ StartUserShell(
     /* FIXME: reverting to lower privileges after creating user shell? */
     RtlAdjustPrivilege(SE_ASSIGNPRIMARYTOKEN_PRIVILEGE, TRUE, FALSE, &Old);
 
+    if (Session->DwmProcess == NULL)
+        StartDesktopCompositor(Session, lpEnvironment);
     ReadyEvent = CreateUserDesktopReadyEvent(Session);
     ret = Session->Gina.Functions.WlxActivateUserShell(
                 Session->Gina.Context,
@@ -1337,6 +1480,7 @@ HandleLogoff(
     HANDLE hThread;
     NTSTATUS Status;
 
+    StopDesktopCompositorWatch(Session);
     Status = CreateLogoffSecurityAttributes(&psa);
     if (!NT_SUCCESS(Status))
     {
@@ -2129,7 +2273,30 @@ SASWindowProc(
                 KillTimer(hwndDlg, 1);
                 RestartUserShell(Session);
             }
+            else if (wParam == 2)
+            {
+                KillTimer(hwndDlg, 2);
+                if (Session->LogonState != STATE_LOGGED_OFF &&
+                    Session->LogonState != STATE_LOGGED_OFF_SAS)
+                {
+                    RestartDesktopCompositor(Session);
+                }
+            }
             break;
+        }
+        case WL_WM_DWM_EXITED:
+        {
+            if ((ULONG)wParam == Session->DwmGeneration && Session->DwmProcess != NULL)
+            {
+                StopDesktopCompositorWatch(Session);
+                /* TODO: INFO_NEEDED: the Windows limit on repeated compositor restarts */
+                if (Session->LogonState != STATE_LOGGED_OFF &&
+                    Session->LogonState != STATE_LOGGED_OFF_SAS)
+                {
+                    SetTimer(hwndDlg, 2, 1000, NULL);
+                }
+            }
+            return TRUE;
         }
         case WLX_WM_SAS:
         {
