@@ -32,7 +32,6 @@ static HWND uiExpression;
 static HWND uiHistoryButton, uiHistoryPopup;
 static TCHAR uiHistoryEntries[64][768];
 static int uiHistoryCount;
-static HWND uiOwner;
 static BOOL uiHistoryOpen;
 static HFONT uiExpressionFont;
 static HBRUSH uiControlBrush;
@@ -391,7 +390,6 @@ void ModernCalcInit(HWND hwnd)
     uiHistoryButton = CreateWindowEx(0,TEXT("BUTTON"),TEXT("Historial"),
         WS_CHILD|WS_VISIBLE|BS_OWNERDRAW,0,0,80,28,hwnd,(HMENU)(UINT_PTR)UI_HISTORY_BUTTON,
         (HINSTANCE)GetWindowLongPtr(hwnd,GWLP_HINSTANCE),NULL);
-    uiOwner = hwnd;
     {
         WNDCLASS wc;
         ZeroMemory(&wc, sizeof(wc));
@@ -462,7 +460,6 @@ void ModernCalcCleanup(void)
     if (uiHistoryPopup && IsWindow(uiHistoryPopup)) DestroyWindow(uiHistoryPopup);
     uiHistoryPopup = NULL;
     uiHistoryButton = NULL;
-    uiOwner = NULL;
     uiHistoryOpen=FALSE;
     uiOriginalCount = 0;
     uiSciBase = uiSciAngle = uiSciInv = uiSciHyp = NULL;
