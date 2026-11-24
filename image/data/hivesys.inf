@@ -2050,6 +2050,14 @@ HKLM,"SYSTEM\CurrentControlSet\Services\Nwifi","ImagePath",0x00020000,"system32\
 HKLM,"SYSTEM\CurrentControlSet\Services\Nwifi","Group",0x00000000,"NDIS"
 HKLM,"SYSTEM\CurrentControlSet\Services\Nwifi","DisplayName",0x00000000,"ReactOS Native WiFi Service"
 
+; qWAVE flow driver
+; FIXME: Windows loads QWAVEdrv on demand (Start 3) as a dependency of the qWAVE service, which LiberNT does not have
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVEdrv","DisplayName",0x00000000,"QWAVE driver"
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVEdrv","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVEdrv","ImagePath",0x00020000,"system32\drivers\qwavedrv.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVEdrv","Start",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVEdrv","Type",0x00010001,0x00000001
+
 ; Packet driver
 HKLM,"SYSTEM\CurrentControlSet\Services\Packet","ErrorControl",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\Packet","Group",0x00000000,"PNP_TDI"
