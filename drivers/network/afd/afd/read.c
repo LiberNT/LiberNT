@@ -391,8 +391,9 @@ static NTSTATUS ReceiveActivity( PAFD_FCB FCB, PIRP Irp ) {
             UnlockBuffers( RecvReq->BufferArray,
                            RecvReq->BufferCount, FALSE );
 
-            /* Unexpected disconnect by the remote host or graceful disconnect */
-            Status = FCB->LastReceiveStatus;
+            /* A local receive shutdown must report WSAESHUTDOWN, not the peer's status */
+            Status = FCB->ReceiveShutdown ? STATUS_END_OF_FILE
+                                          : FCB->LastReceiveStatus;
 
             NextIrp->IoStatus.Status = Status;
             NextIrp->IoStatus.Information = 0;
@@ -741,6 +742,13 @@ AfdConnectedSocketReadData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
     if( FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS )
     {
+        if (FCB->TdiReceiveClosed)
+        {
+            AFD_DbgPrint(MIN_TRACE,("Receive closed\n"));
+            UnlockBuffers(RecvReq->BufferArray, RecvReq->BufferCount, FALSE);
+            return UnlockAndMaybeComplete(FCB, STATUS_END_OF_FILE, Irp, 0);
+        }
+
         if (IsListEmpty(&FCB->DatagramList))
         {
             Status = AfdRearmDatagram(FCB);
@@ -1210,7 +1218,7 @@ AfdPacketSocketReadData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     if (FCB->TdiReceiveClosed)
     {
         AFD_DbgPrint(MIN_TRACE,("Receive closed\n"));
-        return UnlockAndMaybeComplete(FCB, STATUS_FILE_CLOSED, Irp, 0);
+        return UnlockAndMaybeComplete(FCB, STATUS_END_OF_FILE, Irp, 0);
     }
 
     if( !(RecvReq = LockRequest( Irp, IrpSp, FALSE, &LockMode )) )

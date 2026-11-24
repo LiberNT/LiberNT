@@ -555,6 +555,14 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         FCB->EventSelectDisabled &= ~AFD_EVENT_SEND;
         PTDI_CONNECTION_INFORMATION TargetAddress;
 
+        if (FCB->SendClosed)
+        {
+            AFD_DbgPrint(MIN_TRACE,("No more sends\n"));
+
+            /* This is a graceful send closure */
+            return UnlockAndMaybeComplete(FCB, STATUS_END_OF_FILE, Irp, 0);
+        }
+
         if( !FCB->RemoteAddress )
             return UnlockAndMaybeComplete( FCB, STATUS_INVALID_CONNECTION, Irp, 0 );
 
@@ -611,6 +619,14 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         }
     }
 
+    if (FCB->SendClosed)
+    {
+        AFD_DbgPrint(MIN_TRACE,("No more sends\n"));
+
+        /* A local send shutdown wins over any pending remote close */
+        return UnlockAndMaybeComplete(FCB, STATUS_END_OF_FILE, Irp, 0);
+    }
+
     if (FCB->PollState & AFD_EVENT_CLOSE)
     {
         AFD_DbgPrint(MIN_TRACE,("Connection reset by remote peer\n"));
@@ -625,14 +641,6 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
         /* This is an abortive socket closure on our side */
         return UnlockAndMaybeComplete(FCB, FCB->PollStatus[FD_CLOSE_BIT], Irp, 0);
-    }
-
-    if (FCB->SendClosed)
-    {
-        AFD_DbgPrint(MIN_TRACE,("No more sends\n"));
-
-        /* This is a graceful send closure */
-        return UnlockAndMaybeComplete(FCB, STATUS_FILE_CLOSED, Irp, 0);
     }
 
     if( !(SendReq = LockRequest( Irp, IrpSp, FALSE, &LockMode )) )
@@ -1042,7 +1050,7 @@ AfdPacketSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     if (FCB->SendClosed)
     {
         AFD_DbgPrint(MIN_TRACE,("No more sends\n"));
-        return UnlockAndMaybeComplete(FCB, STATUS_FILE_CLOSED, Irp, 0);
+        return UnlockAndMaybeComplete(FCB, STATUS_END_OF_FILE, Irp, 0);
     }
 
     if( !(SendReq = LockRequest( Irp, IrpSp, FALSE, &LockMode )) )
