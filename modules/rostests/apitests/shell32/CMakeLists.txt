@@ -31,6 +31,7 @@ list(APPEND SOURCE
     GetDisplayNameOf.cpp
     GUIDFromString.cpp
     IconPositions.cpp
+    ImageAssociations.cpp
     LockServer.cpp
     Int64ToString.cpp
     IShellFolderViewCB.cpp

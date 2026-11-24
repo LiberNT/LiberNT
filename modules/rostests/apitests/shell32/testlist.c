@@ -31,6 +31,7 @@ extern void func_FindExecutable(void);
 extern void func_GetDisplayNameOf(void);
 extern void func_GUIDFromString(void);
 extern void func_IconPositions(void);
+extern void func_ImageAssociations(void);
 extern void func_ILCreateFromPath(void);
 extern void func_ILIsEqual(void);
 extern void func_Int64ToString(void);
@@ -135,6 +136,7 @@ const struct test winetest_testlist[] =
     { "GetDisplayNameOf", func_GetDisplayNameOf },
     { "GUIDFromString", func_GUIDFromString },
     { "IconPositions", func_IconPositions },
+    { "ImageAssociations", func_ImageAssociations },
     { "ILCreateFromPath", func_ILCreateFromPath },
     { "ILIsEqual", func_ILIsEqual },
     { "Int64ToString", func_Int64ToString },
