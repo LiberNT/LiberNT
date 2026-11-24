@@ -2075,8 +2075,8 @@ HKLM,"SYSTEM\CurrentControlSet\Services\rspndr","Start",0x00010001,0x00000002
 HKLM,"SYSTEM\CurrentControlSet\Services\rspndr","Type",0x00010001,0x00000001
 
 ; Quality Windows Audio Video Experience
-; FIXME: Windows also depends on psched (the packet scheduler); LiberNT marks qWAVE traffic in tcpip instead
-HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE","DependOnService",0x00010000,"RpcSs","QWAVEdrv"
+; FIXME: Windows also depends on psched (the packet scheduler); LiberNT marks qWAVE traffic in tcpip and shapes none
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE","DependOnService",0x00010000,"RpcSs","QWAVEdrv","lltdio"
 HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE","Description",0x00000000,"Provides network quality of service to audio and video streaming applications."
 HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE","DisplayName",0x00000000,"Quality Windows Audio Video Experience"
 HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE","ErrorControl",0x00010001,0x00000001
