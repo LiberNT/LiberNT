@@ -439,8 +439,7 @@ Status ParsePackageAgreements(const YamlNode *node, std::vector<PackageAgreement
     }
     for (const PackageAgreement &agreement : agreements)
     {
-        if (agreement.label.size() > 100 || agreement.text.size() > 10000 || agreement.url.size() > 2048 ||
-            (agreement.text.empty() && agreement.url.empty()))
+        if (agreement.label.size() > 100 || agreement.text.size() > 10000 || agreement.url.size() > 2048)
             return Status::Fail(ERROR_BAD_FORMAT, "package manifest contains an invalid agreement");
     }
     return Status::Ok();
@@ -841,6 +840,15 @@ Status RunManifestSelfTests()
         agreements.agreements[0].text != "Read these terms before installing." ||
         agreements.agreements[0].url != "https://example.test/terms")
         return Status::Fail(ERROR_ASSERTION_FAILURE, "package agreement parser self-test failed");
+    status = ParseInstallerManifest("PackageIdentifier: Example.Labels\nPackageVersion: 1.0\nAgreements:\n"
+                                    "- AgreementUrl: https://example.test/eula\n- AgreementLabel: EULA\n", agreements);
+    if (!status || agreements.agreements.size() != 2 || !agreements.hasAgreements ||
+        agreements.agreements[0].url != "https://example.test/eula" || agreements.agreements[1].label != "EULA" ||
+        !agreements.agreements[1].text.empty() || !agreements.agreements[1].url.empty())
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "partial package agreement self-test failed");
+    if (ParseInstallerManifest("PackageIdentifier: Example.Long\nPackageVersion: 1.0\nAgreements:\n- AgreementLabel: " +
+                               std::string(101, 'x') + "\n", agreements))
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "package agreement label limit self-test failed");
     if (UrlEncodePath("manifests/a/A+B/1.0/A+B.yaml") != L"manifests/a/A%2BB/1.0/A%2BB.yaml")
         return Status::Fail(ERROR_ASSERTION_FAILURE, "URL encoder self-test failed");
 

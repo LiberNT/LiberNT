@@ -615,3 +615,35 @@ START_TEST(dependency)
     CloseProcesses(L"clipx.exe");
     UninstallPackage(Package.Id);
 }
+
+START_TEST(agreements)
+{
+    static const PCWSTR Id = L"Microsoft.RemoteHelp";
+    WCHAR Arguments[512];
+    DWORD ExitCode;
+
+    if (ArpHasDisplayName(L"Remote Help"))
+    {
+        skip("%ls is already installed\n", Id);
+        return;
+    }
+    if (!SourceAvailable(Id))
+        return;
+
+    StringCchPrintfW(Arguments, _countof(Arguments), L"show --id %s -e --source winget --version 5.2.1210.0", Id);
+    if (RunTool(Arguments, &ExitCode))
+    {
+        ok(ExitCode == 0, "show returned 0x%08lx:\n%s\n", ExitCode, Output);
+        ok(OutputContains(L"End User License Agreement (EULA)"), "show output does not name the agreement label:\n%s\n", Output);
+        ok(OutputContains(L"https://learn.microsoft.com/en-us/legal/remote-help/microsoft-remote-help-license-terms"),
+           "show output does not name the agreement URL:\n%s\n", Output);
+    }
+
+    StringCchPrintfW(Arguments, _countof(Arguments),
+                     L"install --id %s -e --source winget --version 5.2.1210.0 --silent --disable-interactivity", Id);
+    if (RunTool(Arguments, &ExitCode))
+    {
+        ok(ExitCode != 0, "install without accepting the agreements returned 0:\n%s\n", Output);
+        ok(!ArpHasDisplayName(L"Remote Help"), "%ls was installed without accepting its agreements\n", Id);
+    }
+}
