@@ -105,6 +105,7 @@ typedef struct _POWRPROF_PROCESSOR_POLICY_VALUES
     DWORD EnergyPreference;
 } POWRPROF_PROCESSOR_POLICY_VALUES;
 
+/* TODO: Windows 11 keeps the schemes machine-wide in Control\Power\User\PowerSchemes, written only by the Power service; this per-user store has no broker */
 static const WCHAR szModernPowerSchemes[] = L"Control Panel\\PowerCfg\\PowerSchemes";
 static const WCHAR szActivePowerScheme[] = L"ActivePowerScheme";
 static const WCHAR szAcSettingIndex[] = L"ACSettingIndex";
