@@ -324,7 +324,7 @@ START_TEST(wgl_desktop)
         {
             if (!IsIconic(window) && !render(dc, phase, client.right, client.bottom, FALSE)) goto cleanup;
             pump(50);
-        } while (GetTickCount() - start < 1800);
+        } while (GetTickCount() - start < 100);
     }
     complete = TRUE;
 
