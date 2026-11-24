@@ -39,6 +39,7 @@ public:
 
 private:
     std::wstring DefaultPackageDirectory(const PackageRecord &package) const;
+    void RemoveInstaller(const PackageRecord &package, const std::wstring &path) const;
     Status Execute(const std::wstring &commandLine, const std::wstring &workingDirectory, DWORD &exitCode) const;
 
     HttpClient http_;
