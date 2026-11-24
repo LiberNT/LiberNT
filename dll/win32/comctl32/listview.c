@@ -3102,6 +3102,9 @@ static BOOL LISTVIEW_Arrange(LISTVIEW_INFO *infoPtr, INT nAlignCode)
         return TRUE;
     }
 #endif
+#ifdef __REACTOS__
+    /* FIXME: Windows arranges icons in their position order and ignores LVM_SETITEMPOSITION while auto-arranging */
+#endif
     for (i = 0; i < infoPtr->nItemCount; i++)
     {
 	next_pos(infoPtr, &pos);
