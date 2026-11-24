@@ -10,7 +10,7 @@
 
 #define UMD2D_WIDTH  64u
 #define UMD2D_HEIGHT 64u
-#define UMDFLIP_HOLD_MS 4000u
+#define UMDFLIP_HOLD_MS 50u
 
 typedef HRESULT (WINAPI *PFN_D3DUmdRtCreateDeviceCallbacks)(
     D3DKMT_HANDLE,
