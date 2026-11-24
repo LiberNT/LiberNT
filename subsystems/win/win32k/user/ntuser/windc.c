@@ -162,6 +162,39 @@ DceAllocDCE(PWND Window OPTIONAL, DCE_TYPE Type)
   return(pDce);
 }
 
+static VOID
+DceGetSurfaceOrigin(_Out_ PPOINTL Origin)
+{
+  Origin->x = 0;
+  Origin->y = 0;
+  if (gpmdev != NULL && gpmdev->ppdevGlobal != NULL)
+     *Origin = gpmdev->ppdevGlobal->ptlOrigion;
+}
+
+/* The screen rectangle a window DC draws in; the desktop window's coordinates are screen coordinates */
+static VOID
+DceGetDrawableRect(_In_ PWND Window,
+                   _In_ ULONG Flags,
+                   _Out_ PRECTL Rect)
+{
+  ASSERT(Window != NULL);
+  if (UserIsDesktopWindow(Window))
+  {
+     Rect->left = 0;
+     Rect->top = 0;
+     Rect->right = Window->rcClient.right - Window->rcClient.left;
+     Rect->bottom = Window->rcClient.bottom - Window->rcClient.top;
+  }
+  else if (Flags & DCX_WINDOW)
+  {
+     *Rect = Window->rcWindow;
+  }
+  else
+  {
+     *Rect = Window->rcClient;
+  }
+}
+
 static VOID APIENTRY
 DceSetDrawable( PWND Window OPTIONAL,
                 HDC hDC,
@@ -169,21 +202,14 @@ DceSetDrawable( PWND Window OPTIONAL,
                 BOOL SetClipOrigin)
 {
   RECTL rect = {0,0,0,0};
+  POINTL SurfaceOrigin;
 
   if (Window)
-  {
-      if (Flags & DCX_WINDOW)
-      {
-         rect = Window->rcWindow;
-      }
-      else
-      {
-         rect = Window->rcClient;
-      }
-  }
+     DceGetDrawableRect(Window, Flags, &rect);
+  DceGetSurfaceOrigin(&SurfaceOrigin);
 
   /* Set DC Origin and Window Rectangle */
-  GreSetDCOrg( hDC, rect.left, rect.top, &rect);
+  GreSetDCOrg( hDC, rect.left - SurfaceOrigin.x, rect.top - SurfaceOrigin.y, &rect);
 }
 
 
@@ -310,6 +336,13 @@ noparent:
    }
 
    Dce->DCXFlags &= ~DCX_DCEDIRTY;
+   if (RgnVisible != NULL)
+   {
+      POINTL SurfaceOrigin;
+
+      DceGetSurfaceOrigin(&SurfaceOrigin);
+      REGION_bOffsetRgn(RgnVisible, -SurfaceOrigin.x, -SurfaceOrigin.y);
+   }
    GdiSelectVisRgn(Dce->hDC, RgnVisible);
    /* Tell GDI driver */
    if (Window)
@@ -1054,20 +1087,15 @@ DceResetActiveDCEs(PWND Window)
          }
          if (Window == CurrentWindow || IntIsChildWindow(Window, CurrentWindow))
          {
-            if (pDCE->DCXFlags & DCX_WINDOW)
-            {
-               DeltaX = CurrentWindow->rcWindow.left - dc->ptlDCOrig.x;
-               DeltaY = CurrentWindow->rcWindow.top - dc->ptlDCOrig.y;
-               dc->ptlDCOrig.x = CurrentWindow->rcWindow.left;
-               dc->ptlDCOrig.y = CurrentWindow->rcWindow.top;
-            }
-            else
-            {
-               DeltaX = CurrentWindow->rcClient.left - dc->ptlDCOrig.x;
-               DeltaY = CurrentWindow->rcClient.top - dc->ptlDCOrig.y;
-               dc->ptlDCOrig.x = CurrentWindow->rcClient.left;
-               dc->ptlDCOrig.y = CurrentWindow->rcClient.top;
-            }
+            RECTL rcDrawable;
+            POINTL SurfaceOrigin;
+
+            DceGetDrawableRect(CurrentWindow, pDCE->DCXFlags, &rcDrawable);
+            DceGetSurfaceOrigin(&SurfaceOrigin);
+            DeltaX = rcDrawable.left - SurfaceOrigin.x - dc->ptlDCOrig.x;
+            DeltaY = rcDrawable.top - SurfaceOrigin.y - dc->ptlDCOrig.y;
+            dc->ptlDCOrig.x = rcDrawable.left - SurfaceOrigin.x;
+            dc->ptlDCOrig.y = rcDrawable.top - SurfaceOrigin.y;
             DC_vSetBrushOrigin(dc, dc->dclevel.ptlBrushOrigin.x, dc->dclevel.ptlBrushOrigin.y);
 
             if (NULL != dc->dclevel.prgnClip)
