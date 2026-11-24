@@ -499,7 +499,7 @@ HvSyncHive(
 #if !defined(CMLIB_HOST) && !defined(_BLDR_)
     BOOLEAN HardErrors;
 #endif
-    BOOLEAN LogOnly;
+    BOOLEAN LogOnly, HasLog;
 
     ASSERT(!RegistryHive->ReadOnly);
     ASSERT(RegistryHive->Signature == HV_HHIVE_SIGNATURE);
@@ -537,6 +537,7 @@ HvSyncHive(
 
 #if !defined(CMLIB_HOST) && !defined(_BLDR_)
     LogOnly = HvpIsLogOnlyHive(RegistryHive);
+    HasLog = LogOnly;
     if (LogOnly && !HvpPrepareUnreconciledVector(RegistryHive))
     {
         if (RegistryHive->CurrentLogOffset && !HvpReconcileHive(RegistryHive))
@@ -548,8 +549,10 @@ HvSyncHive(
     }
 #else
     LogOnly = FALSE;
+    HasLog = TRUE;
 #endif
-    if (!HvpWriteLog(RegistryHive, LogOnly))
+    /* A hive whose log file could not be opened is written straight to its primary file */
+    if (HasLog && !HvpWriteLog(RegistryHive, LogOnly))
     {
         DPRINT1("Failed to write the hive log\n");
 #if !defined(CMLIB_HOST) && !defined(_BLDR_)
