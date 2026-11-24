@@ -830,7 +830,8 @@ DxgkpShouldRegisterDisplayBridge(
     TakeOverFromFallback = !RegisterDisplayBridge &&
                            Owner != NULL &&
                            DxgkPostDisplayCoreOutranks(DxgkpPostDisplayRole(Claimant),
-                                                       DxgkpPostDisplayRole(Owner));
+                                                       DxgkpPostDisplayRole(Owner)) &&
+                           DxgkAdapterHasMemoryResources(Claimant->TranslatedResources);
 
     if (OwnerDeviceObject != NULL)
         ObDereferenceObject(OwnerDeviceObject);
@@ -869,6 +870,9 @@ DxgkpShouldRegisterDisplayBridge(
         KeReleaseMutex(&g_PostDisplayOwnershipMutex, FALSE);
     }
 
+    /* Source displays skip display-only adapters, so each of them gets a bridge of its own */
+    if (Claimant->MiniportContext->IsDisplayOnlyDriver)
+        RegisterDisplayBridge = TRUE;
     if (!RegisterDisplayBridge)
     {
         DXGKRNL_WARN("DISPLAY_BRIDGE: adapter %p did not claim POST ownership; "

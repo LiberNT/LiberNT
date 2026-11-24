@@ -84,7 +84,6 @@ typedef struct _DXGKP_DISPLAY_BRIDGE
 } DXGKP_DISPLAY_BRIDGE, *PDXGKP_DISPLAY_BRIDGE;
 
 static KSPIN_LOCK g_DisplayBridgeLock;
-static LONG g_DisplayBridgeCount;
 
 static
 PDXGKP_DISPLAY_BRIDGE
@@ -5340,7 +5339,6 @@ DxgkpCloseDisplayBridge(
 
     KeAcquireSpinLock(&g_DisplayBridgeLock, &OldIrql);
     Adapter->DisplayBridge = NULL;
-    g_DisplayBridgeCount--;
     KeReleaseSpinLock(&g_DisplayBridgeLock, OldIrql);
     ExWaitForRundownProtectionRelease(&Bridge->Rundown);
     Bridge->Adapter = NULL;
@@ -6179,11 +6177,6 @@ DxgkDisplayRegister(
         DXGKRNL_TRACE("DxgkDisplayRegister: already registered for this adapter\n");
         return STATUS_SUCCESS;
     }
-    if (InterlockedCompareExchange(&g_DisplayBridgeCount, 0, 0) != 0)
-    {
-        DXGKRNL_ERR("DxgkDisplayRegister: the ReactOS display bridge already belongs to another adapter\n");
-        return STATUS_NOT_SUPPORTED;
-    }
 
     /* ---- Step 1: Find a free \Device\VideoN name ---- */
 
@@ -6260,7 +6253,6 @@ DxgkDisplayRegister(
 
     KeAcquireSpinLock(&g_DisplayBridgeLock, &OldIrql);
     Adapter->DisplayBridge = Bridge;
-    g_DisplayBridgeCount++;
     KeReleaseSpinLock(&g_DisplayBridgeLock, OldIrql);
     DeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
     DeviceObject->Flags |= DO_BUFFERED_IO;
@@ -6364,6 +6356,8 @@ DxgkDisplayRegister(
         DxgkpRegWriteDword(hDriverKey, L"DefaultSettings.FixedOutput", 0);
         DxgkpRegWriteDword(hDriverKey, L"Attach.RelativeX", 0);
         DxgkpRegWriteDword(hDriverKey, L"Attach.RelativeY", 0);
+        DxgkpRegWriteDword(hDriverKey, L"Attach.ToDesktop",
+                           (Adapter->PostDisplayWidth != 0 && Adapter->PostDisplayHeight != 0) ? 1 : 0);
 
         DXGKRNL_TRACE("DxgkDisplayRegister: driver settings key written "
                        "(Device%lu, display=%ls)\n",
