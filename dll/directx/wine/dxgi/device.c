@@ -18,6 +18,9 @@
  */
 
 #include "dxgi_private.h"
+#ifdef __REACTOS__
+#include <winternl.h>
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(dxgi);
 
@@ -340,6 +343,32 @@ static HRESULT STDMETHODCALLTYPE dxgi_device_ReclaimResources(IWineDXGIDevice *i
     return E_NOTIMPL;
 }
 
+#ifdef __REACTOS__
+/* The completion signal needs an event handle with full event access */
+static HRESULT dxgi_device_check_completion_event(HANDLE event)
+{
+    OBJECT_BASIC_INFORMATION basic;
+    union
+    {
+        OBJECT_TYPE_INFORMATION info;
+        BYTE buffer[sizeof(OBJECT_TYPE_INFORMATION) + 64 * sizeof(WCHAR)];
+    } type;
+    static const WCHAR event_type[] = L"Event";
+
+    if (!event)
+        return E_INVALIDARG;
+    if (NtQueryObject(event, ObjectTypeInformation, &type, sizeof(type), NULL) < 0 ||
+            type.info.TypeName.Length != sizeof(event_type) - sizeof(WCHAR) ||
+            memcmp(type.info.TypeName.Buffer, event_type, sizeof(event_type) - sizeof(WCHAR)))
+        return E_INVALIDARG;
+    if (NtQueryObject(event, ObjectBasicInformation, &basic, sizeof(basic), NULL) < 0)
+        return E_INVALIDARG;
+    if ((basic.GrantedAccess & EVENT_ALL_ACCESS) != EVENT_ALL_ACCESS)
+        return E_ACCESSDENIED;
+    return S_OK;
+}
+#endif
+
 static HRESULT STDMETHODCALLTYPE dxgi_device_EnqueueSetEvent(IWineDXGIDevice *iface, HANDLE event)
 {
     struct dxgi_device *device = impl_from_IWineDXGIDevice(iface);
@@ -347,6 +376,10 @@ static HRESULT STDMETHODCALLTYPE dxgi_device_EnqueueSetEvent(IWineDXGIDevice *if
 
     TRACE("iface %p, event %p.\n", iface, event);
 
+#ifdef __REACTOS__
+    if ((hr = dxgi_device_check_completion_event(event)) != S_OK)
+        return hr;
+#endif
     wined3d_mutex_lock();
     hr = wined3d_device_enqueue_set_event(device->wined3d_device, event);
     wined3d_mutex_unlock();
