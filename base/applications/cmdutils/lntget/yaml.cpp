@@ -413,7 +413,7 @@ private:
                 return false;
             if (!IsSequenceEntry(line, lineIndent))
                 return true;
-            node.items.emplace_back();
+            node.items.push_back(YamlNode());
             YamlNode &item = node.items.back();
             std::size_t column = lineIndent + 1;
             while (column < line.size() && IsBlankCharacter(line[column]))
@@ -452,7 +452,7 @@ private:
                 if (member.first == key)
                     return Fail("duplicate key " + key);
             }
-            node.members.emplace_back(key, YamlNode());
+            node.members.push_back(std::make_pair(key, YamlNode()));
             YamlNode &value = node.members.back().second;
             while (column < line.size() && IsBlankCharacter(line[column]))
                 ++column;
@@ -785,7 +785,7 @@ private:
             }
             if (node.IsSequence())
             {
-                node.items.emplace_back();
+                node.items.push_back(YamlNode());
                 if (!ParseFlowNode(line, column, depth, node.items.back()))
                     return false;
             }
@@ -802,7 +802,7 @@ private:
                         return Fail("duplicate key " + key.scalar);
                     }
                 }
-                node.members.emplace_back(key.scalar, YamlNode());
+                node.members.push_back(std::make_pair(key.scalar, YamlNode()));
                 if (!SkipFlowSpace(line, column))
                     return false;
                 if (lines_[line][column] == ':')
