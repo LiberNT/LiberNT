@@ -25,7 +25,8 @@ NpCancelListeningQueueIrp(IN PDEVICE_OBJECT DeviceObject,
     FsRtlEnterFileSystem();
     NpAcquireExclusiveVcb();
 
-    RemoveEntryList(&Irp->Tail.Overlay.ListEntry);
+    if (!IsListEmpty(&Irp->Tail.Overlay.ListEntry))
+        RemoveEntryList(&Irp->Tail.Overlay.ListEntry);
 
     NpReleaseVcb();
     FsRtlExitFileSystem();
