@@ -1,6 +1,7 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_dependency(void);
 extern void func_exe(void);
 extern void func_gui(void);
 extern void func_guiuninstall(void);
@@ -14,6 +15,7 @@ extern void func_wix(void);
 
 const struct test winetest_testlist[] =
 {
+    { "dependency", func_dependency },
     { "exe", func_exe },
     { "gui", func_gui },
     { "guiuninstall", func_guiuninstall },

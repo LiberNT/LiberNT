@@ -9,6 +9,7 @@
 #include <windows.h>
 #include <strsafe.h>
 #include <string.h>
+#include <tlhelp32.h>
 
 #define TOOL_TIMEOUT (15 * 60 * 1000)
 #define REMOVAL_TIMEOUT (20 * 1000)
@@ -542,4 +543,75 @@ START_TEST(portablefiles)
         DeleteFileW(UserFile);
         RemoveDirectoryW(Directory);
     }
+}
+
+static void
+CloseProcesses(PCWSTR ImageName)
+{
+    PROCESSENTRY32W Entry = { sizeof(Entry) };
+    HANDLE Snapshot, Process;
+    BOOL More;
+
+    Snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (Snapshot == INVALID_HANDLE_VALUE)
+        return;
+    for (More = Process32FirstW(Snapshot, &Entry); More; More = Process32NextW(Snapshot, &Entry))
+    {
+        if (_wcsicmp(Entry.szExeFile, ImageName))
+            continue;
+        trace("closing %ls (%lu) before the uninstall\n", ImageName, Entry.th32ProcessID);
+        Process = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, Entry.th32ProcessID);
+        if (!Process)
+            continue;
+        TerminateProcess(Process, 0);
+        WaitForSingleObject(Process, 5000);
+        CloseHandle(Process);
+    }
+    CloseHandle(Snapshot);
+}
+
+START_TEST(dependency)
+{
+    static const PACKAGE Package = { L"bluemars.ClipX", L"nullsoft", NULL, L"ClipX", L"%ProgramFiles%\\ClipX\\clipx.exe" };
+    WCHAR Arguments[512];
+    SYSTEM_INFO System;
+    PCWSTR Dependency;
+    DWORD ExitCode;
+
+    GetNativeSystemInfo(&System);
+    if (System.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 || System.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_ARM64)
+        Dependency = L"Microsoft.VCRedist.2015+.x64";
+    else if (System.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL)
+        Dependency = L"Microsoft.VCRedist.2015+.x86";
+    else
+    {
+        skip("%ls has no installer for this architecture\n", Package.Id);
+        return;
+    }
+    if (ArpHasDisplayName(Package.DisplayName) || PackageFileExists(&Package))
+    {
+        skip("%ls is already installed\n", Package.Id);
+        return;
+    }
+    if (!SourceAvailable(Package.Id))
+        return;
+
+    StringCchPrintfW(Arguments, _countof(Arguments),
+                     L"install --id %s -e --source winget --version 2.0.0.1 --silent --accept-package-agreements --disable-interactivity",
+                     Package.Id);
+    if (!RunTool(Arguments, &ExitCode))
+        return;
+    ok(ExitCode == 0, "install returned 0x%08lx:\n%s\n", ExitCode, Output);
+    ok(OutputContains(Dependency), "install output does not name the dependency %ls:\n%s\n", Dependency, Output);
+    ok(ArpHasDisplayName(Package.DisplayName), "no installed application named %ls\n", Package.DisplayName);
+    ok(PackageFileExists(&Package), "%ls is missing\n", Package.File);
+
+    StringCchPrintfW(Arguments, _countof(Arguments), L"list --id %s -e --source winget", Dependency);
+    if (RunTool(Arguments, &ExitCode))
+        ok(ExitCode == 0, "the dependency %ls is not installed: 0x%08lx\n%s\n", Dependency, ExitCode, Output);
+    if (!ArpHasDisplayName(Package.DisplayName))
+        return;
+
+    CloseProcesses(L"clipx.exe");
+    UninstallPackage(Package.Id);
 }

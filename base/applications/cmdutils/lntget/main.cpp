@@ -18,6 +18,7 @@
 #include "gui.hpp"
 #include "source.hpp"
 #include "util.hpp"
+#include "yaml.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -658,7 +659,10 @@ Status UpgradeCommand(SourceManager &source, const CommandOptions &options)
 
 Status SelfTestCommand()
 {
-    Status status = RunManifestSelfTests();
+    Status status = RunYamlSelfTests();
+    if (!status)
+        return status;
+    status = RunManifestSelfTests();
     if (!status)
         return status;
     status = RunHashSelfTests();

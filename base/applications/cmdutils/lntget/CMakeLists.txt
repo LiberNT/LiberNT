@@ -18,7 +18,8 @@ list(APPEND SOURCE
     source.cpp
     source_trust.cpp
     sqlite_index.cpp
-    util.cpp)
+    util.cpp
+    yaml.cpp)
 
 add_rc_deps(lntget.rc
     ${CMAKE_CURRENT_SOURCE_DIR}/res/lntget.ico
