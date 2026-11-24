@@ -328,6 +328,96 @@ TestModeLists(void)
     }
 }
 
+static void
+CheckDisplaySize(PCWSTR Device, DWORD Width, DWORD Height, const char *What)
+{
+    DEVMODEW Current;
+    MONITORINFOEXW Info;
+    HMONITOR Monitor;
+    RECT Desktop;
+    POINT Center;
+
+    ZeroMemory(&Current, sizeof(Current));
+    Current.dmSize = sizeof(Current);
+    ok(EnumDisplaySettingsW(Device, ENUM_CURRENT_SETTINGS, &Current), "%s: %ls has no current settings\n", What, Device);
+    ok(Current.dmPelsWidth == Width && Current.dmPelsHeight == Height, "%s: %ls is %lux%lu, expected %lux%lu\n",
+       What, Device, Current.dmPelsWidth, Current.dmPelsHeight, Width, Height);
+    Center.x = Current.dmPosition.x + (LONG)Width / 2;
+    Center.y = Current.dmPosition.y + (LONG)Height / 2;
+    Monitor = MonitorFromPoint(Center, MONITOR_DEFAULTTONULL);
+    ZeroMemory(&Info, sizeof(Info));
+    Info.cbSize = sizeof(Info);
+    ok(Monitor != NULL && GetMonitorInfoW(Monitor, (MONITORINFO *)&Info), "%s: no monitor at (%ld,%ld)\n", What, Center.x, Center.y);
+    ok(!wcscmp(Info.szDevice, Device), "%s: the monitor at (%ld,%ld) is %ls\n", What, Center.x, Center.y, Info.szDevice);
+    ok(Info.rcMonitor.left == Current.dmPosition.x && Info.rcMonitor.top == Current.dmPosition.y &&
+       Info.rcMonitor.right - Info.rcMonitor.left == (LONG)Width && Info.rcMonitor.bottom - Info.rcMonitor.top == (LONG)Height,
+       "%s: %ls monitor %s, expected %lux%lu at (%ld,%ld)\n", What, Device, wine_dbgstr_rect(&Info.rcMonitor),
+       Width, Height, Current.dmPosition.x, Current.dmPosition.y);
+    ok(Info.rcMonitor.right <= GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN) &&
+       Info.rcMonitor.bottom <= GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN),
+       "%s: %ls monitor %s is outside the virtual screen\n", What, Device, wine_dbgstr_rect(&Info.rcMonitor));
+    ok(GetWindowRect(GetDesktopWindow(), &Desktop), "GetWindowRect of the desktop failed with %lu\n", GetLastError());
+    ok(Desktop.left == GetSystemMetrics(SM_XVIRTUALSCREEN) && Desktop.top == GetSystemMetrics(SM_YVIRTUALSCREEN) &&
+       Desktop.right - Desktop.left == GetSystemMetrics(SM_CXVIRTUALSCREEN) &&
+       Desktop.bottom - Desktop.top == GetSystemMetrics(SM_CYVIRTUALSCREEN),
+       "%s: the desktop window is %s\n", What, wine_dbgstr_rect(&Desktop));
+}
+
+static void
+TestModeChange(void)
+{
+    DISPLAY_DEVICEW Device;
+    DEVMODEW Original, Mode;
+    DWORD Index;
+    LONG Result;
+    BOOL Found = FALSE;
+
+    for (Index = 0; !Found; Index++)
+    {
+        Device.cb = sizeof(Device);
+        if (!EnumDisplayDevicesW(NULL, Index, &Device, 0))
+            break;
+        Found = (Device.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) &&
+                !(Device.StateFlags & (DISPLAY_DEVICE_PRIMARY_DEVICE | DISPLAY_DEVICE_MIRRORING_DRIVER));
+    }
+    if (!Found)
+    {
+        skip("no display beside the primary one\n");
+        return;
+    }
+    ZeroMemory(&Original, sizeof(Original));
+    Original.dmSize = sizeof(Original);
+    ok(EnumDisplaySettingsW(Device.DeviceName, ENUM_CURRENT_SETTINGS, &Original), "%ls has no current settings\n", Device.DeviceName);
+    Found = FALSE;
+    for (Index = 0; !Found; Index++)
+    {
+        ZeroMemory(&Mode, sizeof(Mode));
+        Mode.dmSize = sizeof(Mode);
+        if (!EnumDisplaySettingsW(Device.DeviceName, Index, &Mode))
+            break;
+        Found = Mode.dmBitsPerPel == 32 && Mode.dmPelsWidth >= 800 && Mode.dmPelsHeight >= 600 &&
+                (Mode.dmPelsWidth != Original.dmPelsWidth || Mode.dmPelsHeight != Original.dmPelsHeight);
+    }
+    if (!Found)
+    {
+        skip("%ls offers one size only\n", Device.DeviceName);
+        return;
+    }
+    Mode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_BITSPERPEL;
+    Result = ChangeDisplaySettingsExW(Device.DeviceName, &Mode, NULL, 0, NULL);
+    ok(Result == DISP_CHANGE_SUCCESSFUL, "changing %ls to %lux%lu returned %ld\n", Device.DeviceName,
+       Mode.dmPelsWidth, Mode.dmPelsHeight, Result);
+    if (Result == DISP_CHANGE_SUCCESSFUL)
+        CheckDisplaySize(Device.DeviceName, Mode.dmPelsWidth, Mode.dmPelsHeight, "changed");
+
+    Original.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_BITSPERPEL;
+    Result = ChangeDisplaySettingsExW(Device.DeviceName, &Original, NULL, 0, NULL);
+    ok(Result == DISP_CHANGE_SUCCESSFUL, "restoring %ls to %lux%lu returned %ld\n", Device.DeviceName,
+       Original.dmPelsWidth, Original.dmPelsHeight, Result);
+    if (Result == DISP_CHANGE_SUCCESSFUL)
+        CheckDisplaySize(Device.DeviceName, Original.dmPelsWidth, Original.dmPelsHeight, "restored");
+}
+
 START_TEST(MultiMonitor)
 {
     MONITOR_LIST List;
@@ -369,6 +459,7 @@ START_TEST(MultiMonitor)
        wine_dbgstr_rect(&Virtual));
     TestDisplayConfig(&List);
     TestModeLists();
+    TestModeChange();
 
     if (List.Count < 2)
     {

@@ -904,6 +904,46 @@ UserDisplayTopologyChanged(VOID)
     return bChanged;
 }
 
+static BOOL
+UserSwitchMultiDisplayMode(
+    _In_ PPDEVOBJ ppdev,
+    _In_ PDEVMODEW pdm)
+{
+    PVOID pvOldCursor;
+    ULONG_PTR ulResult;
+    PDESKTOP pdesk;
+    ULONG i;
+    BOOL bSuccess;
+
+    ASSERT(gpmdev != NULL);
+    ASSERT(gpmdev->cDev > 1);
+    pvOldCursor = UserSetCursor(NULL, TRUE);
+    IntCompositionOnDisplayChangeBegin();
+    bSuccess = PDEVOBJ_bSwitchMultiDisplayMode(gpmdev, ppdev, pdm);
+    IntCompositionOnDisplayChangeEnd();
+    pvOldCursor = UserSetCursor(pvOldCursor, TRUE);
+    ASSERT(pvOldCursor == NULL);
+    if (!bSuccess)
+        return FALSE;
+
+    for (i = 0; i < gpmdev->cDev; i++)
+        UserUpdateMonitorSize((HDEV)gpmdev->dev[i].ppdev);
+    InitMetrics();
+    pdesk = IntGetActiveDesktop();
+    if (pdesk != NULL)
+        co_IntShowDesktop(pdesk, gpsi->aiSysMet[SM_CXVIRTUALSCREEN], gpsi->aiSysMet[SM_CYVIRTUALSCREEN], FALSE);
+    UserClipCursor(NULL);
+    co_IntSendMessageTimeout(HWND_BROADCAST,
+                             WM_DISPLAYCHANGE,
+                             gpsi->BitCount,
+                             MAKELONG(gpsi->aiSysMet[SM_CXSCREEN], gpsi->aiSysMet[SM_CYSCREEN]),
+                             SMTO_NORMAL,
+                             100,
+                             &ulResult);
+    UserRedrawDesktop();
+    return TRUE;
+}
+
 /* A detach, a display outside the desktop, or any display of a multi-display desktop.
  * Returns FALSE for an ordinary mode change of a single-display desktop. */
 static BOOL
@@ -975,17 +1015,50 @@ UserChangeDisplayTopology(
                ppdev->pdmwDev->dmDisplayFrequency == newDevMode->dmDisplayFrequency &&
                ppdev->pdmwDev->dmPosition.x == newDevMode->dmPosition.x &&
                ppdev->pdmwDev->dmPosition.y == newDevMode->dmPosition.y;
-    if (ppdev != NULL)
-        PDEVOBJ_vRelease(ppdev);
     lResult = DISP_CHANGE_SUCCESSFUL;
     if (!(flags & CDS_TEST) && (flags & CDS_UPDATEREGISTRY))
         lResult = UserStoreDisplayTopology(pustrDevice, newDevMode, TRUE, flags);
-    /* FIXME: a display joins a desktop, or a multi-display desktop changes, at the next start */
     if (lResult == DISP_CHANGE_SUCCESSFUL && !(flags & (CDS_TEST | CDS_NORESET)) && !bCurrent)
-        lResult = DISP_CHANGE_RESTART;
+    {
+        /* FIXME: a display joins a desktop at the next start */
+        if (ppdev == NULL || !UserSwitchMultiDisplayMode(ppdev, newDevMode))
+            lResult = DISP_CHANGE_RESTART;
+    }
+    if (ppdev != NULL)
+        PDEVOBJ_vRelease(ppdev);
     ExFreePoolWithTag(newDevMode, GDITAG_DEVMODE);
     *plResult = lResult;
     return TRUE;
+}
+
+/* Applies the stored settings of each display of a multi-display desktop whose displays stay the same */
+static LONG
+UserApplyStoredDisplaySettings(
+    _In_ DWORD flags)
+{
+    UNICODE_STRING ustrName;
+    DEVMODEW dm;
+    LONG lResult = DISP_CHANGE_SUCCESSFUL;
+    LONG lDisplay;
+    ULONG i;
+
+    ASSERT(gpmdev != NULL);
+    ASSERT(gpmdev->cDev > 1);
+    for (i = 0; i < gpmdev->cDev && lResult == DISP_CHANGE_SUCCESSFUL; i++)
+    {
+        ASSERT(gpmdev->dev[i].ppdev->pGraphicsDevice != NULL);
+        RtlInitUnicodeString(&ustrName, gpmdev->dev[i].ppdev->pGraphicsDevice->szWinDeviceName);
+        RtlZeroMemory(&dm, sizeof(dm));
+        dm.dmSize = sizeof(dm);
+        if (!NT_SUCCESS(UserEnumRegistryDisplaySettings(&ustrName, &dm)) ||
+            (dm.dmFields & (DM_PELSWIDTH | DM_PELSHEIGHT)) != (DM_PELSWIDTH | DM_PELSHEIGHT))
+        {
+            continue;
+        }
+        if (UserChangeDisplayTopology(&ustrName, &dm, flags & ~CDS_UPDATEREGISTRY, &lDisplay))
+            lResult = lDisplay;
+    }
+    return lResult;
 }
 
 LONG
@@ -1035,6 +1108,8 @@ UserChangeDisplaySettings(
         return DISP_CHANGE_BADMODE;
     }
 
+    if (!pdm && !pustrDevice && gpmdev != NULL && gpmdev->cDev > 1 && !UserDisplayTopologyChanged())
+        return UserApplyStoredDisplaySettings(flags);
     if (UserChangeDisplayTopology(pustrDevice, &dm, flags, &lResult))
         return lResult;
 

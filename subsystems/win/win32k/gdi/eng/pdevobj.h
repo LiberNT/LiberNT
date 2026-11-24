@@ -218,6 +218,13 @@ PDEVOBJ_bSwitchMode(
 
 BOOL
 NTAPI
+PDEVOBJ_bSwitchMultiDisplayMode(
+    _Inout_ PMDEVOBJ pmdev,
+    _Inout_ PPDEVOBJ ppdevDisplay,
+    _In_ PDEVMODEW pdm);
+
+BOOL
+NTAPI
 PDEVOBJ_bDynamicModeChange(
     _Inout_ PPDEVOBJ ppdev,
     _Inout_ PPDEVOBJ ppdev2);
