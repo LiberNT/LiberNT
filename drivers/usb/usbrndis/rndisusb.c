@@ -470,6 +470,7 @@ RndisUsbFindCdcEthernetDescriptor(
                         EthDesc->iMACAddress, EthDesc->wMaxSegmentSize);
 
                 Adapter->CdcMacAddressIndex = EthDesc->iMACAddress;
+                Adapter->CdcMcFilterCount = EthDesc->wNumberMCFilters;
                 return;
             }
         }

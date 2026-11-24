@@ -490,7 +490,8 @@ RndisSetPacketFilter(
             CdcFilter |= CDC_ECM_PACKET_TYPE_BROADCAST;
         if (PacketFilter & NDIS_PACKET_TYPE_PROMISCUOUS)
             CdcFilter |= CDC_ECM_PACKET_TYPE_PROMISCUOUS;
-        if (PacketFilter & NDIS_PACKET_TYPE_ALL_MULTICAST)
+        if ((PacketFilter & NDIS_PACKET_TYPE_ALL_MULTICAST) ||
+            ((PacketFilter & NDIS_PACKET_TYPE_MULTICAST) && Adapter->CdcMcAllFallback))
             CdcFilter |= CDC_ECM_PACKET_TYPE_ALL_MULTICAST;
 
         Status = RndisUsbSetEthernetPacketFilter(Adapter, CdcFilter);
