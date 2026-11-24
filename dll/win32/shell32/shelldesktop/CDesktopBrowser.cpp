@@ -21,11 +21,6 @@
 
 #include "shelldesktop.h"
 
-// Support for multiple monitors is disabled till LVM_SETWORKAREAS gets implemented
-#ifdef MULTIMONITOR_SUPPORT
-#include <atlcoll.h>
-#endif
-
 #include <dbt.h>
 #include <atlsimpcoll.h>
 
@@ -197,6 +192,7 @@ public:
     LRESULT OnEraseBkgnd(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnSettingChange(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
+    LRESULT OnDisplayChange(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnClose(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnOpenNewWindow(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
     LRESULT OnCommand(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
@@ -214,6 +210,7 @@ BEGIN_MSG_MAP(CBaseBar)
     MESSAGE_HANDLER(WM_SIZE, OnSize)
     MESSAGE_HANDLER(WM_SYSCOLORCHANGE, OnSettingChange)
     MESSAGE_HANDLER(WM_SETTINGCHANGE, OnSettingChange)
+    MESSAGE_HANDLER(WM_DISPLAYCHANGE, OnDisplayChange)
     MESSAGE_HANDLER(WM_CLOSE, OnClose)
     MESSAGE_HANDLER(WM_EXPLORER_OPEN_NEW_WINDOW, OnOpenNewWindow)
     MESSAGE_HANDLER(WM_COMMAND, OnCommand)
@@ -364,69 +361,58 @@ CDesktopBrowser::~CDesktopBrowser()
     }
 }
 
-#ifdef MULTIMONITOR_SUPPORT
-BOOL CALLBACK MonitorEnumProc(
-  _In_ HMONITOR hMonitor,
-  _In_ HDC      hdcMonitor,
-  _In_ LPRECT   lprcMonitor,
-  _In_ LPARAM   dwData
-)
+typedef struct _DESKTOP_WORK_AREAS
 {
-    CAtlList<RECT> *list = (CAtlList<RECT>*)dwData;
-    MONITORINFO MonitorInfo;
-    MonitorInfo.cbSize = sizeof(MonitorInfo);
-    if (::GetMonitorInfoW(hMonitor, &MonitorInfo))
-    {
-        list->AddTail(MonitorInfo.rcWork);
-    }
+    RECT Areas[LV_MAX_WORKAREAS];
+    UINT Count;
+} DESKTOP_WORK_AREAS;
 
+static BOOL CALLBACK CollectWorkArea(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
+{
+    DESKTOP_WORK_AREAS *pAreas = (DESKTOP_WORK_AREAS *)dwData;
+    MONITORINFO MonitorInfo = { sizeof(MonitorInfo) };
+
+    if (pAreas->Count >= _countof(pAreas->Areas) || !::GetMonitorInfoW(hMonitor, &MonitorInfo))
+        return TRUE;
+    if (MonitorInfo.dwFlags & MONITORINFOF_PRIMARY)
+    {
+        MoveMemory(&pAreas->Areas[1], &pAreas->Areas[0], pAreas->Count * sizeof(RECT));
+        pAreas->Areas[0] = MonitorInfo.rcWork;
+    }
+    else
+    {
+        pAreas->Areas[pAreas->Count] = MonitorInfo.rcWork;
+    }
+    pAreas->Count++;
     return TRUE;
 }
-#endif
 
 HRESULT CDesktopBrowser::_Resize()
 {
+    DESKTOP_WORK_AREAS WorkAreas = {};
     RECT rcNewSize;
+    HWND hwndListView = FindWindowExW(m_hWndShellView, NULL, WC_LISTVIEW, NULL);
 
-#ifdef MULTIMONITOR_SUPPORT
-
-    UINT cMonitors = GetSystemMetrics(SM_CMONITORS);
-    if (cMonitors == 1)
-    {
-        SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcNewSize, 0);
-    }
-    else
+    if (GetSystemMetrics(SM_CMONITORS) > 1)
     {
         SetRect(&rcNewSize,
                 GetSystemMetrics(SM_XVIRTUALSCREEN),
                 GetSystemMetrics(SM_YVIRTUALSCREEN),
                 GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
                 GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN));
+        EnumDisplayMonitors(NULL, NULL, CollectWorkArea, (LPARAM)&WorkAreas);
+        for (UINT i = 0; i < WorkAreas.Count; i++)
+            OffsetRect(&WorkAreas.Areas[i], -rcNewSize.left, -rcNewSize.top);
     }
-
-    ::MoveWindow(m_hWnd, rcNewSize.left, rcNewSize.top, rcNewSize.right - rcNewSize.left, rcNewSize.bottom - rcNewSize.top, TRUE);
-    ::MoveWindow(m_hWndShellView, 0, 0, rcNewSize.right - rcNewSize.left, rcNewSize.bottom - rcNewSize.top, TRUE);
-
-    if (cMonitors != 1)
+    else
     {
-        CAtlList<RECT> list;
-        EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, (LPARAM)&list);
-        RECT* prcWorkAreas = new RECT[list.GetCount()];
-        int i = 0;
-        for (POSITION it = list.GetHeadPosition(); it; list.GetNext(it))
-            prcWorkAreas[i++] = list.GetAt(it);
-
-        HWND hwndListView = FindWindowExW(m_hWndShellView, NULL, WC_LISTVIEW, NULL);
-
-        ::SendMessageW(hwndListView, LVM_SETWORKAREAS , i, (LPARAM)prcWorkAreas);
+        SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcNewSize, 0);
     }
 
-#else
-     SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcNewSize, 0);
+    if (hwndListView)
+        ::SendMessageW(hwndListView, LVM_SETWORKAREAS, WorkAreas.Count, WorkAreas.Count ? (LPARAM)WorkAreas.Areas : 0);
     ::MoveWindow(m_hWnd, rcNewSize.left, rcNewSize.top, rcNewSize.right - rcNewSize.left, rcNewSize.bottom - rcNewSize.top, TRUE);
     ::MoveWindow(m_hWndShellView, 0, 0, rcNewSize.right - rcNewSize.left, rcNewSize.bottom - rcNewSize.top, TRUE);
-
-#endif
     return S_OK;
 }
 
@@ -1258,17 +1244,24 @@ LRESULT CDesktopBrowser::OnSettingChange(UINT uMsg, WPARAM wParam, LPARAM lParam
     }
     SHSettingsChanged((LPCVOID)wParam, (PCWSTR)lParam); // Invalidate cached restrictions
 
+    if (uMsg == WM_SETTINGCHANGE && wParam == SPI_SETWORKAREA && m_hWndShellView != NULL)
+    {
+        _Resize();
+    }
+
     if (m_hWndShellView)
     {
         /* Forward the message */
         ::SendMessageW(m_hWndShellView, uMsg, wParam, lParam);
     }
 
-    if (uMsg == WM_SETTINGCHANGE && wParam == SPI_SETWORKAREA && m_hWndShellView != NULL)
-    {
-        _Resize();
-    }
+    return 0;
+}
 
+LRESULT CDesktopBrowser::OnDisplayChange(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+{
+    if (m_hWndShellView)
+        _Resize();
     return 0;
 }
 

@@ -341,6 +341,166 @@ static void TestDesktop(void)
     DeleteTestFile(szPath);
 }
 
+static BOOL CALLBACK FindSecondaryMonitor(HMONITOR hMonitor, HDC hdc, LPRECT prc, LPARAM lParam)
+{
+    MONITORINFO info = { sizeof(info) };
+    if (GetMonitorInfoW(hMonitor, &info) && !(info.dwFlags & MONITORINFOF_PRIMARY))
+    {
+        *(HMONITOR *)lParam = hMonitor;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+typedef struct _DESKTOP_AREAS
+{
+    HWND hwndList;
+    RECT rcAreas[LV_MAX_WORKAREAS];
+    UINT nAreas;
+} DESKTOP_AREAS;
+
+static BOOL ReadDesktopWorkAreas(DESKTOP_AREAS *pAreas)
+{
+    struct
+    {
+        UINT nAreas;
+        RECT rcAreas[LV_MAX_WORKAREAS];
+    } remote = {};
+    DWORD dwProcessId = 0;
+    BOOL bRead = FALSE;
+
+    GetWindowThreadProcessId(pAreas->hwndList, &dwProcessId);
+    HANDLE hProcess = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE, FALSE, dwProcessId);
+    if (!hProcess)
+        return FALSE;
+    BYTE *pRemote = (BYTE *)VirtualAllocEx(hProcess, NULL, sizeof(remote), MEM_COMMIT, PAGE_READWRITE);
+    if (pRemote)
+    {
+        SendMessageW(pAreas->hwndList, LVM_GETNUMBEROFWORKAREAS, 0, (LPARAM)pRemote);
+        SendMessageW(pAreas->hwndList, LVM_GETWORKAREAS, LV_MAX_WORKAREAS, (LPARAM)(pRemote + FIELD_OFFSET(decltype(remote), rcAreas)));
+        bRead = ReadProcessMemory(hProcess, pRemote, &remote, sizeof(remote), NULL);
+        VirtualFreeEx(hProcess, pRemote, 0, MEM_RELEASE);
+    }
+    CloseHandle(hProcess);
+    if (!bRead)
+        return FALSE;
+    pAreas->nAreas = min(remote.nAreas, (UINT)LV_MAX_WORKAREAS);
+    CopyMemory(pAreas->rcAreas, remote.rcAreas, sizeof(pAreas->rcAreas));
+    return TRUE;
+}
+
+static BOOL CALLBACK CheckMonitorWorkArea(HMONITOR hMonitor, HDC hdc, LPRECT prc, LPARAM lParam)
+{
+    const DESKTOP_AREAS *pAreas = (const DESKTOP_AREAS *)lParam;
+    MONITORINFO info = { sizeof(info) };
+    BOOL bFound = FALSE;
+
+    if (!GetMonitorInfoW(hMonitor, &info))
+        return TRUE;
+    MapWindowPoints(NULL, pAreas->hwndList, (POINT *)&info.rcWork, 2);
+    for (UINT i = 0; i < pAreas->nAreas && !bFound; ++i)
+        bFound = EqualRect(&pAreas->rcAreas[i], &info.rcWork);
+    ok(bFound, "The desktop has no work area %s for monitor %p\n", wine_dbgstr_rect(&info.rcWork), hMonitor);
+    return TRUE;
+}
+
+static void TestDesktopDisplays(void)
+{
+    if (GetSystemMetrics(SM_CMONITORS) < 2)
+    {
+        skip("The desktop has one display\n");
+        return;
+    }
+
+    HWND hwndProgman = FindWindowW(L"Progman", NULL);
+    HWND hwndView = hwndProgman ? FindWindowExW(hwndProgman, NULL, L"SHELLDLL_DefView", NULL) : NULL;
+    HWND hwndList = hwndView ? FindWindowExW(hwndView, NULL, WC_LISTVIEWW, NULL) : NULL;
+    if (!hwndList)
+    {
+        skip("No desktop list view\n");
+        return;
+    }
+
+    RECT rcDesktop, rcVirtual;
+    SetRect(&rcVirtual, GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
+            GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN));
+    GetWindowRect(hwndProgman, &rcDesktop);
+    ok(EqualRect(&rcDesktop, &rcVirtual), "The desktop window is %s, the displays cover %s\n",
+       wine_dbgstr_rect(&rcDesktop), wine_dbgstr_rect(&rcVirtual));
+    GetWindowRect(hwndList, &rcDesktop);
+    ok(EqualRect(&rcDesktop, &rcVirtual), "The desktop list view is %s, the displays cover %s\n",
+       wine_dbgstr_rect(&rcDesktop), wine_dbgstr_rect(&rcVirtual));
+
+    DESKTOP_AREAS areas = {};
+    areas.hwndList = hwndList;
+    ok(ReadDesktopWorkAreas(&areas), "Cannot read the desktop work areas (%lu)\n", GetLastError());
+    ok_int(areas.nAreas, GetSystemMetrics(SM_CMONITORS));
+    EnumDisplayMonitors(NULL, NULL, CheckMonitorWorkArea, (LPARAM)&areas);
+
+    HMONITOR hSecondary = NULL;
+    MONITORINFO info = { sizeof(info) };
+    EnumDisplayMonitors(NULL, NULL, FindSecondaryMonitor, (LPARAM)&hSecondary);
+    if (!hSecondary || !GetMonitorInfoW(hSecondary, &info))
+        return;
+
+    CComPtr<IShellWindows> pShellWindows;
+    VARIANT vLocation, vRoot;
+    long hwnd = 0;
+    CComPtr<IDispatch> pDispatch;
+    CComPtr<IFolderView2> pfv;
+    CComPtr<IShellFolder> psf;
+    V_VT(&vLocation) = VT_I4;
+    V_I4(&vLocation) = CSIDL_DESKTOP;
+    VariantInit(&vRoot);
+    HRESULT hr = CoCreateInstance(CLSID_ShellWindows, NULL, CLSCTX_LOCAL_SERVER, IID_PPV_ARG(IShellWindows, &pShellWindows));
+    if (SUCCEEDED(hr))
+        hr = pShellWindows->FindWindowSW(&vLocation, &vRoot, SWC_DESKTOP, &hwnd, SWFO_NEEDDISPATCH, &pDispatch);
+    if (hr == S_OK && pDispatch)
+        hr = ViewFromDispatch(pDispatch, &pfv);
+    if (hr == S_OK && pfv)
+        hr = SHGetDesktopFolder(&psf);
+    if (hr != S_OK || !pfv || !psf)
+    {
+        skip("No desktop folder view (0x%lx)\n", hr);
+        return;
+    }
+
+    WCHAR szDir[MAX_PATH], szPath[MAX_PATH];
+    if (FAILED(SHGetFolderPathW(NULL, CSIDL_DESKTOPDIRECTORY, NULL, SHGFP_TYPE_CURRENT, szDir)) ||
+        !CreateTestFile(szDir, DESKTOP_ITEM, szPath, _countof(szPath)))
+    {
+        ok(FALSE, "Creating %S on the desktop failed (%lu)\n", DESKTOP_ITEM, GetLastError());
+        return;
+    }
+    CComPtr<IShellView> psv;
+    if (SUCCEEDED(pfv->QueryInterface(IID_PPV_ARG(IShellView, &psv))))
+        psv->Refresh();
+    CComHeapPtr<ITEMID_CHILD> pidl;
+    for (DWORD start = GetTickCount(); !pidl && GetTickCount() - start < WAIT_MS; Sleep(100))
+        FindViewItem(pfv, psf, DESKTOP_ITEM, &pidl);
+    ok(pidl != NULL, "%S did not appear on the desktop\n", DESKTOP_ITEM);
+    if (pidl)
+    {
+        POINT spacing = { 0, 0 };
+        if (FAILED(pfv->GetSpacing(&spacing)) || spacing.x <= 0 || spacing.y <= 0)
+            spacing.x = spacing.y = 100;
+        RECT rcWork = info.rcWork;
+        MapWindowPoints(NULL, hwndList, (POINT *)&rcWork, 2);
+        POINT target = { rcWork.left + spacing.x * 2, rcWork.top + spacing.y }, pt = { -1, -1 };
+        PCUITEMID_CHILD apidl[1] = { pidl };
+        ok_hex(pfv->SelectAndPositionItems(1, apidl, &target, SVSI_POSITIONITEM), S_OK);
+        ok_hex(pfv->GetItemPosition(pidl, &pt), S_OK);
+        MapWindowPoints(hwndList, NULL, &pt, 1);
+        RECT rcList;
+        GetWindowRect(hwndList, &rcList);
+        ok(MonitorFromPoint(pt, MONITOR_DEFAULTTONULL) == hSecondary && PtInRect(&rcList, pt),
+           "%S was put on the secondary display at %s and is at (%ld,%ld) for a desktop list view at %s\n",
+           DESKTOP_ITEM, wine_dbgstr_point(&target), pt.x, pt.y, wine_dbgstr_rect(&rcList));
+    }
+    DeleteTestFile(szPath);
+}
+
 START_TEST(IconPositions)
 {
     HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
@@ -348,6 +508,7 @@ START_TEST(IconPositions)
 
     TestFolderViews();
     TestDesktop();
+    TestDesktopDisplays();
 
     if (SUCCEEDED(hr))
         CoUninitialize();
