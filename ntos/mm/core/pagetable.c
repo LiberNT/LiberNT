@@ -626,7 +626,9 @@ MiPtCheckTable(
 
         if (MiArchPteIsBlock(Entry, (ULONG)Level))
         {
-            Used++;
+            if (Space == &Space->System->SystemSpace || (ULONG)Level + 1 < Arch->PagingLevels ||
+                Index < ((Arch->SystemAddressStart >> Arch->Level[Level].Shift) & Arch->Level[Level].IndexMask))
+                Used++;
             continue;
         }
 
