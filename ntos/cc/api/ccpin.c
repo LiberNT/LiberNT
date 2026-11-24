@@ -156,6 +156,13 @@ CcMapData(
     else
         CcMapDataNoWait++;
 
+    /* TODO: a no-wait map across a view boundary was not measured on Windows 11; it is still mapped */
+    if ((Flags & MAP_WAIT) && FileOffset != NULL &&
+        ((ULONG64)FileOffset->QuadPart & CC_VIEW_MASK) + Length > CC_VIEW_SIZE)
+    {
+        ExRaiseStatus(STATUS_ACCESS_VIOLATION);
+    }
+
     if (!CcNtAcquireBcb(FileObject, FileOffset, Length, (Flags & MAP_WAIT) ? PIN_WAIT : 0, FALSE, &NtBcb, Buffer))
         return FALSE;
 
