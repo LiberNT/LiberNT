@@ -31,6 +31,7 @@ using namespace std;
 #include <wininet.h>
 #include <winreg.h>
 
+#include <dpfilter.h>
 #include <ndk/rtlfuncs.h>
 #include <reactos/buildno.h>
 
