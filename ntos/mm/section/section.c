@@ -932,6 +932,34 @@ MiSegmentTryReference(
     }
 }
 
+BOOLEAN
+MiSegmentHoldsFrames(
+    _Inout_ PMI_SEGMENT Segment)
+{
+    BOOLEAN Holds = FALSE;
+    ULONG64 Page;
+
+    MI_MUTEX_ACQUIRE(&Segment->Lock);
+
+    for (Page = 0; Page < MiSegmentPages(Segment) && !Holds; Page++)
+    {
+        PMI_PTE Proto = MiSegmentProtoPresent(Segment, Page);
+        MI_SOFT_KIND Kind;
+
+        if (Proto == NULL)
+        {
+            Page = MiSegmentNextChunkPage(Page) - 1;
+            continue;
+        }
+
+        Kind = MiSoftKind(MiArchPteRead(Proto));
+        Holds = (Kind == MiSoftResident || Kind == MiSoftTransition);
+    }
+
+    MI_MUTEX_RELEASE(&Segment->Lock);
+    return Holds;
+}
+
 static
 BOOLEAN
 MiSegmentRelease(
@@ -943,6 +971,7 @@ MiSegmentRelease(
     PMI_SEGMENT Victim = NULL;
     BOOLEAN Closed = FALSE;
     BOOLEAN Exceeded = FALSE;
+    BOOLEAN Cacheable;
     KIRQL OldIrql;
 
     if (DeferredDelete != NULL)
@@ -960,6 +989,9 @@ MiSegmentRelease(
             return FALSE;
     }
 
+    Cacheable = AllowCache && System->UnusedSegmentLimit != 0 && Segment->Kind != MiSegmentPageFileBacked &&
+                Segment->FileOps.Release != NULL && MiSegmentHoldsFrames(Segment);
+
     MI_SPIN_ACQUIRE(&System->SegmentListLock, &OldIrql);
     MiAssertUnusedSegments(System);
     MI_ASSERT(MI_ATOMIC_READ32(&Segment->ReferenceCount) > 0);
@@ -971,8 +1003,7 @@ MiSegmentRelease(
     }
 
     MI_ASSERT(Segment->State == MI_SEGMENT_ACTIVE);
-    if (AllowCache && !Segment->CloseWhenUnused && System->UnusedSegmentLimit != 0 &&
-        Segment->Kind != MiSegmentPageFileBacked && Segment->FileOps.Release != NULL)
+    if (Cacheable && !Segment->CloseWhenUnused && System->UnusedSegmentLimit != 0)
     {
         Segment->State = MI_SEGMENT_UNUSED;
         InsertTailList(&System->UnusedSegmentList, &Segment->UnusedLink);

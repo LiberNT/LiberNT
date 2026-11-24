@@ -680,6 +680,7 @@ VOID MiSegmentDereference(_Inout_ PMI_SEGMENT Segment);
 NTSTATUS MiSegmentExtend(_Inout_ PMI_SEGMENT Segment, _In_ ULONG64 NewSizeInBytes);
 NTSTATUS MiSegmentFlush(_Inout_ PMI_SEGMENT Segment, _In_ ULONG64 Offset, _In_ ULONG64 Length);
 BOOLEAN MiSegmentPurge(_Inout_ PMI_SEGMENT Segment, _In_ ULONG64 Offset, _In_ ULONG64 Length);
+BOOLEAN MiSegmentHoldsFrames(_Inout_ PMI_SEGMENT Segment);
 BOOLEAN MiSegmentIsResident(_Inout_ PMI_SEGMENT Segment, _In_ ULONG64 Offset, _In_ ULONG64 Length);
 NTSTATUS MiSegmentMakeResident(_Inout_ PMI_SEGMENT Segment, _In_ ULONG64 Offset, _In_ ULONG64 Length);
 NTSTATUS MiSegmentFaultIn(_Inout_ PMI_SEGMENT Segment, _In_ ULONG64 Page, _In_ ULONG ReadAhead);
