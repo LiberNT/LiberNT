@@ -225,8 +225,8 @@ START_TEST(LogonTypes)
             CloseHandle(Token);
         }
         Token = TryLogOn(Lsa, Package, User, RemoteInteractive, &Status);
-        todo_if(is_reactos()) ok(Status == STATUS_LOGON_TYPE_NOT_GRANTED,
-                                 "A user outside Remote Desktop Users got a RemoteInteractive logon: 0x%08lx\n", Status);
+        ok(Status == STATUS_LOGON_TYPE_NOT_GRANTED,
+           "A user outside Remote Desktop Users got a RemoteInteractive logon: 0x%08lx\n", Status);
         if (Token)
             CloseHandle(Token);
         if (AddToRemoteDesktopUsers(User))
