@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    EnumerateProcessesA.c
     SessionInformation.c
     TermSrvReady.c
     testlist.c)

@@ -237,6 +237,72 @@ BOOL WINAPI WTSEnumerateProcessesExA(HANDLE server, DWORD *level, DWORD session_
 BOOL WINAPI WTSEnumerateProcessesA(HANDLE hServer, DWORD Reserved, DWORD Version,
     PWTS_PROCESS_INFOA* ppProcessInfo, DWORD* pCount)
 {
+#ifdef __REACTOS__
+    WTS_PROCESS_INFOW *infoW = NULL;
+    WTS_PROCESS_INFOA *info;
+    DWORD count = 0, size, i;
+    char *p;
+    int len;
+
+    TRACE("%p 0x%08lx 0x%08lx %p %p\n", hServer, Reserved, Version, ppProcessInfo, pCount);
+
+    if (Reserved || Version != 1)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!ppProcessInfo || !pCount)
+    {
+        SetLastError(ERROR_INVALID_USER_BUFFER);
+        return FALSE;
+    }
+
+    if (!WTSEnumerateProcessesW(hServer, Reserved, Version, &infoW, &count))
+        return FALSE;
+
+    size = count * sizeof(*info);
+    for (i = 0; i < count; i++)
+    {
+        if (infoW[i].pUserSid)
+            size += GetLengthSid(infoW[i].pUserSid);
+        size += WideCharToMultiByte(CP_ACP, 0, infoW[i].pProcessName, -1, NULL, 0, NULL, NULL);
+    }
+
+    if (!(info = malloc(size)))
+    {
+        WTSFreeMemory(infoW);
+        SetLastError(ERROR_OUTOFMEMORY);
+        return FALSE;
+    }
+    p = (char *)(info + count);
+
+    for (i = 0; i < count; i++)
+    {
+        info[i].SessionId = infoW[i].SessionId;
+        info[i].ProcessId = infoW[i].ProcessId;
+        info[i].pUserSid = NULL;
+        if (infoW[i].pUserSid)
+        {
+            DWORD sid_size = GetLengthSid(infoW[i].pUserSid);
+
+            info[i].pUserSid = p;
+            memcpy(p, infoW[i].pUserSid, sid_size);
+            p += sid_size;
+        }
+    }
+    for (i = 0; i < count; i++)
+    {
+        info[i].pProcessName = p;
+        len = WideCharToMultiByte(CP_ACP, 0, infoW[i].pProcessName, -1, p, (char *)info + size - p, NULL, NULL);
+        p += len;
+    }
+    WTSFreeMemory(infoW);
+
+    *ppProcessInfo = info;
+    *pCount = count;
+    SetLastError(0);
+    return TRUE;
+#else
     FIXME("Stub %p 0x%08lx 0x%08lx %p %p\n", hServer, Reserved, Version,
           ppProcessInfo, pCount);
 
@@ -246,6 +312,7 @@ BOOL WINAPI WTSEnumerateProcessesA(HANDLE hServer, DWORD Reserved, DWORD Version
     *ppProcessInfo = NULL;
 
     return TRUE;
+#endif
 }
 
 /************************************************************
