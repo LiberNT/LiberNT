@@ -8,6 +8,7 @@ list(APPEND SOURCE
     ListViewActivate.c
     ListViewGroups.c
     ListViewSnapToGrid.c
+    ListViewWorkAreas.c
     LoadIconWithScaleDown.c
     propsheet.c
     PropSheetRecalc.c

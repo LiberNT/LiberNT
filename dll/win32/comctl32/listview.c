@@ -299,6 +299,10 @@ typedef struct tagLISTVIEW_INFO
   SIZE iconSpacing;
   SIZE iconStateSize;
   POINT currIconPos;        /* this is the position next icon will be placed */
+#ifdef __REACTOS__
+  RECT rcWorkAreas[LV_MAX_WORKAREAS];
+  UINT nWorkAreas;
+#endif
 
   /* header */
   HWND hwndHeader;
@@ -2854,10 +2858,79 @@ static DWORD LISTVIEW_MapIndexToId(const LISTVIEW_INFO *infoPtr, INT iItem)
  * RETURN:
  * None
  */
+#ifdef __REACTOS__
+static UINT LISTVIEW_GetWorkArea(const LISTVIEW_INFO *infoPtr, const POINT *pos, RECT *area)
+{
+    POINT Origin, pt;
+    UINT i, found = 0;
+
+    assert(infoPtr->nWorkAreas > 0 && infoPtr->nWorkAreas <= LV_MAX_WORKAREAS);
+    LISTVIEW_GetOrigin(infoPtr, &Origin);
+    pt = *pos;
+    if (infoPtr->uView == LV_VIEW_ICON)
+    {
+        pt.x += (infoPtr->nItemWidth - infoPtr->iconSize.cx) / 2;
+        pt.y += ICON_TOP_PADDING;
+    }
+    pt.x += Origin.x;
+    pt.y += Origin.y;
+    for (i = 0; i < infoPtr->nWorkAreas; i++)
+    {
+        if (PtInRect(&infoPtr->rcWorkAreas[i], pt))
+        {
+            found = i;
+            break;
+        }
+    }
+    *area = infoPtr->rcWorkAreas[found];
+    OffsetRect(area, -Origin.x, -Origin.y);
+    return found;
+}
+
+static void LISTVIEW_NextIconPosInArea(const LISTVIEW_INFO *infoPtr, const RECT *area, BOOL alignLeft,
+                                       POINT *cursor, LPPOINT lpPos)
+{
+    lpPos->x = area->left + cursor->x;
+    lpPos->y = area->top + cursor->y;
+    if (alignLeft)
+    {
+        cursor->y += infoPtr->nItemHeight;
+        if (cursor->y + infoPtr->nItemHeight <= area->bottom - area->top) return;
+        cursor->x += infoPtr->nItemWidth;
+        cursor->y = 0;
+    }
+    else
+    {
+        cursor->x += infoPtr->nItemWidth;
+        if (cursor->x + infoPtr->nItemWidth <= area->right - area->left) return;
+        cursor->x = 0;
+        cursor->y += infoPtr->nItemHeight;
+    }
+}
+
+static void LISTVIEW_NextIconPosInFirstArea(LISTVIEW_INFO *infoPtr, BOOL alignLeft, LPPOINT lpPos)
+{
+    POINT Origin;
+    RECT area;
+
+    LISTVIEW_GetOrigin(infoPtr, &Origin);
+    area = infoPtr->rcWorkAreas[0];
+    OffsetRect(&area, -Origin.x, -Origin.y);
+    LISTVIEW_NextIconPosInArea(infoPtr, &area, alignLeft, &infoPtr->currIconPos, lpPos);
+}
+#endif
+
 static void LISTVIEW_NextIconPosTop(LISTVIEW_INFO *infoPtr, LPPOINT lpPos)
 {
     INT nListWidth = infoPtr->rcList.right - infoPtr->rcList.left;
     
+#ifdef __REACTOS__
+    if (infoPtr->nWorkAreas)
+    {
+        LISTVIEW_NextIconPosInFirstArea(infoPtr, FALSE, lpPos);
+        return;
+    }
+#endif
     *lpPos = infoPtr->currIconPos;
     
     infoPtr->currIconPos.x += infoPtr->nItemWidth;
@@ -2883,6 +2956,13 @@ static void LISTVIEW_NextIconPosLeft(LISTVIEW_INFO *infoPtr, LPPOINT lpPos)
 {
     INT nListHeight = infoPtr->rcList.bottom - infoPtr->rcList.top;
     
+#ifdef __REACTOS__
+    if (infoPtr->nWorkAreas)
+    {
+        LISTVIEW_NextIconPosInFirstArea(infoPtr, TRUE, lpPos);
+        return;
+    }
+#endif
     *lpPos = infoPtr->currIconPos;
     
     infoPtr->currIconPos.y += infoPtr->nItemHeight;
@@ -2944,8 +3024,12 @@ static LONG LISTVIEW_NearestGridLine(LONG value, INT size)
 
 static void LISTVIEW_SnapToGrid(const LISTVIEW_INFO *infoPtr, POINT *pos)
 {
-    pos->x = LISTVIEW_NearestGridLine(pos->x, infoPtr->nItemWidth);
-    pos->y = LISTVIEW_NearestGridLine(pos->y, infoPtr->nItemHeight);
+    RECT area = { 0, 0, 0, 0 };
+
+    if (infoPtr->nWorkAreas)
+        LISTVIEW_GetWorkArea(infoPtr, pos, &area);
+    pos->x = area.left + LISTVIEW_NearestGridLine(pos->x - area.left, infoPtr->nItemWidth);
+    pos->y = area.top + LISTVIEW_NearestGridLine(pos->y - area.top, infoPtr->nItemHeight);
 }
 #endif
 
@@ -2998,6 +3082,26 @@ static BOOL LISTVIEW_Arrange(LISTVIEW_INFO *infoPtr, INT nAlignCode)
     }
     
     infoPtr->currIconPos.x = infoPtr->currIconPos.y = 0;
+#ifdef __REACTOS__
+    if (infoPtr->nWorkAreas)
+    {
+        POINT cursors[LV_MAX_WORKAREAS];
+        RECT area;
+        UINT index;
+
+        ZeroMemory(cursors, sizeof(cursors));
+        for (i = 0; i < infoPtr->nItemCount; i++)
+        {
+            pos.x = (LONG_PTR)DPA_GetPtr(infoPtr->hdpaPosX, i);
+            pos.y = (LONG_PTR)DPA_GetPtr(infoPtr->hdpaPosY, i);
+            index = LISTVIEW_GetWorkArea(infoPtr, &pos, &area);
+            LISTVIEW_NextIconPosInArea(infoPtr, &area, nAlignCode == LVA_ALIGNLEFT,
+                                       index ? &cursors[index] : &infoPtr->currIconPos, &pos);
+            LISTVIEW_MoveIconTo(infoPtr, i, &pos, FALSE);
+        }
+        return TRUE;
+    }
+#endif
     for (i = 0; i < infoPtr->nItemCount; i++)
     {
 	next_pos(infoPtr, &pos);
@@ -3006,6 +3110,30 @@ static BOOL LISTVIEW_Arrange(LISTVIEW_INFO *infoPtr, INT nAlignCode)
 
     return TRUE;
 }
+
+#ifdef __REACTOS__
+static LRESULT LISTVIEW_SetWorkAreas(LISTVIEW_INFO *infoPtr, INT count, const RECT *areas)
+{
+    if (!areas || count <= 0)
+        count = 0;
+    else if (count > LV_MAX_WORKAREAS)
+        count = LV_MAX_WORKAREAS;
+    if (count)
+        memcpy(infoPtr->rcWorkAreas, areas, count * sizeof(RECT));
+    infoPtr->nWorkAreas = count;
+    /* FIXME: Windows also moves the existing icons into the new work areas */
+    return 0;
+}
+
+static LRESULT LISTVIEW_GetWorkAreas(const LISTVIEW_INFO *infoPtr, INT count, RECT *areas)
+{
+    if (!areas || count <= 0)
+        return 0;
+    ZeroMemory(areas, min(count, LV_MAX_WORKAREAS) * sizeof(RECT));
+    memcpy(areas, infoPtr->rcWorkAreas, min((UINT)count, infoPtr->nWorkAreas) * sizeof(RECT));
+    return 0;
+}
+#endif
   
 /***
  * DESCRIPTION:
@@ -12761,8 +12889,14 @@ LISTVIEW_WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     return LISTVIEW_GetNextItemIndex(infoPtr, (LVITEMINDEX *)wParam, lParam);
 
   case LVM_GETNUMBEROFWORKAREAS:
+#ifdef __REACTOS__
+    if (lParam)
+        *(UINT *)lParam = infoPtr->nWorkAreas;
+    return 0;
+#else
     FIXME("LVM_GETNUMBEROFWORKAREAS: unimplemented\n");
     return 1;
+#endif
 
   case LVM_GETORIGIN:
   {
@@ -12824,8 +12958,12 @@ LISTVIEW_WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     return LISTVIEW_GetViewRect(infoPtr, (LPRECT)lParam);
 
   case LVM_GETWORKAREAS:
+#ifdef __REACTOS__
+    return LISTVIEW_GetWorkAreas(infoPtr, (INT)wParam, (RECT *)lParam);
+#else
     FIXME("LVM_GETWORKAREAS: unimplemented\n");
     return FALSE;
+#endif
 
 #ifdef __REACTOS__
   case LVM_HASGROUP:
@@ -13039,7 +13177,12 @@ LISTVIEW_WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
   case LVM_SETVIEW:
     return LISTVIEW_SetView(infoPtr, wParam);
 
+#ifdef __REACTOS__
+  case LVM_SETWORKAREAS:
+    return LISTVIEW_SetWorkAreas(infoPtr, (INT)wParam, (const RECT *)lParam);
+#else
   /* case LVM_SETWORKAREAS: */
+#endif
 
 #ifdef __REACTOS__
   case LVM_SORTGROUPS:
