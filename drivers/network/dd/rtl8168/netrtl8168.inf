@@ -13,6 +13,7 @@ DriverVer  = 11/24/2026,1.00
 
 [DestinationDirs]
 DefaultDestDir = 12
+RTL8168_FwCopyFiles = 12,realtek
 
 [Manufacturer]
 %RealtekMfg% = RealtekMfg
@@ -29,13 +30,21 @@ Characteristics = 0x4
 *PhysicalMediaType = 14
 BusType = 5
 AddReg = RTL8168_AddReg.NT
-CopyFiles = RTL8168_CopyFiles.NT
+CopyFiles = RTL8168_CopyFiles.NT, RTL8168_FwCopyFiles
 
 [RTL8168_Inst.ndi.NT.HW]
 AddReg = RTL8168_HwAddReg.NT
 
 [RTL8168_CopyFiles.NT]
 rtl8168.sys
+
+[RTL8168_FwCopyFiles]
+rtl8168h-2.fw
+rtl8168h-1.fw
+rtl8168g-2.fw
+rtl8168g-3.fw
+rtl8168fp-3.fw
+rtl8411-2.fw
 
 [RTL8168_AddReg.NT]
 HKR, Ndi,            Service,    0, "rtl8168"
@@ -45,7 +54,7 @@ HKR, Ndi\Interfaces, LowerRange, 0, "ethernet"
 [RTL8168_HwAddReg.NT]
 HKR, "Interrupt Management",,0x00000010
 HKR, "Interrupt Management\MessageSignaledInterruptProperties",,0x00000010
-HKR, "Interrupt Management\MessageSignaledInterruptProperties", MSISupported, 0x00010001, 0
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", MSISupported, 0x00010001, 1
 
 [RTL8168_Inst.ndi.NT.Services]
 AddService = rtl8168, 0x00000002, RTL8168_Service_Inst
@@ -62,6 +71,12 @@ LoadOrderGroup = NDIS
 
 [SourceDisksFiles]
 rtl8168.sys = 1
+rtl8168h-2.fw = 1
+rtl8168h-1.fw = 1
+rtl8168g-2.fw = 1
+rtl8168g-3.fw = 1
+rtl8168fp-3.fw = 1
+rtl8411-2.fw = 1
 
 [Strings]
 LiberNT = "LiberNT Project"

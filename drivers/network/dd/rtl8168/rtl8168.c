@@ -7,8 +7,8 @@
  * Register offsets and descriptor ownership rules are taken from the
  * lawfully published FreeBSD re(4)/rl(4) headers (BSD-2-Clause).
  * RTL8168H MAC bring-up is LiberNT-owned register programming from those
- * quirks. PHY firmware is the unmodified Realtek rtl8168h-2.fw blob under
- * fw/, redistributed under LICENCE.rtlwifi_firmware.txt and applied by a
+ * quirks. PHY firmware is unmodified Realtek rtl_nic blobs under fw/,
+ * redistributed under LICENCE.rtlwifi_firmware.txt and applied by a
  * LiberNT-owned opcode interpreter. The miniport itself is a LiberNT
  * NDIS 6.30 reimplementation.
  */
@@ -408,10 +408,20 @@ Rtl8168MacOcpRead(
     _In_ PRTL8168_ADAPTER Adapter,
     _In_ ULONG Reg)
 {
+    ULONG i;
+
     Rtl8168Write32(Adapter,
                    RL_MACOCP,
                    (Reg & 0x7fff) << RL_MACOCP_ADDR_SHIFT);
-    NdisStallExecution(10);
+    for (i = 0; i < 100; i++)
+    {
+        ULONG Data = Rtl8168Read32(Adapter, RL_MACOCP);
+
+        if (Data & RL_MACOCP_FLAG)
+            return (USHORT)(Data & RL_MACOCP_DATA_MASK);
+        NdisStallExecution(10);
+    }
+
     return (USHORT)(Rtl8168Read32(Adapter, RL_MACOCP) & RL_MACOCP_DATA_MASK);
 }
 
@@ -835,14 +845,49 @@ Rtl8168Apply8168hPhyScript(
     }
 }
 
+static VOID
+Rtl8168FirmwareCandidates(
+    _In_ ULONG HwRev,
+    _Out_writes_(2) PCWSTR *Names)
+{
+    Names[0] = NULL;
+    Names[1] = NULL;
+
+    switch (HwRev)
+    {
+        case RL_HWREV_8168H:
+            Names[0] = L"rtl8168h-2.fw";
+            Names[1] = L"rtl8168h-1.fw";
+            break;
+        case RL_HWREV_8168G:
+            Names[0] = L"rtl8168g-2.fw";
+            Names[1] = L"rtl8168g-3.fw";
+            break;
+        case RL_HWREV_8168GU:
+            Names[0] = L"rtl8168g-3.fw";
+            Names[1] = L"rtl8168g-2.fw";
+            break;
+        case RL_HWREV_8168FP:
+            Names[0] = L"rtl8168fp-3.fw";
+            break;
+        case RL_HWREV_8411B:
+            Names[0] = L"rtl8411-2.fw";
+            break;
+        default:
+            break;
+    }
+}
+
 static NTSTATUS
-Rtl8168LoadAndApply8168hFirmware(
-    _In_ PRTL8168_ADAPTER Adapter)
+Rtl8168LoadAndApplyFirmwareFile(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ PCWSTR FileName)
 {
     FILE_STANDARD_INFORMATION FileInfo;
     OBJECT_ATTRIBUTES Attributes;
     IO_STATUS_BLOCK IoStatus;
     UNICODE_STRING Path;
+    WCHAR PathBuffer[RTL8168_FW_PATH_CHARS];
     HANDLE Handle;
     NTSTATUS Status;
     PUCHAR Buffer;
@@ -851,8 +896,20 @@ Rtl8168LoadAndApply8168hFirmware(
     ULONG OpCount;
     ULONG i;
     UCHAR Sum;
+    ULONG DirLen = 0;
+    ULONG NameLen = 0;
 
-    RtlInitUnicodeString(&Path, RTL8168_FW_PATH);
+    while (RTL8168_FW_DIR[DirLen] != L'\0')
+        DirLen++;
+    while (FileName[NameLen] != L'\0')
+        NameLen++;
+    if (DirLen + NameLen + 1 > RTL_NUMBER_OF(PathBuffer))
+        return STATUS_BUFFER_TOO_SMALL;
+
+    RtlCopyMemory(PathBuffer, RTL8168_FW_DIR, DirLen * sizeof(WCHAR));
+    RtlCopyMemory(PathBuffer + DirLen, FileName, (NameLen + 1) * sizeof(WCHAR));
+
+    RtlInitUnicodeString(&Path, PathBuffer);
     InitializeObjectAttributes(&Attributes,
                                &Path,
                                OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
@@ -871,7 +928,7 @@ Rtl8168LoadAndApply8168hFirmware(
                           0);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("rtl8168: firmware %ws unavailable 0x%08lx\n", RTL8168_FW_PATH, Status);
+        DPRINT1("rtl8168: firmware %ws unavailable 0x%08lx\n", PathBuffer, Status);
         return Status;
     }
 
@@ -929,8 +986,29 @@ Rtl8168LoadAndApply8168hFirmware(
                                (const ULONG *)(Buffer + Start),
                                OpCount);
     ExFreePoolWithTag(Buffer, RTL8168_TAG);
-    DPRINT1("rtl8168: applied rtl8168h-2.fw (%lu ops)\n", OpCount);
+    DPRINT1("rtl8168: applied %ws (%lu ops)\n", FileName, OpCount);
     return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+Rtl8168LoadAndApplyFirmware(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    PCWSTR Names[2];
+    NTSTATUS Status = STATUS_NOT_FOUND;
+    ULONG i;
+
+    Rtl8168FirmwareCandidates(Adapter->HwRev, Names);
+    for (i = 0; i < RTL_NUMBER_OF(Names); i++)
+    {
+        if (!Names[i])
+            continue;
+        Status = Rtl8168LoadAndApplyFirmwareFile(Adapter, Names[i]);
+        if (NT_SUCCESS(Status))
+            return Status;
+    }
+
+    return Status;
 }
 
 static VOID
@@ -947,7 +1025,7 @@ Rtl8168Configure8168hPhy(
     NTSTATUS Status;
 
     Rtl8168PhySoftReset(Adapter);
-    Status = Rtl8168LoadAndApply8168hFirmware(Adapter);
+    Status = Rtl8168LoadAndApplyFirmware(Adapter);
     if (!NT_SUCCESS(Status))
         DPRINT1("rtl8168: 8168H firmware apply failed 0x%08lx\n", Status);
 
@@ -1172,7 +1250,7 @@ Rtl8168IndicateLinkState(
     LinkState.MediaDuplexState = Adapter->MediaDuplexState;
     LinkState.XmitLinkSpeed = Adapter->LinkSpeed;
     LinkState.RcvLinkSpeed = Adapter->LinkSpeed;
-    LinkState.PauseFunctions = NdisPauseFunctionsUnsupported;
+    LinkState.PauseFunctions = NdisPauseFunctionsSendAndReceive;
 
     RtlZeroMemory(&Indication, sizeof(Indication));
     Indication.Header.Type = NDIS_OBJECT_TYPE_STATUS_INDICATION;
@@ -1402,7 +1480,7 @@ Rtl8168ProgramDatapath(
 {
     USHORT Cplus;
 
-    Cplus = RL_CPLUSCMD_PCI_MRW | RL_CPLUSCMD_PCI_DAC;
+    Cplus = RL_CPLUSCMD_PCI_MRW | RL_CPLUSCMD_PCI_DAC | RL_CPLUSCMD_RXCSUM;
     if (Adapter->MacStatCplus)
         Cplus |= RL_CPLUSCMD_MACSTAT_DIS | RL_CPLUSCMD_INTT_1;
     else
@@ -1470,8 +1548,7 @@ Rtl8168StartHardware(
                   (UCHAR)(Rtl8168Read8(Adapter, RL_CFG1) | RL_CFG1_DRIVER_LOAD | RL_CFG1_PM_ENABLE));
     Rtl8168Write8(Adapter,
                   RL_CFG2,
-                  (UCHAR)(Rtl8168Read8(Adapter, RL_CFG2) &
-                          ~(RL_CFG2_CLKREQ_EN | RL_CFG2_MSI_ENABLE)));
+                  (UCHAR)(Rtl8168Read8(Adapter, RL_CFG2) & ~RL_CFG2_CLKREQ_EN));
     Rtl8168Write8(Adapter,
                   RL_CFG5,
                   (UCHAR)(Rtl8168Read8(Adapter, RL_CFG5) & ~RL_CFG5_ASPM_EN));
@@ -1486,7 +1563,15 @@ Rtl8168StartHardware(
     {
         Rtl8168SetMaxReadRequest(Adapter, PCI_EXPRESS_MRRS_4096);
         if (Adapter->Rtl8168GPlus)
+        {
+            NTSTATUS FwStatus;
+
             Rtl8168SetPcieEntryLatency(Adapter);
+            Rtl8168PhySoftReset(Adapter);
+            FwStatus = Rtl8168LoadAndApplyFirmware(Adapter);
+            if (!NT_SUCCESS(FwStatus) && FwStatus != STATUS_NOT_FOUND)
+                DPRINT1("rtl8168: firmware apply failed 0x%08lx\n", FwStatus);
+        }
     }
 
     Rtl8168InitRings(Adapter);
@@ -1830,6 +1915,56 @@ NTAPI
 Rtl8168EnableInterruptEx(
     _In_ NDIS_HANDLE MiniportInterruptContext)
 {
+    Rtl8168EnableInterrupts((PRTL8168_ADAPTER)MiniportInterruptContext);
+}
+
+static BOOLEAN
+NTAPI
+Rtl8168MessageInterrupt(
+    _In_ NDIS_HANDLE MiniportInterruptContext,
+    _In_ ULONG MessageId,
+    _Out_ PBOOLEAN QueueDefaultInterruptDpc,
+    _Out_ PULONG TargetProcessors)
+{
+    UNREFERENCED_PARAMETER(MessageId);
+    return Rtl8168Interrupt(MiniportInterruptContext,
+                            QueueDefaultInterruptDpc,
+                            TargetProcessors);
+}
+
+static VOID
+NTAPI
+Rtl8168MessageInterruptDpc(
+    _In_ NDIS_HANDLE MiniportInterruptContext,
+    _In_ ULONG MessageId,
+    _In_ PVOID MiniportDpcContext,
+    _In_ PVOID ReceiveThrottleParameters,
+    _In_ PVOID NdisReserved1)
+{
+    UNREFERENCED_PARAMETER(MessageId);
+    Rtl8168InterruptDpc(MiniportInterruptContext,
+                        MiniportDpcContext,
+                        ReceiveThrottleParameters,
+                        NdisReserved1);
+}
+
+static VOID
+NTAPI
+Rtl8168DisableMessageInterrupt(
+    _In_ NDIS_HANDLE MiniportInterruptContext,
+    _In_ ULONG MessageId)
+{
+    UNREFERENCED_PARAMETER(MessageId);
+    Rtl8168DisableInterrupts((PRTL8168_ADAPTER)MiniportInterruptContext);
+}
+
+static VOID
+NTAPI
+Rtl8168EnableMessageInterrupt(
+    _In_ NDIS_HANDLE MiniportInterruptContext,
+    _In_ ULONG MessageId)
+{
+    UNREFERENCED_PARAMETER(MessageId);
     Rtl8168EnableInterrupts((PRTL8168_ADAPTER)MiniportInterruptContext);
 }
 
@@ -2226,7 +2361,7 @@ Rtl8168SetGeneralAttributes(
     GenAttrs.ConnectionType = NET_IF_CONNECTION_DEDICATED;
     GenAttrs.IfType = IF_TYPE_ETHERNET_CSMACD;
     GenAttrs.IfConnectorPresent = TRUE;
-    GenAttrs.SupportedPauseFunctions = NdisPauseFunctionsUnsupported;
+    GenAttrs.SupportedPauseFunctions = NdisPauseFunctionsSendAndReceive;
     GenAttrs.SupportedOidList = (PNDIS_OID)Rtl8168SupportedOids;
     GenAttrs.SupportedOidListLength = sizeof(Rtl8168SupportedOids);
     GenAttrs.SupportedStatistics =
@@ -2258,17 +2393,49 @@ Rtl8168RegisterInterrupt(
     IntChars.InterruptDpcHandler = Rtl8168InterruptDpc;
     IntChars.DisableInterruptHandler = Rtl8168DisableInterruptEx;
     IntChars.EnableInterruptHandler = Rtl8168EnableInterruptEx;
-    IntChars.InterruptType = NDIS_CONNECT_LINE_BASED;
-    IntChars.MsiSupported = FALSE;
+    IntChars.MsiSupported = TRUE;
+    IntChars.MsiSyncWithAllMessages = TRUE;
+    IntChars.MessageInterruptHandler = Rtl8168MessageInterrupt;
+    IntChars.MessageInterruptDpcHandler = Rtl8168MessageInterruptDpc;
+    IntChars.DisableMessageInterruptHandler = Rtl8168DisableMessageInterrupt;
+    IntChars.EnableMessageInterruptHandler = Rtl8168EnableMessageInterrupt;
 
     Status = NdisMRegisterInterruptEx(Adapter->MiniportHandle,
                                       Adapter,
                                       &IntChars,
                                       &Adapter->InterruptHandle);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        IntChars.MsiSupported = FALSE;
+        IntChars.MessageInterruptHandler = NULL;
+        IntChars.MessageInterruptDpcHandler = NULL;
+        IntChars.DisableMessageInterruptHandler = NULL;
+        IntChars.EnableMessageInterruptHandler = NULL;
+        Status = NdisMRegisterInterruptEx(Adapter->MiniportHandle,
+                                          Adapter,
+                                          &IntChars,
+                                          &Adapter->InterruptHandle);
+    }
 
     if (Status != NDIS_STATUS_SUCCESS)
+    {
         DPRINT1("rtl8168: interrupt registration failed 0x%08x\n", Status);
+        return Status;
+    }
 
+    Adapter->MessageInterrupt =
+        (IntChars.InterruptType == NDIS_CONNECT_MESSAGE_BASED);
+    if (!Adapter->MessageInterrupt)
+    {
+        Rtl8168Write8(Adapter, RL_EECMD, RL_EEMODE_WRITECFG);
+        Rtl8168Write8(Adapter,
+                      RL_CFG2,
+                      (UCHAR)(Rtl8168Read8(Adapter, RL_CFG2) & ~RL_CFG2_MSI_ENABLE));
+        Rtl8168Write8(Adapter, RL_EECMD, RL_EEMODE_OFF);
+    }
+
+    DPRINT1("rtl8168: %s interrupt connected\n",
+            Adapter->MessageInterrupt ? "message" : "line");
     return Status;
 }
 
@@ -2381,7 +2548,7 @@ Rtl8168QueryInformation(
             Data.LinkState.MediaDuplexState = Adapter->MediaDuplexState;
             Data.LinkState.XmitLinkSpeed = Adapter->LinkSpeed;
             Data.LinkState.RcvLinkSpeed = Adapter->LinkSpeed;
-            Data.LinkState.PauseFunctions = NdisPauseFunctionsUnsupported;
+            Data.LinkState.PauseFunctions = NdisPauseFunctionsSendAndReceive;
             return Rtl8168CopyQuery(OidRequest, &Data.LinkState, sizeof(Data.LinkState));
 
         case OID_GEN_STATISTICS:

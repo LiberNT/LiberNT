@@ -1,11 +1,30 @@
-Firmware for the Realtek RTL8168H/8111H family Ethernet chips. Installed to
+Firmware for Realtek RTL8168/8111 family Ethernet chips. Installed to
 \SystemRoot\system32\drivers\realtek\ and loaded by the rtl8168 driver during
-PHY bring-up.
+PHY bring-up. All blobs are redistributed unmodified under
+LICENCE.rtlwifi_firmware.txt (this directory). Copyright (c) 2010, Realtek
+Semiconductor Corporation. Source: linux-firmware 20261019, rtl_nic/.
 
 File: rtl8168h-2.fw
-  Realtek RTL8168H PHY firmware (version rtl8168h-2_0.0.2), distributed by
-  linux-firmware as rtl_nic/rtl8168h-2.fw (linux-firmware 20261019, SHA-256
-  0b4beab008e308f28296c13188ee23edfeff7d865e398a7ade170495c8cec7e6).
-  Copyright (c) 2010, Realtek Semiconductor Corporation. Redistributable in
-  binary form, without modification, under the terms in
-  LICENCE.rtlwifi_firmware.txt (this directory).
+  Version rtl8168h-2_0.0.2. SHA-256
+  0b4beab008e308f28296c13188ee23edfeff7d865e398a7ade170495c8cec7e6.
+  Used for HWREV 8168H (0x54000000).
+
+File: rtl8168h-1.fw
+  SHA-256 4ef963690f3a7b25a9bc97fb12c58922c02886699933ed6297636cc15aad9d8d.
+  Fallback for HWREV 8168H.
+
+File: rtl8168g-2.fw
+  SHA-256 f878ec719f78e0b104bc73362a9862611858bec893f58a1b3b289a0a57d71d25.
+  Used for HWREV 8168G (0x4C000000).
+
+File: rtl8168g-3.fw
+  SHA-256 e4d5e62b0a5a097af34c7aa3c55f634fd5be2c232e02c6b983ebd7e699cb27e9.
+  Used for HWREV 8168GU (0x50800000); fallback for 8168G.
+
+File: rtl8168fp-3.fw
+  SHA-256 c526c06aa0ab8d9b57ba2b730bb1e40a1c3513f8591e238dceb2e0f45210ed27.
+  Used for HWREV 8168FP (0x54800000).
+
+File: rtl8411-2.fw
+  SHA-256 80dbdacba4d5dfee46b6c2b4e433f6f2eeb756d29ad46bf2362ba20c8ec594b1.
+  Used for HWREV 8411B (0x5C800000).

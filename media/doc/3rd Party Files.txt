@@ -123,9 +123,9 @@ Used Version: rtw89/rtw8852b_fw-2.bin (linux-firmware 20260319)
 License: Realtek binary redistribution license (drivers/network/dd/rtw8852bs/fw/LICENCE.rtlwifi_firmware.txt)
 URL: https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git
 
-Title: Realtek RTL8168H PHY firmware
+Title: Realtek RTL8168/8111 PHY firmware
 Path: drivers/network/dd/rtl8168/fw
-Used Version: rtl_nic/rtl8168h-2.fw (linux-firmware 20261019)
+Used Version: rtl_nic/rtl8168h-2.fw, rtl8168h-1.fw, rtl8168g-2.fw, rtl8168g-3.fw, rtl8168fp-3.fw, rtl8411-2.fw (linux-firmware 20261019)
 License: Realtek binary redistribution license (drivers/network/dd/rtl8168/fw/LICENCE.rtlwifi_firmware.txt)
 URL: https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git
 

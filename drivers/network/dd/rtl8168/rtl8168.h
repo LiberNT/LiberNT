@@ -36,11 +36,12 @@
 #define RTL8168_LINK_HOLD_100NS 50000000ULL
 #define RTL8168_LINK_GRACE_100NS 30000000ULL
 #define RL_CPLUSCMD_INTT_1 0x0001
-#define RTL8168_FW_PATH L"\\SystemRoot\\System32\\drivers\\realtek\\rtl8168h-2.fw"
-#define RTL8168_FW_MAX_SIZE 4096
+#define RTL8168_FW_DIR L"\\SystemRoot\\System32\\drivers\\realtek\\"
+#define RTL8168_FW_MAX_SIZE 8192
 #define RTL8168_FW_MIN_SIZE 0x2D
 #define RTL8168_FW_START_OFFSET 0x24
 #define RTL8168_FW_LEN_OFFSET 0x28
+#define RTL8168_FW_PATH_CHARS 96
 #define RL_FW_PHY_READ 0x0
 #define RL_FW_PHY_OR 0x1
 #define RL_FW_PHY_AND 0x2
@@ -327,6 +328,7 @@ typedef struct _RTL8168_ADAPTER
     BOOLEAN DatapathReady;
     BOOLEAN SurpriseRemoved;
     BOOLEAN RingsOwnedByHardware;
+    BOOLEAN MessageInterrupt;
     ULONG64 LinkHoldTicks;
     ULONG64 LinkGraceTicks;
     ULONG LinkDownPolls;
