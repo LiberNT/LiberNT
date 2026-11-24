@@ -83,14 +83,53 @@ START_TEST(MediaConnect)
         ok(Entry->Mtu >= 1500, "mtu %lu\n", Entry->Mtu);
     }
 
-    HeapFree(GetProcessHeap(), 0, Table);
-
     if (!Found)
     {
+        HeapFree(GetProcessHeap(), 0, Table);
         skip("no RTL8168/8111 adapter bound; needs real hardware\n");
         return;
     }
 
     ok(Found >= 1, "found %lu adapter(s)\n", Found);
     trace("rtl8168 adapters=%lu up=%lu\n", Found, Up);
+
+    if (Up)
+    {
+        DWORD Dhcp = 0;
+        DWORD Apipa = 0;
+
+        for (Entry = Table; Entry; Entry = Entry->Next)
+        {
+            IP_ADAPTER_UNICAST_ADDRESS *Unicast;
+
+            if (!IsRtl8168Description(Entry->Description) &&
+                !IsRtl8168Description(Entry->FriendlyName))
+            {
+                continue;
+            }
+            if (Entry->OperStatus != IfOperStatusUp)
+                continue;
+
+            for (Unicast = Entry->FirstUnicastAddress;
+                 Unicast;
+                 Unicast = Unicast->Next)
+            {
+                SOCKADDR_IN *Sin;
+
+                if (Unicast->Address.lpSockaddr->sa_family != AF_INET)
+                    continue;
+                Sin = (SOCKADDR_IN *)Unicast->Address.lpSockaddr;
+                if ((ntohl(Sin->sin_addr.s_addr) & 0xffff0000) == 0xa9fe0000)
+                    Apipa++;
+                else if (Sin->sin_addr.s_addr != 0)
+                    Dhcp++;
+            }
+        }
+
+        trace("rtl8168 ipv4 dhcp-like=%lu apipa=%lu\n", Dhcp, Apipa);
+        if (!Dhcp && Apipa)
+            trace("rtl8168 still on APIPA; DHCP offer path needs a live lease\n");
+    }
+
+    HeapFree(GetProcessHeap(), 0, Table);
 }

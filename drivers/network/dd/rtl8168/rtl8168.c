@@ -49,7 +49,10 @@ static const NDIS_OID Rtl8168SupportedOids[] =
     OID_802_3_PERMANENT_ADDRESS,
     OID_802_3_CURRENT_ADDRESS,
     OID_802_3_MULTICAST_LIST,
-    OID_802_3_MAXIMUM_LIST_SIZE
+    OID_802_3_MAXIMUM_LIST_SIZE,
+    OID_TCP_OFFLOAD_CURRENT_CONFIG,
+    OID_TCP_OFFLOAD_HARDWARE_CAPABILITIES,
+    OID_TCP_OFFLOAD_PARAMETERS
 };
 
 static __inline UCHAR
@@ -193,12 +196,103 @@ Rtl8168SoftReset(
 }
 
 static BOOLEAN
+Rtl8168WaitMcuBits(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ UCHAR Mask)
+{
+    ULONG i;
+
+    for (i = 0; i < 1000; i++)
+    {
+        if ((Rtl8168Read8(Adapter, RL_MCU_CMD) & Mask) == Mask)
+            return TRUE;
+        NdisStallExecution(100);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
+Rtl8168PhyOcpWrite(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ ULONG Reg,
+    _In_ USHORT Value)
+{
+    ULONG i;
+
+    if (Reg & 0xffff0001)
+        return FALSE;
+
+    Rtl8168Write32(Adapter,
+                   RL_GPHY_OCP,
+                   RL_MACOCP_FLAG | (Reg << RL_MACOCP_ADDR_SHIFT) | Value);
+    for (i = 0; i < 100; i++)
+    {
+        if (!(Rtl8168Read32(Adapter, RL_GPHY_OCP) & RL_MACOCP_FLAG))
+            return TRUE;
+        NdisStallExecution(25);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
+Rtl8168PhyOcpRead(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ ULONG Reg,
+    _Out_ PUSHORT Value)
+{
+    ULONG i;
+    ULONG Data;
+
+    *Value = 0xffff;
+    if (Reg & 0xffff0001)
+        return FALSE;
+
+    Rtl8168Write32(Adapter, RL_GPHY_OCP, Reg << RL_MACOCP_ADDR_SHIFT);
+    for (i = 0; i < 100; i++)
+    {
+        Data = Rtl8168Read32(Adapter, RL_GPHY_OCP);
+        if (Data & RL_MACOCP_FLAG)
+        {
+            *Value = (USHORT)(Data & RL_MACOCP_DATA_MASK);
+            return TRUE;
+        }
+        NdisStallExecution(25);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
 Rtl8168PhyWrite(
     _In_ PRTL8168_ADAPTER Adapter,
     _In_ ULONG Reg,
     _In_ USHORT Value)
 {
     ULONG i;
+    ULONG OcpReg;
+
+    if (Adapter->Rtl8168GPlus)
+    {
+        if (Reg == 0x1f)
+        {
+            Adapter->PhyOcpBase = Value ? ((ULONG)Value << 4) : RL_OCP_STD_PHY_BASE;
+            return TRUE;
+        }
+
+        OcpReg = Reg & 0x1f;
+        if (Adapter->PhyOcpBase != RL_OCP_STD_PHY_BASE)
+        {
+            if (OcpReg < 0x10)
+                return FALSE;
+            OcpReg -= 0x10;
+        }
+
+        return Rtl8168PhyOcpWrite(Adapter,
+                                  Adapter->PhyOcpBase + (OcpReg * 2),
+                                  Value);
+    }
 
     Rtl8168Write32(Adapter,
                    RL_PHYAR,
@@ -209,7 +303,10 @@ Rtl8168PhyWrite(
     for (i = 0; i < 200; i++)
     {
         if (!(Rtl8168Read32(Adapter, RL_PHYAR) & RL_PHYAR_FLAG))
+        {
+            NdisStallExecution(20);
             return TRUE;
+        }
         NdisStallExecution(25);
     }
 
@@ -224,8 +321,33 @@ Rtl8168PhyRead(
 {
     ULONG i;
     ULONG Data;
+    ULONG OcpReg;
 
     *Value = 0xffff;
+
+    if (Adapter->Rtl8168GPlus)
+    {
+        if (Reg == 0x1f)
+        {
+            *Value = (Adapter->PhyOcpBase == RL_OCP_STD_PHY_BASE) ?
+                     (USHORT)0 :
+                     (USHORT)(Adapter->PhyOcpBase >> 4);
+            return TRUE;
+        }
+
+        OcpReg = Reg & 0x1f;
+        if (Adapter->PhyOcpBase != RL_OCP_STD_PHY_BASE)
+        {
+            if (OcpReg < 0x10)
+                return FALSE;
+            OcpReg -= 0x10;
+        }
+
+        return Rtl8168PhyOcpRead(Adapter,
+                                 Adapter->PhyOcpBase + (OcpReg * 2),
+                                 Value);
+    }
+
     Rtl8168Write32(Adapter,
                    RL_PHYAR,
                    (Reg & 0x1f) << RL_PHYAR_REG_SHIFT);
@@ -236,6 +358,7 @@ Rtl8168PhyRead(
         if (Data & RL_PHYAR_FLAG)
         {
             *Value = (USHORT)(Data & RL_PHYAR_DATA_MASK);
+            NdisStallExecution(20);
             return TRUE;
         }
         NdisStallExecution(25);
@@ -517,8 +640,14 @@ static VOID
 Rtl8168IdentifyHardware(
     _Inout_ PRTL8168_ADAPTER Adapter)
 {
-    Adapter->HwRev = Rtl8168Read32(Adapter, RL_TXCFG) & RL_TXCFG_HWREV_MASK;
-    Adapter->Rtl8168H = (Adapter->HwRev == RL_HWREV_8168H);
+    ULONG TxCfg = Rtl8168Read32(Adapter, RL_TXCFG);
+
+    Adapter->ChipXid = (TxCfg >> RL_TXCFG_XID_SHIFT) & RL_TXCFG_XID_MASK;
+    Adapter->HwRev = TxCfg & RL_TXCFG_HWREV_MASK;
+    Adapter->Rtl8168H2 = (Adapter->ChipXid == RL_XID_8168H_2);
+    Adapter->Rtl8168H =
+        (Adapter->ChipXid == RL_XID_8168H) || Adapter->Rtl8168H2 ||
+        (Adapter->HwRev == RL_HWREV_8168H) || (Adapter->HwRev == RL_HWREV_8168H_2);
     Adapter->Rtl8168GPlus =
         (Adapter->HwRev == RL_HWREV_8168G) ||
         (Adapter->HwRev == RL_HWREV_8168GU) ||
@@ -527,12 +656,16 @@ Rtl8168IdentifyHardware(
         (Adapter->HwRev == RL_HWREV_8168FP) ||
         (Adapter->HwRev == RL_HWREV_8411B);
     Adapter->MacStatCplus = Adapter->Rtl8168GPlus;
+    Adapter->RxChecksumEnabled = FALSE;
     Adapter->PcieHashSwap = TRUE;
+    Adapter->PhyOcpBase = RL_OCP_STD_PHY_BASE;
 
-    DPRINT1("rtl8168: hwrev=0x%08lx gplus=%u h=%u macstat=%u\n",
+    DPRINT1("rtl8168: hwrev=0x%08lx xid=0x%03lx gplus=%u h=%u h2=%u macstat=%u\n",
             Adapter->HwRev,
+            Adapter->ChipXid,
             Adapter->Rtl8168GPlus ? 1 : 0,
             Adapter->Rtl8168H ? 1 : 0,
+            Adapter->Rtl8168H2 ? 1 : 0,
             Adapter->MacStatCplus ? 1 : 0);
 }
 
@@ -847,18 +980,28 @@ Rtl8168Apply8168hPhyScript(
 
 static VOID
 Rtl8168FirmwareCandidates(
-    _In_ ULONG HwRev,
+    _In_ PRTL8168_ADAPTER Adapter,
     _Out_writes_(2) PCWSTR *Names)
 {
     Names[0] = NULL;
     Names[1] = NULL;
 
-    switch (HwRev)
+    if (Adapter->Rtl8168H2 || Adapter->ChipXid == RL_XID_8168H_2)
     {
-        case RL_HWREV_8168H:
-            Names[0] = L"rtl8168h-2.fw";
-            Names[1] = L"rtl8168h-1.fw";
-            break;
+        Names[0] = L"rtl8168h-2.fw";
+        Names[1] = L"rtl8168h-1.fw";
+        return;
+    }
+
+    if (Adapter->Rtl8168H || Adapter->ChipXid == RL_XID_8168H)
+    {
+        Names[0] = L"rtl8168h-1.fw";
+        Names[1] = L"rtl8168h-2.fw";
+        return;
+    }
+
+    switch (Adapter->HwRev)
+    {
         case RL_HWREV_8168G:
             Names[0] = L"rtl8168g-2.fw";
             Names[1] = L"rtl8168g-3.fw";
@@ -986,6 +1129,7 @@ Rtl8168LoadAndApplyFirmwareFile(
                                (const ULONG *)(Buffer + Start),
                                OpCount);
     ExFreePoolWithTag(Buffer, RTL8168_TAG);
+    Adapter->FirmwareApplied = TRUE;
     DPRINT1("rtl8168: applied %ws (%lu ops)\n", FileName, OpCount);
     return STATUS_SUCCESS;
 }
@@ -998,7 +1142,7 @@ Rtl8168LoadAndApplyFirmware(
     NTSTATUS Status = STATUS_NOT_FOUND;
     ULONG i;
 
-    Rtl8168FirmwareCandidates(Adapter->HwRev, Names);
+    Rtl8168FirmwareCandidates(Adapter, Names);
     for (i = 0; i < RTL_NUMBER_OF(Names); i++)
     {
         if (!Names[i])
@@ -1009,6 +1153,19 @@ Rtl8168LoadAndApplyFirmware(
     }
 
     return Status;
+}
+
+static VOID
+Rtl8168PhyDisableEeeAdvert(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
+    Rtl8168PhyWrite(Adapter, RL_8168H_MMD_CTRL, RL_8168H_MDIO_MMD_AN);
+    Rtl8168PhyWrite(Adapter, RL_8168H_MMD_DATA, RL_8168H_MDIO_AN_EEE_ADV);
+    Rtl8168PhyWrite(Adapter,
+                    RL_8168H_MMD_CTRL,
+                    (USHORT)(RL_8168H_MMD_CTRL_NOINCR | RL_8168H_MDIO_MMD_AN));
+    Rtl8168PhyWrite(Adapter, RL_8168H_MMD_DATA, 0x0000);
 }
 
 static VOID
@@ -1079,13 +1236,17 @@ Rtl8168Configure8168hPhy(
     Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
 
     Rtl8168PhyWrite(Adapter, 0x1f, 0x0a44);
-    Rtl8168PhyModify(Adapter, 0x14, 0x0080, 0x0000);
+    Rtl8168PhyModify(Adapter, 0x11, 0x0080, 0x0000);
     Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
 
     Rtl8168PhyWrite(Adapter, 0x1f, 0x0a43);
+    Rtl8168PhyModify(Adapter, 0x10, 0x0001, 0x0000);
     if (Rtl8168PhyRead(Adapter, 0x10, &PhyVal) && (PhyVal & 0x0004))
         Rtl8168PhyModify(Adapter, 0x10, 0x0004, 0x0000);
+    Rtl8168PhyModify(Adapter, 0x11, RL_8168H_PHY_EEE_CFG_BIT, 0x0000);
     Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
+
+    Rtl8168PhyDisableEeeAdvert(Adapter);
 }
 
 static VOID
@@ -1148,7 +1309,6 @@ Rtl8168Configure8168H(
     Rtl8168Write8(Adapter,
                   RL_EEE_LED,
                   (UCHAR)(Rtl8168Read8(Adapter, RL_EEE_LED) & ~0x07));
-    Rtl8168EriModify(Adapter, 0x1b0, RL_ERIAR_MASK_0011, RL_8168H_ERI_EEE_SET, 0x00);
     Rtl8168Write8(Adapter,
                   RL_DLLPR,
                   (UCHAR)(Rtl8168Read8(Adapter, RL_DLLPR) &
@@ -1157,7 +1317,11 @@ Rtl8168Configure8168H(
                   RL_MISC1,
                   (UCHAR)(Rtl8168Read8(Adapter, RL_MISC1) & ~RL_MISC1_PFM_D3COLD_EN));
 
-    Rtl8168EriModify(Adapter, 0x1b0, RL_ERIAR_MASK_0011, 0x0000, RL_8168H_ERI_EEE_CLR);
+    Rtl8168EriModify(Adapter,
+                     0x1b0,
+                     RL_ERIAR_MASK_0011,
+                     0x0000,
+                     RL_8168H_ERI_EEE_CLR | RL_8168H_ERI_TX_LPI_CLR);
     Rtl8168DisableL2L3(Adapter);
 
     Rtl8168PhyWrite(Adapter, 0x1f, 0x0c42);
@@ -1191,8 +1355,8 @@ Rtl8168ApplyRxFilter(
     _In_ PRTL8168_ADAPTER Adapter)
 {
     ULONG Filter = Adapter->PacketFilter;
-    ULONG RxCfg = RL_RXCFG_BASE | RL_RXCFG_APM | RL_RXCFG_AB;
-    ULONG Hash[2] = { 0, 0 };
+    ULONG RxCfg;
+    ULONG Hash[2] = { 0xffffffff, 0xffffffff };
     ULONG i;
     BOOLEAN InGrace = (KeQueryInterruptTime() < Adapter->LinkGraceTicks);
 
@@ -1200,7 +1364,9 @@ Rtl8168ApplyRxFilter(
         Filter = RTL8168_DEFAULT_PACKET_FILTER;
 
     if (Adapter->Rtl8168GPlus)
-        RxCfg |= RL_RXCFG_EARLYOFFV2;
+        RxCfg = RL_RXCFG_GPLUS_BASE | RL_RXCFG_APM | RL_RXCFG_AB | RL_RXCFG_AM;
+    else
+        RxCfg = RL_RXCFG_BASE | RL_RXCFG_APM | RL_RXCFG_AB;
 
     if (Filter & NDIS_PACKET_TYPE_PROMISCUOUS)
     {
@@ -1215,15 +1381,26 @@ Rtl8168ApplyRxFilter(
     else if (Filter & NDIS_PACKET_TYPE_MULTICAST)
     {
         RxCfg |= RL_RXCFG_AM;
+        Hash[0] = Hash[1] = 0;
         for (i = 0; i < Adapter->MulticastCount; i++)
         {
             ULONG Crc = Rtl8168EtherCrc32(Adapter->MulticastList[i], ETH_LENGTH_OF_ADDRESS);
             ULONG Bit = (Crc >> 26) & 0x3f;
             Hash[Bit >> 5] |= 1u << (Bit & 31);
         }
+        if (Hash[0] == 0 && Hash[1] == 0)
+            Hash[0] = Hash[1] = 0xffffffff;
+    }
+    else if (Adapter->Rtl8168GPlus)
+    {
+        Hash[0] = Hash[1] = 0xffffffff;
+    }
+    else
+    {
+        Hash[0] = Hash[1] = 0;
     }
 
-    if (!(Filter & NDIS_PACKET_TYPE_BROADCAST) && !InGrace)
+    if (!(Filter & NDIS_PACKET_TYPE_BROADCAST) && !InGrace && Adapter->LinkEverUp)
         RxCfg &= ~RL_RXCFG_AB;
 
     if (Adapter->PcieHashSwap && (Hash[0] | Hash[1]))
@@ -1245,21 +1422,46 @@ Rtl8168NoteLinkActivity(
     Adapter->LinkHoldTicks = KeQueryInterruptTime() + RTL8168_LINK_HOLD_100NS;
 }
 
+static NDIS_MEDIA_CONNECT_STATE
+Rtl8168NdisConnectState(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    /*
+     * LiberNT TCPIP maps anything other than MediaConnectStateConnected to
+     * NDIS_STATUS_MEDIA_DISCONNECT, which drops the interface from ipconfig.
+     * Report Unknown as Connected only after a real PHY link so DHCP does not
+     * start into a dead cable; later grace Unknowns stay Connected.
+     */
+    if (Adapter->MediaConnectState == MediaConnectStateDisconnected)
+        return MediaConnectStateDisconnected;
+    if (Adapter->MediaConnectState == MediaConnectStateUnknown)
+        return Adapter->LinkEverUp ? MediaConnectStateConnected :
+                                     MediaConnectStateDisconnected;
+    return MediaConnectStateConnected;
+}
+
 static VOID
 Rtl8168IndicateLinkState(
     _In_ PRTL8168_ADAPTER Adapter)
 {
     NDIS_LINK_STATE LinkState;
     NDIS_STATUS_INDICATION Indication;
+    NDIS_MEDIA_CONNECT_STATE Report = Rtl8168NdisConnectState(Adapter);
+    ULONG64 Speed = Adapter->LinkSpeed;
+
+    if (Speed == NDIS_LINK_SPEED_UNKNOWN)
+        Speed = RTL8168_LINK_SPEED_1G;
 
     RtlZeroMemory(&LinkState, sizeof(LinkState));
     LinkState.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
     LinkState.Header.Revision = NDIS_LINK_STATE_REVISION_1;
     LinkState.Header.Size = NDIS_SIZEOF_LINK_STATE_REVISION_1;
-    LinkState.MediaConnectState = Adapter->MediaConnectState;
-    LinkState.MediaDuplexState = Adapter->MediaDuplexState;
-    LinkState.XmitLinkSpeed = Adapter->LinkSpeed;
-    LinkState.RcvLinkSpeed = Adapter->LinkSpeed;
+    LinkState.MediaConnectState = Report;
+    LinkState.MediaDuplexState =
+        (Adapter->MediaDuplexState == MediaDuplexStateUnknown) ?
+        MediaDuplexStateFull : Adapter->MediaDuplexState;
+    LinkState.XmitLinkSpeed = Speed;
+    LinkState.RcvLinkSpeed = Speed;
     LinkState.PauseFunctions = NdisPauseFunctionsSendAndReceive;
 
     RtlZeroMemory(&Indication, sizeof(Indication));
@@ -1312,6 +1514,15 @@ Rtl8168RefreshLink(
     if (LinkUp)
     {
         Adapter->LinkDownPolls = 0;
+        if (!Adapter->LinkEverUp && Adapter->Rtl8168H)
+        {
+            Rtl8168EriModify(Adapter,
+                             0x1b0,
+                             RL_ERIAR_MASK_0011,
+                             0x0000,
+                             RL_8168H_ERI_TX_LPI_CLR);
+        }
+        Adapter->LinkEverUp = TRUE;
         Connect = MediaConnectStateConnected;
         Duplex = (Media & RL_GMEDIA_FDX) ? MediaDuplexStateFull : MediaDuplexStateHalf;
         if (!(Media & (RL_GMEDIA_FDX | RL_GMEDIA_10M | RL_GMEDIA_100M | RL_GMEDIA_1000M)))
@@ -1490,7 +1701,9 @@ Rtl8168ProgramDatapath(
 {
     USHORT Cplus;
 
-    Cplus = RL_CPLUSCMD_PCI_MRW | RL_CPLUSCMD_PCI_DAC | RL_CPLUSCMD_RXCSUM;
+    Cplus = RL_CPLUSCMD_PCI_MRW | RL_CPLUSCMD_PCI_DAC;
+    if (Adapter->RxChecksumEnabled)
+        Cplus |= RL_CPLUSCMD_RXCSUM;
     if (Adapter->MacStatCplus)
         Cplus |= RL_CPLUSCMD_MACSTAT_DIS | RL_CPLUSCMD_INTT_1;
     else
@@ -1530,7 +1743,7 @@ Rtl8168ProgramDatapath(
     }
 
     Rtl8168Write8(Adapter, RL_TDFNR, 0x08);
-    Rtl8168Write16(Adapter, RL_RMS, RTL8168_BUFFER_SIZE);
+    Rtl8168Write16(Adapter, RL_RMS, RTL8168_RX_MAX_SIZE);
     Rtl8168ApplyRxFilter(Adapter);
     Rtl8168Write16(Adapter, RL_INTRMOD, RTL8168_INTR_MITIGATE);
 
@@ -1541,15 +1754,66 @@ Rtl8168ProgramDatapath(
 }
 
 static VOID
+Rtl8168LeaveOutOfBand(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    ULONG i;
+
+    Rtl8168Write32(Adapter,
+                   RL_MISC,
+                   Rtl8168Read32(Adapter, RL_MISC) | RL_MISC_RXDV_GATE);
+    NdisStallExecution(2000);
+
+    for (i = 0; i < 100; i++)
+    {
+        if (Rtl8168Read32(Adapter, RL_TXCFG) & RL_TXCFG_QUEUE_EMPTY)
+            break;
+        NdisStallExecution(100);
+    }
+
+    if (!Rtl8168WaitMcuBits(Adapter, RL_MCU_TXFIFO_EMPTY | RL_MCU_RXFIFO_EMPTY))
+        DPRINT1("rtl8168: oob mcu fifo wait timed out\n");
+
+    Rtl8168Write8(Adapter,
+                  RL_COMMAND,
+                  (UCHAR)(Rtl8168Read8(Adapter, RL_COMMAND) &
+                          ~(RL_CMD_TX_ENB | RL_CMD_RX_ENB)));
+    NdisMSleep(1);
+
+    Rtl8168Write8(Adapter,
+                  RL_MCU_CMD,
+                  (UCHAR)(Rtl8168Read8(Adapter, RL_MCU_CMD) & ~RL_MCU_NOW_IS_OOB));
+
+    Rtl8168MacOcpModify(Adapter,
+                        RL_MACOCP_LINK_LIST,
+                        RL_MACOCP_LINK_LIST_HOLD,
+                        0);
+    if (!Rtl8168WaitMcuBits(Adapter, RL_MCU_LINK_LIST_RDY))
+        DPRINT1("rtl8168: oob link-list hold wait timed out\n");
+
+    Rtl8168MacOcpModify(Adapter,
+                        RL_MACOCP_LINK_LIST,
+                        0,
+                        RL_MACOCP_LINK_LIST_GO);
+    if (!Rtl8168WaitMcuBits(Adapter, RL_MCU_LINK_LIST_RDY))
+        DPRINT1("rtl8168: oob link-list go wait timed out\n");
+
+    DPRINT1("rtl8168: left out-of-band\n");
+}
+
+static VOID
 Rtl8168StartHardware(
     _In_ PRTL8168_ADAPTER Adapter)
 {
     Rtl8168DisableAspm(Adapter);
+    Rtl8168IdentifyHardware(Adapter);
+
+    if (Adapter->Rtl8168GPlus)
+        Rtl8168LeaveOutOfBand(Adapter);
 
     if (!Rtl8168SoftReset(Adapter))
         DPRINT1("rtl8168: soft reset timed out\n");
 
-    Rtl8168IdentifyHardware(Adapter);
     Rtl8168PhyWake(Adapter);
 
     Rtl8168Write8(Adapter, RL_EECMD, RL_EEMODE_WRITECFG);
@@ -1601,6 +1865,7 @@ Rtl8168StartHardware(
     if (Adapter->Rtl8168GPlus)
         Rtl8168Write8(Adapter, RL_COMMAND, RL_CMD_TX_ENB | RL_CMD_RX_ENB);
 
+    Adapter->LinkGraceTicks = KeQueryInterruptTime() + RTL8168_LINK_GRACE_100NS;
     Rtl8168RefreshLink(Adapter, TRUE);
 }
 
@@ -1803,6 +2068,16 @@ Rtl8168PollReceive(
             continue;
         }
 
+        if ((Cmd & RL_RDESC_PROTO_MASK) == RL_RDESC_PROTO_UDP &&
+            Adapter->RxUdpLogged < 8)
+        {
+            Adapter->RxUdpLogged++;
+            DPRINT1("rtl8168: rx udp cmd=0x%08lx len=%lu rxcs=%u\n",
+                    Cmd,
+                    Length,
+                    Adapter->RxChecksumEnabled ? 1 : 0);
+        }
+
         Nbl = Adapter->RxBuffers[Index].NetBufferList;
         if (!Nbl)
         {
@@ -1828,6 +2103,42 @@ Rtl8168PollReceive(
         NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
         NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SUCCESS;
         NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[0] = (PVOID)(ULONG_PTR)Index;
+
+        if (Adapter->RxChecksumEnabled)
+        {
+            NDIS_TCP_IP_CHECKSUM_NET_BUFFER_LIST_INFO ChecksumInfo;
+            ULONG Proto = Cmd & RL_RDESC_PROTO_MASK;
+
+            RtlZeroMemory(&ChecksumInfo, sizeof(ChecksumInfo));
+            if (Proto == RL_RDESC_PROTO_TCP || Proto == RL_RDESC_PROTO_UDP ||
+                Proto == RL_RDESC_PROTO_IP)
+            {
+                ChecksumInfo.Receive.IpChecksumSucceeded =
+                    !(Cmd & RL_RDESC_IPFAIL) ? 1 : 0;
+                ChecksumInfo.Receive.IpChecksumFailed =
+                    (Cmd & RL_RDESC_IPFAIL) ? 1 : 0;
+            }
+            if (Proto == RL_RDESC_PROTO_TCP)
+            {
+                ChecksumInfo.Receive.TcpChecksumSucceeded =
+                    !(Cmd & RL_RDESC_TCPFAIL) ? 1 : 0;
+                ChecksumInfo.Receive.TcpChecksumFailed =
+                    (Cmd & RL_RDESC_TCPFAIL) ? 1 : 0;
+            }
+            else if (Proto == RL_RDESC_PROTO_UDP)
+            {
+                ChecksumInfo.Receive.UdpChecksumSucceeded =
+                    !(Cmd & RL_RDESC_UDPFAIL) ? 1 : 0;
+                ChecksumInfo.Receive.UdpChecksumFailed =
+                    (Cmd & RL_RDESC_UDPFAIL) ? 1 : 0;
+            }
+            NET_BUFFER_LIST_INFO(Nbl, TcpIpChecksumNetBufferListInfo) =
+                ChecksumInfo.Value;
+        }
+        else
+        {
+            NET_BUFFER_LIST_INFO(Nbl, TcpIpChecksumNetBufferListInfo) = NULL;
+        }
 
         Adapter->RxBuffers[Index].Indicated = TRUE;
         InterlockedIncrement(&Adapter->RxOutstanding);
@@ -1904,6 +2215,7 @@ Rtl8168InterruptDpc(
     UNREFERENCED_PARAMETER(NdisReserved1);
 
     Rtl8168DrainTxCompletions(Adapter);
+    Rtl8168PollReceive(Adapter, RTL8168_RX_BUDGET);
     Rtl8168PollReceive(Adapter, RTL8168_RX_BUDGET);
 
     if (Rtl8168RefreshLink(Adapter, FALSE))
@@ -2336,6 +2648,61 @@ Rtl8168SetRegistrationAttributes(
                                       (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&RegAttrs);
 }
 
+static VOID
+Rtl8168FillChecksumOffload(
+    _Out_ PNDIS_OFFLOAD Offload,
+    _In_ BOOLEAN RxEnabled)
+{
+    RtlZeroMemory(Offload, sizeof(*Offload));
+    Offload->Header.Type = NDIS_OBJECT_TYPE_OFFLOAD;
+    Offload->Header.Revision = NDIS_OFFLOAD_REVISION_1;
+    Offload->Header.Size = NDIS_SIZEOF_NDIS_OFFLOAD_REVISION_1;
+
+    Offload->Checksum.IPv4Transmit.Encapsulation = NDIS_ENCAPSULATION_NOT_SUPPORTED;
+    Offload->Checksum.IPv6Transmit.Encapsulation = NDIS_ENCAPSULATION_NOT_SUPPORTED;
+    Offload->LsoV1.IPv4.Encapsulation = NDIS_ENCAPSULATION_NOT_SUPPORTED;
+    Offload->LsoV2.IPv4.Encapsulation = NDIS_ENCAPSULATION_NOT_SUPPORTED;
+    Offload->LsoV2.IPv6.Encapsulation = NDIS_ENCAPSULATION_NOT_SUPPORTED;
+
+    if (RxEnabled)
+    {
+        Offload->Checksum.IPv4Receive.Encapsulation = NDIS_ENCAPSULATION_IEEE_802_3;
+        Offload->Checksum.IPv4Receive.IpOptionsSupported = TRUE;
+        Offload->Checksum.IPv4Receive.TcpOptionsSupported = TRUE;
+        Offload->Checksum.IPv4Receive.TcpChecksum = TRUE;
+        Offload->Checksum.IPv4Receive.UdpChecksum = TRUE;
+        Offload->Checksum.IPv4Receive.IpChecksum = TRUE;
+    }
+    else
+    {
+        Offload->Checksum.IPv4Receive.Encapsulation = NDIS_ENCAPSULATION_NOT_SUPPORTED;
+    }
+
+    Offload->Checksum.IPv6Receive.Encapsulation = NDIS_ENCAPSULATION_NOT_SUPPORTED;
+}
+
+static NDIS_STATUS
+Rtl8168SetOffloadAttributes(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    NDIS_MINIPORT_ADAPTER_OFFLOAD_ATTRIBUTES OffloadAttrs;
+    NDIS_OFFLOAD DefaultOffload;
+    NDIS_OFFLOAD HardwareOffload;
+
+    Rtl8168FillChecksumOffload(&HardwareOffload, FALSE);
+    Rtl8168FillChecksumOffload(&DefaultOffload, FALSE);
+
+    RtlZeroMemory(&OffloadAttrs, sizeof(OffloadAttrs));
+    OffloadAttrs.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_OFFLOAD_ATTRIBUTES;
+    OffloadAttrs.Header.Revision = NDIS_MINIPORT_ADAPTER_OFFLOAD_ATTRIBUTES_REVISION_1;
+    OffloadAttrs.Header.Size = NDIS_SIZEOF_MINIPORT_ADAPTER_OFFLOAD_ATTRIBUTES_REVISION_1;
+    OffloadAttrs.DefaultOffloadConfiguration = &DefaultOffload;
+    OffloadAttrs.HardwareOffloadCapabilities = &HardwareOffload;
+
+    return NdisMSetMiniportAttributes(Adapter->MiniportHandle,
+                                      (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&OffloadAttrs);
+}
+
 static NDIS_STATUS
 Rtl8168SetGeneralAttributes(
     _In_ PRTL8168_ADAPTER Adapter)
@@ -2351,10 +2718,14 @@ Rtl8168SetGeneralAttributes(
     GenAttrs.MtuSize = RTL8168_MTU;
     GenAttrs.MaxXmitLinkSpeed = RTL8168_LINK_SPEED_1G;
     GenAttrs.MaxRcvLinkSpeed = RTL8168_LINK_SPEED_1G;
-    GenAttrs.XmitLinkSpeed = Adapter->LinkSpeed;
-    GenAttrs.RcvLinkSpeed = Adapter->LinkSpeed;
-    GenAttrs.MediaConnectState = Adapter->MediaConnectState;
-    GenAttrs.MediaDuplexState = Adapter->MediaDuplexState;
+    GenAttrs.XmitLinkSpeed =
+        (Adapter->LinkSpeed == NDIS_LINK_SPEED_UNKNOWN) ?
+        RTL8168_LINK_SPEED_1G : Adapter->LinkSpeed;
+    GenAttrs.RcvLinkSpeed = GenAttrs.XmitLinkSpeed;
+    GenAttrs.MediaConnectState = Rtl8168NdisConnectState(Adapter);
+    GenAttrs.MediaDuplexState =
+        (Adapter->MediaDuplexState == MediaDuplexStateUnknown) ?
+        MediaDuplexStateFull : Adapter->MediaDuplexState;
     GenAttrs.LookaheadSize = Adapter->Lookahead;
     GenAttrs.MacOptions = RTL8168_MAC_OPTIONS;
     GenAttrs.SupportedPacketFilters = RTL8168_SUPPORTED_FILTERS;
@@ -2485,6 +2856,7 @@ Rtl8168QueryInformation(
         NDIS_LINK_STATE LinkState;
         NDIS_STATISTICS_INFO Statistics;
         NDIS_INTERRUPT_MODERATION_PARAMETERS InterruptModeration;
+        NDIS_OFFLOAD Offload;
         UCHAR Mac[ETH_LENGTH_OF_ADDRESS];
     } Data;
 
@@ -2560,10 +2932,14 @@ Rtl8168QueryInformation(
             Data.LinkState.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
             Data.LinkState.Header.Revision = NDIS_LINK_STATE_REVISION_1;
             Data.LinkState.Header.Size = NDIS_SIZEOF_LINK_STATE_REVISION_1;
-            Data.LinkState.MediaConnectState = Adapter->MediaConnectState;
-            Data.LinkState.MediaDuplexState = Adapter->MediaDuplexState;
-            Data.LinkState.XmitLinkSpeed = Adapter->LinkSpeed;
-            Data.LinkState.RcvLinkSpeed = Adapter->LinkSpeed;
+            Data.LinkState.MediaConnectState = Rtl8168NdisConnectState(Adapter);
+            Data.LinkState.MediaDuplexState =
+                (Adapter->MediaDuplexState == MediaDuplexStateUnknown) ?
+                MediaDuplexStateFull : Adapter->MediaDuplexState;
+            Data.LinkState.XmitLinkSpeed =
+                (Adapter->LinkSpeed == NDIS_LINK_SPEED_UNKNOWN) ?
+                RTL8168_LINK_SPEED_1G : Adapter->LinkSpeed;
+            Data.LinkState.RcvLinkSpeed = Data.LinkState.XmitLinkSpeed;
             Data.LinkState.PauseFunctions = NdisPauseFunctionsSendAndReceive;
             return Rtl8168CopyQuery(OidRequest, &Data.LinkState, sizeof(Data.LinkState));
 
@@ -2636,6 +3012,14 @@ Rtl8168QueryInformation(
         case OID_802_3_MAXIMUM_LIST_SIZE:
             Data.Ulong = RTL8168_MAX_MULTICAST;
             return Rtl8168CopyQuery(OidRequest, &Data.Ulong, sizeof(Data.Ulong));
+
+        case OID_TCP_OFFLOAD_HARDWARE_CAPABILITIES:
+            Rtl8168FillChecksumOffload(&Data.Offload, FALSE);
+            return Rtl8168CopyQuery(OidRequest, &Data.Offload, sizeof(Data.Offload));
+
+        case OID_TCP_OFFLOAD_CURRENT_CONFIG:
+            Rtl8168FillChecksumOffload(&Data.Offload, FALSE);
+            return Rtl8168CopyQuery(OidRequest, &Data.Offload, sizeof(Data.Offload));
 
         default:
             return NDIS_STATUS_NOT_SUPPORTED;
@@ -2714,6 +3098,24 @@ Rtl8168SetInformation(
             OidRequest->DATA.SET_INFORMATION.BytesRead = ETH_LENGTH_OF_ADDRESS;
             return NDIS_STATUS_SUCCESS;
 
+        case OID_TCP_OFFLOAD_PARAMETERS:
+            if (Length < sizeof(NDIS_OFFLOAD_PARAMETERS))
+            {
+                OidRequest->DATA.SET_INFORMATION.BytesNeeded = sizeof(NDIS_OFFLOAD_PARAMETERS);
+                return NDIS_STATUS_BUFFER_TOO_SHORT;
+            }
+            {
+                USHORT Cplus;
+
+                UNREFERENCED_PARAMETER(Buffer);
+                Adapter->RxChecksumEnabled = FALSE;
+                Cplus = Rtl8168Read16(Adapter, RL_CPLUSCMD);
+                Cplus &= (USHORT)~RL_CPLUSCMD_RXCSUM;
+                Rtl8168Write16(Adapter, RL_CPLUSCMD, Cplus);
+            }
+            OidRequest->DATA.SET_INFORMATION.BytesRead = sizeof(NDIS_OFFLOAD_PARAMETERS);
+            return NDIS_STATUS_SUCCESS;
+
         default:
             return NDIS_STATUS_NOT_SUPPORTED;
     }
@@ -2777,6 +3179,10 @@ Rtl8168InitializeEx(
     Status = Rtl8168SetGeneralAttributes(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
         goto Fail;
+
+    Status = Rtl8168SetOffloadAttributes(Adapter);
+    if (Status != NDIS_STATUS_SUCCESS)
+        DPRINT1("rtl8168: offload attributes 0x%08x\n", Status);
 
     Status = Rtl8168StartLinkTimer(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
@@ -2863,6 +3269,13 @@ Rtl8168Pause(
     Rtl8168DisableInterrupts(Adapter);
     Rtl8168DrainTxCompletions(Adapter);
     Rtl8168WaitForReturnedReceives(Adapter);
+    if (Adapter->Rtl8168GPlus)
+    {
+        Rtl8168Write32(Adapter,
+                       RL_MISC,
+                       Rtl8168Read32(Adapter, RL_MISC) | RL_MISC_RXDV_GATE);
+        NdisStallExecution(2000);
+    }
     Rtl8168Write32(Adapter,
                    RL_RXCFG,
                    Rtl8168Read32(Adapter, RL_RXCFG) &
@@ -2870,6 +3283,52 @@ Rtl8168Pause(
     Rtl8168Write8(Adapter, RL_COMMAND, 0);
     Adapter->RingsOwnedByHardware = FALSE;
     return NDIS_STATUS_SUCCESS;
+}
+
+static VOID
+Rtl8168ReapplyMacBringUp(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    Rtl8168Write8(Adapter, RL_EECMD, RL_EEMODE_WRITECFG);
+    Rtl8168Write8(Adapter,
+                  RL_CFG1,
+                  (UCHAR)(Rtl8168Read8(Adapter, RL_CFG1) | RL_CFG1_DRIVER_LOAD | RL_CFG1_PM_ENABLE));
+    Rtl8168Write8(Adapter,
+                  RL_CFG2,
+                  (UCHAR)(Rtl8168Read8(Adapter, RL_CFG2) & ~RL_CFG2_CLKREQ_EN));
+    if (Adapter->MessageInterrupt)
+    {
+        Rtl8168Write8(Adapter,
+                      RL_CFG2,
+                      (UCHAR)(Rtl8168Read8(Adapter, RL_CFG2) | RL_CFG2_MSI_ENABLE));
+    }
+    Rtl8168Write8(Adapter,
+                  RL_CFG5,
+                  (UCHAR)(Rtl8168Read8(Adapter, RL_CFG5) & ~RL_CFG5_ASPM_EN));
+    Rtl8168Write8(Adapter, RL_EECMD, RL_EEMODE_OFF);
+
+    if (Adapter->Rtl8168H)
+    {
+        Rtl8168Configure8168H(Adapter);
+        Rtl8168Configure8168hPhy(Adapter);
+    }
+    else if (Adapter->Rtl8168GPlus)
+    {
+        NTSTATUS FwStatus;
+
+        Rtl8168SetPcieEntryLatency(Adapter);
+        Rtl8168SetMaxReadRequest(Adapter, PCI_EXPRESS_MRRS_4096);
+        Rtl8168PhySoftReset(Adapter);
+        FwStatus = Rtl8168LoadAndApplyFirmware(Adapter);
+        if (!NT_SUCCESS(FwStatus) && FwStatus != STATUS_NOT_FOUND)
+            DPRINT1("rtl8168: restart firmware apply failed 0x%08lx\n", FwStatus);
+    }
+    else
+    {
+        Rtl8168SetMaxReadRequest(Adapter, PCI_EXPRESS_MRRS_4096);
+    }
+
+    Rtl8168PhyWake(Adapter);
 }
 
 static NDIS_STATUS
@@ -2890,17 +3349,47 @@ Rtl8168Restart(
     if (Adapter->PacketFilter == 0)
         Adapter->PacketFilter = RTL8168_DEFAULT_PACKET_FILTER;
 
+    if (Adapter->RingsOwnedByHardware)
+        Rtl8168StopHardware(Adapter);
+    else
+        Rtl8168Write8(Adapter, RL_COMMAND, 0);
+
+    Rtl8168ReapplyMacBringUp(Adapter);
+    Rtl8168InitRings(Adapter);
     Rtl8168WriteMacAddress(Adapter);
     Rtl8168ProgramDatapath(Adapter, TRUE);
+
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
+    Rtl8168PhyWrite(Adapter,
+                    MII_ADVERTISE,
+                    ADVERTISE_CSMA | ADVERTISE_10HALF | ADVERTISE_10FULL |
+                    ADVERTISE_100HALF | ADVERTISE_100FULL | ADVERTISE_PAUSE);
+    Rtl8168PhyWrite(Adapter, MII_CTRL1000, ADVERTISE_1000FULL);
+    Rtl8168PhyWrite(Adapter, MII_BMCR, BMCR_ANENABLE | BMCR_ANRESTART);
+
     Adapter->DatapathReady = TRUE;
     Rtl8168EnableInterrupts(Adapter);
-    NdisMSleep(200000);
+
+    {
+        ULONG Wait;
+
+        for (Wait = 0; Wait < 100; Wait++)
+        {
+            Rtl8168RefreshLink(Adapter, FALSE);
+            if (Adapter->MediaConnectState == MediaConnectStateConnected)
+                break;
+            NdisMSleep(100000);
+        }
+    }
+
     Rtl8168RefreshLink(Adapter, TRUE);
-    DPRINT1("rtl8168: restart link=%s media=0x%02x speed=%I64u\n",
+    DPRINT1("rtl8168: restart link=%s media=0x%02x speed=%I64u rxerr=%I64u fw=%u\n",
             (Adapter->MediaConnectState == MediaConnectStateConnected) ? "up" :
             (Adapter->MediaConnectState == MediaConnectStateUnknown) ? "unknown" : "down",
             Rtl8168Read8(Adapter, RL_GMEDIASTAT),
-            Adapter->LinkSpeed);
+            Adapter->LinkSpeed,
+            Adapter->RxErrors,
+            Adapter->FirmwareApplied ? 1 : 0);
     Rtl8168IndicateLinkState(Adapter);
     Rtl8168PollReceive(Adapter, RTL8168_RX_BUDGET);
     return NDIS_STATUS_SUCCESS;
@@ -3028,6 +3517,7 @@ FailNbl:
         KeMemoryBarrier();
         (VOID)Rtl8168Read8(Adapter, RL_COMMAND);
         Rtl8168Write8(Adapter, RL_GTXPOLL, RL_GTXPOLL_NPQ);
+        Rtl8168Write8(Adapter, RL_GTXPOLL, RL_GTXPOLL_NPQ);
         Rtl8168NoteLinkActivity(Adapter);
         if (Rtl8168RefreshLink(Adapter, FALSE))
             Rtl8168IndicateLinkState(Adapter);
@@ -3130,7 +3620,10 @@ Rtl8168Reset(
     Rtl8168StartHardware(Adapter);
     Adapter->DatapathReady = WasReady && !Adapter->SurpriseRemoved;
     if (Adapter->DatapathReady)
+    {
+        Rtl8168ProgramDatapath(Adapter, TRUE);
         Rtl8168EnableInterrupts(Adapter);
+    }
     Rtl8168RefreshLink(Adapter, TRUE);
     Rtl8168IndicateLinkState(Adapter);
     return NDIS_STATUS_SUCCESS;

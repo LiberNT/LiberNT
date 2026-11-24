@@ -623,7 +623,8 @@ static NTSTATUS UDPSendToAddress(
             UnlockObject(AddrFile);
             return STATUS_INVALID_ADDRESS;
         }
-        if (AddrIsUnspecified(&LocalAddress)) GetInterfaceSourceAddress(NCE->Interface, &RemoteAddress, &NCE->Address, &LocalAddress);
+        if (AddrIsUnspecified(&LocalAddress) && !IsBroadcast)
+            GetInterfaceSourceAddress(NCE->Interface, &RemoteAddress, &NCE->Address, &LocalAddress);
     }
     else if (AddrIsUnspecified(&LocalAddress))
     {
@@ -636,7 +637,8 @@ static NTSTATUS UDPSendToAddress(
             return STATUS_NETWORK_UNREACHABLE;
         }
 
-        GetInterfaceSourceAddress(NCE->Interface, &RemoteAddress, &NCE->Address, &LocalAddress);
+        if (!IsBroadcast)
+            GetInterfaceSourceAddress(NCE->Interface, &RemoteAddress, &NCE->Address, &LocalAddress);
     }
     else
     {
