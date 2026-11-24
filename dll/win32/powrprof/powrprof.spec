@@ -25,6 +25,7 @@
 @ stdcall PowerReadDCValueIndex(ptr ptr ptr ptr ptr)
 @ stdcall PowerReadDescription(ptr ptr ptr ptr ptr ptr)
 @ stdcall PowerReadFriendlyName (ptr ptr ptr ptr ptr ptr)
+@ stdcall PowerReadSettingAttributes(ptr ptr)
 @ stdcall PowerRegisterForEffectivePowerModeNotifications(long ptr ptr ptr)
 @ stdcall PowerRegisterSuspendResumeNotification(long ptr ptr)
 @ stdcall PowerUnregisterSuspendResumeNotification(ptr)

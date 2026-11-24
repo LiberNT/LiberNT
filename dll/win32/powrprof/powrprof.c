@@ -215,6 +215,14 @@ POWRPROF_FormatGuid(
     swprintf(Buffer, L"{%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}", Guid->Data1, Guid->Data2, Guid->Data3, Guid->Data4[0], Guid->Data4[1], Guid->Data4[2], Guid->Data4[3], Guid->Data4[4], Guid->Data4[5], Guid->Data4[6], Guid->Data4[7]);
 }
 
+static void
+POWRPROF_FormatKeyGuid(
+    WCHAR Buffer[37],
+    const GUID *Guid)
+{
+    swprintf(Buffer, L"%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x", Guid->Data1, Guid->Data2, Guid->Data3, Guid->Data4[0], Guid->Data4[1], Guid->Data4[2], Guid->Data4[3], Guid->Data4[4], Guid->Data4[5], Guid->Data4[6], Guid->Data4[7]);
+}
+
 static DWORD
 POWRPROF_OpenSettingKey(
     const GUID *Scheme,
@@ -242,6 +250,7 @@ static const WCHAR szDefaultPowerSchemeValues[] = L"DefaultPowerSchemeValues";
 static const WCHAR szPossibleSettings[] = L"PossibleSettings";
 static const WCHAR szFriendlyName[] = L"FriendlyName";
 static const WCHAR szSettingDescription[] = L"Description";
+static const WCHAR szAttributes[] = L"Attributes";
 
 static DWORD
 POWRPROF_OpenDefinitionKey(
@@ -252,19 +261,22 @@ POWRPROF_OpenDefinitionKey(
     BOOL Create,
     HKEY *Key)
 {
-    WCHAR SubgroupString[39], SettingString[39];
+    WCHAR GuidString[37];
     WCHAR Path[MAX_PATH];
     DWORD Disposition;
 
-    POWRPROF_FormatGuid(SubgroupString, Subgroup ? Subgroup : &NO_SUBGROUP_GUID);
+    wcscpy(Path, szPowerSettings);
+    if (Subgroup && !IsEqualGUID(Subgroup, &NO_SUBGROUP_GUID))
+    {
+        POWRPROF_FormatKeyGuid(GuidString, Subgroup);
+        wcscat(Path, L"\\");
+        wcscat(Path, GuidString);
+    }
     if (Setting)
     {
-        POWRPROF_FormatGuid(SettingString, Setting);
-        swprintf(Path, L"%s\\%s\\%s", szPowerSettings, SubgroupString, SettingString);
-    }
-    else
-    {
-        swprintf(Path, L"%s\\%s", szPowerSettings, SubgroupString);
+        POWRPROF_FormatKeyGuid(GuidString, Setting);
+        wcscat(Path, L"\\");
+        wcscat(Path, GuidString);
     }
     if (SubKey)
     {
@@ -296,7 +308,7 @@ POWRPROF_GetDefinedSettingDefault(
     *Value = 0;
     wcscpy(SubKey, szDefaultPowerSchemeValues);
     wcscat(SubKey, L"\\");
-    POWRPROF_FormatGuid(SubKey + wcslen(SubKey), Scheme);
+    POWRPROF_FormatKeyGuid(SubKey + wcslen(SubKey), Scheme);
     if (POWRPROF_OpenDefinitionKey(Subgroup, Setting, SubKey, KEY_QUERY_VALUE, FALSE, &Key) != ERROR_SUCCESS)
         return ERROR_SUCCESS;
     Size = sizeof(*Value);
@@ -2228,7 +2240,7 @@ POWRPROF_FormatDefaultKey(
 {
     wcscpy(SubKey, szDefaultPowerSchemeValues);
     wcscat(SubKey, L"\\");
-    POWRPROF_FormatGuid(SubKey + wcslen(SubKey), SchemePersonality);
+    POWRPROF_FormatKeyGuid(SubKey + wcslen(SubKey), SchemePersonality);
 }
 
 DWORD WINAPI PowerCreateSetting(HKEY RootSystemPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid)
@@ -2264,7 +2276,7 @@ DWORD WINAPI PowerCreatePossibleSetting(HKEY RootSystemPowerKey, const GUID *Sub
 
 DWORD WINAPI PowerRemovePowerSetting(const GUID *PowerSettingSubKeyGuid, const GUID *PowerSettingGuid)
 {
-    WCHAR SettingString[39];
+    WCHAR SettingString[37];
     HKEY Key;
     DWORD Error;
 
@@ -2278,7 +2290,7 @@ DWORD WINAPI PowerRemovePowerSetting(const GUID *PowerSettingSubKeyGuid, const G
     Error = POWRPROF_OpenDefinitionKey(PowerSettingSubKeyGuid, NULL, NULL, KEY_ALL_ACCESS, FALSE, &Key);
     if (Error == ERROR_SUCCESS)
     {
-        POWRPROF_FormatGuid(SettingString, PowerSettingGuid);
+        POWRPROF_FormatKeyGuid(SettingString, PowerSettingGuid);
         Error = RegDeleteTreeW(Key, SettingString);
         RegCloseKey(Key);
     }
@@ -2378,8 +2390,88 @@ DWORD WINAPI PowerWritePossibleValue(HKEY RootPowerKey, const GUID *SubGroupOfPo
 
 DWORD WINAPI PowerWriteSettingAttributes(const GUID *SubGroupGuid, const GUID *PowerSettingGuid, DWORD Attributes)
 {
+    HKEY Key;
+    DWORD Error;
+
     TRACE("(%s,%s,0x%lx)\n", debugstr_guid(SubGroupGuid), debugstr_guid(PowerSettingGuid), Attributes);
-    return POWRPROF_WriteDefinitionDword(SubGroupGuid, PowerSettingGuid, NULL, L"Attributes", Attributes);
+
+    Error = AcquirePwrProfSemaphoreError();
+    if (Error != ERROR_SUCCESS)
+        return Error;
+    Error = POWRPROF_OpenDefinitionKey(SubGroupGuid, PowerSettingGuid, NULL, KEY_SET_VALUE, TRUE, &Key);
+    if (Error == ERROR_SUCCESS)
+    {
+        Error = RegSetValueExW(Key, szAttributes, 0, REG_DWORD, (const BYTE *)&Attributes, sizeof(Attributes));
+        RegCloseKey(Key);
+    }
+    ReleaseSemaphore(PPRegSemaphore, 1, NULL);
+    return Error;
+}
+
+static DWORD
+POWRPROF_QueryAttributes(
+    HKEY Key)
+{
+    DWORD Value, Type, Size = sizeof(Value);
+
+    if (RegQueryValueExW(Key, szAttributes, NULL, &Type, (BYTE *)&Value, &Size) != ERROR_SUCCESS ||
+        Type != REG_DWORD || Size != sizeof(Value))
+        return 0;
+    return Value;
+}
+
+static BOOL
+POWRPROF_FindSettingDefinition(
+    const GUID *Setting,
+    HKEY *Key)
+{
+    WCHAR SettingString[37], Name[256 + 37];
+    HKEY Settings;
+    DWORD Index, Length;
+    BOOL Found = FALSE;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, szPowerSettings, 0, KEY_ENUMERATE_SUB_KEYS, &Settings) != ERROR_SUCCESS)
+        return FALSE;
+    POWRPROF_FormatKeyGuid(SettingString, Setting);
+    for (Index = 0; !Found; Index++)
+    {
+        Length = 256;
+        if (RegEnumKeyExW(Settings, Index, Name, &Length, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        if (_wcsicmp(Name, SettingString) != 0)
+        {
+            wcscat(Name, L"\\");
+            wcscat(Name, SettingString);
+        }
+        Found = RegOpenKeyExW(Settings, Name, 0, KEY_QUERY_VALUE, Key) == ERROR_SUCCESS;
+    }
+    RegCloseKey(Settings);
+    return Found;
+}
+
+DWORD WINAPI PowerReadSettingAttributes(const GUID *SubGroupGuid, const GUID *PowerSettingGuid)
+{
+    HKEY Key;
+    DWORD Attributes = 0;
+
+    TRACE("(%s,%s)\n", debugstr_guid(SubGroupGuid), debugstr_guid(PowerSettingGuid));
+
+    /* TODO: the built-in settings have no definition keys, so their attributes read as 0 */
+    if (SubGroupGuid)
+    {
+        if (POWRPROF_OpenDefinitionKey(SubGroupGuid, NULL, NULL, KEY_QUERY_VALUE, FALSE, &Key) != ERROR_SUCCESS)
+            return 0;
+        Attributes = POWRPROF_QueryAttributes(Key);
+        RegCloseKey(Key);
+    }
+    if (PowerSettingGuid)
+    {
+        if (!POWRPROF_FindSettingDefinition(PowerSettingGuid, &Key))
+            return 0;
+        Attributes |= POWRPROF_QueryAttributes(Key);
+        RegCloseKey(Key);
+    }
+    return Attributes;
 }
 
 DWORD WINAPI PowerWriteValueIncrement(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, DWORD ValueIncrement)

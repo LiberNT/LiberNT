@@ -37,6 +37,9 @@ typedef enum _POWER_PLATFORM_ROLE {
 #define EnableWakeOnRing		    0x08
 #define EnableVideoDimDisplay		0x10
 
+#define POWER_ATTRIBUTE_HIDE        0x00000001
+#define POWER_ATTRIBUTE_SHOW_AOAC   0x00000002
+
 typedef struct _GLOBAL_MACHINE_POWER_POLICY {
     ULONG Revision;
     SYSTEM_POWER_STATE LidOpenWakeAc;
@@ -181,6 +184,7 @@ DWORD   WINAPI PowerReadACDefaultIndex(_In_opt_ HKEY, _In_ const GUID *, _In_opt
 DWORD   WINAPI PowerReadACValueIndex(_In_opt_ HKEY, _In_opt_ const GUID *, _In_opt_ const GUID *, _In_opt_ const GUID *, _Out_ LPDWORD);
 DWORD   WINAPI PowerReadDCDefaultIndex(_In_opt_ HKEY, _In_ const GUID *, _In_opt_ const GUID *, _In_ const GUID *, _Out_ LPDWORD);
 DWORD   WINAPI PowerReadDCValueIndex(_In_opt_ HKEY, _In_opt_ const GUID *, _In_opt_ const GUID *, _In_opt_ const GUID *, _Out_ LPDWORD);
+DWORD   WINAPI PowerReadSettingAttributes(_In_opt_ const GUID *, _In_opt_ const GUID *);
 #endif
 DWORD   WINAPI PowerRegisterSuspendResumeNotification(DWORD, HANDLE, PHPOWERNOTIFY);
 DWORD   WINAPI PowerUnregisterSuspendResumeNotification(HPOWERNOTIFY);
