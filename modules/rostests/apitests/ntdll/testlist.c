@@ -81,6 +81,7 @@ extern void func_NtCreateFile(void);
 extern void func_NtDeleteFile(void);
 extern void func_NtCreateKey(void);
 extern void func_NtCreateKeyCached(void);
+extern void func_NtCreateNamedPipeFile(void);
 extern void func_NtCreateProfile(void);
 extern void func_NtCreateSection(void);
 extern void func_NtCreateSection_CachedRead(void);
@@ -342,6 +343,7 @@ const struct test winetest_testlist[] =
     { "NtDeleteFile",                   func_NtDeleteFile },
     { "NtCreateKey",                    func_NtCreateKey },
     { "NtCreateKeyCached",              func_NtCreateKeyCached },
+    { "NtCreateNamedPipeFile",          func_NtCreateNamedPipeFile },
     { "NtCreateProfile",                func_NtCreateProfile },
     { "NtCreateSection",                func_NtCreateSection },
     { "NtCreateSection_CachedRead", func_NtCreateSection_CachedRead },
