@@ -6,11 +6,10 @@
  *
  * Register offsets and descriptor ownership rules are taken from the
  * lawfully published FreeBSD re(4)/rl(4) headers (BSD-2-Clause).
- * RTL8168H bring-up register values are hardware facts published in
- * Realtek/netdev patch mail; the sequences are reimplemented here.
- * The 8168H PHY script was clean-room recovered from the published
- * linux-firmware rtl8168h-2.fw opcode stream (v0.0.2) and executed by
- * a LiberNT interpreter; the Realtek .fw blob is not shipped.
+ * RTL8168H MAC and PHY bring-up is LiberNT-owned black-box register
+ * programming derived from FreeBSD behaviour and public hardware notes.
+ * Realtek linux-firmware blobs and their opcode streams are not
+ * embedded, shipped or interpreted here.
  * The miniport itself is a LiberNT NDIS 6.30 reimplementation.
  */
 
@@ -689,179 +688,23 @@ Rtl8168PhyModify(
     Rtl8168PhyWrite(Adapter, Reg, (USHORT)((Value & ~Clear) | Set));
 }
 
-static const ULONG Rtl8168h2PhyScript[211] =
-{
-    0x40000001u, 0x801f0fc2u, 0x80080000u, 0x800a0000u,
-    0x800c0000u, 0x800e0000u, 0x80100000u, 0x80120000u,
-    0x80140000u, 0x80160000u, 0xe0000003u, 0x80060000u,
-    0x801f0f80u, 0x8000e008u, 0x8002e00fu, 0x8004e011u,
-    0x8006e047u, 0x8008e049u, 0x800ae073u, 0x800ce075u,
-    0x800ee077u, 0x8010c707u, 0x80121d00u, 0x80148de2u,
-    0x801648c1u, 0x8018c502u, 0x801abd00u, 0x801c00e4u,
-    0x801ee0c0u, 0x8020c502u, 0x8022bd00u, 0x80240216u,
-    0x8026c634u, 0x802875c0u, 0x802a49d3u, 0x802cf027u,
-    0x802ec631u, 0x803075c0u, 0x803249d3u, 0x8034f123u,
-    0x8036c627u, 0x803875c0u, 0x803ab405u, 0x803cc525u,
-    0x803e9dc0u, 0x8040c621u, 0x804275c8u, 0x804449d5u,
-    0x8046f00au, 0x804849d6u, 0x804af008u, 0x804c49d7u,
-    0x804ef006u, 0x805049d8u, 0x8052f004u, 0x805475d2u,
-    0x805649d9u, 0x8058f111u, 0x805ac517u, 0x805c9dc8u,
-    0x805ec516u, 0x80609dd2u, 0x8062c618u, 0x806475c0u,
-    0x806649d4u, 0x8068f003u, 0x806a49d0u, 0x806cf104u,
-    0x806ec60au, 0x8070c50eu, 0x80729dc0u, 0x8074b005u,
-    0x8076c607u, 0x80789dc0u, 0x807ab007u, 0x807cc602u,
-    0x807ebe00u, 0x80801a06u, 0x8082b400u, 0x8084e86cu,
-    0x8086a000u, 0x808801e1u, 0x808a0200u, 0x808c9200u,
-    0x808ee84cu, 0x8090e004u, 0x8092e908u, 0x8094c502u,
-    0x8096bd00u, 0x80980b58u, 0x809ab407u, 0x809cb404u,
-    0x809e2195u, 0x80a025bdu, 0x80a29be0u, 0x80a41c1cu,
-    0x80a6484fu, 0x80a89ce2u, 0x80aa72e2u, 0x80ac49aeu,
-    0x80aef1feu, 0x80b00b00u, 0x80b2f116u, 0x80b4c71cu,
-    0x80b6c419u, 0x80b89ce0u, 0x80ba1c13u, 0x80bc484fu,
-    0x80be9ce2u, 0x80c074e2u, 0x80c249ceu, 0x80c4f1feu,
-    0x80c6c412u, 0x80c89ce0u, 0x80ca1c13u, 0x80cc484fu,
-    0x80ce9ce2u, 0x80d074e2u, 0x80d249ceu, 0x80d4f1feu,
-    0x80d6c70cu, 0x80d874f8u, 0x80da48c3u, 0x80dc8cf8u,
-    0x80deb004u, 0x80e0b007u, 0x80e2c502u, 0x80e4bd00u,
-    0x80e60f24u, 0x80e80481u, 0x80ea0c81u, 0x80ecde24u,
-    0x80eee000u, 0x80f0c602u, 0x80f2be00u, 0x80f40ca4u,
-    0x80f6c502u, 0x80f8bd00u, 0x80fa0000u, 0x80fcc602u,
-    0x80febe00u, 0x81000000u, 0x801f0fc2u, 0x80068000u,
-    0x800800e2u, 0x800a0210u, 0x800c1a04u, 0x800e0b26u,
-    0x80100f02u, 0x80120ca0u, 0x8018003fu, 0x40000000u,
-    0x801f0b82u, 0x00100000u, 0x10000010u, 0xc0100000u,
-    0x801f0b80u, 0x70000000u, 0xe0000001u, 0x00100000u,
-    0x20000040u, 0xa0020040u, 0x90000064u, 0x30050000u,
-    0x801f0a43u, 0x80138028u, 0x80146201u, 0x8013b82eu,
-    0x80140001u, 0x801f0a43u, 0x8013b820u, 0x80140290u,
-    0x8013a012u, 0x80140000u, 0x8013a014u, 0x80142c04u,
-    0x80142c09u, 0x80142c09u, 0x80142c09u, 0x8014ad01u,
-    0x8014ad01u, 0x8014ad01u, 0x8014ad01u, 0x8014236cu,
-    0x8013a01au, 0x80140000u, 0x8013a006u, 0x80140fffu,
-    0x8013a004u, 0x80140fffu, 0x8013a002u, 0x80140fffu,
-    0x8013a000u, 0x8014136bu, 0x8013b820u, 0x80140210u,
-    0x801f0a43u, 0x80130000u, 0x80140000u, 0x801f0b82u,
-    0x00170000u, 0x2000fffeu, 0xc0170000u, 0x801f0a43u,
-    0x80138028u, 0x80140000u, 0x801f0b82u, 0x00100000u,
-    0x2000ffefu, 0xc0100000u, 0x801f0a40u,
-};
-
 static VOID
-Rtl8168FwScriptWrite(
-    _In_ PRTL8168_ADAPTER Adapter,
-    _In_ BOOLEAN MacOcp,
-    _In_ ULONG Reg,
-    _In_ USHORT Value)
-{
-    if (MacOcp)
-        Rtl8168MacOcpWrite(Adapter, Reg, Value);
-    else
-        Rtl8168PhyWrite(Adapter, Reg, Value);
-}
-
-static BOOLEAN
-Rtl8168FwScriptRead(
-    _In_ PRTL8168_ADAPTER Adapter,
-    _In_ BOOLEAN MacOcp,
-    _In_ ULONG Reg,
-    _Out_ PUSHORT Value)
-{
-    if (MacOcp)
-    {
-        *Value = Rtl8168MacOcpRead(Adapter, Reg);
-        return TRUE;
-    }
-
-    return Rtl8168PhyRead(Adapter, Reg, Value);
-}
-
-static VOID
-Rtl8168Apply8168hPhyScript(
+Rtl8168PhySoftReset(
     _In_ PRTL8168_ADAPTER Adapter)
 {
-    ULONG Index;
-    ULONG Predata = 0;
-    ULONG Count = 0;
-    BOOLEAN MacOcp = FALSE;
+    USHORT Value;
+    ULONG i;
 
-    for (Index = 0; Index < RTL_NUMBER_OF(Rtl8168h2PhyScript); Index++)
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
+    Rtl8168PhyWrite(Adapter, MII_BMCR, BMCR_RESET);
+    for (i = 0; i < 2500; i++)
     {
-        ULONG Action = Rtl8168h2PhyScript[Index];
-        ULONG Opcode = Action >> 28;
-        ULONG Reg = (Action >> 16) & 0x0fff;
-        USHORT Value = (USHORT)(Action & 0xffff);
-        USHORT Data;
-
-        switch (Opcode)
-        {
-            case RL_FW_PHY_READ:
-                if (Rtl8168FwScriptRead(Adapter, MacOcp, Reg, &Data))
-                {
-                    Predata = Data;
-                    Count++;
-                }
-                break;
-
-            case RL_FW_PHY_OR:
-                Predata |= Value;
-                break;
-
-            case RL_FW_PHY_AND:
-                Predata &= Value;
-                break;
-
-            case RL_FW_PHY_BJMPN:
-                if (Reg <= Index)
-                    Index -= Reg;
-                break;
-
-            case RL_FW_PHY_MDIO_CHG:
-                MacOcp = (Value == 1);
-                break;
-
-            case RL_FW_PHY_CLEAR_READCOUNT:
-                Count = 0;
-                break;
-
-            case RL_FW_PHY_WRITE:
-                Rtl8168FwScriptWrite(Adapter, MacOcp, Reg, Value);
-                break;
-
-            case RL_FW_PHY_READCOUNT_EQ_SKIP:
-                if (Count == Value)
-                    Index++;
-                break;
-
-            case RL_FW_PHY_COMP_EQ_SKIPN:
-                if (Predata == Value)
-                    Index += Reg;
-                break;
-
-            case RL_FW_PHY_COMP_NEQ_SKIPN:
-                if (Predata != Value)
-                    Index += Reg;
-                break;
-
-            case RL_FW_PHY_WRITE_PREVIOUS:
-                Rtl8168FwScriptWrite(Adapter, MacOcp, Reg, (USHORT)Predata);
-                break;
-
-            case RL_FW_PHY_SKIPN:
-                Index += Reg;
-                break;
-
-            case RL_FW_PHY_DELAY_MS:
-                NdisMSleep(Value);
-                break;
-
-            default:
-                DPRINT1("rtl8168: unknown PHY script opcode 0x%lx\n", Opcode);
-                return;
-        }
+        if (Rtl8168PhyRead(Adapter, MII_BMCR, &Value) && !(Value & BMCR_RESET))
+            return;
+        NdisStallExecution(1000);
     }
 
-    DPRINT1("rtl8168: applied clean-room 8168H PHY script (%u ops)\n",
-            (ULONG)RTL_NUMBER_OF(Rtl8168h2PhyScript));
+    DPRINT1("rtl8168: PHY soft reset timed out\n");
 }
 
 static VOID
@@ -876,7 +719,7 @@ Rtl8168Configure8168hPhy(
     USHORT Rlen;
     USHORT PhyVal;
 
-    Rtl8168Apply8168hPhyScript(Adapter);
+    Rtl8168PhySoftReset(Adapter);
 
     Rtl8168PhyWrite(Adapter, 0x1f, 0x0a43);
     Rtl8168PhyWrite(Adapter, 0x13, 0x808a);
@@ -935,6 +778,8 @@ Rtl8168Configure8168hPhy(
     if (Rtl8168PhyRead(Adapter, 0x10, &PhyVal) && (PhyVal & 0x0004))
         Rtl8168PhyModify(Adapter, 0x10, 0x0004, 0x0000);
     Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
+
+    DPRINT1("rtl8168: applied black-box 8168H PHY bring-up\n");
 }
 
 static VOID
