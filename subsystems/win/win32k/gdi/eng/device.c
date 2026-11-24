@@ -347,6 +347,17 @@ EngpUpdateGraphicsDeviceList(VOID)
              pGraphicsDevice;
              pGraphicsDevice = pGraphicsDevice->pNextGraphicsDevice)
         {
+            if (!EngpHasVgaDriver(pGraphicsDevice) &&
+                EngpIsDisplayAttached(pGraphicsDevice))
+            {
+                pNewPrimaryGraphicsDevice = pGraphicsDevice;
+                break;
+            }
+        }
+        for (pGraphicsDevice = gpGraphicsDeviceFirst;
+             pGraphicsDevice && !pNewPrimaryGraphicsDevice;
+             pGraphicsDevice = pGraphicsDevice->pNextGraphicsDevice)
+        {
             if (!EngpHasVgaDriver(pGraphicsDevice))
             {
                 pNewPrimaryGraphicsDevice = pGraphicsDevice;
