@@ -13,6 +13,7 @@
 #define BROKER_DISPLAY_PREFIX L"RdpVdd_RemoteDisplay&NewSession_"
 #define AGENT_TIMEOUT 10000
 #define AGENT_ATTACH_TIMEOUT 90000
+#define WINLOGON_START_TIMEOUT 60000
 
 typedef struct AGENT AGENT;
 typedef void (*BROKER_LOG)(const char *fmt, ...);

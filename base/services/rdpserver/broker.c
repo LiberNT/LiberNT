@@ -8,6 +8,7 @@
 #define WIN32_NO_STATUS
 #include "broker.h"
 #include "agent.h"
+#include <remoteconsole.h>
 #include <ws2tcpip.h>
 #include <wtsapi32.h>
 #include <cfgmgr32.h>
@@ -163,6 +164,20 @@ static BOOL DisplayStarted(const WCHAR *instance)
 }
 
 /* A new session's win32k needs its display before csrss initializes, so the adapter is made first */
+static BOOL WaitForWinlogon(AGENT *agent)
+{
+    WCHAR pipe[64];
+    DWORD wait;
+    _snwprintf(pipe, ARRAYSIZE(pipe), REMOTE_CONSOLE_PIPE_FORMAT, agent->Session);
+    pipe[ARRAYSIZE(pipe) - 1] = 0;
+    for (wait = 0; wait < WINLOGON_START_TIMEOUT / 100; ++wait)
+    {
+        if (WaitNamedPipeW(pipe, 1) || GetLastError() != ERROR_FILE_NOT_FOUND) return TRUE;
+        if (WaitForSingleObject(agent->Winlogon, 100) == WAIT_OBJECT_0) return FALSE;
+    }
+    return FALSE;
+}
+
 static AGENT *StartNewSession(const BYTE *sid, const WCHAR *user)
 {
     static const WCHAR hardwareIds[] = L"RdpVdd_RemoteDisplay\0";
@@ -239,6 +254,11 @@ static AGENT *StartNewSession(const BYTE *sid, const WCHAR *user)
     if (!agent->Winlogon)
     {
         Log("Cannot watch Winlogon of session %lu error=%lu: 0x%08lx", session, GetLastError(), StopSession(session));
+        goto failed;
+    }
+    if (!WaitForWinlogon(agent))
+    {
+        Log("Winlogon of session %lu did not start: 0x%08lx", session, StopSession(session));
         goto failed;
     }
     CopySid(sizeof(agent->Sid), agent->Sid, (PSID)sid);
