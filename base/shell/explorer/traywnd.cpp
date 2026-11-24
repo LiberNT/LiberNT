@@ -1127,6 +1127,8 @@ class CTrayWindow :
     CTrayShowDesktopButton* m_pShowDesktopButton;
     CComObject<CSecondaryTrayWindow> *m_SecondaryTrays[TRAY_MAX_SECONDARY];
     UINT m_SecondaryTrayCount;
+    BOOL m_SecondaryTraysUpdating;
+    BOOL m_SecondaryTraysStale;
 
     CComPtr<IMenuBand>  m_StartMenuBand;
     CComPtr<IMenuPopup> m_StartMenuPopup;
@@ -1182,6 +1184,8 @@ public:
         m_StartButton(),
         m_pShowDesktopButton(NULL),
         m_SecondaryTrayCount(0),
+        m_SecondaryTraysUpdating(FALSE),
+        m_SecondaryTraysStale(FALSE),
         m_Theme(NULL),
         m_Font(NULL),
         m_DesktopWnd(NULL),
@@ -3459,9 +3463,22 @@ ChangePos:
 
     VOID UpdateSecondaryTrays()
     {
-        DestroySecondaryTrays();
-        if (MultiMonitorTaskbarsEnabled())
-            EnumDisplayMonitors(NULL, NULL, AddSecondaryTrayProc, reinterpret_cast<LPARAM>(this));
+        /* Creating a tray broadcasts the new work area, which lets the next display change in:
+         * that change only marks the trays stale, and the running update builds them again */
+        if (m_SecondaryTraysUpdating)
+        {
+            m_SecondaryTraysStale = TRUE;
+            return;
+        }
+        m_SecondaryTraysUpdating = TRUE;
+        do
+        {
+            m_SecondaryTraysStale = FALSE;
+            DestroySecondaryTrays();
+            if (MultiMonitorTaskbarsEnabled())
+                EnumDisplayMonitors(NULL, NULL, AddSecondaryTrayProc, reinterpret_cast<LPARAM>(this));
+        } while (m_SecondaryTraysStale);
+        m_SecondaryTraysUpdating = FALSE;
     }
 
     LRESULT OnUpdateSecondaryTrays(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)

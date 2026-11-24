@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    SecondaryTaskbars.c
     VolumeOsd.c
     testlist.c)
 
