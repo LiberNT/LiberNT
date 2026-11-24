@@ -165,6 +165,25 @@ OutputContains(PCWSTR Text)
     return strstr(Output, Narrow) != NULL;
 }
 
+static BOOL
+InstallerKept(PCWSTR Id)
+{
+    WCHAR Temp[MAX_PATH], Pattern[MAX_PATH];
+    WIN32_FIND_DATAW Data;
+    HANDLE Find;
+
+    GetTempPathW(_countof(Temp), Temp);
+    if (wcsstr(GetTool(), L"winget"))
+        StringCchPrintfW(Pattern, _countof(Pattern), L"%sWinGet\\%s.*", Temp, Id);
+    else
+        StringCchPrintfW(Pattern, _countof(Pattern), L"%slntget\\%s", Temp, Id);
+    Find = FindFirstFileW(Pattern, &Data);
+    if (Find == INVALID_HANDLE_VALUE)
+        return FALSE;
+    FindClose(Find);
+    return TRUE;
+}
+
 static void
 TestPackage(const PACKAGE *Package)
 {
@@ -196,6 +215,7 @@ TestPackage(const PACKAGE *Package)
     ok(PackageFileExists(Package), "%ls is missing\n", Package->File);
     if (ExitCode != 0)
         return;
+    ok(!InstallerKept(Package->Id), "the installer of %ls was kept after the install\n", Package->Id);
 
     StringCchPrintfW(Arguments, _countof(Arguments), L"list --id %s -e --source winget", Package->Id);
     if (RunTool(Arguments, &ExitCode))
