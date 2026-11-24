@@ -693,6 +693,8 @@ DxgkpPinSupportedPathTransformations(
                 Path->ContentTransformation.Rotation = D3DKMDT_VPPR_ROTATE180;
             else if (Path->ContentTransformation.RotationSupport.Rotate270)
                 Path->ContentTransformation.Rotation = D3DKMDT_VPPR_ROTATE270;
+            else
+                return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
         }
 
     }
@@ -773,7 +775,7 @@ DxgkpPathScalingSupported(
 }
 
 static NTSTATUS
-DxgkpPinPathTransformationsForPinnedModes(
+DxgkpPinPathScalingForPinnedModes(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _Inout_ PDXGKP_VIDPN VidPn)
 {
@@ -793,13 +795,6 @@ DxgkpPinPathTransformationsForPinnedModes(
     {
         D3DKMDT_VIDPN_PRESENT_PATH *Path = &VidPn->Paths[Index];
 
-        /* A driver may offer rotations only once the path's modes are pinned */
-        if (!DxgkpVidPnPathRotationIsPinned(Path))
-        {
-            RtlZeroMemory(&Path->ContentTransformation.RotationSupport,
-                          sizeof(Path->ContentTransformation.RotationSupport));
-            Enumerate = TRUE;
-        }
         if (!DxgkpPathSourceMatchesTarget(VidPn, Path, &Match))
             continue;
         if (Match)
@@ -849,24 +844,6 @@ DxgkpPinPathTransformationsForPinnedModes(
                 return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
             Path->ContentTransformation.Scaling = D3DKMDT_VPPS_IDENTITY;
         }
-    }
-
-    for (Index = 0; Index < VidPn->NumPaths; Index++)
-    {
-        D3DKMDT_VIDPN_PRESENT_PATH *Path = &VidPn->Paths[Index];
-
-        if (DxgkpVidPnPathRotationIsPinned(Path))
-            continue;
-        if (Path->ContentTransformation.RotationSupport.Identity)
-            Path->ContentTransformation.Rotation = D3DKMDT_VPPR_IDENTITY;
-        else if (Path->ContentTransformation.RotationSupport.Rotate90)
-            Path->ContentTransformation.Rotation = D3DKMDT_VPPR_ROTATE90;
-        else if (Path->ContentTransformation.RotationSupport.Rotate180)
-            Path->ContentTransformation.Rotation = D3DKMDT_VPPR_ROTATE180;
-        else if (Path->ContentTransformation.RotationSupport.Rotate270)
-            Path->ContentTransformation.Rotation = D3DKMDT_VPPR_ROTATE270;
-        else
-            return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
     }
     return STATUS_SUCCESS;
 }
@@ -2923,10 +2900,10 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
     if (!TopologyEmpty && FullMiniportNegotiatesModes && !ForceDodPresentOnlyPath &&
         DXGK_CB(Adapter, DxgkDdiEnumVidPnCofuncModality) != NULL)
     {
-        Status = DxgkpPinPathTransformationsForPinnedModes(Adapter, VidPn);
+        Status = DxgkpPinPathScalingForPinnedModes(Adapter, VidPn);
         if (!NT_SUCCESS(Status))
         {
-            DXGKRNL_WARN("DxgkpCommitVidPnToMiniport: no scaling or rotation for the pinned modes (0x%08lX)\n", Status);
+            DXGKRNL_WARN("DxgkpCommitVidPnToMiniport: no scaling for the pinned modes (0x%08lX)\n", Status);
             goto Cleanup;
         }
     }
