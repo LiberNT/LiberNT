@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Test that a session whose display disappears with the Remote Desktop service keeps running
+ * PURPOSE:     Test that a session outlives a Remote Desktop service that ends abnormally and is given back to its user
  * COPYRIGHT:   Copyright 2026 mikuta0407 <mikuta0407@mikuta0407.net>
  */
 
@@ -100,6 +100,7 @@ START_TEST(ServiceCrash)
     RDP_TEST_SETUP Setup;
     RDP_CLIENT Client;
     SC_HANDLE Manager, Service;
+    SERVICE_STATUS Status;
     WCHAR User[16], Next[16];
     char UserA[16], NextA[16];
     DWORD Before, Session = 0, Restarted = 0, Wait, Own = 0;
@@ -117,7 +118,7 @@ START_TEST(ServiceCrash)
     if (!RdpTestStart(&Setup))
         return;
     Manager = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
-    Service = Manager ? OpenServiceW(Manager, SERVICE, SERVICE_START | SERVICE_QUERY_STATUS) : NULL;
+    Service = Manager ? OpenServiceW(Manager, SERVICE, SERVICE_STOP | SERVICE_START | SERVICE_QUERY_STATUS) : NULL;
     ok(Service != NULL, "Cannot open %ls: %lu\n", SERVICE, GetLastError());
     if (Service && RdpTestAddUser(User))
     {
@@ -140,6 +141,19 @@ START_TEST(ServiceCrash)
                "Winlogon of session %lu did not survive its display\n", Session);
             ok(StartServiceW(Service, 0, NULL), "Cannot start %ls again: %lu\n", SERVICE, GetLastError());
             ok(WaitForState(Service, SERVICE_RUNNING), "%ls did not start again\n", SERVICE);
+            RdpClientStart(&Client, UserA, UserA);
+            ok(RdpClientWaitConnected(&Client), "%s could not connect again: 0x%08x\n", UserA, Client.Error);
+            for (Wait = 0; Wait < 100 && ProcessesInSession(Session, L"rdpserver.exe") != 1; Wait++)
+                Sleep(200);
+            ok(ProcessesInSession(Session, L"rdpserver.exe") == 1, "%s did not get session %lu back\n", UserA, Session);
+            for (Wait = 0; Wait < 150 && !Client.Updates && !Client.Disconnected; Wait++)
+                Sleep(200);
+            ok(Client.Updates != 0, "%s got no picture of session %lu\n", UserA, Session);
+            ok(Client.Alive && !Client.Disconnected, "%s was not kept connected to session %lu: 0x%08x\n", UserA, Session,
+               Client.Error);
+            Restarted = NewestSession();
+            ok(Restarted == Session, "Session %lu was started for %s instead of session %lu\n", Restarted, UserA, Session);
+            RdpClientStop(&Client);
             if (RdpTestAddUser(Next))
             {
                 RdpClientStart(&Client, NextA, NextA);
@@ -148,9 +162,19 @@ START_TEST(ServiceCrash)
                 for (Wait = 0; Wait < 200 && (Restarted = NewestSession()) <= Session; Wait++)
                     Sleep(200);
                 ok(Restarted > Session, "No session started for %s after the restart (newest %lu)\n", NextA, Restarted);
+                for (Wait = 0; Wait < 150 && !Client.Updates && !Client.Disconnected; Wait++)
+                    Sleep(200);
+                ok(Client.Updates != 0, "%s got no picture of its new session: 0x%08x\n", NextA, Client.Error);
                 RdpClientStop(&Client);
                 NetUserDel(NULL, Next);
             }
+            ok(ControlService(Service, SERVICE_CONTROL_STOP, &Status), "Cannot stop %ls: %lu\n", SERVICE, GetLastError());
+            ok(WaitForState(Service, SERVICE_STOPPED), "%ls did not stop\n", SERVICE);
+            for (Wait = 0; Wait < 150 && ProcessesInSession(Session, NULL) != 0; Wait++)
+                Sleep(200);
+            ok(ProcessesInSession(Session, NULL) == 0, "Session %lu did not end with %ls\n", Session, SERVICE);
+            ok(StartServiceW(Service, 0, NULL), "Cannot start %ls again: %lu\n", SERVICE, GetLastError());
+            ok(WaitForState(Service, SERVICE_RUNNING), "%ls did not start again\n", SERVICE);
         }
         else
         {

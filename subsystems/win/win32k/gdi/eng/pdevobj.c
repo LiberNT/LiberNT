@@ -960,6 +960,37 @@ PDEVOBJ_bMoveToDisplay(
 
 BOOL
 NTAPI
+PDEVOBJ_bReplaceDisplay(
+    _Inout_ PPDEVOBJ ppdev,
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice,
+    _In_ PDEVMODEW pdm)
+{
+    PPDEVOBJ ppdevNew;
+    DWORD StateFlags;
+    BOOL bRet = FALSE;
+
+    ASSERT(ppdev->pGraphicsDevice != pGraphicsDevice);
+
+    EngAcquireSemaphore(ppdev->hsemDevLock);
+    EngAcquireSemaphore(ghsemPDEV);
+
+    StateFlags = pGraphicsDevice->StateFlags;
+    ppdevNew = PDEVOBJ_Create(pGraphicsDevice, pdm, 0, LDEV_DEVICE_DISPLAY);
+    pGraphicsDevice->StateFlags = StateFlags;
+    if (ppdevNew && PDEVOBJ_bExchangeDisplay(ppdev, ppdevNew))
+        bRet = TRUE;
+
+    EngReleaseSemaphore(ghsemPDEV);
+    EngReleaseSemaphore(ppdev->hsemDevLock);
+
+    ASSERT(!bRet || ppdev->pGraphicsDevice == pGraphicsDevice);
+    if (ppdevNew)
+        PDEVOBJ_vRelease(ppdevNew);
+    return bRet;
+}
+
+BOOL
+NTAPI
 PDEVOBJ_bReturnToDetachedDisplay(
     _Inout_ PPDEVOBJ ppdev)
 {

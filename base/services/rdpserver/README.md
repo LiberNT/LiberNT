@@ -46,7 +46,12 @@ talk over the pipe `\\.\pipe\LiberNT-RDPServer-<session>`, which only SYSTEM
 can open; each side checks that the other end is the process it expects. A new
 connection of the same user replaces the one already connected; the agent
 leaves the display when the last connection of its session ends. A session the
-service started ends when its user signs out or when the service stops.
+service started ends when its user signs out or when the service stops. If the
+service ends abnormally, its sessions keep running, disconnected, as on Windows
+11; the service lists them in the volatile key
+`HKLM\SYSTEM\CurrentControlSet\Services\LiberNTRDPServer\Sessions`, and once
+started again it gives each one back to its user on a new
+`RdpVdd_RemoteDisplay&SessionId_<n>` adapter.
 *Settings > System > Remote Desktop* sets the value, and it is 1 on a new
 installation, as on Windows 11. The agent follows the desktop that receives
 input, so a client sees and drives the logon screen and the lock screen as well

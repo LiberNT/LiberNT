@@ -136,4 +136,8 @@ VOID
 NTAPI
 UserQueueDisplayDetach(VOID);
 
+VOID
+NTAPI
+UserQueueDisplayReplace(VOID);
+
 /* EOF */

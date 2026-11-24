@@ -11,6 +11,7 @@
 #include <windows.h>
 
 #define BROKER_DISPLAY_PREFIX L"RdpVdd_RemoteDisplay&NewSession_"
+#define BROKER_SESSIONS_KEY L"SYSTEM\\CurrentControlSet\\Services\\LiberNTRDPServer\\Sessions"
 #define AGENT_TIMEOUT 10000
 #define AGENT_ATTACH_TIMEOUT 90000
 #define WINLOGON_START_TIMEOUT 60000

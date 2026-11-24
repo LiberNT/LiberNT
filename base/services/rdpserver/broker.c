@@ -13,6 +13,7 @@
 #include <wtsapi32.h>
 #include <cfgmgr32.h>
 #include <swdevice.h>
+#include <tlhelp32.h>
 #include <stdio.h>
 #include <assert.h>
 #include <bcrypt.h>
@@ -178,19 +179,86 @@ static BOOL WaitForWinlogon(AGENT *agent)
     return FALSE;
 }
 
-static AGENT *StartNewSession(const BYTE *sid, const WCHAR *user)
+static BOOL CreateDisplay(AGENT *agent)
 {
     static const WCHAR hardwareIds[] = L"RdpVdd_RemoteDisplay\0";
     SW_DEVICE_CREATE_INFO info = {sizeof(info)};
     WCHAR name[64];
+    DISPLAY_CREATION *creation;
+    DWORD wait;
+    BOOL created;
+    assert(!agent->Console && !agent->Display);
+    /* dxgkrnl gives a NewSession adapter only to a session without a desktop yet */
+    if (agent->Session)
+        _snwprintf(name, ARRAYSIZE(name), L"RdpVdd_RemoteDisplay&SessionId_%04lu", agent->Session);
+    else
+        _snwprintf(name, ARRAYSIZE(name), BROKER_DISPLAY_PREFIX L"%ld", InterlockedIncrement(&NextDisplay));
+    name[ARRAYSIZE(name) - 1] = 0;
+    info.pszInstanceId = name;
+    info.pszzHardwareIds = hardwareIds;
+    info.pszzCompatibleIds = hardwareIds;
+    info.CapabilityFlags = SWDeviceCapabilitiesRemovable | SWDeviceCapabilitiesSilentInstall |
+                           SWDeviceCapabilitiesDriverRequired;
+    info.pszDeviceDescription = L"LiberNT Remote Display Adapter";
+    creation = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*creation));
+    if (!creation || !(creation->Ready = CreateEventW(NULL, TRUE, FALSE, NULL)))
+    {
+        if (creation) HeapFree(GetProcessHeap(), 0, creation);
+        Log("Cannot create a session display: out of memory");
+        return FALSE;
+    }
+    creation->References = 2;
+    creation->Result = E_FAIL;
+    if (FAILED(SwDeviceCreate(L"RemoteDisplayEnum", L"HTREE\\ROOT\\0", &info, 0, NULL, DisplayCreated, creation,
+                              &agent->Display)))
+    {
+        agent->Display = NULL;
+        ReleaseCreation(creation);
+        ReleaseCreation(creation);
+        Log("Cannot create a session display");
+        return FALSE;
+    }
+    created = WaitForSingleObject(creation->Ready, 15000) == WAIT_OBJECT_0 && SUCCEEDED(creation->Result);
+    if (created) lstrcpynW(agent->DisplayInstance, creation->Instance, ARRAYSIZE(agent->DisplayInstance));
+    else Log("Cannot create a session display: 0x%08lx", creation->Result);
+    ReleaseCreation(creation);
+    for (wait = 0; created && wait < 150 && !DisplayStarted(agent->DisplayInstance); ++wait) Sleep(100);
+    if (created && DisplayStarted(agent->DisplayInstance)) return TRUE;
+    if (created) Log("The session display %ls did not start", agent->DisplayInstance);
+    SwDeviceClose(agent->Display);
+    agent->Display = NULL;
+    agent->DisplayInstance[0] = 0;
+    return FALSE;
+}
+
+/* The sessions the service started are kept in a volatile key, so a restarted service can give them back */
+static void RememberSession(AGENT *agent, BOOL keep)
+{
+    WCHAR name[16];
+    HKEY key;
+    LSTATUS error;
+    _snwprintf(name, ARRAYSIZE(name), L"%lu", agent->Session);
+    name[ARRAYSIZE(name) - 1] = 0;
+    error = RegCreateKeyExW(HKEY_LOCAL_MACHINE, BROKER_SESSIONS_KEY, 0, NULL, REG_OPTION_VOLATILE, KEY_SET_VALUE, NULL,
+                            &key, NULL);
+    if (error == ERROR_SUCCESS)
+    {
+        error = keep ? RegSetValueExW(key, name, 0, REG_BINARY, agent->Sid, GetLengthSid(agent->Sid))
+                     : RegDeleteValueW(key, name);
+        RegCloseKey(key);
+    }
+    if (error != ERROR_SUCCESS && (keep || error != ERROR_FILE_NOT_FOUND))
+        Log("Cannot %s session %lu in the session list: %ld", keep ? "add" : "remove", agent->Session, error);
+}
+
+static AGENT *StartNewSession(const BYTE *sid, const WCHAR *user)
+{
     HANDLE port = NULL, csrss = NULL, initial = NULL;
     AGENT *agent;
     AGENT **slot = NULL;
-    DISPLAY_CREATION *creation;
     NTSTATUS status;
     ULONG session = 0;
-    DWORD i, wait;
-    BOOL created;
+    DWORD i;
     for (i = 0; i < MAX_AGENTS && !slot; ++i)
         if (!Agents[i]) slot = &Agents[i];
     if (!slot)
@@ -204,43 +272,7 @@ static AGENT *StartNewSession(const BYTE *sid, const WCHAR *user)
         Log("Cannot start a new session: out of memory");
         return NULL;
     }
-    _snwprintf(name, ARRAYSIZE(name), BROKER_DISPLAY_PREFIX L"%ld", InterlockedIncrement(&NextDisplay));
-    name[ARRAYSIZE(name) - 1] = 0;
-    info.pszInstanceId = name;
-    info.pszzHardwareIds = hardwareIds;
-    info.pszzCompatibleIds = hardwareIds;
-    info.CapabilityFlags = SWDeviceCapabilitiesRemovable | SWDeviceCapabilitiesSilentInstall |
-                           SWDeviceCapabilitiesDriverRequired;
-    info.pszDeviceDescription = L"LiberNT Remote Display Adapter";
-    creation = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*creation));
-    if (!creation || !(creation->Ready = CreateEventW(NULL, TRUE, FALSE, NULL)))
-    {
-        if (creation) HeapFree(GetProcessHeap(), 0, creation);
-        Log("Cannot create the display of a new session: out of memory");
-        goto failed;
-    }
-    creation->References = 2;
-    creation->Result = E_FAIL;
-    if (FAILED(SwDeviceCreate(L"RemoteDisplayEnum", L"HTREE\\ROOT\\0", &info, 0, NULL, DisplayCreated, creation,
-                              &agent->Display)))
-    {
-        agent->Display = NULL;
-        ReleaseCreation(creation);
-        ReleaseCreation(creation);
-        Log("Cannot create the display of a new session");
-        goto failed;
-    }
-    created = WaitForSingleObject(creation->Ready, 15000) == WAIT_OBJECT_0 && SUCCEEDED(creation->Result);
-    if (created) lstrcpynW(agent->DisplayInstance, creation->Instance, ARRAYSIZE(agent->DisplayInstance));
-    else Log("Cannot create the display of a new session: 0x%08lx", creation->Result);
-    ReleaseCreation(creation);
-    if (!created) goto failed;
-    for (wait = 0; wait < 150 && !DisplayStarted(agent->DisplayInstance); ++wait) Sleep(100);
-    if (!DisplayStarted(agent->DisplayInstance))
-    {
-        Log("The display of a new session did not start");
-        goto failed;
-    }
+    if (!CreateDisplay(agent)) goto failed;
     status = SmConnectToSm(NULL, NULL, 0, &port);
     if (NT_SUCCESS(status)) status = SmStartCsr(port, &session, NULL, &csrss, &initial);
     if (port) NtClose(port);
@@ -264,6 +296,7 @@ static AGENT *StartNewSession(const BYTE *sid, const WCHAR *user)
     CopySid(sizeof(agent->Sid), agent->Sid, (PSID)sid);
     lstrcpynW(agent->User, user, ARRAYSIZE(agent->User));
     *slot = agent;
+    RememberSession(agent, TRUE);
     Log("Session %lu started for %ls on %ls", session, user, agent->DisplayInstance);
     return agent;
 failed:
@@ -312,6 +345,7 @@ static BOOL RunAgent(AGENT *agent)
     DWORD tries, server = 0, mode = PIPE_READMODE_MESSAGE;
     if (agent->Pipe && !agent->Broken && ProcessAlive(agent->Process)) return TRUE;
     StopAgentProcess(agent);
+    if (!agent->Console && !agent->Display && !CreateDisplay(agent)) return FALSE;
     if (!NewPipeKey(agent)) return FALSE;
     agent->Process = StartAgent(agent->Session, agent->PipeKey, agent->Console ? NULL : agent->DisplayInstance);
     if (!agent->Process) return FALSE;
@@ -471,6 +505,7 @@ static void EndSignedOutSessions(void)
         if (!agent || !agent->Winlogon || WaitForSingleObject(agent->Winlogon, 0) != WAIT_OBJECT_0) continue;
         status = StopSession(agent->Session);
         Log("Session %lu of %ls ended after its user signed out: 0x%08lx", agent->Session, agent->User, status);
+        RememberSession(agent, FALSE);
         Agents[i] = NULL;
         ReleaseAgent(agent);
     }
@@ -552,6 +587,82 @@ static DWORD WINAPI BrokerMain(void *unused)
     return 0;
 }
 
+static HANDLE OpenWinlogon(DWORD session)
+{
+    PROCESSENTRY32W entry = {sizeof(entry)};
+    HANDLE snapshot, winlogon = NULL;
+    DWORD processSession;
+    snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return NULL;
+    if (Process32FirstW(snapshot, &entry))
+    {
+        do
+        {
+            if (!_wcsicmp(entry.szExeFile, L"winlogon.exe") && ProcessIdToSessionId(entry.th32ProcessID, &processSession) &&
+                processSession == session)
+                winlogon = OpenProcess(SYNCHRONIZE, FALSE, entry.th32ProcessID);
+        } while (!winlogon && Process32NextW(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+    return winlogon;
+}
+
+/* A session outlives a service that ended abnormally; it waits, disconnected, for its user as on Windows */
+static BOOL AdoptSession(DWORD session, const BYTE *sid)
+{
+    WCHAR name[128], domain[128];
+    DWORD nameLength = ARRAYSIZE(name), domainLength = ARRAYSIZE(domain), i;
+    SID_NAME_USE use;
+    AGENT *agent;
+    HANDLE winlogon;
+    for (i = 0; i < MAX_AGENTS && Agents[i]; ++i)
+        ;
+    if (i == MAX_AGENTS) return FALSE;
+    winlogon = OpenWinlogon(session);
+    if (!winlogon) return FALSE;
+    agent = NewAgent(session, FALSE);
+    if (!agent)
+    {
+        CloseHandle(winlogon);
+        return FALSE;
+    }
+    agent->Winlogon = winlogon;
+    CopySid(sizeof(agent->Sid), agent->Sid, (PSID)sid);
+    if (LookupAccountSidW(NULL, (PSID)sid, name, &nameLength, domain, &domainLength, &use))
+        _snwprintf(agent->User, ARRAYSIZE(agent->User), L"%ls\\%ls", domain, name);
+    agent->User[ARRAYSIZE(agent->User) - 1] = 0;
+    Agents[i] = agent;
+    Log("Session %lu of %ls waits for its user after the service restarted", session, agent->User);
+    return TRUE;
+}
+
+static void AdoptSessions(void)
+{
+    BYTE sid[SECURITY_MAX_SID_SIZE];
+    WCHAR name[16];
+    DWORD index = 0, nameLength, sidLength, type;
+    ULONG session;
+    HKEY key;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, BROKER_SESSIONS_KEY, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &key) != ERROR_SUCCESS)
+        return;
+    for (;;)
+    {
+        nameLength = ARRAYSIZE(name);
+        sidLength = sizeof(sid);
+        if (RegEnumValueW(key, index, name, &nameLength, NULL, &type, sid, &sidLength) != ERROR_SUCCESS) break;
+        session = wcstoul(name, NULL, 10);
+        if (type == REG_BINARY && session != 0 && IsValidSid(sid) && GetLengthSid(sid) == sidLength &&
+            AdoptSession(session, sid))
+        {
+            ++index;
+            continue;
+        }
+        Log("Session %ls is gone", name);
+        RegDeleteValueW(key, name);
+    }
+    RegCloseKey(key);
+}
+
 BOOL BrokerStart(BROKER_LOG log, BROKER_START_AGENT start, BROKER_ALLOWED allowed, BROKER_ACCEPTED accepted)
 {
     Log = log;
@@ -559,6 +670,7 @@ BOOL BrokerStart(BROKER_LOG log, BROKER_START_AGENT start, BROKER_ALLOWED allowe
     Allowed = allowed;
     Accepted = accepted;
     InitializeCriticalSection(&TableLock);
+    AdoptSessions();
     BrokerStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!BrokerStopEvent) return FALSE;
     BrokerThread = CreateThread(NULL, 0, BrokerMain, NULL, 0, NULL);
@@ -586,6 +698,7 @@ void BrokerStop(void)
         /* The display of a session goes away with this process, so a session left behind could never be shown again */
         Log("Session %lu of %ls ended with the service: 0x%08lx", agent->Session, agent->User,
             StopSession(agent->Session));
+        RememberSession(agent, FALSE);
         Agents[i] = NULL;
         ReleaseAgent(agent);
     }

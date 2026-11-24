@@ -17,6 +17,12 @@
 
 #define TERMINAL_SERVER_KEY L"SYSTEM\\CurrentControlSet\\Control\\Terminal Server"
 
+typedef struct _RDP_TEST_CONTEXT
+{
+    rdpContext Context;
+    PRDP_CLIENT Client;
+} RDP_TEST_CONTEXT, *PRDP_TEST_CONTEXT;
+
 static BOOL
 ServiceRunning(PCWSTR Name)
 {
@@ -173,6 +179,30 @@ RdpTestAddUser(PCWSTR Name)
     return Status == NERR_Success;
 }
 
+static BOOL
+ClientBitmapUpdate(rdpContext *Context, const BITMAP_UPDATE *Bitmap)
+{
+    UNREFERENCED_PARAMETER(Bitmap);
+    InterlockedIncrement(&((PRDP_TEST_CONTEXT)Context)->Client->Updates);
+    return TRUE;
+}
+
+static BOOL
+ClientSurfaceBits(rdpContext *Context, const SURFACE_BITS_COMMAND *Command)
+{
+    UNREFERENCED_PARAMETER(Command);
+    InterlockedIncrement(&((PRDP_TEST_CONTEXT)Context)->Client->Updates);
+    return TRUE;
+}
+
+static BOOL
+ClientPostConnect(freerdp *Instance)
+{
+    Instance->context->update->BitmapUpdate = ClientBitmapUpdate;
+    Instance->context->update->SurfaceBits = ClientSurfaceBits;
+    return TRUE;
+}
+
 static DWORD WINAPI
 ClientThread(PVOID Parameter)
 {
@@ -237,11 +267,18 @@ RdpClientStart(PRDP_CLIENT Client, const char *User, const char *RoutingUser)
     Client->Stop = CreateEventW(NULL, TRUE, FALSE, NULL);
     Client->Connected = CreateEventW(NULL, TRUE, FALSE, NULL);
     Instance = freerdp_new();
+    if (Instance)
+    {
+        Instance->ContextSize = sizeof(RDP_TEST_CONTEXT);
+        Instance->PostConnect = ClientPostConnect;
+    }
     if (Instance && !freerdp_context_new(Instance))
     {
         freerdp_free(Instance);
         Instance = NULL;
     }
+    if (Instance)
+        ((PRDP_TEST_CONTEXT)Instance->context)->Client = Client;
     ok(Instance != NULL, "Cannot make a client for %s\n", User);
     Client->Instance = Instance;
     if (Instance)

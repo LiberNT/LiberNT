@@ -1389,7 +1389,8 @@ BOOL
 UserMoveDesktopDisplay(
     _In_ PPDEVOBJ ppdev,
     _In_opt_ PGRAPHICS_DEVICE pGraphicsDevice,
-    _In_opt_ PDEVMODEW pdm)
+    _In_opt_ PDEVMODEW pdm,
+    _In_ BOOL bReplace)
 {
     WORD OrigBC = gpsi->BitCount;
     PVOID pvOldCursor;
@@ -1397,7 +1398,9 @@ UserMoveDesktopDisplay(
 
     pvOldCursor = UserSetCursor(NULL, TRUE);
     IntCompositionOnDisplayChangeBegin();
-    if (pGraphicsDevice)
+    if (pGraphicsDevice && bReplace)
+        bRet = PDEVOBJ_bReplaceDisplay(ppdev, pGraphicsDevice, pdm);
+    else if (pGraphicsDevice)
         bRet = PDEVOBJ_bMoveToDisplay(ppdev, pGraphicsDevice, pdm);
     else
         bRet = PDEVOBJ_bReturnToDetachedDisplay(ppdev);
@@ -1435,7 +1438,7 @@ UserSetDisplayTopology(
 
     if (Topology == SDC_TOPOLOGY_INTERNAL)
     {
-        if (bApply && gppdevDetached && !UserMoveDesktopDisplay(ppdev, NULL, NULL))
+        if (bApply && gppdevDetached && !UserMoveDesktopDisplay(ppdev, NULL, NULL, FALSE))
             lRet = ERROR_GEN_FAILURE;
         goto leave;
     }
@@ -1471,7 +1474,7 @@ UserSetDisplayTopology(
         goto leave;
 
     pdm = UserSelectExternalDisplayMode(pGraphicsDevice, ppdev);
-    if (!pdm || !UserMoveDesktopDisplay(ppdev, pGraphicsDevice, pdm))
+    if (!pdm || !UserMoveDesktopDisplay(ppdev, pGraphicsDevice, pdm, FALSE))
         lRet = ERROR_GEN_FAILURE;
     if (pdm)
         ExFreePoolWithTag(pdm, GDITAG_DEVMODE);
@@ -1516,6 +1519,7 @@ NtUserSetDisplayConfig(
 
 static volatile LONG gUserDisplayConfigurationPending;
 static volatile LONG gUserDisplayDetachPending;
+static volatile LONG gUserDisplayReplacePending;
 
 static
 VOID
@@ -1547,6 +1551,46 @@ UserQueueDisplayDetach(VOID)
 
 VOID
 NTAPI
+UserQueueDisplayReplace(VOID)
+{
+    InterlockedExchange(&gUserDisplayReplacePending, 1);
+    UserQueueDisplayConfigurationWorker();
+}
+
+static
+VOID
+UserReplaceRemovedDisplay(VOID)
+{
+    PGRAPHICS_DEVICE pGraphicsDevice = NULL;
+    PDEVMODEW pdm;
+    PPDEVOBJ ppdev;
+    ULONG i;
+
+    ppdev = EngpGetPDEV(NULL);
+    if (!ppdev)
+        return;
+    if (!gppdevDetached && gpmdev->cDev == 1 && ppdev->pGraphicsDevice &&
+        EngpIsGraphicsDeviceRemoved(ppdev->pGraphicsDevice))
+    {
+        for (i = 0; (pGraphicsDevice = EngpFindGraphicsDevice(NULL, i)) != NULL; i++)
+        {
+            if (UserIsExternalDisplay(pGraphicsDevice, ppdev))
+                break;
+        }
+    }
+    if (pGraphicsDevice)
+    {
+        pdm = UserSelectExternalDisplayMode(pGraphicsDevice, ppdev);
+        if (!pdm || !UserMoveDesktopDisplay(ppdev, pGraphicsDevice, pdm, TRUE))
+            ERR("Could not move the desktop to %S\n", pGraphicsDevice->szWinDeviceName);
+        if (pdm)
+            ExFreePoolWithTag(pdm, GDITAG_DEVMODE);
+    }
+    PDEVOBJ_vRelease(ppdev);
+}
+
+VOID
+NTAPI
 co_UserProcessDisplayConfigurationUpdate(VOID)
 {
     PGRAPHICS_DEVICE pGraphicsDevice;
@@ -1563,6 +1607,12 @@ co_UserProcessDisplayConfigurationUpdate(VOID)
         lResult = UserSetDisplayTopology(SDC_TOPOLOGY_INTERNAL, TRUE);
         if (lResult != ERROR_SUCCESS)
             ERR("Could not move the desktop off a removed display: %ld\n", lResult);
+        EngpReleaseRemovedGraphicsDevices();
+    }
+
+    if (InterlockedExchange(&gUserDisplayReplacePending, 0) != 0)
+    {
+        UserReplaceRemovedDisplay();
         EngpReleaseRemovedGraphicsDevices();
     }
 

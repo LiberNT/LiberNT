@@ -56,6 +56,11 @@ VOID
 NTAPI
 EngpReleaseRemovedGraphicsDevices(VOID);
 
+BOOLEAN
+NTAPI
+EngpIsGraphicsDeviceRemoved(
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice);
+
 VOID
 NTAPI
 EngpReleaseAllGraphicsDevices(VOID);

@@ -247,6 +247,13 @@ NTAPI
 PDEVOBJ_bReturnToDetachedDisplay(
     _Inout_ PPDEVOBJ ppdev);
 
+BOOL
+NTAPI
+PDEVOBJ_bReplaceDisplay(
+    _Inout_ PPDEVOBJ ppdev,
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice,
+    _In_ PDEVMODEW pdm);
+
 extern PPDEVOBJ gppdevDetached;
 
 PPDEVOBJ

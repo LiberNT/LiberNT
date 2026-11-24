@@ -206,6 +206,36 @@ EngpUnlinkGraphicsDevice(
 
 static
 BOOLEAN
+EngpIsGraphicsDeviceRemovedLocked(
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice)
+{
+    PGRAPHICS_DEVICE_NOTIFY pNotify;
+    PLIST_ENTRY pEntry;
+
+    for (pEntry = gGraphicsDeviceNotifyList.Flink; pEntry != &gGraphicsDeviceNotifyList; pEntry = pEntry->Flink)
+    {
+        pNotify = CONTAINING_RECORD(pEntry, GRAPHICS_DEVICE_NOTIFY, ListEntry);
+        if (pNotify->pGraphicsDevice == pGraphicsDevice)
+            return pNotify->bRemoved;
+    }
+    return FALSE;
+}
+
+BOOLEAN
+NTAPI
+EngpIsGraphicsDeviceRemoved(
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice)
+{
+    BOOLEAN bRemoved;
+
+    EngAcquireSemaphoreShared(ghsemGraphicsDeviceList);
+    bRemoved = EngpIsGraphicsDeviceRemovedLocked(pGraphicsDevice);
+    EngReleaseSemaphore(ghsemGraphicsDeviceList);
+    return bRemoved;
+}
+
+static
+BOOLEAN
 EngpIsGraphicsDeviceRegistered(
     _In_ PCWSTR pwszNtDeviceName)
 {
@@ -218,6 +248,9 @@ EngpIsGraphicsDeviceRegistered(
          pGraphicsDevice && !bFound;
          pGraphicsDevice = pGraphicsDevice->pNextGraphicsDevice)
     {
+        /* The name of a removed device belongs to the device that replaces it */
+        if (EngpIsGraphicsDeviceRemovedLocked(pGraphicsDevice))
+            continue;
         bFound = _wcsicmp(pGraphicsDevice->szNtDeviceName, pwszNtDeviceName) == 0 ||
                  (pGraphicsDevice->pVgaDevice &&
                   _wcsicmp(pGraphicsDevice->pVgaDevice->szNtDeviceName, pwszNtDeviceName) == 0);
@@ -339,6 +372,7 @@ EngpGraphicsDeviceNotification(
     }
     if (pGraphicsDevice && !bQueryRemove && !bRemove)
     {
+        pNotify->bRemoved = TRUE;
         pOldMonitors = pGraphicsDevice->pvMonDev;
         oldCount = pGraphicsDevice->dwMonCnt;
         pGraphicsDevice->pvMonDev = NULL;
@@ -415,6 +449,10 @@ EngpReleaseRemovedGraphicsDevices(VOID)
             {
                 pGraphicsDevice = pNotify->pGraphicsDevice;
                 EngpUnlinkGraphicsDevice(pGraphicsDevice);
+                if (gpPrimaryGraphicsDevice == pGraphicsDevice)
+                    gpPrimaryGraphicsDevice = NULL;
+                if (gpVgaGraphicsDevice == pGraphicsDevice)
+                    gpVgaGraphicsDevice = NULL;
                 break;
             }
         }
@@ -480,6 +518,7 @@ EngpUpdateGraphicsDeviceList(VOID)
     WCHAR awcBuffer[256];
     NTSTATUS Status;
     PGRAPHICS_DEVICE pGraphicsDevice, pNewPrimaryGraphicsDevice = NULL;
+    BOOLEAN bAdded = FALSE;
     ULONG cbValue;
     HKEY hkey;
 
@@ -523,6 +562,7 @@ EngpUpdateGraphicsDeviceList(VOID)
         /* Initialize the driver for this device */
         pGraphicsDevice = InitDisplayDriver(awcDeviceName, awcBuffer);
         if (!pGraphicsDevice) continue;
+        bAdded = TRUE;
     }
 
     /* Close the device map registry key */
@@ -629,6 +669,9 @@ EngpUpdateGraphicsDeviceList(VOID)
         gpPrimaryGraphicsDevice->pVgaDevice = gpVgaGraphicsDevice;
         EngReleaseSemaphore(ghsemGraphicsDeviceList);
     }
+
+    if (bAdded && gpmdev && gpmdev->ppdevGlobal && EngpIsGraphicsDeviceRemoved(gpmdev->ppdevGlobal->pGraphicsDevice))
+        UserQueueDisplayReplace();
 
     return STATUS_SUCCESS;
 }
@@ -1295,8 +1338,14 @@ EngpFindGraphicsDevice(
     {
         /* Select video adapter by device number */
         for (pGraphicsDevice = gpGraphicsDeviceFirst, i = 0;
-             pGraphicsDevice && i < iDevNum;
-             pGraphicsDevice = pGraphicsDevice->pNextGraphicsDevice, i++);
+             pGraphicsDevice;
+             pGraphicsDevice = pGraphicsDevice->pNextGraphicsDevice)
+        {
+            if (EngpIsGraphicsDeviceRemovedLocked(pGraphicsDevice))
+                continue;
+            if (i++ == iDevNum)
+                break;
+        }
     }
 
     /* Unlock list */
