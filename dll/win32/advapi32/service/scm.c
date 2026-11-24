@@ -2397,6 +2397,177 @@ OpenServiceW(SC_HANDLE hSCManager,
 }
 
 
+/* The configuration as a 64-bit SCM lays it out, with offsets in place of pointers */
+typedef struct _QUERY_SERVICE_CONFIG64
+{
+    DWORD dwServiceType;
+    DWORD dwStartType;
+    DWORD dwErrorControl;
+    ULONG64 lpBinaryPathName;
+    ULONG64 lpLoadOrderGroup;
+    DWORD dwTagId;
+    ULONG64 lpDependencies;
+    ULONG64 lpServiceStartName;
+    ULONG64 lpDisplayName;
+} QUERY_SERVICE_CONFIG64, *PQUERY_SERVICE_CONFIG64;
+
+C_ASSERT(sizeof(QUERY_SERVICE_CONFIG64) == 64);
+C_ASSERT(FIELD_OFFSET(QUERY_SERVICE_CONFIG64, lpBinaryPathName) == 16);
+C_ASSERT(FIELD_OFFSET(QUERY_SERVICE_CONFIG64, lpDependencies) == 40);
+C_ASSERT(sizeof(QUERY_SERVICE_CONFIGA) == sizeof(QUERY_SERVICE_CONFIGW));
+C_ASSERT(FIELD_OFFSET(QUERY_SERVICE_CONFIGA, lpDependencies) == FIELD_OFFSET(QUERY_SERVICE_CONFIGW, lpDependencies));
+C_ASSERT(FIELD_OFFSET(QUERY_SERVICE_CONFIGA, lpDisplayName) == FIELD_OFFSET(QUERY_SERVICE_CONFIGW, lpDisplayName));
+
+#define SCM_CONFIG_REPLY_SIZE (8 * 1024)
+
+/* FIXME: the other replies that carry pointers (EnumServicesStatus*, EnumDependentServices, QueryServiceLockStatus, QueryServiceConfig2) still reach 32-bit callers in the 64-bit SCM's layout */
+static
+BOOL
+ScmServerHasWiderPointers(VOID)
+{
+    BOOL Wow64 = FALSE;
+
+    if (sizeof(PVOID) >= sizeof(ULONG64))
+        return FALSE;
+    return IsWow64Process(GetCurrentProcess(), &Wow64) && Wow64;
+}
+
+static
+BOOL
+ScmIsNulChar(
+    _In_ const BYTE *Char,
+    _In_ SIZE_T CharSize)
+{
+    return (CharSize == sizeof(WCHAR)) ? (*(const WCHAR *)Char == 0) : (*Char == 0);
+}
+
+/* The size in bytes of the string, or string list, that a reply holds at Offset; 0 when it does not fit */
+static
+SIZE_T
+ScmConfigStringBytes(
+    _In_ const BYTE *Reply,
+    _In_ DWORD ReplyLength,
+    _In_ ULONG64 Offset,
+    _In_ SIZE_T CharSize,
+    _In_ BOOL MultiString)
+{
+    SIZE_T Index;
+
+    if (Offset < sizeof(QUERY_SERVICE_CONFIG64) || Offset >= ReplyLength || (Offset % CharSize) != 0)
+        return 0;
+    for (Index = (SIZE_T)Offset; Index + CharSize <= ReplyLength; Index += CharSize)
+    {
+        if (!ScmIsNulChar(Reply + Index, CharSize))
+            continue;
+        if (!MultiString)
+            return Index + CharSize - (SIZE_T)Offset;
+        if (Index == Offset)
+            return (Index + 2 * CharSize <= ReplyLength) ? 2 * CharSize : CharSize;
+        if (ScmIsNulChar(Reply + Index - CharSize, CharSize))
+            return Index + CharSize - (SIZE_T)Offset;
+    }
+    return 0;
+}
+
+static
+DWORD
+ScmQueryServiceConfigFromWiderServer(
+    _In_ SC_HANDLE hService,
+    _In_ BOOL Wide,
+    _Out_writes_bytes_opt_(cbBufSize) PVOID lpServiceConfig,
+    _In_ DWORD cbBufSize,
+    _Out_ LPDWORD pcbBytesNeeded)
+{
+    LPQUERY_SERVICE_CONFIGW Config = lpServiceConfig;
+    SIZE_T CharSize = Wide ? sizeof(WCHAR) : sizeof(CHAR);
+    PQUERY_SERVICE_CONFIG64 Reply;
+    ULONG64 Offsets[5];
+    SIZE_T Bytes[5];
+    PVOID *Fields[5];
+    DWORD ReplyLength = 0, Needed, Error, Index;
+    PBYTE Out;
+
+    if (!pcbBytesNeeded)
+        return ScmRpcStatusToWinError(RPC_X_NULL_REF_POINTER);
+
+    Reply = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, SCM_CONFIG_REPLY_SIZE);
+    if (!Reply)
+        return ERROR_NOT_ENOUGH_MEMORY;
+
+    RpcTryExcept
+    {
+        if (Wide)
+            Error = RQueryServiceConfigW((SC_RPC_HANDLE)hService, (LPBYTE)Reply, SCM_CONFIG_REPLY_SIZE, &ReplyLength);
+        else
+            Error = RQueryServiceConfigA((SC_RPC_HANDLE)hService, (LPBYTE)Reply, SCM_CONFIG_REPLY_SIZE, &ReplyLength);
+    }
+    RpcExcept(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Error = ScmRpcStatusToWinError(RpcExceptionCode());
+    }
+    RpcEndExcept;
+
+    if (Error != ERROR_SUCCESS)
+    {
+        HeapFree(GetProcessHeap(), 0, Reply);
+        return Error;
+    }
+    ReplyLength = min(ReplyLength, SCM_CONFIG_REPLY_SIZE);
+
+    Offsets[0] = Reply->lpBinaryPathName;
+    Offsets[1] = Reply->lpLoadOrderGroup;
+    Offsets[2] = Reply->lpDependencies;
+    Offsets[3] = Reply->lpServiceStartName;
+    Offsets[4] = Reply->lpDisplayName;
+    Needed = sizeof(QUERY_SERVICE_CONFIGW);
+    for (Index = 0; Index < ARRAYSIZE(Offsets); Index++)
+    {
+        Bytes[Index] = Offsets[Index] ? ScmConfigStringBytes((PBYTE)Reply, ReplyLength, Offsets[Index], CharSize,
+                                                             Index == 2) : 0;
+        if (Offsets[Index] && !Bytes[Index])
+        {
+            HeapFree(GetProcessHeap(), 0, Reply);
+            return ERROR_INVALID_DATA;
+        }
+        if (Bytes[Index])
+            Needed = ALIGN_UP_BY(Needed, sizeof(PVOID)) + (DWORD)Bytes[Index];
+    }
+
+    *pcbBytesNeeded = Needed;
+    if (!Config || cbBufSize < Needed)
+    {
+        HeapFree(GetProcessHeap(), 0, Reply);
+        return ERROR_INSUFFICIENT_BUFFER;
+    }
+
+    Config->dwServiceType = Reply->dwServiceType;
+    Config->dwStartType = Reply->dwStartType;
+    Config->dwErrorControl = Reply->dwErrorControl;
+    Config->dwTagId = Reply->dwTagId;
+    Fields[0] = (PVOID *)&Config->lpBinaryPathName;
+    Fields[1] = (PVOID *)&Config->lpLoadOrderGroup;
+    Fields[2] = (PVOID *)&Config->lpDependencies;
+    Fields[3] = (PVOID *)&Config->lpServiceStartName;
+    Fields[4] = (PVOID *)&Config->lpDisplayName;
+    Out = (PBYTE)(Config + 1);
+    for (Index = 0; Index < ARRAYSIZE(Fields); Index++)
+    {
+        if (!Bytes[Index])
+        {
+            *Fields[Index] = NULL;
+            continue;
+        }
+        Out = (PBYTE)Config + ALIGN_UP_BY(Out - (PBYTE)Config, sizeof(PVOID));
+        RtlCopyMemory(Out, (PBYTE)Reply + Offsets[Index], Bytes[Index]);
+        *Fields[Index] = Out;
+        Out += Bytes[Index];
+    }
+    ASSERT((DWORD)(Out - (PBYTE)Config) == Needed);
+    HeapFree(GetProcessHeap(), 0, Reply);
+    return ERROR_SUCCESS;
+}
+
+
 /**********************************************************************
  *  QueryServiceConfigA
  *
@@ -2415,6 +2586,17 @@ QueryServiceConfigA(SC_HANDLE hService,
 
     TRACE("QueryServiceConfigA(%p %p %lu %p)\n",
            hService, lpServiceConfig, cbBufSize, pcbBytesNeeded);
+
+    if (ScmServerHasWiderPointers())
+    {
+        dwError = ScmQueryServiceConfigFromWiderServer(hService, FALSE, lpServiceConfig, cbBufSize, pcbBytesNeeded);
+        if (dwError != ERROR_SUCCESS)
+        {
+            SetLastError(dwError);
+            return FALSE;
+        }
+        return TRUE;
+    }
 
     if (lpServiceConfig == NULL ||
         cbBufSize < sizeof(QUERY_SERVICE_CONFIGA))
@@ -2514,6 +2696,17 @@ QueryServiceConfigW(SC_HANDLE hService,
 
     TRACE("QueryServiceConfigW(%p %p %lu %p)\n",
            hService, lpServiceConfig, cbBufSize, pcbBytesNeeded);
+
+    if (ScmServerHasWiderPointers())
+    {
+        dwError = ScmQueryServiceConfigFromWiderServer(hService, TRUE, lpServiceConfig, cbBufSize, pcbBytesNeeded);
+        if (dwError != ERROR_SUCCESS)
+        {
+            SetLastError(dwError);
+            return FALSE;
+        }
+        return TRUE;
+    }
 
     if (lpServiceConfig == NULL ||
         cbBufSize < sizeof(QUERY_SERVICE_CONFIGW))
