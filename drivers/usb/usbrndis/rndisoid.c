@@ -768,14 +768,22 @@ RndisSetInformation(
             /* Program device filters */
             if (Adapter->IsCdcEcm || Adapter->IsCdcNcm)
             {
-                NtStatus = RndisUsbSetEthernetMulticastFilters(
-                    Adapter,
-                    (PUCHAR)Adapter->MulticastList,
-                    (USHORT)Adapter->MulticastListCount);
-                if (!NT_SUCCESS(NtStatus))
+                USHORT DeviceFilters = Adapter->CdcMcFilterCount & 0x7FFF;
+                BOOLEAN Fallback = TRUE;
+
+                if (Adapter->MulticastListCount <= DeviceFilters)
                 {
-                    Status = NDIS_STATUS_FAILURE;
-                    break;
+                    NtStatus = RndisUsbSetEthernetMulticastFilters(
+                        Adapter,
+                        (PUCHAR)Adapter->MulticastList,
+                        (USHORT)Adapter->MulticastListCount);
+                    Fallback = !NT_SUCCESS(NtStatus);
+                }
+
+                if (Fallback != Adapter->CdcMcAllFallback)
+                {
+                    Adapter->CdcMcAllFallback = Fallback;
+                    RndisSetPacketFilter(Adapter, Adapter->PacketFilter);
                 }
             }
             else if (!Adapter->IsCdcEem)

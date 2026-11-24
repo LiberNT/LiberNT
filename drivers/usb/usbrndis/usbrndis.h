@@ -809,6 +809,8 @@ typedef struct _RNDIS_ADAPTER {
     BOOLEAN IsCdcNcm;               /* TRUE if CDC-NCM mode (NTB framing) */
     BOOLEAN IsCdcEem;
     UCHAR CdcMacAddressIndex;       /* USB string descriptor index for MAC address (CDC-ECM/NCM) */
+    USHORT CdcMcFilterCount;        /* wNumberMCFilters from the Ethernet Networking descriptor */
+    BOOLEAN CdcMcAllFallback;       /* Multicast list not programmable: receive all multicast */
 
     /* CDC-NCM Parameters (only valid if IsCdcNcm is TRUE) */
     USHORT NcmTxSequence;           /* TX NTB sequence number */
