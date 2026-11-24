@@ -12,6 +12,7 @@ extern void func_guiupdate(void);
 extern void func_inno(void);
 extern void func_nullsoft(void);
 extern void func_nullsoftdirectory(void);
+extern void func_options(void);
 extern void func_portable(void);
 extern void func_portablefiles(void);
 extern void func_upgrade(void);
@@ -31,6 +32,7 @@ const struct test winetest_testlist[] =
     { "inno", func_inno },
     { "nullsoft", func_nullsoft },
     { "nullsoftdirectory", func_nullsoftdirectory },
+    { "options", func_options },
     { "portable", func_portable },
     { "portablefiles", func_portablefiles },
     { "upgrade", func_upgrade },
