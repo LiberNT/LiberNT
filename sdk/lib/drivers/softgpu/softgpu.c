@@ -1272,12 +1272,23 @@ SoftGpuStartDevice(
                  Device,
                  PreferredFrameBufferSize,
                  PlatformConfig.HighestFrameBufferAddress);
-    if (Status == STATUS_INSUFFICIENT_RESOURCES &&
-        PreferredFrameBufferSize > RequiredFrameBufferSize)
+    while (Status == STATUS_INSUFFICIENT_RESOURCES &&
+           PreferredFrameBufferSize > RequiredFrameBufferSize)
     {
+        SIZE_T NextFrameBufferSize = RequiredFrameBufferSize;
+
+        for (Index = 0; Index < PlatformConfig.ModeCount; Index++)
+        {
+            SIZE_T SlabSize = PlatformConfig.Modes[Index].AllocationSlabSize;
+
+            if (SlabSize < PreferredFrameBufferSize && SlabSize > NextFrameBufferSize)
+                NextFrameBufferSize = SlabSize;
+        }
+        ASSERT(NextFrameBufferSize < PreferredFrameBufferSize);
+        PreferredFrameBufferSize = NextFrameBufferSize;
         Status = SoftGpuAllocateFrameBuffer(
                      Device,
-                     RequiredFrameBufferSize,
+                     PreferredFrameBufferSize,
                      PlatformConfig.HighestFrameBufferAddress);
     }
     if (!NT_SUCCESS(Status))
