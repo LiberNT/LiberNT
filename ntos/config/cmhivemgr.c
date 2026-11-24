@@ -755,6 +755,17 @@ CmpFlushHiveToDisk(
     CmpBeginStarveWriters();
     Written = Force ? HvReconcileHive(&Hive->Hive) : HvSyncHive(&Hive->Hive);
     CmpEndStarveWriters();
+    if (!Written && !Hive->DiskFileBad)
+    {
+        Hive->DiskFileBad = 1;
+        DPRINT1("CM: the files of hive %wZ cannot be written; its changes stay in memory and later flushes retry\n",
+                &Hive->FileFullPath);
+    }
+    else if (Written && Hive->DiskFileBad)
+    {
+        Hive->DiskFileBad = 0;
+        DPRINT1("CM: the files of hive %wZ are written again\n", &Hive->FileFullPath);
+    }
     CmpUnlockHiveFlusher(Hive);
 
     if (!Written) return STATUS_REGISTRY_IO_FAILED;
