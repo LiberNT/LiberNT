@@ -130,7 +130,8 @@ Status PlanPackageDependencies(SourceManager &source, const InstallerEntry &inst
     return status;
 }
 
-Status InstallDependencyPlan(SourceManager &source, const std::vector<DependencyStep> &plan, const SelectionOptions &selection)
+Status InstallDependencyPlan(SourceManager &source, const std::vector<DependencyStep> &plan, const SelectionOptions &selection,
+                             InstallLockWait *wait)
 {
     for (const DependencyStep &step : plan)
     {
@@ -157,7 +158,7 @@ Status InstallDependencyPlan(SourceManager &source, const std::vector<Dependency
         std::wstring path;
         status = service.Download(step.package, step.installer, nullptr, path);
         DWORD exitCode = 0;
-        if (status) status = service.Install(step.package, step.installer, path, DependencySelection(selection).mode, exitCode);
+        if (status) status = service.Install(step.package, step.installer, path, DependencySelection(selection).mode, exitCode, nullptr, wait);
         if (!status)
             return Status::Fail(status.code, "dependency " + step.package.id + ": " + status.message);
         std::printf("Installed dependency %s %s.\n", step.package.id.c_str(), step.package.version.c_str());

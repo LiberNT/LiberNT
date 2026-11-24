@@ -440,4 +440,47 @@ std::wstring DecimalWideString(unsigned long long value)
     return text;
 }
 
+Status InstallLock::Acquire(InstallLockWait *wait)
+{
+    if (acquired_)
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "the install lock is already held");
+    if (!handle_)
+    {
+        handle_ = CreateMutexW(nullptr, FALSE, L"WinGetCrossProcessInstallLock");
+        if (!handle_)
+        {
+            const DWORD error = GetLastError();
+            return Status::Fail(error, "cannot create the install lock: " + WindowsErrorMessage(error));
+        }
+    }
+    DWORD result = WaitForSingleObject(handle_, 0);
+    if (result == WAIT_TIMEOUT)
+    {
+        std::printf("Waiting for another install/uninstall to complete...\n");
+        std::fflush(stdout);
+        if (wait) wait->Waiting();
+        result = WaitForSingleObject(handle_, INFINITE);
+        if ((result == WAIT_OBJECT_0 || result == WAIT_ABANDONED) && wait) wait->Acquired();
+    }
+    if (result != WAIT_OBJECT_0 && result != WAIT_ABANDONED)
+    {
+        const DWORD error = result == WAIT_FAILED ? GetLastError() : ERROR_INVALID_STATE;
+        return Status::Fail(error, "cannot acquire the install lock: " + WindowsErrorMessage(error));
+    }
+    thread_ = GetCurrentThreadId();
+    acquired_ = true;
+    return Status::Ok();
+}
+
+InstallLock::~InstallLock()
+{
+    if (acquired_)
+    {
+        if (thread_ != GetCurrentThreadId())
+            FatalAppExitW(0, L"lntget released the install lock on another thread");
+        ReleaseMutex(handle_);
+    }
+    if (handle_) CloseHandle(handle_);
+}
+
 } // namespace lntget

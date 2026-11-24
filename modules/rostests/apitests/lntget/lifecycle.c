@@ -760,3 +760,178 @@ START_TEST(options)
     ok(ExitCode == 0, "uninstall with -h returned 0x%08lx:\n%s\n", ExitCode, Output);
     ok(WaitForRemoval(&WixPackage), "%ls is still installed after uninstall\n", WixPackage.Id);
 }
+
+#define LOCK_WAIT_TEXT "Waiting for another install/uninstall to complete"
+#define LOCK_WAIT_TIMEOUT (5 * 60 * 1000)
+
+typedef struct _TOOL_RUN
+{
+    PROCESS_INFORMATION Process;
+    WCHAR OutputPath[MAX_PATH];
+} TOOL_RUN;
+
+static BOOL
+StartTool(PCWSTR Arguments, TOOL_RUN *Run)
+{
+    SECURITY_ATTRIBUTES Inherit = { sizeof(Inherit), NULL, TRUE };
+    WCHAR Directory[MAX_PATH], CommandLine[2048];
+    STARTUPINFOW Startup = { sizeof(Startup) };
+    HANDLE File, Null;
+    BOOL Started;
+
+    ZeroMemory(Run, sizeof(*Run));
+    GetTempPathW(_countof(Directory), Directory);
+    if (!GetTempFileNameW(Directory, L"lnl", 0, Run->OutputPath))
+        return FALSE;
+    File = CreateFileW(Run->OutputPath, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &Inherit,
+                       CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+        return FALSE;
+    Null = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &Inherit, OPEN_EXISTING, 0, NULL);
+    StringCchPrintfW(CommandLine, _countof(CommandLine), L"\"%s\" %s", GetTool(), Arguments);
+    Startup.dwFlags = STARTF_USESTDHANDLES;
+    Startup.hStdInput = Null;
+    Startup.hStdOutput = File;
+    Startup.hStdError = File;
+    Started = CreateProcessW(NULL, CommandLine, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &Startup, &Run->Process);
+    ok(Started, "CreateProcess(%ls) failed with %lu\n", CommandLine, GetLastError());
+    if (Null != INVALID_HANDLE_VALUE)
+        CloseHandle(Null);
+    CloseHandle(File);
+    if (!Started)
+        DeleteFileW(Run->OutputPath);
+    return Started;
+}
+
+static void
+ReadToolOutput(TOOL_RUN *Run)
+{
+    HANDLE File;
+    DWORD Read = 0;
+
+    Output[0] = '\0';
+    File = CreateFileW(Run->OutputPath, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    ReadFile(File, Output, sizeof(Output) - 1, &Read, NULL);
+    Output[Read] = '\0';
+    CloseHandle(File);
+}
+
+static BOOL
+WaitForToolOutput(TOOL_RUN *Run, PCSTR Text, DWORD Timeout)
+{
+    DWORD Start = GetTickCount();
+
+    for (;;)
+    {
+        ReadToolOutput(Run);
+        if (strstr(Output, Text))
+            return TRUE;
+        if (WaitForSingleObject(Run->Process.hProcess, 0) == WAIT_OBJECT_0 || GetTickCount() - Start > Timeout)
+        {
+            ReadToolOutput(Run);
+            return strstr(Output, Text) != NULL;
+        }
+        Sleep(250);
+    }
+}
+
+static DWORD
+FinishTool(TOOL_RUN *Run)
+{
+    DWORD Wait, ExitCode = 0xFFFFFFFF;
+
+    Wait = WaitForSingleObject(Run->Process.hProcess, TOOL_TIMEOUT);
+    ok(Wait == WAIT_OBJECT_0, "the tool did not finish: %lu\n", Wait);
+    if (Wait != WAIT_OBJECT_0)
+        TerminateProcess(Run->Process.hProcess, ERROR_TIMEOUT);
+    GetExitCodeProcess(Run->Process.hProcess, &ExitCode);
+    CloseHandle(Run->Process.hThread);
+    CloseHandle(Run->Process.hProcess);
+    ReadToolOutput(Run);
+    DeleteFileW(Run->OutputPath);
+    return ExitCode;
+}
+
+static void
+RunWhileLocked(HANDLE Lock, PCWSTR Arguments, BOOL Install, PCSTR WingetMarker)
+{
+    PCSTR Marker = wcsstr(GetTool(), L"winget") ? WingetMarker : LOCK_WAIT_TEXT;
+    const PACKAGE *Package = &WixPackage;
+    TOOL_RUN Run;
+    DWORD ExitCode;
+    BOOL Waited, Present;
+
+    ok(WaitForSingleObject(Lock, 0) == WAIT_OBJECT_0, "cannot take the install lock\n");
+    if (!StartTool(Arguments, &Run))
+    {
+        ReleaseMutex(Lock);
+        return;
+    }
+    Waited = WaitForToolOutput(&Run, Marker, LOCK_WAIT_TIMEOUT);
+    ok(Waited, "%ls did not print '%s':\n%s\n", Arguments, Marker, Output);
+    Sleep(5000);
+    ok(WaitForSingleObject(Run.Process.hProcess, 0) == WAIT_TIMEOUT, "%ls finished while the install lock was held:\n%s\n", Arguments, Output);
+    Present = ArpHasDisplayName(Package->DisplayName) || PackageFileExists(Package);
+    ok(Present != Install, "%ls changed %ls while the install lock was held\n", Arguments, Package->Id);
+    ok(ReleaseMutex(Lock), "cannot release the install lock: %lu\n", GetLastError());
+    ExitCode = FinishTool(&Run);
+    ok(ExitCode == 0, "%ls returned 0x%08lx:\n%s\n", Arguments, ExitCode, Output);
+    if (Install)
+        ok(ArpHasDisplayName(Package->DisplayName), "no installed application named %ls\n", Package->DisplayName);
+    else
+        ok(WaitForRemoval(Package), "%ls is still installed after uninstall\n", Package->Id);
+}
+
+static DWORD WINAPI
+AbandonLock(LPVOID Parameter)
+{
+    return WaitForSingleObject((HANDLE)Parameter, 0);
+}
+
+START_TEST(installlock)
+{
+    static const WCHAR Install[] = L"install --id 7zip.7zip -e --source winget --installer-type wix --silent --accept-package-agreements --disable-interactivity";
+    static const WCHAR Uninstall[] = L"uninstall --id 7zip.7zip -e --source winget --silent --disable-interactivity";
+    HANDLE Lock, Thread;
+    DWORD ExitCode, Result = WAIT_FAILED;
+
+    if (ArpHasDisplayName(WixPackage.DisplayName) || PackageFileExists(&WixPackage))
+    {
+        skip("%ls is already installed\n", WixPackage.Id);
+        return;
+    }
+    if (!SourceAvailable(WixPackage.Id))
+        return;
+    Lock = CreateMutexW(NULL, FALSE, L"WinGetCrossProcessInstallLock");
+    ok(Lock != NULL, "CreateMutex failed with %lu\n", GetLastError());
+    if (!Lock)
+        return;
+
+    RunWhileLocked(Lock, Install, TRUE, "Successfully verified installer hash");
+    if (ArpHasDisplayName(WixPackage.DisplayName))
+        RunWhileLocked(Lock, Uninstall, FALSE, "Found 7-Zip");
+
+    Thread = CreateThread(NULL, 0, AbandonLock, Lock, 0, NULL);
+    ok(Thread != NULL, "CreateThread failed with %lu\n", GetLastError());
+    if (Thread)
+    {
+        WaitForSingleObject(Thread, INFINITE);
+        GetExitCodeThread(Thread, &Result);
+        CloseHandle(Thread);
+    }
+    ok(Result == WAIT_OBJECT_0, "the thread did not take the install lock: %lu\n", Result);
+    if (RunTool(Install, &ExitCode))
+    {
+        ok(ExitCode == 0, "install after an abandoned lock returned 0x%08lx:\n%s\n", ExitCode, Output);
+        ok(!strstr(Output, LOCK_WAIT_TEXT), "install waited for an abandoned lock:\n%s\n", Output);
+        ok(ArpHasDisplayName(WixPackage.DisplayName), "no installed application named %ls\n", WixPackage.DisplayName);
+    }
+    if (ArpHasDisplayName(WixPackage.DisplayName))
+    {
+        UninstallPackage(WixPackage.Id);
+        ok(WaitForRemoval(&WixPackage), "%ls is still installed after uninstall\n", WixPackage.Id);
+    }
+    CloseHandle(Lock);
+}

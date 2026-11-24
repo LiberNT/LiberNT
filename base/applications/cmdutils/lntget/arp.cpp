@@ -664,9 +664,14 @@ std::wstring BuildUninstallCommand(const ArpEntry &entry, const std::string &ins
     return command;
 }
 
-Status UninstallArpEntry(const ArpEntry &entry, const std::string &installerType, InstallMode mode, DWORD &exitCode)
+Status UninstallArpEntry(const ArpEntry &entry, const std::string &installerType, InstallMode mode, DWORD &exitCode,
+                         InstallLockWait *lockWait)
 {
     exitCode = 0;
+    InstallLock lock;
+    Status status = lock.Acquire(lockWait);
+    if (!status)
+        return status;
     if (entry.portable)
         return UninstallPortable(entry);
     const std::wstring command = BuildUninstallCommand(entry, installerType, mode);

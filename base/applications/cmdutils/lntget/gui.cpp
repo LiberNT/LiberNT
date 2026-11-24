@@ -155,6 +155,7 @@ enum class OperationStage
     Downloading,
     Verifying,
     Installing,
+    WaitingForInstall,
     Complete,
     Failed,
     NeedsAgreement,
@@ -475,6 +476,28 @@ private:
         unsigned long long lastReceived_ = 0;
     };
 
+    class InstallWaitCallback : public InstallLockWait
+    {
+    public:
+        InstallWaitCallback(Worker &worker, const OperationUpdate &update) : worker_(worker), update_(update) {}
+
+        void Waiting() override
+        {
+            OperationUpdate current = update_;
+            current.stage = OperationStage::WaitingForInstall;
+            worker_.PostOperation(current);
+        }
+
+        void Acquired() override
+        {
+            worker_.PostOperation(update_);
+        }
+
+    private:
+        Worker &worker_;
+        const OperationUpdate &update_;
+    };
+
     static DWORD WINAPI ThreadMain(LPVOID parameter)
     {
         static_cast<Worker *>(parameter)->Run();
@@ -704,7 +727,8 @@ private:
 
         if (install)
         {
-            status = InstallDependencyPlan(*source_, dependencies, options);
+            InstallWaitCallback wait(*this, update);
+            status = InstallDependencyPlan(*source_, dependencies, options, &wait);
             if (!status)
             {
                 update.stage = OperationStage::Failed;
@@ -732,7 +756,8 @@ private:
             update.stage = OperationStage::Installing;
             PostOperation(update);
             DWORD exitCode = 0;
-            status = service.Install(package, installer, path, InstallMode::Default, exitCode);
+            InstallWaitCallback wait(*this, update);
+            status = service.Install(package, installer, path, InstallMode::Default, exitCode, nullptr, &wait);
             update.exitCode = exitCode;
             RunInstalledJob();
             if (!status)
@@ -2165,6 +2190,12 @@ void ApplyOperationUpdate(CatalogWindow &state, const OperationUpdate &update)
         case OperationStage::Installing:
             SetWindowTextW(state.operationTitle, (std::wstring(L"Installing ") + name).c_str());
             SetWindowTextW(state.operationDetail, L"The verified installer is running silently. This may take a moment.");
+            SetWindowTextW(state.operationPercent, L"");
+            SetOperationMarquee(state, true);
+            break;
+        case OperationStage::WaitingForInstall:
+            SetWindowTextW(state.operationTitle, (std::wstring(L"Waiting to install ") + name).c_str());
+            SetWindowTextW(state.operationDetail, L"Waiting for another install/uninstall to complete…");
             SetWindowTextW(state.operationPercent, L"");
             SetOperationMarquee(state, true);
             break;

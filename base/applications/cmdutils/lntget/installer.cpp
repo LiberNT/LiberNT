@@ -359,7 +359,7 @@ Status InstallerService::Execute(const std::wstring &commandLine, const std::wst
 }
 
 Status InstallerService::Install(const PackageRecord &package, const InstallerEntry &installer, const std::wstring &path,
-                                 InstallMode mode, DWORD &exitCode, TrackedPackage *tracked)
+                                 InstallMode mode, DWORD &exitCode, TrackedPackage *tracked, InstallLockWait *wait)
 {
     const std::wstring ownedPath(path);
     HANDLE lockedInstaller = CreateFileW(ownedPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
@@ -374,6 +374,13 @@ Status InstallerService::Install(const PackageRecord &package, const InstallerEn
     {
         CloseHandle(lockedInstaller);
         return Status::Fail(status.code, "installer changed after download verification: " + status.message);
+    }
+    InstallLock lock;
+    status = lock.Acquire(wait);
+    if (!status)
+    {
+        CloseHandle(lockedInstaller);
+        return status;
     }
 
     if (AsciiEquals(EffectiveInstallerType(installer), "portable"))

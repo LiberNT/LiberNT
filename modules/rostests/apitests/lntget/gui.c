@@ -338,7 +338,7 @@ SelectInstalledRow(HANDLE Process, HWND List, PCWSTR Name, BOOL Prefix)
 }
 
 static void
-UninstallFromInstalledApps(HANDLE Process, HWND Catalog)
+UninstallFromInstalledApps(HANDLE Process, HWND Catalog, HANDLE Lock)
 {
     HWND Installed, List, Uninstall, Status;
     WCHAR Text[256];
@@ -362,9 +362,23 @@ UninstallFromInstalledApps(HANDLE Process, HWND Catalog)
     ok(SendMessageW(List, LVM_GETNEXTITEM, (WPARAM)-1, LVNI_SELECTED) == Row, "jq is not selected\n");
     ok(WaitForEnabled(Uninstall, 5000), "Uninstall stays disabled with jq selected\n");
 
+    if (Lock)
+        ok(WaitForSingleObject(Lock, 0) == WAIT_OBJECT_0, "cannot take the install lock\n");
     PostMessageW(Uninstall, BM_CLICK, 0, 0);
     if (!ConfirmMessageBox(Process, Installed))
+    {
+        if (Lock)
+            ReleaseMutex(Lock);
         goto Close;
+    }
+    if (Lock)
+    {
+        ok(WaitForText(Status, L"Waiting for another install/uninstall to complete", Text, _countof(Text), GUI_TIMEOUT),
+           "status is '%ls' while the install lock is held\n", Text);
+        Sleep(3000);
+        ok(JqInstalled(), "jq was uninstalled while the install lock was held\n");
+        ok(ReleaseMutex(Lock), "cannot release the install lock: %lu\n", GetLastError());
+    }
     ok(WaitForText(Status, L"jq was uninstalled.", Text, _countof(Text), GUI_TIMEOUT), "status is '%ls'\n", Text);
     ok(WaitForInstalledState(FALSE, 20000), "jq is still installed after the window uninstalled it\n");
     ok(SelectInstalledRow(Process, List, L"jq", FALSE) < 0, "jq is still listed after the uninstall\n");
@@ -449,7 +463,7 @@ START_TEST(gui)
     ok(!wcscmp(Text, L"Reinstall"), "the action is '%ls' after the installation\n", Text);
 
     if (JqInstalled())
-        UninstallFromInstalledApps(Process.hProcess, Catalog);
+        UninstallFromInstalledApps(Process.hProcess, Catalog, NULL);
 
     PostMessageW(Catalog, WM_CLOSE, 0, 0);
 
@@ -888,4 +902,82 @@ Exit:
 Cleanup:
     if (JqInstalled() && RunTool(L"uninstall --id jqlang.jq -e --source winget --silent --disable-interactivity", &ExitCode))
         ok(ExitCode == 0, "cleanup uninstall returned 0x%08lx\n", ExitCode);
+}
+
+START_TEST(guiinstalllock)
+{
+    WCHAR CommandLine[1024], Text[256];
+    STARTUPINFOW Startup = { sizeof(Startup) };
+    PROCESS_INFORMATION Process;
+    HWND Catalog, Notice, Install, Title;
+    HANDLE Lock;
+    DWORD ExitCode;
+
+    if (wcsstr(GetTool(), L"winget"))
+    {
+        skip("winget has no catalog window\n");
+        return;
+    }
+    if (JqInstalled())
+    {
+        skip("jq is already installed\n");
+        return;
+    }
+    if (!RunTool(L"search --id jqlang.jq -e --source winget", &ExitCode) || ExitCode != 0)
+    {
+        skip("the winget source is unavailable: 0x%08lx\n", ExitCode);
+        return;
+    }
+    Lock = CreateMutexW(NULL, FALSE, L"WinGetCrossProcessInstallLock");
+    ok(Lock != NULL, "CreateMutex failed with %lu\n", GetLastError());
+    if (!Lock)
+        return;
+
+    StringCchPrintfW(CommandLine, _countof(CommandLine), L"\"%s\" gui jqlang.jq", GetTool());
+    if (!CreateProcessW(NULL, CommandLine, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &Startup, &Process))
+    {
+        ok(0, "CreateProcess(%ls) failed with %lu\n", CommandLine, GetLastError());
+        CloseHandle(Lock);
+        return;
+    }
+    CloseHandle(Process.hThread);
+
+    Catalog = WaitForWindow(Process.hProcess, L"LntGetCatalog", NULL, 60000);
+    ok(Catalog != NULL, "the catalog window did not open\n");
+    if (!Catalog)
+        goto Exit;
+    Notice = WaitForWindow(Process.hProcess, L"#32770", Catalog, 30000);
+    ok(Notice != NULL, "the compatibility notice did not open\n");
+    if (Notice)
+        PostMessageW(Notice, WM_COMMAND, IDOK, 0);
+    ok(WaitForText(Catalog, L" packages)", Text, _countof(Text), GUI_TIMEOUT), "catalog title is '%ls'\n", Text);
+
+    Install = GetDlgItem(Catalog, ID_INSTALL);
+    Title = GetDlgItem(Catalog, ID_OPERATION_TITLE);
+    ok(WaitForEnabled(Install, 30000), "Install stays disabled\n");
+    ok(WaitForSingleObject(Lock, 0) == WAIT_OBJECT_0, "cannot take the install lock\n");
+    PostMessageW(Install, BM_CLICK, 0, 0);
+    ok(WaitForText(Title, L"Waiting to install jq", Text, _countof(Text), GUI_TIMEOUT),
+       "operation title is '%ls' while the install lock is held\n", Text);
+    Sleep(3000);
+    ok(!JqInstalled(), "jq was installed while the install lock was held\n");
+    ok(ReleaseMutex(Lock), "cannot release the install lock: %lu\n", GetLastError());
+    ok(WaitForText(Title, L"Installation complete", Text, _countof(Text), GUI_TIMEOUT), "operation title is '%ls'\n", Text);
+    ok(WaitForInstalledState(TRUE, 5000), "jq is not installed after the lock was released\n");
+
+    if (JqInstalled())
+        UninstallFromInstalledApps(Process.hProcess, Catalog, Lock);
+
+    PostMessageW(Catalog, WM_CLOSE, 0, 0);
+
+Exit:
+    ok(WaitForSingleObject(Process.hProcess, 30000) == WAIT_OBJECT_0, "lntget did not exit after its window closed\n");
+    TerminateProcess(Process.hProcess, ERROR_TIMEOUT);
+    GetExitCodeProcess(Process.hProcess, &ExitCode);
+    ok(ExitCode == 0, "lntget gui returned 0x%08lx\n", ExitCode);
+    CloseHandle(Process.hProcess);
+    CloseHandle(Lock);
+
+    if (JqInstalled() && RunTool(L"uninstall --id jqlang.jq -e --source winget --silent --disable-interactivity", &ExitCode))
+        trace("cleanup uninstall returned 0x%08lx\n", ExitCode);
 }

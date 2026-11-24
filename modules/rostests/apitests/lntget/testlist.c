@@ -7,9 +7,11 @@ extern void func_dependencyagreements(void);
 extern void func_exe(void);
 extern void func_gui(void);
 extern void func_guiagreements(void);
+extern void func_guiinstalllock(void);
 extern void func_guiuninstall(void);
 extern void func_guiupdate(void);
 extern void func_inno(void);
+extern void func_installlock(void);
 extern void func_nullsoft(void);
 extern void func_nullsoftdirectory(void);
 extern void func_options(void);
@@ -27,9 +29,11 @@ const struct test winetest_testlist[] =
     { "exe", func_exe },
     { "gui", func_gui },
     { "guiagreements", func_guiagreements },
+    { "guiinstalllock", func_guiinstalllock },
     { "guiuninstall", func_guiuninstall },
     { "guiupdate", func_guiupdate },
     { "inno", func_inno },
+    { "installlock", func_installlock },
     { "nullsoft", func_nullsoft },
     { "nullsoftdirectory", func_nullsoftdirectory },
     { "options", func_options },

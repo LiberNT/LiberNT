@@ -37,4 +37,30 @@ bool ParseHex256(const std::string &text, uint8_t (&value)[32]);
 std::string DecimalString(unsigned long long value);
 std::wstring DecimalWideString(unsigned long long value);
 
+class InstallLockWait
+{
+public:
+    virtual void Waiting() = 0;
+    virtual void Acquired() = 0;
+
+protected:
+    ~InstallLockWait() {}
+};
+
+class InstallLock
+{
+public:
+    InstallLock() = default;
+    InstallLock(const InstallLock &) = delete;
+    InstallLock &operator=(const InstallLock &) = delete;
+    ~InstallLock();
+
+    Status Acquire(InstallLockWait *wait = nullptr);
+
+private:
+    HANDLE handle_ = nullptr;
+    DWORD thread_ = 0;
+    bool acquired_ = false;
+};
+
 } // namespace lntget
