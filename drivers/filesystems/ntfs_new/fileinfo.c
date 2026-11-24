@@ -2038,13 +2038,6 @@ NtfsRenameStream(_In_ PVolumeContextBlock VolCB,
         NewName[StreamName.Length / sizeof(WCHAR)] = UNICODE_NULL;
     }
     Status = NtfsPrepareStreamRenames(StreamCB, &StreamName, &Renames, &RenameCount);
-    if (NT_SUCCESS(Status) && FileObject->SectionObjectPointer && FileObject->SectionObjectPointer->SharedCacheMap)
-    {
-        IO_STATUS_BLOCK FlushStatus;
-
-        CcFlushCache(FileObject->SectionObjectPointer, NULL, 0, &FlushStatus);
-        Status = FlushStatus.Status;
-    }
     if (NT_SUCCESS(Status))
         Status = NtfsFileRecordRenameDataStream(FileCB->FileRec, OldStream.Length ? FileCB->RequestedStream : NULL,
                                                 NewName, ReplaceIfExists);
@@ -3204,9 +3197,28 @@ NtfsFsdSetInformation(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         IrpSp->Parameters.SetFile.FileInformationClass == FileRenameInformationEx ||
         IrpSp->Parameters.SetFile.FileInformationClass == FileLinkInformation)
     {
-        if (IrpSp->Parameters.SetFile.FileInformationClass != FileRenameInformation &&
+        BOOLEAN FlushBeforeMetadata =
+            IrpSp->Parameters.SetFile.FileInformationClass != FileRenameInformation &&
             IrpSp->Parameters.SetFile.FileInformationClass != FileRenameInformationEx &&
-            IrpSp->Parameters.SetFile.FileInformationClass != FileLinkInformation &&
+            IrpSp->Parameters.SetFile.FileInformationClass != FileLinkInformation;
+
+        if (!FlushBeforeMetadata &&
+            (IrpSp->Parameters.SetFile.FileInformationClass == FileRenameInformation ||
+             IrpSp->Parameters.SetFile.FileInformationClass == FileRenameInformationEx) &&
+            !IrpSp->Parameters.SetFile.FileObject &&
+            SystemBuffer != NULL &&
+            BufferLength >= FIELD_OFFSET(FILE_RENAME_INFORMATION, FileName) + sizeof(WCHAR))
+        {
+            PFILE_RENAME_INFORMATION RenameInfo = SystemBuffer;
+
+            if (RenameInfo->FileNameLength >= sizeof(WCHAR) &&
+                RenameInfo->FileName[0] == L':')
+            {
+                FlushBeforeMetadata = TRUE;
+            }
+        }
+
+        if (FlushBeforeMetadata &&
             FileObject->SectionObjectPointer != NULL &&
             FileObject->SectionObjectPointer->SharedCacheMap != NULL)
         {
