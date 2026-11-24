@@ -491,7 +491,7 @@ endfunction()
 function(add_kernel_ubsan TARGET)
     if(ENABLE_KERNEL_UBSAN)
         target_compile_options(${TARGET} PRIVATE
-            "$<$<COMPILE_LANGUAGE:C,CXX>:-fsanitize=shift,integer-divide-by-zero,signed-integer-overflow,bounds,bool,enum,vla-bound,builtin,float-cast-overflow,nonnull-attribute,returns-nonnull-attribute;-fno-autolink>")
+            "$<$<COMPILE_LANGUAGE:C,CXX>:-fsanitize=shift,integer-divide-by-zero,signed-integer-overflow,bounds,bool,enum,vla-bound,builtin,float-cast-overflow,nonnull-attribute,returns-nonnull-attribute,null,alignment,pointer-overflow;-fno-autolink>")
     endif()
 endfunction()
 
