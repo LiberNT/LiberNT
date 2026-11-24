@@ -747,6 +747,7 @@ NTSTATUS TdiQueryDeviceControl(
                                         &Iosb);
     if (!Irp)
         return STATUS_INSUFFICIENT_RESOURCES;
+    IoGetNextIrpStackLocation(Irp)->FileObject = FileObject;
 
     Status = TdiCall(Irp, DeviceObject, &Event, &Iosb);
 
