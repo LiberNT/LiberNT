@@ -374,7 +374,7 @@ KiQueueReadyThread(
         /* It may not run here after all; let the deferred pass place it again */
         Thread->State = DeferredReady;
         KiReleasePrcbLock(Prcb);
-        KiDeferredReadyThread(Thread);
+        KiInsertDeferredReadyList(Thread);
         return;
     }
 
@@ -512,11 +512,15 @@ FASTCALL
 KiDeferredReadyThread(
     _Inout_ PKTHREAD Thread)
 {
-    ASSERT(Thread->State == DeferredReady);
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
+
+    KiAcquireThreadLock(Thread);
+    ASSERT(Thread->State == DeferredReady);
 
     KiApplyThreadAdjustment(Thread);
     KiPlaceReadyThread(Thread, KiSelectTargetProcessor(Thread));
+
+    KiReleaseThreadLock(Thread);
 }
 
 /*
@@ -534,14 +538,16 @@ KiProcessDeferredReadyList(
 
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
 
-    Entry = Prcb->DeferredReadyListHead.Next;
-    Prcb->DeferredReadyListHead.Next = NULL;
-
-    while (Entry != NULL)
+    while ((Entry = Prcb->DeferredReadyListHead.Next) != NULL)
     {
-        Thread = CONTAINING_RECORD(Entry, KTHREAD, SwapListEntry);
-        Entry = Entry->Next;
-        KiDeferredReadyThread(Thread);
+        Prcb->DeferredReadyListHead.Next = NULL;
+
+        while (Entry != NULL)
+        {
+            Thread = CONTAINING_RECORD(Entry, KTHREAD, SwapListEntry);
+            Entry = Entry->Next;
+            KiDeferredReadyThread(Thread);
+        }
     }
 }
 
@@ -996,7 +1002,6 @@ KiSetPriorityThread(
             return;
         }
 
-        /* FIXME: a waiting thread readied concurrently can be queued at the old priority between this read and the write */
         Thread->Priority = (SCHAR)Priority;
         return;
     }
@@ -1064,7 +1069,7 @@ KiSetAffinityThread(
             Thread->State = DeferredReady;
             KiReleasePrcbLock(Prcb);
 
-            KiDeferredReadyThread(Thread);
+            KiInsertDeferredReadyList(Thread);
             break;
         }
 
@@ -1081,8 +1086,7 @@ KiSetAffinityThread(
             {
                 Prcb->NextThread = NULL;
                 KiReleasePrcbLock(Prcb);
-                Thread->State = DeferredReady;
-                KiDeferredReadyThread(Thread);
+                KiInsertDeferredReadyList(Thread);
                 break;
             }
 
@@ -1500,10 +1504,14 @@ KiBalanceReadyQueues(
         Thread->State = DeferredReady;
         KiReleasePrcbLock(Source);
 
+        KiAcquireThreadLock(Thread);
         Thread->NextProcessor = Target->Number;
         Thread->AdjustReason = AdjustNone;
         KiApplyThreadAdjustment(Thread);
         KiPlaceReadyThread(Thread, Target->Number);
+        KiReleaseThreadLock(Thread);
+
+        KiCheckDeferredReadyList(KeGetCurrentPrcb());
 
         Moved = TRUE;
         break;

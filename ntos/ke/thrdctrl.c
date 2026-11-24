@@ -948,7 +948,9 @@ KeReadyThread(
     KIRQL OldIrql;
 
     OldIrql = KiEnterDispatcher();
+    KiAcquireThreadLock(Thread);
     KiReadyThread(Thread);
+    KiReleaseThreadLock(Thread);
     KiExitDispatcher(OldIrql);
 }
 

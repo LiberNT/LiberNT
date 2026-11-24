@@ -61,18 +61,25 @@ KiRelieveStarvedThread(
     if (RemoveEntryList(&Thread->WaitListEntry))
         Prcb->ReadySummary ^= PRIORITY_MASK(Priority);
 
-    Thread->PriorityDecrement = KI_STARVATION_PRIORITY - Thread->BasePriority;
-    Thread->Priority = (SCHAR)KiApplyPriorityFloor(Thread,
-                                                   KI_STARVATION_PRIORITY);
-    KiSetThreadQuantum(Thread, Thread->QuantumReset * 2);
-    Thread->Preempted = FALSE;
-
     /* Off the queue, so no longer ready, before anyone else can look at it */
     Thread->State = DeferredReady;
     KiReleasePrcbLock(Prcb);
 
+    KiAcquireThreadLock(Thread);
+    if ((Thread->BasePriority < KI_STARVATION_PRIORITY) &&
+        (Thread->Priority < KI_STARVATION_PRIORITY))
+    {
+        Thread->PriorityDecrement = KI_STARVATION_PRIORITY - Thread->BasePriority;
+        Thread->Priority = (SCHAR)KiApplyPriorityFloor(Thread,
+                                                       KI_STARVATION_PRIORITY);
+    }
+    KiSetThreadQuantum(Thread, Thread->QuantumReset * 2);
+    Thread->Preempted = FALSE;
     Thread->AdjustReason = AdjustNone;
+    KiReleaseThreadLock(Thread);
+
     KiDeferredReadyThread(Thread);
+    KiCheckDeferredReadyList(KeGetCurrentPrcb());
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
