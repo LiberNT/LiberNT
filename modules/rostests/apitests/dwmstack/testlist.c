@@ -25,7 +25,6 @@ extern void func_scene_cache(void);
 const struct test winetest_testlist[] =
 {
     { "dwmstack", func_dwmstack },
-    { "dwm_restart", func_dwm_restart },
     { "caption_cache", func_caption_cache },
     { "client_format", func_client_format },
     { "event_poll", func_event_poll },
@@ -36,5 +35,6 @@ const struct test winetest_testlist[] =
     { "monitor_power", func_monitor_power },
     { "pointer_image", func_pointer_image },
     { "scene_cache", func_scene_cache },
+    { "dwm_restart", func_dwm_restart },
     { 0, 0 }
 };
