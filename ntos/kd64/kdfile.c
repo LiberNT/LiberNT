@@ -184,6 +184,9 @@ KdPullRemoteFile(
                                      NULL,
                                      NULL);
             }
+            /* The usual next step is a reboot, which writes back nothing still in the cache */
+            if (NT_SUCCESS(Status))
+                Status = ZwFlushBuffersFile(FileHandle, &IoStatusBlock);
             ZwClose(FileHandle);
         }
     }
