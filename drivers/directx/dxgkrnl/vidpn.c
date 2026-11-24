@@ -8906,6 +8906,7 @@ DxgkpDisplayModeGdiAlias(
 NTSTATUS
 DxgkVidPnQueryVideoModes(
     _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
     _Out_writes_opt_(Capacity) PVIDEO_MODE_INFORMATION Modes,
     _In_ ULONG Capacity,
     _Out_ PULONG Count,
@@ -8925,6 +8926,11 @@ DxgkVidPnQueryVideoModes(
     if (!NT_SUCCESS(Status))
         goto Cleanup;
     Cache = Adapter->DisplayModeCache;
+    if (VidPnSourceId != D3DDDI_ID_ALL && Cache->SourceId != VidPnSourceId)
+    {
+        Status = STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE;
+        goto Cleanup;
+    }
     if (CurrentOnly)
     {
         RtlZeroMemory(&Current, sizeof(Current));
@@ -9071,6 +9077,7 @@ Cleanup:
 NTSTATUS
 DxgkVidPnSetVideoMode(
     _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
     _In_ ULONG ModeIndex)
 {
     DXGKP_DISPLAY_MODE_CACHE *Cache;
@@ -9105,6 +9112,11 @@ DxgkVidPnSetVideoMode(
     if (!NT_SUCCESS(Status))
         goto Cleanup;
     Cache = Adapter->DisplayModeCache;
+    if (VidPnSourceId != D3DDDI_ID_ALL && Cache->SourceId != VidPnSourceId)
+    {
+        Status = STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE;
+        goto Cleanup;
+    }
     Index = ModeIndex & DXGKP_DISPLAY_MODE_INDEX_MASK;
     if ((ModeIndex >> DXGKP_DISPLAY_MODE_INDEX_BITS) != Cache->Generation || Index >= Cache->Count)
     {

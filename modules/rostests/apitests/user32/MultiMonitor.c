@@ -6,6 +6,7 @@
  */
 
 #include "precomp.h"
+#include <d3dkmthk.h>
 
 #define MAX_MONITORS 16
 #define PROBE_COLOR RGB(0x12, 0x9A, 0x56)
@@ -233,6 +234,100 @@ TestDisplayConfig(const MONITOR_LIST *List)
     }
 }
 
+static BOOL
+ListsMode(PCWSTR Device, UINT Width, UINT Height)
+{
+    DEVMODEW Mode;
+    DWORD Index;
+
+    for (Index = 0; ; Index++)
+    {
+        ZeroMemory(&Mode, sizeof(Mode));
+        Mode.dmSize = sizeof(Mode);
+        if (!EnumDisplaySettingsExW(Device, Index, &Mode, EDS_RAWMODE))
+            return FALSE;
+        if (Mode.dmPelsWidth == Width && Mode.dmPelsHeight == Height && Mode.dmBitsPerPel == 32)
+            return TRUE;
+    }
+}
+
+static void
+TestModeLists(void)
+{
+    NTSTATUS (APIENTRY *pOpenAdapter)(D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME *);
+    NTSTATUS (APIENTRY *pGetModeList)(D3DKMT_GETDISPLAYMODELIST *);
+    NTSTATUS (APIENTRY *pCloseAdapter)(const D3DKMT_CLOSEADAPTER *);
+    HMODULE Gdi32 = GetModuleHandleW(L"gdi32.dll");
+    HMODULE Win32u = LoadLibraryW(L"win32u.dll");
+    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME Open;
+    D3DKMT_GETDISPLAYMODELIST List;
+    D3DKMT_CLOSEADAPTER Close;
+    DISPLAY_DEVICEW Device;
+    D3DKMT_DISPLAYMODE *Modes;
+    ULONG Missing, Checked, Mode;
+    DWORD Index;
+
+    pOpenAdapter = (void *)GetProcAddress(Gdi32, "D3DKMTOpenAdapterFromGdiDisplayName");
+    pGetModeList = (void *)GetProcAddress(Gdi32, "D3DKMTGetDisplayModeList");
+    pCloseAdapter = (void *)GetProcAddress(Gdi32, "D3DKMTCloseAdapter");
+    if (!pGetModeList && Win32u)
+        pGetModeList = (void *)GetProcAddress(Win32u, "NtGdiDdDDIGetDisplayModeList");
+    if (!pCloseAdapter && Win32u)
+        pCloseAdapter = (void *)GetProcAddress(Win32u, "NtGdiDdDDICloseAdapter");
+    if (!pOpenAdapter || !pGetModeList || !pCloseAdapter)
+    {
+        skip("no D3DKMT display mode list\n");
+        return;
+    }
+    for (Index = 0; ; Index++)
+    {
+        Device.cb = sizeof(Device);
+        if (!EnumDisplayDevicesW(NULL, Index, &Device, 0))
+            break;
+        if (!(Device.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) || (Device.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER))
+            continue;
+        ZeroMemory(&Open, sizeof(Open));
+        lstrcpynW(Open.DeviceName, Device.DeviceName, ARRAYSIZE(Open.DeviceName));
+        if (pOpenAdapter(&Open) < 0)
+        {
+            skip("%ls: no adapter for D3DKMT\n", Device.DeviceName);
+            continue;
+        }
+        ZeroMemory(&List, sizeof(List));
+        List.hAdapter = Open.hAdapter;
+        List.VidPnSourceId = Open.VidPnSourceId;
+        Modes = NULL;
+        if (pGetModeList(&List) >= 0 && List.ModeCount != 0 &&
+            (Modes = HeapAlloc(GetProcessHeap(), 0, List.ModeCount * sizeof(*Modes))) != NULL)
+        {
+            List.pModeList = Modes;
+            ok(pGetModeList(&List) >= 0, "%ls: D3DKMTGetDisplayModeList failed\n", Device.DeviceName);
+            Missing = 0;
+            Checked = 0;
+            for (Mode = 0; Mode < List.ModeCount; Mode++)
+            {
+                if ((Modes[Mode].Format != D3DDDIFMT_X8R8G8B8 && Modes[Mode].Format != D3DDDIFMT_A8R8G8B8) ||
+                    (Modes[Mode].DisplayOrientation != D3DDDI_ROTATION_IDENTITY && Modes[Mode].DisplayOrientation != 0))
+                {
+                    continue;
+                }
+                Checked++;
+                if (!ListsMode(Device.DeviceName, Modes[Mode].Width, Modes[Mode].Height))
+                {
+                    if (Missing == 0)
+                        trace("%ls: %ux%u is not a display setting\n", Device.DeviceName, Modes[Mode].Width, Modes[Mode].Height);
+                    Missing++;
+                }
+            }
+            ok(Missing == 0, "%ls: %lu of %lu source modes are not display settings\n", Device.DeviceName, Missing, Checked);
+            trace("%ls: %lu source modes checked\n", Device.DeviceName, Checked);
+        }
+        HeapFree(GetProcessHeap(), 0, Modes);
+        Close.hAdapter = Open.hAdapter;
+        pCloseAdapter(&Close);
+    }
+}
+
 START_TEST(MultiMonitor)
 {
     MONITOR_LIST List;
@@ -273,6 +368,7 @@ START_TEST(MultiMonitor)
     ok(EqualRect(&Union, &Virtual), "the monitors cover %s, the virtual screen is %s\n", wine_dbgstr_rect(&Union),
        wine_dbgstr_rect(&Virtual));
     TestDisplayConfig(&List);
+    TestModeLists();
 
     if (List.Count < 2)
     {

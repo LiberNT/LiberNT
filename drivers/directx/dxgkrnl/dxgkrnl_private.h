@@ -4213,6 +4213,7 @@ DxgkpDisplayCommitSwitchesPrimary(
 NTSTATUS
 DxgkVidPnQueryVideoModes(
     _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
     _Out_writes_opt_(Capacity) struct _VIDEO_MODE_INFORMATION *Modes,
     _In_ ULONG Capacity,
     _Out_ PULONG Count,
@@ -4221,6 +4222,7 @@ DxgkVidPnQueryVideoModes(
 NTSTATUS
 DxgkVidPnSetVideoMode(
     _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
     _In_ ULONG ModeIndex);
 
 VOID
