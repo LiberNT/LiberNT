@@ -17,6 +17,11 @@ MouseSafetyOnDrawEnd(
     _Inout_ PPDEVOBJ ppdev,
     _In_ BOOL Wrote);
 
+VOID
+NTAPI
+EngpReleasePointer(
+    _Inout_ PPDEVOBJ ppdev);
+
 ULONG
 NTAPI
 IntEngSetPointerShape(

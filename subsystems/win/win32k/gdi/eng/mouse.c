@@ -740,6 +740,28 @@ EngMovePointer(
         IntEndMousePointerBatch(ppdev, pso, &rclOld, bOld, &rclNew, bNew);
 }
 
+/* The surfaces of an engine-managed pointer belong to the PDEV and go away with it */
+VOID
+NTAPI
+EngpReleasePointer(
+    _Inout_ PPDEVOBJ ppdev)
+{
+    PGDIPOINTER pgp = &ppdev->Pointer;
+    PSURFACE *apsurf[] = { &pgp->psurfColor, &pgp->psurfMask, &pgp->psurfSave };
+    ULONG i;
+
+    ASSERT(ppdev->cPdevRefs == 0);
+    for (i = 0; i < RTL_NUMBER_OF(apsurf); i++)
+    {
+        if (*apsurf[i] == NULL)
+            continue;
+        EngDeleteSurface((*apsurf[i])->BaseObject.hHmgr);
+        SURFACE_ShareUnlockSurface(*apsurf[i]);
+        *apsurf[i] = NULL;
+    }
+    pgp->Enabled = FALSE;
+}
+
 ULONG
 NTAPI
 IntEngSetPointerShape(

@@ -124,6 +124,8 @@ PDEVOBJ_vRelease(
     /* Check if references are left */
     if (ppdev->cPdevRefs == 0)
     {
+        EngpReleasePointer(ppdev);
+
         /* Do we have a surface? */
         if (ppdev->pSurface)
         {
