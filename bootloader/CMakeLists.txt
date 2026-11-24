@@ -414,7 +414,7 @@ if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "i386")
         ${WINLOAD_ARCH_SOURCE}
         ${WINLOAD_COMMON_SOURCE}
         bios/osl.c)
-    set_target_properties(winloadpcat PROPERTIES OUTPUT_NAME winload)
+    set_target_properties(winloadpcat PROPERTIES OUTPUT_NAME winload PDB_NAME winloadpcat)
     bootloader_pcat_application(winloadpcat 0x01000000)
     target_link_libraries(winloadpcat bootwim bootntfs)
     if(MSVC)
