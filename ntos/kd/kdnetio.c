@@ -103,6 +103,12 @@ KdpNetQueryAttached(
     return KdpNetReady && KdpNetInterface.QueryAttached(Columns, Rows);
 }
 
+BOOLEAN
+KdpNetIsReady(VOID)
+{
+    return KdpNetReady;
+}
+
 VOID
 KdpNetDisplayStatus(VOID)
 {

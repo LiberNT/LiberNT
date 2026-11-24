@@ -226,6 +226,9 @@ KdShowShutdownLog(VOID);
 VOID
 KdpResetFileIoHost(VOID);
 
+BOOLEAN
+KdpFileRequestInProgress(VOID);
+
 NTSTATUS
 NTAPI
 KdpAllowDisable(VOID);

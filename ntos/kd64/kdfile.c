@@ -407,6 +407,14 @@ KdpReloadService(
     return Status;
 }
 
+BOOLEAN
+KdpFileRequestInProgress(VOID)
+{
+    LONG Request = InterlockedCompareExchange(&KdpFileRequest, KDP_FILE_REQUEST_NONE, KDP_FILE_REQUEST_NONE);
+
+    return Request == KD_FILE_REQUEST_PULL || Request == KD_FILE_REQUEST_RELOAD;
+}
+
 static
 VOID
 NTAPI
