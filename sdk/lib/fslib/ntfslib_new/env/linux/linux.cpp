@@ -85,7 +85,12 @@ NtfsDiskFdLinux(void)
 extern "C" void
 NtfsUseWritebackClockLinux(BOOLEAN Enable)
 {
+#ifdef CLOCK_REALTIME_COARSE
     NtfsTimestampClock = Enable ? CLOCK_REALTIME_COARSE : CLOCK_REALTIME;
+#else
+    UNREFERENCED_PARAMETER(Enable);
+    NtfsTimestampClock = CLOCK_REALTIME;
+#endif
 }
 
 static void
