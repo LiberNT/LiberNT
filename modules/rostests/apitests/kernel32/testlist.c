@@ -22,6 +22,7 @@ extern void func_BackupReadWrite(void);
 extern void func_CalendarDateTime(void);
 extern void func_CallbackCallingConventions(void);
 extern void func_CallbackMayRunLong(void);
+extern void func_CheckElevationEnabled(void);
 extern void func_CdfsVolume(void);
 extern void func_CreateSymbolicLink(void);
 extern void func_SataDiskAddress(void);
@@ -258,6 +259,7 @@ const struct test winetest_testlist[] =
     { "CalendarDateTime",            func_CalendarDateTime },
     { "CallbackCallingConventions", func_CallbackCallingConventions },
     { "CallbackMayRunLong",          func_CallbackMayRunLong },
+    { "CheckElevationEnabled",       func_CheckElevationEnabled },
     { "CdfsVolume", func_CdfsVolume },
     { "CreateSymbolicLink", func_CreateSymbolicLink },
     { "SataDiskAddress", func_SataDiskAddress },

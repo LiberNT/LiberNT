@@ -2,6 +2,7 @@
 set(KERNEL32_API_SOURCE
     client/ApplicationRecovery.c
     client/ApplicationRestart.c
+    client/CheckElevationEnabled.c
     client/CompareObjectHandles.c
     client/DepPolicy.c
     client/DiscardVirtualMemory.c

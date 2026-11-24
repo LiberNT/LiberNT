@@ -32,6 +32,7 @@ list(APPEND SOURCE
     CallbackCallingConventions.c
     CdfsVolume.c
     CallbackMayRunLong.c
+    CheckElevationEnabled.c
     Arm64ThreadContext.c
     ConsoleCommandHistory.c
     ConsoleCP.c
