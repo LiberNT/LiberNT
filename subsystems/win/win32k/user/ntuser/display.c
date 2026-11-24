@@ -1443,15 +1443,14 @@ NtUserSetDisplayConfig(
 }
 
 static volatile LONG gUserDisplayConfigurationPending;
+static volatile LONG gUserDisplayDetachPending;
 
+static
 VOID
-NTAPI
-UserQueueDisplayConfigurationUpdate(VOID)
+UserQueueDisplayConfigurationWorker(VOID)
 {
     PUSER_SESSION Session;
     PTHREADINFO DesktopThread;
-
-    InterlockedExchange(&gUserDisplayConfigurationPending, 1);
 
     /* The display driver reports from any thread, and the user lock may be held by one that waits for that driver */
     Session = ReadPointerAcquire((PVOID volatile *)&gpDisplaySession);
@@ -1461,6 +1460,22 @@ UserQueueDisplayConfigurationUpdate(VOID)
     DesktopThread = ReadPointerAcquire((PVOID volatile *)&Session->DesktopThread);
     if (DesktopThread != NULL)
         KeSetEvent(DesktopThread->pEventQueueServer, IO_NO_INCREMENT, FALSE);
+}
+
+VOID
+NTAPI
+UserQueueDisplayConfigurationUpdate(VOID)
+{
+    InterlockedExchange(&gUserDisplayConfigurationPending, 1);
+    UserQueueDisplayConfigurationWorker();
+}
+
+VOID
+NTAPI
+UserQueueDisplayDetach(VOID)
+{
+    InterlockedExchange(&gUserDisplayDetachPending, 1);
+    UserQueueDisplayConfigurationWorker();
 }
 
 VOID
@@ -1475,6 +1490,14 @@ co_UserProcessDisplayConfigurationUpdate(VOID)
     ULONG iDevNum, cbReturned;
     LONG lResult;
     BOOL bEventDevice;
+
+    if (InterlockedExchange(&gUserDisplayDetachPending, 0) != 0)
+    {
+        lResult = UserSetDisplayTopology(SDC_TOPOLOGY_INTERNAL, TRUE);
+        if (lResult != ERROR_SUCCESS)
+            ERR("Could not move the desktop off a removed display: %ld\n", lResult);
+        EngpReleaseRemovedGraphicsDevices();
+    }
 
     if (InterlockedExchange(&gUserDisplayConfigurationPending, 0) == 0)
         return;

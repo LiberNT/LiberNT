@@ -25,6 +25,7 @@ typedef struct _GRAPHICS_DEVICE_NOTIFY
     LIST_ENTRY ListEntry;
     PGRAPHICS_DEVICE pGraphicsDevice;
     PVOID NotificationEntry;
+    BOOLEAN bRemoved;
 } GRAPHICS_DEVICE_NOTIFY, *PGRAPHICS_DEVICE_NOTIFY;
 
 static PDRIVER_OBJECT gpGraphicsDriverObject;
@@ -277,8 +278,14 @@ EngpGraphicsDeviceNotification(
     UserEnterExclusive();
     EngAcquireSemaphore(ghsemGraphicsDeviceList);
     pGraphicsDevice = pNotify->pGraphicsDevice;
-    /* TODO: remove a device that is attached to the desktop */
-    if (pGraphicsDevice &&
+    if (pGraphicsDevice && gppdevDetached && gpmdev && gpmdev->ppdevGlobal->pGraphicsDevice == pGraphicsDevice)
+    {
+        TRACE("Moving the desktop off the removed graphics device %S\n", pGraphicsDevice->szWinDeviceName);
+        if (!bQueryRemove)
+            pNotify->bRemoved = TRUE;
+        UserQueueDisplayDetach();
+    }
+    else if (pGraphicsDevice &&
         !(pGraphicsDevice->StateFlags & (DISPLAY_DEVICE_ATTACHED_TO_DESKTOP | DISPLAY_DEVICE_PRIMARY_DEVICE)) &&
         pGraphicsDevice != gpPrimaryGraphicsDevice &&
         pGraphicsDevice != gpVgaGraphicsDevice &&
@@ -309,6 +316,41 @@ EngpGraphicsDeviceNotification(
     if (pGraphicsDevice)
         ERR("Graphics device %S was removed while in use\n", pGraphicsDevice->szWinDeviceName);
     return STATUS_SUCCESS;
+}
+
+VOID
+NTAPI
+EngpReleaseRemovedGraphicsDevices(VOID)
+{
+    PGRAPHICS_DEVICE_NOTIFY pNotify;
+    PGRAPHICS_DEVICE pGraphicsDevice;
+    PLIST_ENTRY pEntry;
+
+    for (;;)
+    {
+        pGraphicsDevice = NULL;
+        EngAcquireSemaphore(ghsemGraphicsDeviceList);
+        for (pEntry = gGraphicsDeviceNotifyList.Flink; pEntry != &gGraphicsDeviceNotifyList; pEntry = pEntry->Flink)
+        {
+            pNotify = CONTAINING_RECORD(pEntry, GRAPHICS_DEVICE_NOTIFY, ListEntry);
+            if (pNotify->bRemoved &&
+                !(pNotify->pGraphicsDevice->StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) &&
+                !PDEVOBJ_bGraphicsDeviceInUse(pNotify->pGraphicsDevice))
+            {
+                pGraphicsDevice = pNotify->pGraphicsDevice;
+                EngpUnlinkGraphicsDevice(pGraphicsDevice);
+                break;
+            }
+        }
+        EngReleaseSemaphore(ghsemGraphicsDeviceList);
+        if (!pGraphicsDevice)
+            break;
+
+        TRACE("Releasing removed graphics device %S\n", pGraphicsDevice->szWinDeviceName);
+        pNotify = EngpFreeGraphicsDevice(pGraphicsDevice);
+        if (pNotify)
+            ExFreePoolWithTag(pNotify, GDITAG_GDEVICE);
+    }
 }
 
 static
