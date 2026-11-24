@@ -461,6 +461,57 @@ TestMapViewInSystemSpace(VOID)
     ZwClose(SectionHandle);
 }
 
+typedef struct _SESSION_VIEW_PROBE
+{
+    PVOID SectionObject;
+    PVOID View;
+    BOOLEAN ViewValid;
+    NTSTATUS MapStatus;
+    PVOID MappedBase;
+} SESSION_VIEW_PROBE, *PSESSION_VIEW_PROBE;
+
+static
+VOID
+NTAPI
+SessionViewProbeWorker(
+    _In_ PVOID Context)
+{
+    PSESSION_VIEW_PROBE Probe = Context;
+    SIZE_T ViewSize = PAGE_SIZE;
+
+    Probe->ViewValid = MmIsAddressValid(Probe->View);
+    Probe->MapStatus = MmMapViewInSessionSpace(Probe->SectionObject, &Probe->MappedBase, &ViewSize);
+    if (NT_SUCCESS(Probe->MapStatus))
+        MmUnmapViewInSessionSpace(Probe->MappedBase);
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+static
+VOID
+TestSessionViewOutsideSession(
+    _In_ PVOID SectionObject,
+    _In_ PVOID View)
+{
+    SESSION_VIEW_PROBE Probe;
+    HANDLE Thread;
+    NTSTATUS Status;
+
+    RtlZeroMemory(&Probe, sizeof(Probe));
+    Probe.SectionObject = SectionObject;
+    Probe.View = View;
+    Probe.MapStatus = STATUS_PENDING;
+
+    Status = PsCreateSystemThread(&Thread, SYNCHRONIZE, NULL, NULL, NULL, SessionViewProbeWorker, &Probe);
+    if (!ok_eq_hex(Status, STATUS_SUCCESS))
+        return;
+    ZwWaitForSingleObject(Thread, FALSE, NULL);
+    ZwClose(Thread);
+
+    trace("System process: view valid %u, map 0x%08lx base %p\n", Probe.ViewValid, Probe.MapStatus, Probe.MappedBase);
+    ok(Probe.ViewValid, "session view %p is not valid in the System process\n", View);
+    ok_eq_hex(Probe.MapStatus, STATUS_SUCCESS);
+}
+
 static
 VOID
 TestMapViewInSessionSpaceEx(VOID)
@@ -510,6 +561,12 @@ TestMapViewInSessionSpaceEx(VOID)
     if (NT_SUCCESS(Status))
     {
         ok(MappedBase != NULL, "session-space base was NULL\n");
+        KmtStartSeh()
+            *(volatile UCHAR *)MappedBase = 0x5A;
+            ok(*(volatile UCHAR *)MappedBase == 0x5A, "session view not writable\n");
+        KmtEndSeh(STATUS_SUCCESS);
+        ok(MmIsAddressValid(MappedBase), "session view %p not valid in its own session\n", MappedBase);
+        TestSessionViewOutsideSession(SectionObject, MappedBase);
         Status = MmUnmapViewInSessionSpace(MappedBase);
         ok_eq_hex(Status, STATUS_SUCCESS);
     }
