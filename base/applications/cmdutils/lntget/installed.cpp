@@ -24,6 +24,7 @@ namespace
 {
 
 constexpr UINT MessageUninstallDone = WM_APP + 1;
+constexpr UINT MessageUninstallWaiting = WM_APP + 2;
 
 enum : int
 {
@@ -46,14 +47,25 @@ struct InstalledWindow
     HFONT font = nullptr;
     HANDLE thread = nullptr;
     bool busy = false;
+    std::wstring busyStatus;
     std::vector<InstalledPackage> apps;
 };
 
-struct UninstallJob
+struct UninstallJob final : public InstallLockWait
 {
     HWND window = nullptr;
     InstalledPackage package;
     Status status;
+
+    void Waiting() override
+    {
+        PostMessageW(window, MessageUninstallWaiting, TRUE, 0);
+    }
+
+    void Acquired() override
+    {
+        PostMessageW(window, MessageUninstallWaiting, FALSE, 0);
+    }
 };
 
 std::wstring FormatInstalledSize(unsigned long long bytes)
@@ -96,7 +108,7 @@ DWORD WINAPI UninstallThread(LPVOID parameter)
 {
     UninstallJob *job = static_cast<UninstallJob *>(parameter);
     DWORD exitCode = 0;
-    job->status = UninstallArpEntry(job->package.entry, job->package.installerType, InstallMode::Default, exitCode);
+    job->status = UninstallArpEntry(job->package.entry, job->package.installerType, InstallMode::Default, exitCode, job);
     if (job->status && !job->package.installerType.empty())
         RemoveTrackedPackage(job->package.packageId);
     std::printf("LNTGET_GUI_UNINSTALL_DONE id=%s status=%lu\n", job->package.entry.Identity().c_str(),
@@ -134,8 +146,8 @@ void RunUninstaller(InstalledWindow &state)
     EnableWindow(state.uninstall, FALSE);
     EnableWindow(state.refresh, FALSE);
     EnableWindow(state.close, FALSE);
-    const std::wstring status = L"Uninstalling " + app.entry.name + L"\u2026";
-    SetWindowTextW(state.status, status.c_str());
+    state.busyStatus = L"Uninstalling " + app.entry.name + L"\u2026";
+    SetWindowTextW(state.status, state.busyStatus.c_str());
 }
 
 void LayoutInstalled(InstalledWindow &state)
@@ -228,6 +240,10 @@ LRESULT CALLBACK InstalledProc(HWND window, UINT message, WPARAM wParam, LPARAM 
                              !BuildUninstallCommand(state->apps[selected].entry, state->apps[selected].installerType,
                                                     InstallMode::Default).empty());
             }
+            return 0;
+        case MessageUninstallWaiting:
+            if (state->busy)
+                SetWindowTextW(state->status, wParam ? L"Waiting for another install/uninstall to complete\u2026" : state->busyStatus.c_str());
             return 0;
         case MessageUninstallDone:
         {

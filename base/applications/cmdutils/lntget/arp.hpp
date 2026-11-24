@@ -8,6 +8,7 @@
 #pragma once
 
 #include "model.hpp"
+#include "util.hpp"
 
 #include <map>
 
@@ -74,7 +75,8 @@ int CompareVersions(const std::string &left, const std::string &right);
 Status CollectInstalledPackages(SourceManager *source, std::vector<InstalledPackage> &packages);
 
 std::wstring BuildUninstallCommand(const ArpEntry &entry, const std::string &installerType, InstallMode mode);
-Status UninstallArpEntry(const ArpEntry &entry, const std::string &installerType, InstallMode mode, DWORD &exitCode);
+Status UninstallArpEntry(const ArpEntry &entry, const std::string &installerType, InstallMode mode, DWORD &exitCode,
+                         InstallLockWait *lockWait = nullptr);
 
 Status AppendPathVariable(bool machine, const std::wstring &directory);
 Status RemovePathVariable(bool machine, const std::wstring &directory);
