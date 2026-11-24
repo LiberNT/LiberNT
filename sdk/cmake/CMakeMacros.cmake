@@ -1149,8 +1149,8 @@ function(create_registry_hives)
     if(NOT _bootloader_uefi AND (NOT ARCH STREQUAL "i386" OR NOT (SARCH STREQUAL "pc98" OR SARCH STREQUAL "xbox")))
         add_custom_command(
             OUTPUT ${CMAKE_BINARY_DIR}/boot/bootdata/BCD
-            COMMAND native-mkhive -h:BCD -u -d:${CMAKE_BINARY_DIR}/boot/bootdata ${CMAKE_BINARY_DIR}/boot/bootdata/hivebcd_utf16.inf
-            DEPENDS native-mkhive ${CMAKE_BINARY_DIR}/boot/bootdata/hivebcd_utf16.inf)
+            COMMAND native-mkhive -h:BCD -u -d:${CMAKE_BINARY_DIR}/boot/bootdata ${CMAKE_BINARY_DIR}/image/data/hivebcd_utf16.inf
+            DEPENDS native-mkhive ${CMAKE_BINARY_DIR}/image/data/hivebcd_utf16.inf)
 
         add_custom_target(bcd_hive
             DEPENDS ${CMAKE_BINARY_DIR}/boot/bootdata/BCD)
