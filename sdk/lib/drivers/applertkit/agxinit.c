@@ -111,7 +111,7 @@ AppleAgxObjectPlace(
 
     *Page = 0;
     *Bytes = 0;
-    if (!Request->Size || Request->Size > APPLE_UAT_HOST_SIZE)
+    if (!Request->Size || (ULONG64)Request->Size > APPLE_UAT_HOST_SIZE)
         return STATUS_INVALID_PARAMETER;
     if (Request->Hidden)
     {
