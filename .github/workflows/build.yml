@@ -209,6 +209,65 @@ jobs:
     - name: Check build dependencies
       run: python3 sdk/tools/depcheck.py ${{steps.configure.outputs.outdir}} --mode depfiles --nested --fail-on-gaps
 
+  clang-check:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Source checkout
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Install host build tools
+      run: |
+        # Every Ubuntu mirror can answer 503 for a minute or more; the whole install is retried after a pause.
+        for attempt in 1 2 3 4; do
+          if sudo apt-get update && sudo apt-get install -y cmake ninja-build clang-tidy flex bison wget xz-utils tar python3-mako python3-yaml python3-packaging glslang-tools msitools; then
+            break
+          fi
+          if [ "$attempt" -eq 4 ]; then
+            exit 1
+          fi
+          sleep $((30 * attempt))
+        done
+
+    - name: Compute RosBE bootstrap SHA
+      id: rosbe_spec
+      run: |
+        curl -fsSL https://raw.githubusercontent.com/LiberNT/libernt-build-toolchain/main/rosbe-unix-bootstrap.sh -o /tmp/rosbe-bootstrap.sh
+        echo "sha=$(sha1sum /tmp/rosbe-bootstrap.sh | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+    - name: Restore RosBE
+      id: cache_rosbe
+      uses: actions/cache/restore@v5
+      with:
+        path: ~/.local/opt/rosbe
+        key: rosbe-${{runner.os}}-${{steps.rosbe_spec.outputs.sha}}
+
+    - name: Install RosBE
+      if: ${{ steps.cache_rosbe.outputs.cache-hit != 'true' }}
+      run: sh /tmp/rosbe-bootstrap.sh
+
+    - name: Configure
+      id: configure
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        . "$HOME/.local/opt/rosbe/rosbe-env.sh"
+        ./configure.sh --clang -a amd64 -DREACTOS_TARGET_NT=0xA00
+        echo "outdir=output-Clang-amd64-debug" >> "$GITHUB_OUTPUT"
+
+    - name: Collect changed translation units
+      id: changed
+      run: |
+        git diff --name-only --diff-filter=ACMR "origin/${{ github.base_ref }}...HEAD" -- '*.c' '*.cc' '*.cpp' '*.cxx' > /tmp/changed.txt
+        wc -l /tmp/changed.txt
+
+    - name: Run clang-tidy
+      run: |
+        . "$HOME/.local/opt/rosbe/rosbe-env.sh"
+        python3 sdk/tools/clang_check.py ${{steps.configure.outputs.outdir}} --files-from /tmp/changed.txt
+
   build-msvc:
     if: ${{ github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' }}
     strategy:
