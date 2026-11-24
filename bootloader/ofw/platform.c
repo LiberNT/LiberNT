@@ -913,6 +913,32 @@ FwGetVolumeLabel(
     return FALSE;
 }
 
+#define FW_WINDOWS_MANAGER L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi"
+#define FW_LIBERNT_MANAGER L"\\EFI\\LiberNT\\Boot\\bootmgfw.efi"
+
+PCWSTR
+FwGetSystemManagerPath(
+    _In_ BOOLEAN Windows)
+{
+    return Windows ? FW_WINDOWS_MANAGER : FW_LIBERNT_MANAGER;
+}
+
+PCWSTR
+FwGetSystemStorePath(
+    _In_ BOOLEAN Windows)
+{
+    return Windows ? L"\\EFI\\Microsoft\\Boot\\BCD" : L"\\EFI\\LiberNT\\Boot\\BCD";
+}
+
+BOOLEAN
+FwIsLiberNTManager(
+    _In_ PVOID Device,
+    _In_ PCWSTR Path)
+{
+    UNREFERENCED_PARAMETER(Device);
+    return _wcsicmp(Path, FW_LIBERNT_MANAGER) == 0;
+}
+
 PCWSTR
 FwGetRemovableMediaPath(VOID)
 {
