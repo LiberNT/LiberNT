@@ -36,6 +36,7 @@ list(APPEND SOURCE
     SetupInstallRegisterDlls.c
     AddRegRegistryView.c
     SetupInstallServicesFromInfSectionEx.c
+    ReenumerateFlags.c
     ServiceFilterNoLegacyNode.c
     SoftwareComponent.c
     SysButtonDevices.c

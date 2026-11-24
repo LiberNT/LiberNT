@@ -3804,20 +3804,20 @@ QueueSubtreeInstall(
     return TRUE;
 }
 
+typedef struct _REENUMERATE_WORK
+{
+    ULONG ulMinorAction;
+    WCHAR szDeviceInstance[MAX_DEVICE_ID_LEN];
+} REENUMERATE_WORK, *PREENUMERATE_WORK;
+
 static CONFIGRET
-ReenumerateDeviceInstance(
+ReenumerateDeviceInstanceNow(
     _In_ LPWSTR pszDeviceInstance,
     _In_ ULONG ulMinorAction)
 {
     PLUGPLAY_CONTROL_ENUMERATE_DEVICE_DATA EnumerateDeviceData;
     CONFIGRET ret = CR_SUCCESS;
     NTSTATUS Status;
-
-    DPRINT1("ReenumerateDeviceInstance(%S 0x%08lx)\n",
-           pszDeviceInstance, ulMinorAction);
-
-    if (ulMinorAction & ~CM_REENUMERATE_BITS)
-        return CR_INVALID_FLAG;
 
     RtlInitUnicodeString(&EnumerateDeviceData.DeviceInstance,
                          pszDeviceInstance);
@@ -3837,6 +3837,59 @@ ReenumerateDeviceInstance(
     }
 
     return ret;
+}
+
+static DWORD WINAPI
+ReenumerateDeviceInstanceWorker(
+    _In_ LPVOID lpParameter)
+{
+    PREENUMERATE_WORK Work = lpParameter;
+    CONFIGRET ret;
+
+    ret = ReenumerateDeviceInstanceNow(Work->szDeviceInstance, Work->ulMinorAction);
+    if (ret != CR_SUCCESS)
+        DPRINT("Asynchronous reenumeration of %S failed (0x%lx)\n", Work->szDeviceInstance, ret);
+    HeapFree(GetProcessHeap(), 0, Work);
+    return 0;
+}
+
+static CONFIGRET
+ReenumerateDeviceInstance(
+    _In_ LPWSTR pszDeviceInstance,
+    _In_ ULONG ulMinorAction)
+{
+    PREENUMERATE_WORK Work;
+
+    DPRINT("ReenumerateDeviceInstance(%S 0x%08lx)\n",
+           pszDeviceInstance, ulMinorAction);
+
+    if (ulMinorAction & ~CM_REENUMERATE_BITS)
+        return CR_INVALID_FLAG;
+
+    if (!(ulMinorAction & CM_REENUMERATE_ASYNCHRONOUS) ||
+        (ulMinorAction & CM_REENUMERATE_SYNCHRONOUS))
+    {
+        return ReenumerateDeviceInstanceNow(pszDeviceInstance, ulMinorAction);
+    }
+
+    if (wcslen(pszDeviceInstance) >= MAX_DEVICE_ID_LEN)
+        return CR_INVALID_DEVINST;
+    if (!IsPresentDeviceInstanceID(pszDeviceInstance))
+        return CR_NO_SUCH_DEVINST;
+
+    Work = HeapAlloc(GetProcessHeap(), 0, sizeof(*Work));
+    if (Work == NULL)
+        return CR_OUT_OF_MEMORY;
+    Work->ulMinorAction = ulMinorAction;
+    wcscpy(Work->szDeviceInstance, pszDeviceInstance);
+
+    if (!QueueUserWorkItem(ReenumerateDeviceInstanceWorker, Work, WT_EXECUTELONGFUNCTION))
+    {
+        HeapFree(GetProcessHeap(), 0, Work);
+        return CR_FAILURE;
+    }
+
+    return CR_SUCCESS;
 }
 
 

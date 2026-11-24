@@ -5974,7 +5974,7 @@ CM_Reenumerate_DevNode_Ex(
     LPWSTR lpDevInst;
     CONFIGRET ret = CR_FAILURE;
 
-    FIXME("CM_Reenumerate_DevNode_Ex(%lx %lx %p)\n",
+    TRACE("CM_Reenumerate_DevNode_Ex(%lx %lx %p)\n",
           dnDevInst, ulFlags, hMachine);
 
     if (dnDevInst == 0)
