@@ -483,8 +483,9 @@ NdisAllocatePacketPoolEx(
             NumberOfDescriptors = 0xffff;
         }
 
-        Length = sizeof(NDIS_PACKET) + sizeof(NDIS_PACKET_OOB_DATA) +
-                 sizeof(NDIS_PACKET_EXTENSION) + ProtocolReservedLength;
+        Length = ALIGN_UP_BY(sizeof(NDIS_PACKET) + sizeof(NDIS_PACKET_OOB_DATA) +
+                             sizeof(NDIS_PACKET_EXTENSION) + ProtocolReservedLength,
+                             MEMORY_ALLOCATION_ALIGNMENT);
         Size   = sizeof(NDISI_PACKET_POOL) + Length * NumberOfDescriptors;
 
         Pool   = ExAllocatePool(NonPagedPool, Size);
