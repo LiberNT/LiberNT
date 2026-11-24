@@ -2097,7 +2097,7 @@ BOOL
 NTAPI
 NtUserDestroyInputContext(_In_ HIMC hIMC);
 
-BOOLEAN
+BOOL
 NTAPI
 NtUserDestroyWindow(
     HWND Wnd);
@@ -2632,7 +2632,7 @@ NTAPI
 NtUserGetThreadState(
     DWORD Routine);
 
-BOOLEAN
+BOOL
 NTAPI
 NtUserGetTitleBarInfo(
     HWND hwnd,

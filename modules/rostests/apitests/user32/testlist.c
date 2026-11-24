@@ -6,6 +6,7 @@ extern void func_RegisterTouchWindow(void);
 extern void func_AltTabHook(void);
 extern void func_AnimatedCursor(void);
 extern void func_AttachThreadInput(void);
+extern void func_BoolReturnValues(void);
 extern void func_CalculatePopupWindowPosition(void);
 extern void func_CallbackNesting(void);
 extern void func_CharFuncs(void);
@@ -166,6 +167,7 @@ const struct test winetest_testlist[] =
     { "AltTabHook", func_AltTabHook },
     { "AnimatedCursor", func_AnimatedCursor },
     { "AttachThreadInput", func_AttachThreadInput },
+    { "BoolReturnValues", func_BoolReturnValues },
     { "CalculatePopupWindowPosition", func_CalculatePopupWindowPosition },
     { "CallbackNesting", func_CallbackNesting },
     { "CharFuncs", func_CharFuncs },
