@@ -16,6 +16,7 @@ extern void func_PipeSquat(void);
 extern void func_PreAuthSession(void);
 extern void func_RemoteDesktop(void);
 extern void func_RemoteLogonType(void);
+extern void func_ServiceCrash(void);
 extern void func_ServiceStop(void);
 extern void func_TileKey(void);
 extern void func_VideoDetect(void);
@@ -38,6 +39,7 @@ const struct test winetest_testlist[] =
     { "PreAuthSession", func_PreAuthSession },
     { "RemoteDesktop", func_RemoteDesktop },
     { "RemoteLogonType", func_RemoteLogonType },
+    { "ServiceCrash", func_ServiceCrash },
     { "ServiceStop", func_ServiceStop },
     { "TileKey", func_TileKey },
     { "VideoDetect", func_VideoDetect },

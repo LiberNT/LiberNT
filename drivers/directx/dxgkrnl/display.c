@@ -93,6 +93,8 @@ typedef struct _DXGKP_DISPLAY_BRIDGE
     LONG                        DetachedFbMapCount;
     BOOLEAN                     DetachPending;
     PDXGKRNL_ADAPTER            DetachOwner;
+    PVOID                       OrphanFb[2];
+    LONG                        OrphanFbMapCount[2];
 } DXGKP_DISPLAY_BRIDGE, *PDXGKP_DISPLAY_BRIDGE;
 
 static KSPIN_LOCK g_DisplayBridgeLock;
@@ -787,6 +789,66 @@ DxgkpDisplayUnmapDetachedFb(
         DxgkpDisplayReleaseDetachBridge(Bridge);
         DXGKRNL_INFO("DISPLAY_BRIDGE: win32k left the detached desktop copy\n");
     }
+    return Unmapped;
+}
+
+static VOID
+DxgkpDisplayKeepOrphanFb(
+    _In_ PDXGKP_DISPLAY_BRIDGE Bridge,
+    _In_ PVOID Fb,
+    _In_ LONG MapCount)
+{
+    ULONG Slot;
+    KIRQL OldIrql;
+
+    ASSERT(Fb != NULL);
+    ASSERT(MapCount > 0);
+    KeAcquireSpinLock(&Bridge->DetachLock, &OldIrql);
+    for (Slot = 0; Slot < RTL_NUMBER_OF(Bridge->OrphanFb); Slot++)
+    {
+        if (Bridge->OrphanFb[Slot] == NULL)
+        {
+            Bridge->OrphanFb[Slot] = Fb;
+            Bridge->OrphanFbMapCount[Slot] = MapCount;
+            break;
+        }
+    }
+    KeReleaseSpinLock(&Bridge->DetachLock, OldIrql);
+    ASSERT(Slot < RTL_NUMBER_OF(Bridge->OrphanFb));
+    DXGKRNL_WARN("DISPLAY_BRIDGE: \\Device\\Video%lu was removed while win32k maps %p; "
+                 "keeping it until win32k unmaps it\n",
+                 Bridge->DeviceNumber,
+                 Fb);
+}
+
+static BOOLEAN
+DxgkpDisplayUnmapOrphanFb(
+    _In_ PDXGKP_DISPLAY_BRIDGE Bridge,
+    _In_opt_ PVOID Fb)
+{
+    PVOID FreeFb = NULL;
+    BOOLEAN Unmapped = FALSE;
+    ULONG Slot;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Bridge->DetachLock, &OldIrql);
+    for (Slot = 0; Slot < RTL_NUMBER_OF(Bridge->OrphanFb); Slot++)
+    {
+        if (Bridge->OrphanFb[Slot] != NULL && (Fb == Bridge->OrphanFb[Slot] || (Fb == NULL && Slot == 0)))
+        {
+            ASSERT(Bridge->OrphanFbMapCount[Slot] > 0);
+            Unmapped = TRUE;
+            if (--Bridge->OrphanFbMapCount[Slot] == 0)
+            {
+                FreeFb = Bridge->OrphanFb[Slot];
+                Bridge->OrphanFb[Slot] = NULL;
+            }
+            break;
+        }
+    }
+    KeReleaseSpinLock(&Bridge->DetachLock, OldIrql);
+    if (FreeFb != NULL)
+        ExFreePoolWithTag(FreeFb, TAG_DXGK_DISPLAY);
     return Unmapped;
 }
 
@@ -4964,6 +5026,18 @@ DxgkpDisplayDispatch(
     ULONG              BytesReturned = 0;
     PDXGKRNL_ADAPTER   Adapter;
 
+    if (Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_VIDEO_UNMAP_VIDEO_MEMORY &&
+        Stack->Parameters.DeviceIoControl.InputBufferLength >= sizeof(VIDEO_MEMORY) &&
+        Irp->AssociatedIrp.SystemBuffer != NULL &&
+        DxgkpDisplayUnmapOrphanFb(Bridge,
+                                  ((PVIDEO_MEMORY)Irp->AssociatedIrp.SystemBuffer)->RequestedVirtualAddress))
+    {
+        Irp->IoStatus.Status = STATUS_SUCCESS;
+        Irp->IoStatus.Information = 0;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_SUCCESS;
+    }
+
     if (!ExAcquireRundownProtection(&Bridge->Rundown))
     {
         Irp->IoStatus.Status = STATUS_DEVICE_REMOVED;
@@ -7235,7 +7309,10 @@ DxgkDisplayUnregister(
         DxgkpBeginSharedSurfaceMutationLocked(Adapter);
         if (Adapter->ShadowFbPoolOwned)
         {
-            OldFb = Adapter->ShadowFb;
+            if (Adapter->ShadowFb != NULL && Adapter->ShadowFbMapCount > 0)
+                DxgkpDisplayKeepOrphanFb(Bridge, Adapter->ShadowFb, Adapter->ShadowFbMapCount);
+            else
+                OldFb = Adapter->ShadowFb;
             Adapter->ShadowFb = NULL;
             Adapter->ShadowFbPitch = 0;
             Adapter->ShadowFbSize = 0;
@@ -7244,7 +7321,7 @@ DxgkDisplayUnregister(
         }
         if (Adapter->RetiredShadowFb != NULL)
         {
-            ExFreePoolWithTag(Adapter->RetiredShadowFb, TAG_DXGK_DISPLAY);
+            DxgkpDisplayKeepOrphanFb(Bridge, Adapter->RetiredShadowFb, 1);
             Adapter->RetiredShadowFb = NULL;
         }
         DxgkpEndSharedSurfaceMutationLocked(Adapter);
