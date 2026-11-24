@@ -254,16 +254,39 @@ static HRESULT STDMETHODCALLTYPE dxgi_device_QueryResourceResidency(IWineDXGIDev
 
 static HRESULT STDMETHODCALLTYPE dxgi_device_SetGPUThreadPriority(IWineDXGIDevice *iface, INT priority)
 {
+#ifdef __REACTOS__
+    struct dxgi_device *device = impl_from_IWineDXGIDevice(iface);
+
+    TRACE("iface %p, priority %d.\n", iface, priority);
+
+    if (priority < -7 || priority > 7)
+        return E_INVALIDARG;
+    /* TODO: a wined3d device has no kernel GPU context whose scheduling priority this could set */
+    device->gpu_thread_priority = priority;
+    return S_OK;
+#else
     FIXME("iface %p, priority %d stub!\n", iface, priority);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT STDMETHODCALLTYPE dxgi_device_GetGPUThreadPriority(IWineDXGIDevice *iface, INT *priority)
 {
+#ifdef __REACTOS__
+    struct dxgi_device *device = impl_from_IWineDXGIDevice(iface);
+
+    TRACE("iface %p, priority %p.\n", iface, priority);
+
+    if (!priority)
+        return E_INVALIDARG;
+    *priority = device->gpu_thread_priority;
+    return S_OK;
+#else
     FIXME("iface %p, priority %p stub!\n", iface, priority);
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT STDMETHODCALLTYPE dxgi_device_SetMaximumFrameLatency(IWineDXGIDevice *iface, UINT max_latency)
@@ -606,6 +629,9 @@ HRESULT dxgi_device_init(struct dxgi_device *device, struct dxgi_device_layer *l
     device->IWineDXGISwapChainFactory_iface.lpVtbl = &dxgi_swapchain_factory_vtbl;
     device->refcount = 1;
     device->max_frame_latency = DXGI_FRAME_LATENCY_DEFAULT;
+#ifdef __REACTOS__
+    device->gpu_thread_priority = 0;
+#endif
     wined3d_mutex_lock();
     wined3d_private_store_init(&device->private_store);
 
