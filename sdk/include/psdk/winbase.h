@@ -2589,6 +2589,16 @@ HLOCAL WINAPI LocalReAlloc(HLOCAL,SIZE_T,UINT);
 SIZE_T WINAPI LocalShrink(_In_ HLOCAL, _In_ UINT);  /* Obsolete: Has no effect. */
 SIZE_T WINAPI LocalSize(_In_ HLOCAL);
 BOOL WINAPI LocalUnlock(HLOCAL);
+#if (NTDDI_VERSION >= NTDDI_WIN7SP1) && (defined(_AMD64_) || defined(_X86_))
+_Success_(return != NULL)
+WINBASEAPI
+PVOID
+WINAPI
+LocateXStateFeature(
+  _In_ PCONTEXT Context,
+  _In_ DWORD FeatureId,
+  _Out_opt_ PDWORD Length);
+#endif
 BOOL WINAPI LockFile(HANDLE,DWORD,DWORD,DWORD,DWORD);
 BOOL WINAPI LockFileEx(HANDLE,DWORD,DWORD,DWORD,DWORD,LPOVERLAPPED);
 #define LockSegment(w) GlobalFix((HANDLE)(w)) /* Obsolete: Has no effect. */
