@@ -111,6 +111,40 @@ TestGetModuleFileNameW(VOID)
     ok(Relative == FALSE, "GetModuleFileNameW returned relative path: %ls\n", Buffer);
 }
 
+static
+VOID
+TestWow64DllName(VOID)
+{
+    WCHAR Source[MAX_PATH], Expected[MAX_PATH], Reported[MAX_PATH];
+    HMODULE Module;
+    BOOL Wow64;
+
+    if (!IsWow64Process(GetCurrentProcess(), &Wow64) || !Wow64)
+        return;
+
+    if (!GetSystemWow64DirectoryW(Source, RTL_NUMBER_OF(Source)) ||
+        !GetSystemDirectoryW(Expected, RTL_NUMBER_OF(Expected)) ||
+        FAILED(StringCchCatW(Source, RTL_NUMBER_OF(Source), L"\\cabinet.dll")) ||
+        FAILED(StringCchCatW(Expected, RTL_NUMBER_OF(Expected), L"\\cabinet.dll")))
+    {
+        ok(FALSE, "Could not construct system DLL paths\n");
+        return;
+    }
+
+    Module = LoadLibraryW(Source);
+    ok(Module != NULL, "LoadLibraryW(%ls) failed with %lu\n", Source, GetLastError());
+    if (!Module)
+        return;
+
+    if (GetModuleFileNameW(Module, Reported, RTL_NUMBER_OF(Reported)))
+        ok(!_wcsicmp(Reported, Expected), "Reported %ls, expected %ls\n", Reported, Expected);
+    else
+        ok(FALSE, "GetModuleFileNameW failed with %lu\n", GetLastError());
+    ok(GetModuleHandleW(Source) == Module, "Physical name did not identify the loaded module\n");
+    ok(GetModuleHandleW(Expected) == Module, "Logical name did not identify the loaded module\n");
+    FreeLibrary(Module);
+}
+
 START_TEST(GetModuleFileName)
 {
     int argc;
@@ -118,7 +152,10 @@ START_TEST(GetModuleFileName)
 
     argc = winetest_get_mainargs(&argv);
     if (argc < 3)
+    {
+        TestWow64DllName();
         StartChild(argv);
+    }
     else
     {
         TestGetModuleFileNameA();

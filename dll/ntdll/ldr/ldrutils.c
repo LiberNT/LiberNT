@@ -32,7 +32,37 @@ PVOID g_pfnSE_InstallBeforeInit;
 PVOID g_pfnSE_InstallAfterInit;
 PVOID g_pfnSE_ProcessDying;
 
+static const UNICODE_STRING LdrpWow64Directory = RTL_CONSTANT_STRING(L"\\SysWOW64\\");
+static const UNICODE_STRING LdrpLogicalDirectory = RTL_CONSTANT_STRING(L"\\System32\\");
+C_ASSERT(sizeof(L"\\SysWOW64\\") == sizeof(L"\\System32\\"));
+
 /* FUNCTIONS *****************************************************************/
+
+static
+BOOLEAN
+LdrpGetWow64SystemDllSuffix(
+    _In_ PCUNICODE_STRING Name,
+    _In_ PCUNICODE_STRING Directory,
+    _Out_ PUNICODE_STRING Suffix)
+{
+    UNICODE_STRING Root, Relative;
+
+    if (sizeof(PVOID) != sizeof(ULONG) || !NtCurrentTeb()->WowTebOffset)
+        return FALSE;
+
+    RtlInitUnicodeString(&Root, SharedUserData->NtSystemRoot);
+    if (!RtlPrefixUnicodeString(&Root, Name, TRUE))
+        return FALSE;
+
+    Relative.Buffer = Name->Buffer + Root.Length / sizeof(WCHAR);
+    Relative.Length = Relative.MaximumLength = Name->Length - Root.Length;
+    if (!RtlPrefixUnicodeString(Directory, &Relative, TRUE))
+        return FALSE;
+
+    Suffix->Buffer = Relative.Buffer + Directory->Length / sizeof(WCHAR);
+    Suffix->Length = Suffix->MaximumLength = Relative.Length - Directory->Length;
+    return TRUE;
+}
 
 NTSTATUS
 NTAPI
@@ -973,7 +1003,7 @@ LdrpMapDll(IN PWSTR SearchPath OPTIONAL,
     PWCHAR p1 = DllName;
     WCHAR TempChar;
     BOOLEAN KnownDll = FALSE;
-    UNICODE_STRING FullDllName, BaseDllName;
+    UNICODE_STRING FullDllName, BaseDllName, Suffix;
     HANDLE SectionHandle = NULL, DllHandle = 0;
     UNICODE_STRING NtPathDllName;
     ULONG_PTR HardErrorParameters[2];
@@ -1245,6 +1275,11 @@ SkipCheck:
     LdrEntry->ProcessStaticImport = Importer && (Importer->DllBase == Peb->ImageBaseAddress ||
                                                  Importer->ProcessStaticImport);
     if (Redirect) LdrEntry->Flags |= LDRP_REDIRECTED;
+    if (LdrpGetWow64SystemDllSuffix(&FullDllName, &LdrpWow64Directory, &Suffix))
+    {
+        RtlCopyMemory(Suffix.Buffer - LdrpWow64Directory.Length / sizeof(WCHAR),
+                      LdrpLogicalDirectory.Buffer, LdrpLogicalDirectory.Length);
+    }
     LdrEntry->FullDllName = FullDllName;
     LdrEntry->BaseDllName = BaseDllName;
     LdrEntry->EntryPoint = LdrpFetchAddressOfEntryPoint(LdrEntry->DllBase);
@@ -2069,7 +2104,8 @@ LdrpCheckForLoadedDll(IN PWSTR DllPath,
     BOOLEAN FullPath = FALSE;
     PWCHAR wc;
     WCHAR NameBuf[266];
-    UNICODE_STRING FullDllName, NtPathName;
+    UNICODE_STRING FullDllName, NtPathName, Wow64Suffix, LoadedSuffix;
+    BOOLEAN HasWow64Suffix;
     ULONG Length;
     OBJECT_ATTRIBUTES ObjectAttributes;
     NTSTATUS Status;
@@ -2166,8 +2202,9 @@ lookinhash:
                     if (ShowSnaps)
                     {
                         DPRINT1("LDR: LdrpCheckForLoadedDll - Unable To Locate %wZ: 0x%08x\n",
-                            &DllName, Length);
+                            DllName, Length);
                     }
+                    return FALSE;
                 }
 
                 /* Full dll name is found */
@@ -2190,7 +2227,7 @@ lookinhash:
     /* FIXME: Warning, activation context missing */
     DPRINT("Warning, activation context missing\n");
 
-    /* NOTE: From here on down, everything looks good */
+    HasWow64Suffix = LdrpGetWow64SystemDllSuffix(&FullDllName, &LdrpWow64Directory, &Wow64Suffix);
 
     /* Loop the module list */
     ListHead = &NtCurrentPeb()->Ldr->InLoadOrderModuleList;
@@ -2207,9 +2244,10 @@ lookinhash:
         if (!CurEntry->InMemoryOrderLinks.Flink) continue;
 
         /* Check if name matches */
-        if (RtlEqualUnicodeString(&FullDllName,
-                                  &CurEntry->FullDllName,
-                                  TRUE))
+        if (RtlEqualUnicodeString(&FullDllName, &CurEntry->FullDllName, TRUE) ||
+            (HasWow64Suffix && FullDllName.Length == CurEntry->FullDllName.Length &&
+             LdrpGetWow64SystemDllSuffix(&CurEntry->FullDllName, &LdrpLogicalDirectory, &LoadedSuffix) &&
+             RtlEqualUnicodeString(&Wow64Suffix, &LoadedSuffix, TRUE)))
         {
             /* Found it */
             *LdrEntry = CurEntry;

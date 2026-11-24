@@ -142,13 +142,15 @@ TestApplicationDirLoad(PCWSTR Name, BOOL Expected, PCWSTR SystemDirectory)
 START_TEST(KnownDlls)
 {
     USHORT ProcessMachine, NativeMachine;
-    WCHAR SystemDirectory[MAX_PATH];
+    WCHAR SystemDirectory[MAX_PATH], Wow64Directory[MAX_PATH];
     PCWSTR Directory;
     BOOL Wow64, Expected;
 
     if (!GetMachines(&ProcessMachine, &NativeMachine))
         return;
 
+    ok(GetSystemDirectoryW(SystemDirectory, RTL_NUMBER_OF(SystemDirectory)) != 0,
+       "GetSystemDirectoryW failed with %lu\n", GetLastError());
     Wow64 = (ProcessMachine != IMAGE_FILE_MACHINE_UNKNOWN);
     if (Wow64)
     {
@@ -158,11 +160,11 @@ START_TEST(KnownDlls)
             return;
         }
 
-        ok(GetSystemWow64DirectoryW(SystemDirectory, RTL_NUMBER_OF(SystemDirectory)) != 0,
+        ok(GetSystemWow64DirectoryW(Wow64Directory, RTL_NUMBER_OF(Wow64Directory)) != 0,
            "GetSystemWow64DirectoryW failed with %lu\n", GetLastError());
         Directory = L"\\KnownDlls32";
         Expected = TRUE;
-        TestKnownDllPath(Directory, SystemDirectory);
+        TestKnownDllPath(Directory, Wow64Directory);
     }
     else
     {
@@ -172,8 +174,6 @@ START_TEST(KnownDlls)
             return;
         }
 
-        ok(GetSystemDirectoryW(SystemDirectory, RTL_NUMBER_OF(SystemDirectory)) != 0,
-           "GetSystemDirectoryW failed with %lu\n", GetLastError());
         Directory = L"\\KnownDlls";
         Expected = (NativeMachine == IMAGE_FILE_MACHINE_AMD64);
     }
