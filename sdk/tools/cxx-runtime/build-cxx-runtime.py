@@ -172,6 +172,9 @@ def main():
     run('cmake', '--install', builtins)
     # compiler-rt always builds emutls.c for Windows; its CRT imports break modules that pull it in through its weak memcpy.
     run(toolchain / 'bin' / f'llvm-ar{exe}', 'd', prefix / f'lib/windows/libclang_rt.builtins-{builtins_name}.a', 'emutls.c.obj')
+    # compiler-rt's i386 _alloca reads its saved ECX and return address below the stack pointer it just moved, where an interrupt writes in kernel mode; the CRT's stack probe is used instead.
+    if builtins_name == 'i386':
+        run(toolchain / 'bin' / f'llvm-ar{exe}', 'd', prefix / f'lib/windows/libclang_rt.builtins-{builtins_name}.a', 'chkstk2.S.obj')
     manifest = {'compiler': compiler, 'llvm_source': str(llvm), 'flags': flags,
                 'recipe': recipe, 'include_names': names,
                 'inputs': {str(path): digest(path) for path in outputs},

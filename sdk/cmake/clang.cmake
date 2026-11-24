@@ -372,6 +372,10 @@ function(set_module_type_toolchain MODULE TYPE)
     # statically linked (it captures the caller's frame, so a DLL export won't work).
     target_link_libraries(${MODULE} setjmp)
 
+    if(ARCH STREQUAL "i386")
+        target_link_libraries(${MODULE} chkstk)
+    endif()
+
     if(TYPE IN_LIST KERNEL_MODULE_TYPES)
         if(${TYPE} STREQUAL "kmdfdriver")
             set(TYPE "wdmdriver")

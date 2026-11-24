@@ -12,6 +12,8 @@
 #define PAGE_SIZE 4096
 
 PUBLIC __chkstk
+PUBLIC ___chkstk
+PUBLIC __alloca
 PUBLIC __alloca_probe
 PUBLIC __alloca_probe_16
 PUBLIC __alloca_probe_8
@@ -63,6 +65,8 @@ l1:
  guard page for the stack is hit, and the stack growing triggered
  */
 __chkstk:
+___chkstk:
+__alloca:
 __alloca_probe:
 
     /* EAX = size to be allocated */
@@ -93,21 +97,12 @@ __alloca_probe:
     sub ecx, eax
     test [ecx], eax
 
-    /* EAX = top of the stack */
-    mov eax, esp
-
-    /* allocate the memory */
-    mov esp, ecx
-
-    /* restore ECX */
-    mov ecx, [eax]
-
-    /* restore the return address */
-    mov eax, [eax + 4]
-    push eax
-
-    /* return */
-    ret
+    /* Nothing below the stack pointer is read once it moves: an interrupt can write there */
+    mov eax, [esp + 4]
+    mov [esp + 4], ecx
+    pop ecx
+    mov esp, [esp]
+    jmp eax
 
 /* EOF */
 END
