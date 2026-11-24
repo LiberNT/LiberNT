@@ -289,6 +289,8 @@ KiSwapContextExit(
                      0);
     }
 
+    /* Only now, off the outgoing thread's stack, can its handoff complete */
+    ASSERT(OldThread->Running);
     KiCompleteThreadSwitch(OldThread, NewThread);
 
     if (NewThread->ApcState.KernelApcPending)
@@ -316,6 +318,9 @@ KiSwapContextEntry(
     ULONG Cr0, NewCr0;
     PKTHREAD NpxThread;
     PFX_SAVE_AREA NpxSaveArea;
+
+    ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
+    ASSERT((PKTHREAD)(OldThreadAndApcFlag & ~3) != Pcr->PrcbData.CurrentThread);
 
     SwitchFrame->ApcBypassDisable = OldThreadAndApcFlag & 3;
     SwitchFrame->ExceptionList = Pcr->NtTib.ExceptionList;
