@@ -1125,19 +1125,22 @@ Rtl8168Configure8168H(
                    RL_TXCFG,
                    Rtl8168Read32(Adapter, RL_TXCFG) | RL_TXCFG_AUTO_FIFO);
 
-    Rtl8168EriWrite(Adapter, 0xc8, RL_ERIAR_MASK_0101, 0x00080002);
-    Rtl8168EriWrite(Adapter, 0xcc, RL_ERIAR_MASK_0001, 0x38);
-    Rtl8168EriWrite(Adapter, 0xd0, RL_ERIAR_MASK_0001, 0x48);
-    Rtl8168EriWrite(Adapter, 0xe8, RL_ERIAR_MASK_1111, 0x00100006);
+    Rtl8168EriWrite(Adapter, 0xc8, RL_ERIAR_MASK_1111, RL_8168H_ERI_FIFO_RX);
+    Rtl8168EriWrite(Adapter, 0xcc, RL_ERIAR_MASK_0001, RL_8168H_ERI_PAUSE_LO);
+    Rtl8168EriWrite(Adapter, 0xd0, RL_ERIAR_MASK_0001, RL_8168H_ERI_PAUSE_HI);
+    Rtl8168EriWrite(Adapter, 0xe8, RL_ERIAR_MASK_1111, RL_8168H_ERI_FIFO_TX);
 
     Rtl8168SetPcieEntryLatency(Adapter);
     Rtl8168SetMaxReadRequest(Adapter, PCI_EXPRESS_MRRS_4096);
 
     Rtl8168EriModify(Adapter, 0xdc, RL_ERIAR_MASK_0001, 0x00, 0x01);
     Rtl8168EriModify(Adapter, 0xdc, RL_ERIAR_MASK_0001, 0x01, 0x00);
-    Rtl8168EriModify(Adapter, 0xdc, RL_ERIAR_MASK_1111, 0x0010, 0x00);
-    Rtl8168EriModify(Adapter, 0xd4, RL_ERIAR_MASK_1111, 0x1f00, 0x00);
+    Rtl8168EriModify(Adapter, 0xdc, RL_ERIAR_MASK_1111, RL_8168H_ERI_DC_SET, 0x00);
     Rtl8168EriWrite(Adapter, 0x5f0, RL_ERIAR_MASK_0011, 0x4f87);
+
+    Rtl8168Write32(Adapter,
+                   RL_MISC,
+                   Rtl8168Read32(Adapter, RL_MISC) & ~RL_MISC_RXDV_GATE);
 
     Rtl8168EriWrite(Adapter, 0xc0, RL_ERIAR_MASK_0011, 0x0000);
     Rtl8168EriWrite(Adapter, 0xb8, RL_ERIAR_MASK_0011, 0x0000);
@@ -1145,6 +1148,7 @@ Rtl8168Configure8168H(
     Rtl8168Write8(Adapter,
                   RL_EEE_LED,
                   (UCHAR)(Rtl8168Read8(Adapter, RL_EEE_LED) & ~0x07));
+    Rtl8168EriModify(Adapter, 0x1b0, RL_ERIAR_MASK_0011, RL_8168H_ERI_EEE_SET, 0x00);
     Rtl8168Write8(Adapter,
                   RL_DLLPR,
                   (UCHAR)(Rtl8168Read8(Adapter, RL_DLLPR) &
@@ -1153,7 +1157,7 @@ Rtl8168Configure8168H(
                   RL_MISC1,
                   (UCHAR)(Rtl8168Read8(Adapter, RL_MISC1) & ~RL_MISC1_PFM_D3COLD_EN));
 
-    Rtl8168EriModify(Adapter, 0x1b0, RL_ERIAR_MASK_0011, 0x0000, 0x1000);
+    Rtl8168EriModify(Adapter, 0x1b0, RL_ERIAR_MASK_0011, 0x0000, RL_8168H_ERI_EEE_CLR);
     Rtl8168DisableL2L3(Adapter);
 
     Rtl8168PhyWrite(Adapter, 0x1f, 0x0c42);
@@ -1164,8 +1168,14 @@ Rtl8168Configure8168H(
     }
     Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
 
-    Rtl8168MacOcpModify(Adapter, 0xe056, 0x00f0, 0x0000);
-    Rtl8168MacOcpModify(Adapter, 0xe052, 0x6000, 0x8008);
+    Rtl8168MacOcpModify(Adapter,
+                        0xe056,
+                        RL_8168H_MACOCP_E056_CLR,
+                        RL_8168H_MACOCP_E056_SET);
+    Rtl8168MacOcpModify(Adapter,
+                        0xe052,
+                        RL_8168H_MACOCP_E052_CLR,
+                        RL_8168H_MACOCP_E052_SET);
     Rtl8168MacOcpModify(Adapter, 0xe0d6, 0x01ff, 0x017f);
     Rtl8168MacOcpModify(Adapter, 0xd420, 0x0fff, 0x047f);
     Rtl8168MacOcpWrite(Adapter, 0xe63e, 0x0001);
@@ -2425,14 +2435,20 @@ Rtl8168RegisterInterrupt(
 
     Adapter->MessageInterrupt =
         (IntChars.InterruptType == NDIS_CONNECT_MESSAGE_BASED);
-    if (!Adapter->MessageInterrupt)
+    Rtl8168Write8(Adapter, RL_EECMD, RL_EEMODE_WRITECFG);
+    if (Adapter->MessageInterrupt)
     {
-        Rtl8168Write8(Adapter, RL_EECMD, RL_EEMODE_WRITECFG);
+        Rtl8168Write8(Adapter,
+                      RL_CFG2,
+                      (UCHAR)(Rtl8168Read8(Adapter, RL_CFG2) | RL_CFG2_MSI_ENABLE));
+    }
+    else
+    {
         Rtl8168Write8(Adapter,
                       RL_CFG2,
                       (UCHAR)(Rtl8168Read8(Adapter, RL_CFG2) & ~RL_CFG2_MSI_ENABLE));
-        Rtl8168Write8(Adapter, RL_EECMD, RL_EEMODE_OFF);
     }
+    Rtl8168Write8(Adapter, RL_EECMD, RL_EEMODE_OFF);
 
     DPRINT1("rtl8168: %s interrupt connected\n",
             Adapter->MessageInterrupt ? "message" : "line");

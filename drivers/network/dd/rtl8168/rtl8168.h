@@ -12,6 +12,8 @@
 #include <ifdef.h>
 #include <ipifcons.h>
 
+#include "rtl8168_hwvals.h"
+
 #define NDEBUG
 #include <libernt/debug.h>
 
