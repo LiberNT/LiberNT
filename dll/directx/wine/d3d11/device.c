@@ -4887,6 +4887,45 @@ static HRESULT STDMETHODCALLTYPE d3d11_device_CheckFormatSupport(ID3D11Device5 *
         }
     }
 
+    switch (format)
+    {
+        case DXGI_FORMAT_R32G32B32A32_TYPELESS: case DXGI_FORMAT_R32G32B32_TYPELESS:
+        case DXGI_FORMAT_R16G16B16A16_TYPELESS: case DXGI_FORMAT_R32G32_TYPELESS:
+        case DXGI_FORMAT_R32G8X24_TYPELESS: case DXGI_FORMAT_R10G10B10A2_TYPELESS:
+        case DXGI_FORMAT_R8G8B8A8_TYPELESS: case DXGI_FORMAT_R16G16_TYPELESS:
+        case DXGI_FORMAT_R32_TYPELESS: case DXGI_FORMAT_R24G8_TYPELESS:
+        case DXGI_FORMAT_R8G8_TYPELESS: case DXGI_FORMAT_R16_TYPELESS: case DXGI_FORMAT_R8_TYPELESS:
+        case DXGI_FORMAT_BC1_TYPELESS: case DXGI_FORMAT_BC2_TYPELESS: case DXGI_FORMAT_BC3_TYPELESS:
+        case DXGI_FORMAT_BC4_TYPELESS: case DXGI_FORMAT_BC5_TYPELESS:
+        case DXGI_FORMAT_B8G8R8A8_TYPELESS: case DXGI_FORMAT_B8G8R8X8_TYPELESS:
+        case DXGI_FORMAT_BC6H_TYPELESS: case DXGI_FORMAT_BC7_TYPELESS:
+            /* A typeless format only creates resources; every typed use goes through a view format */
+            *format_support &= D3D11_FORMAT_SUPPORT_BUFFER | D3D11_FORMAT_SUPPORT_TEXTURE1D
+                    | D3D11_FORMAT_SUPPORT_TEXTURE2D | D3D11_FORMAT_SUPPORT_TEXTURE3D
+                    | D3D11_FORMAT_SUPPORT_TEXTURECUBE | D3D11_FORMAT_SUPPORT_MIP;
+            break;
+        case DXGI_FORMAT_D32_FLOAT_S8X24_UINT: case DXGI_FORMAT_D32_FLOAT:
+        case DXGI_FORMAT_D24_UNORM_S8_UINT: case DXGI_FORMAT_D16_UNORM:
+            /* Shaders read depth through the format's shader-resource view format */
+            *format_support &= ~(D3D11_FORMAT_SUPPORT_RENDER_TARGET | D3D11_FORMAT_SUPPORT_BLENDABLE
+                    | D3D11_FORMAT_SUPPORT_SHADER_LOAD | D3D11_FORMAT_SUPPORT_SHADER_SAMPLE
+                    | D3D11_FORMAT_SUPPORT_SHADER_SAMPLE_COMPARISON | D3D11_FORMAT_SUPPORT_SHADER_GATHER
+                    | D3D11_FORMAT_SUPPORT_SHADER_GATHER_COMPARISON | D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW
+                    | D3D11_FORMAT_SUPPORT_MULTISAMPLE_LOAD | D3D11_FORMAT_SUPPORT_MULTISAMPLE_RESOLVE);
+            break;
+        case DXGI_FORMAT_R32_FLOAT: case DXGI_FORMAT_R16_UNORM:
+        case DXGI_FORMAT_R24_UNORM_X8_TYPELESS: case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS:
+            /* The shader-resource view formats of depth formats sample with comparison */
+            if (feature_level >= D3D_FEATURE_LEVEL_10_0 && (*format_support & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE))
+                *format_support |= D3D11_FORMAT_SUPPORT_SHADER_SAMPLE_COMPARISON;
+            if (feature_level >= D3D_FEATURE_LEVEL_11_0 && (*format_support & D3D11_FORMAT_SUPPORT_SHADER_GATHER))
+                *format_support |= D3D11_FORMAT_SUPPORT_SHADER_GATHER_COMPARISON;
+            break;
+        default:
+            break;
+    }
+    /* TODO: video processor input and output support once the wined3d device has a video processor */
+
     if (*format_support)
         *format_support |= D3D11_FORMAT_SUPPORT_CPU_LOCKABLE;
 
