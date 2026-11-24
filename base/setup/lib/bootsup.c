@@ -426,6 +426,10 @@ InstallEfiLoaderFiles(
 #define BCD_APPLICATION_DEVICE      L"11000001"
 #define BCD_OS_DEVICE               L"21000001"
 #define BCD_APPLICATION_PATH        L"12000002"
+#define BCD_DISPLAY_ORDER           L"24000001"
+#define BCD_OBJECT_ID_CHARS         38
+#define BCD_MAX_KEPT_ENTRIES        32
+#define BCD_MAX_NEW_ID_TRIES        16
 #define BCD_TEMPLATE_PATH           L"Windows\\System32\\config\\BCD-Template"
 #define BCD_BOOT_MANAGER_PATTERN    L"boot*.efi"
 #define BCD_RELATIVE_PARTITION      L"partition("
@@ -670,6 +674,452 @@ DeleteBcdElement(
     return Status;
 }
 
+typedef struct _BCD_KEPT_ELEMENT
+{
+    struct _BCD_KEPT_ELEMENT *Next;
+    WCHAR Name[16];
+    ULONG Type;
+    ULONG Size;
+    UCHAR Data[ANYSIZE_ARRAY];
+} BCD_KEPT_ELEMENT, *PBCD_KEPT_ELEMENT;
+
+typedef struct _BCD_KEPT_ENTRY
+{
+    WCHAR Id[BCD_OBJECT_ID_CHARS + 1];
+    ULONG Type;
+    PBCD_KEPT_ELEMENT Elements;
+} BCD_KEPT_ENTRY, *PBCD_KEPT_ENTRY;
+
+typedef struct _BCD_KEPT_ENTRIES
+{
+    ULONG Count;
+    BCD_KEPT_ENTRY Entry[BCD_MAX_KEPT_ENTRIES];
+} BCD_KEPT_ENTRIES, *PBCD_KEPT_ENTRIES;
+
+static
+NTSTATUS
+OpenSetupBcdKey(
+    _In_opt_ HANDLE Root,
+    _In_ PCWSTR Name,
+    _In_ ACCESS_MASK Access,
+    _In_ BOOLEAN Create,
+    _Out_ PHANDLE Key)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING KeyName;
+    WCHAR Path[MAX_PATH];
+    NTSTATUS Status;
+
+    if (Root)
+        Status = RtlStringCchCopyW(Path, ARRAYSIZE(Path), Name);
+    else
+        Status = RtlStringCchPrintfW(Path, ARRAYSIZE(Path), L"\\Registry\\Machine\\SetupBcd\\Objects\\%s", Name);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlInitUnicodeString(&KeyName, Path);
+    InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE, Root, NULL);
+    if (Create)
+        return NtCreateKey(Key, Access, &ObjectAttributes, 0, NULL, REG_OPTION_BACKUP_RESTORE, NULL);
+    return NtOpenKeyEx(Key, Access, &ObjectAttributes, REG_OPTION_BACKUP_RESTORE);
+}
+
+static
+PKEY_VALUE_PARTIAL_INFORMATION
+QueryBcdValue(
+    _In_ HANDLE Key,
+    _In_ PCWSTR Name)
+{
+    PKEY_VALUE_PARTIAL_INFORMATION Info;
+    UNICODE_STRING ValueName;
+    ULONG Length = 0;
+    NTSTATUS Status;
+
+    RtlInitUnicodeString(&ValueName, Name);
+    Status = NtQueryValueKey(Key, &ValueName, KeyValuePartialInformation, NULL, 0, &Length);
+    if (Status != STATUS_BUFFER_TOO_SMALL && Status != STATUS_BUFFER_OVERFLOW)
+        return NULL;
+
+    Info = RtlAllocateHeap(ProcessHeap, 0, Length);
+    if (!Info)
+        return NULL;
+
+    Status = NtQueryValueKey(Key, &ValueName, KeyValuePartialInformation, Info, Length, &Length);
+    if (!NT_SUCCESS(Status))
+    {
+        RtlFreeHeap(ProcessHeap, 0, Info);
+        return NULL;
+    }
+
+    ASSERT(FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + Info->DataLength <= Length);
+    return Info;
+}
+
+static
+PKEY_VALUE_PARTIAL_INFORMATION
+QueryBcdElement(
+    _In_ PCWSTR Object,
+    _In_ PCWSTR Element)
+{
+    PKEY_VALUE_PARTIAL_INFORMATION Info;
+    WCHAR Name[MAX_PATH];
+    HANDLE Key;
+
+    if (!NT_SUCCESS(RtlStringCchPrintfW(Name, ARRAYSIZE(Name), L"%s\\Elements\\%s", Object, Element)) ||
+        !NT_SUCCESS(OpenSetupBcdKey(NULL, Name, KEY_QUERY_VALUE, FALSE, &Key)))
+    {
+        return NULL;
+    }
+
+    Info = QueryBcdValue(Key, L"Element");
+    NtClose(Key);
+    return Info;
+}
+
+static
+VOID
+FreeBcdKeptEntry(
+    _Inout_ PBCD_KEPT_ENTRY Entry)
+{
+    PBCD_KEPT_ELEMENT Element;
+
+    while (Entry->Elements)
+    {
+        Element = Entry->Elements;
+        Entry->Elements = Element->Next;
+        RtlFreeHeap(ProcessHeap, 0, Element);
+    }
+}
+
+static
+BOOLEAN
+KeepBcdEntry(
+    _In_ PCWSTR Id,
+    _Out_ PBCD_KEPT_ENTRY Entry)
+{
+    union
+    {
+        KEY_BASIC_INFORMATION Basic;
+        UCHAR Buffer[FIELD_OFFSET(KEY_BASIC_INFORMATION, Name) + sizeof(((PBCD_KEPT_ELEMENT)NULL)->Name)];
+    } Key;
+    PKEY_VALUE_PARTIAL_INFORMATION Info;
+    PBCD_KEPT_ELEMENT Element;
+    WCHAR Name[MAX_PATH];
+    HANDLE Elements, Handle;
+    ULONG Index, Length;
+    NTSTATUS Status;
+
+    RtlZeroMemory(Entry, sizeof(*Entry));
+    if (!NT_SUCCESS(RtlStringCchCopyW(Entry->Id, ARRAYSIZE(Entry->Id), Id)) ||
+        !NT_SUCCESS(RtlStringCchPrintfW(Name, ARRAYSIZE(Name), L"%s\\Description", Id)) ||
+        !NT_SUCCESS(OpenSetupBcdKey(NULL, Name, KEY_QUERY_VALUE, FALSE, &Handle)))
+    {
+        return FALSE;
+    }
+
+    Info = QueryBcdValue(Handle, L"Type");
+    NtClose(Handle);
+    if (!Info || Info->Type != REG_DWORD || Info->DataLength != sizeof(ULONG))
+    {
+        if (Info)
+            RtlFreeHeap(ProcessHeap, 0, Info);
+        return FALSE;
+    }
+    Entry->Type = *(PULONG)Info->Data;
+    RtlFreeHeap(ProcessHeap, 0, Info);
+
+    if (!NT_SUCCESS(RtlStringCchPrintfW(Name, ARRAYSIZE(Name), L"%s\\Elements", Id)) ||
+        !NT_SUCCESS(OpenSetupBcdKey(NULL, Name, KEY_ENUMERATE_SUB_KEYS, FALSE, &Elements)))
+    {
+        return FALSE;
+    }
+
+    for (Index = 0; ; Index++)
+    {
+        Status = NtEnumerateKey(Elements, Index, KeyBasicInformation, &Key, sizeof(Key) - sizeof(WCHAR), &Length);
+        if (Status == STATUS_NO_MORE_ENTRIES)
+        {
+            Status = STATUS_SUCCESS;
+            break;
+        }
+        if (!NT_SUCCESS(Status))
+            break;
+
+        ASSERT(Key.Basic.NameLength % sizeof(WCHAR) == 0);
+        ASSERT(Key.Basic.NameLength < sizeof(Element->Name));
+        Key.Basic.Name[Key.Basic.NameLength / sizeof(WCHAR)] = UNICODE_NULL;
+
+        Status = OpenSetupBcdKey(Elements, Key.Basic.Name, KEY_QUERY_VALUE, FALSE, &Handle);
+        if (!NT_SUCCESS(Status))
+            break;
+        Info = QueryBcdValue(Handle, L"Element");
+        NtClose(Handle);
+        if (!Info)
+        {
+            Status = STATUS_REGISTRY_CORRUPT;
+            break;
+        }
+
+        Element = RtlAllocateHeap(ProcessHeap, 0, FIELD_OFFSET(BCD_KEPT_ELEMENT, Data[Info->DataLength]));
+        if (!Element)
+        {
+            RtlFreeHeap(ProcessHeap, 0, Info);
+            Status = STATUS_NO_MEMORY;
+            break;
+        }
+
+        RtlCopyMemory(Element->Name, Key.Basic.Name, Key.Basic.NameLength + sizeof(WCHAR));
+        Element->Type = Info->Type;
+        Element->Size = Info->DataLength;
+        RtlCopyMemory(Element->Data, Info->Data, Info->DataLength);
+        RtlFreeHeap(ProcessHeap, 0, Info);
+
+        Element->Next = Entry->Elements;
+        Entry->Elements = Element;
+    }
+
+    NtClose(Elements);
+    if (!NT_SUCCESS(Status))
+    {
+        FreeBcdKeptEntry(Entry);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static
+BOOLEAN
+IsBcdEntryForOsDevice(
+    _In_ PBCD_KEPT_ENTRY Entry,
+    _In_reads_bytes_(BCD_DEVICE_ELEMENT_SIZE) const UCHAR *OsElement)
+{
+    PBCD_KEPT_ELEMENT Element;
+
+    for (Element = Entry->Elements; Element; Element = Element->Next)
+    {
+        if (_wcsicmp(Element->Name, BCD_OS_DEVICE) == 0)
+        {
+            return Element->Size == BCD_DEVICE_ELEMENT_SIZE &&
+                   RtlEqualMemory(Element->Data, OsElement, BCD_DEVICE_ELEMENT_SIZE);
+        }
+    }
+
+    return FALSE;
+}
+
+/* Saves the entries of a mounted store that start another installation than the one at OsElement */
+static
+VOID
+KeepOtherBcdEntries(
+    _In_reads_bytes_(BCD_DEVICE_ELEMENT_SIZE) const UCHAR *OsElement,
+    _Inout_ PBCD_KEPT_ENTRIES Kept)
+{
+    PKEY_VALUE_PARTIAL_INFORMATION Order;
+    WCHAR Id[BCD_OBJECT_ID_CHARS + 1];
+    PCWCH Chars;
+    ULONG Count, i, Length = 0;
+
+    ASSERT(Kept->Count == 0);
+
+    Order = QueryBcdElement(BCD_BOOTMGR_OBJECT, BCD_DISPLAY_ORDER);
+    if (!Order)
+        return;
+    if (Order->Type != REG_MULTI_SZ)
+    {
+        RtlFreeHeap(ProcessHeap, 0, Order);
+        return;
+    }
+
+    Chars = (PCWCH)Order->Data;
+    Count = Order->DataLength / sizeof(WCHAR);
+    for (i = 0; i <= Count; i++)
+    {
+        if (i < Count && Chars[i] != UNICODE_NULL)
+        {
+            if (Length < BCD_OBJECT_ID_CHARS + 1)
+                Id[Length] = Chars[i];
+            Length++;
+            continue;
+        }
+
+        if (Length == BCD_OBJECT_ID_CHARS && Kept->Count < BCD_MAX_KEPT_ENTRIES)
+        {
+            Id[Length] = UNICODE_NULL;
+            if (KeepBcdEntry(Id, &Kept->Entry[Kept->Count]))
+            {
+                if (IsBcdEntryForOsDevice(&Kept->Entry[Kept->Count], OsElement))
+                    FreeBcdKeptEntry(&Kept->Entry[Kept->Count]);
+                else
+                    Kept->Count++;
+            }
+        }
+        Length = 0;
+    }
+
+    ASSERT(Kept->Count <= BCD_MAX_KEPT_ENTRIES);
+    RtlFreeHeap(ProcessHeap, 0, Order);
+}
+
+static
+BOOLEAN
+BcdObjectExists(
+    _In_ PCWSTR Id)
+{
+    HANDLE Key;
+
+    if (!NT_SUCCESS(OpenSetupBcdKey(NULL, Id, KEY_QUERY_VALUE, FALSE, &Key)))
+        return FALSE;
+    NtClose(Key);
+    return TRUE;
+}
+
+static
+NTSTATUS
+NewBcdObjectId(
+    _Out_writes_(BCD_OBJECT_ID_CHARS + 1) PWSTR Id)
+{
+    static ULONG Seed;
+    LARGE_INTEGER Counter;
+    ULONG Words[4], i, Try;
+    GUID Guid;
+    NTSTATUS Status;
+
+    if (Seed == 0)
+    {
+        NtQueryPerformanceCounter(&Counter, NULL);
+        Seed = Counter.LowPart ^ Counter.HighPart ^ HandleToUlong(NtCurrentTeb()->ClientId.UniqueProcess);
+    }
+
+    for (Try = 0; Try < BCD_MAX_NEW_ID_TRIES; Try++)
+    {
+        for (i = 0; i < ARRAYSIZE(Words); i++)
+            Words[i] = (RtlRandom(&Seed) << 16) ^ RtlRandom(&Seed);
+        C_ASSERT(sizeof(Words) == sizeof(Guid));
+        RtlCopyMemory(&Guid, Words, sizeof(Guid));
+        Guid.Data3 = (Guid.Data3 & 0x0FFF) | 0x4000;
+        Guid.Data4[0] = (Guid.Data4[0] & 0x3F) | 0x80;
+
+        Status = RtlStringCchPrintfW(Id, BCD_OBJECT_ID_CHARS + 1,
+                                     L"{%08lx-%04hx-%04hx-%02x%02x-%02x%02x%02x%02x%02x%02x}",
+                                     Guid.Data1, Guid.Data2, Guid.Data3,
+                                     Guid.Data4[0], Guid.Data4[1], Guid.Data4[2], Guid.Data4[3],
+                                     Guid.Data4[4], Guid.Data4[5], Guid.Data4[6], Guid.Data4[7]);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        ASSERT(wcslen(Id) == BCD_OBJECT_ID_CHARS);
+        if (!BcdObjectExists(Id))
+            return STATUS_SUCCESS;
+    }
+
+    return STATUS_OBJECT_NAME_COLLISION;
+}
+
+static
+NTSTATUS
+CreateBcdObject(
+    _In_ PCWSTR Id,
+    _In_ ULONG Type)
+{
+    static UNICODE_STRING TypeName = RTL_CONSTANT_STRING(L"Type");
+    HANDLE Object, Key;
+    NTSTATUS Status;
+
+    Status = OpenSetupBcdKey(NULL, Id, KEY_CREATE_SUB_KEY, TRUE, &Object);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = OpenSetupBcdKey(Object, L"Elements", KEY_SET_VALUE, TRUE, &Key);
+    if (NT_SUCCESS(Status))
+    {
+        NtClose(Key);
+        Status = OpenSetupBcdKey(Object, L"Description", KEY_SET_VALUE, TRUE, &Key);
+    }
+    if (NT_SUCCESS(Status))
+    {
+        Status = NtSetValueKey(Key, &TypeName, 0, REG_DWORD, &Type, sizeof(Type));
+        NtClose(Key);
+    }
+
+    NtClose(Object);
+    return Status;
+}
+
+/* Adds the kept entries to the mounted store, after its own entries in the boot menu */
+static
+NTSTATUS
+RestoreBcdEntries(
+    _Inout_ PBCD_KEPT_ENTRIES Kept)
+{
+    PKEY_VALUE_PARTIAL_INFORMATION Order;
+    PBCD_KEPT_ELEMENT Element;
+    PBCD_KEPT_ENTRY Entry;
+    PWCHAR NewOrder;
+    ULONG i, Chars, Used;
+    NTSTATUS Status;
+
+    ASSERT(Kept->Count != 0);
+    ASSERT(Kept->Count <= BCD_MAX_KEPT_ENTRIES);
+
+    for (i = 0; i < Kept->Count; i++)
+    {
+        Entry = &Kept->Entry[i];
+        if (BcdObjectExists(Entry->Id))
+        {
+            Status = NewBcdObjectId(Entry->Id);
+            if (!NT_SUCCESS(Status))
+                return Status;
+        }
+
+        Status = CreateBcdObject(Entry->Id, Entry->Type);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        for (Element = Entry->Elements; Element; Element = Element->Next)
+        {
+            Status = SetBcdElement(Entry->Id, Element->Name, Element->Type, Element->Data, Element->Size);
+            if (!NT_SUCCESS(Status))
+                return Status;
+        }
+    }
+
+    Order = QueryBcdElement(BCD_BOOTMGR_OBJECT, BCD_DISPLAY_ORDER);
+    if (!Order || Order->Type != REG_MULTI_SZ)
+    {
+        if (Order)
+            RtlFreeHeap(ProcessHeap, 0, Order);
+        return STATUS_REGISTRY_CORRUPT;
+    }
+
+    Used = Order->DataLength / sizeof(WCHAR);
+    while (Used != 0 && ((PCWCH)Order->Data)[Used - 1] == UNICODE_NULL)
+        Used--;
+    Chars = Used + (Used != 0) + Kept->Count * (BCD_OBJECT_ID_CHARS + 1) + 1;
+    NewOrder = RtlAllocateHeap(ProcessHeap, 0, Chars * sizeof(WCHAR));
+    if (!NewOrder)
+    {
+        RtlFreeHeap(ProcessHeap, 0, Order);
+        return STATUS_NO_MEMORY;
+    }
+
+    RtlCopyMemory(NewOrder, Order->Data, Used * sizeof(WCHAR));
+    RtlFreeHeap(ProcessHeap, 0, Order);
+    if (Used != 0)
+        NewOrder[Used++] = UNICODE_NULL;
+    for (i = 0; i < Kept->Count; i++)
+    {
+        ASSERT(wcslen(Kept->Entry[i].Id) == BCD_OBJECT_ID_CHARS);
+        RtlCopyMemory(NewOrder + Used, Kept->Entry[i].Id, (BCD_OBJECT_ID_CHARS + 1) * sizeof(WCHAR));
+        Used += BCD_OBJECT_ID_CHARS + 1;
+    }
+    NewOrder[Used++] = UNICODE_NULL;
+    ASSERT(Used == Chars);
+
+    Status = SetBcdElement(BCD_BOOTMGR_OBJECT, BCD_DISPLAY_ORDER, REG_MULTI_SZ, NewOrder, Used * sizeof(WCHAR));
+    RtlFreeHeap(ProcessHeap, 0, NewOrder);
+    return Status;
+}
+
 static
 NTSTATUS
 GetPartitionDeviceNumber(
@@ -714,7 +1164,8 @@ InstallBcdStore(
     WCHAR StorePath[MAX_PATH];
     WCHAR Path[MAX_PATH];
     PCWSTR Text;
-    ULONG Disk, Number;
+    ULONG Disk, Number, i;
+    BCD_KEPT_ENTRIES Kept;
     BOOLEAN PrivilegeSet[2] = {FALSE, FALSE};
     NTSTATUS Status;
 
@@ -761,21 +1212,7 @@ InstallBcdStore(
     if (!NT_SUCCESS(Status))
         return Status;
 
-    CombinePaths(Path, ARRAYSIZE(Path), 2, SystemRootPath->Buffer, StoreDirectory);
-    Status = SetupCreateDirectory(Path);
-    if (!NT_SUCCESS(Status) && Status != STATUS_OBJECT_NAME_COLLISION)
-        return Status;
-
-    CombinePaths(Path, ARRAYSIZE(Path), 2, SystemRootPath->Buffer, BootManagerFile);
-    Status = SetupCopyFile(BootManagerPath, Path, FALSE);
-    if (!NT_SUCCESS(Status))
-        return Status;
-
     CombinePaths(StorePath, ARRAYSIZE(StorePath), 3, SystemRootPath->Buffer, StoreDirectory, L"BCD");
-    Status = SetupCopyFile(TemplatePath, StorePath, FALSE);
-    if (!NT_SUCCESS(Status))
-        return Status;
-
     RtlInitUnicodeString(&FileName, StorePath);
     InitializeObjectAttributes(&KeyAttributes, &MountPoint, OBJ_CASE_INSENSITIVE, NULL, NULL);
     InitializeObjectAttributes(&FileAttributes, &FileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
@@ -787,7 +1224,30 @@ InstallBcdStore(
     Status = RtlAdjustPrivilege(SE_BACKUP_PRIVILEGE, TRUE, FALSE, &PrivilegeSet[1]);
     if (NT_SUCCESS(Status))
     {
-        Status = NtLoadKey(&KeyAttributes, &FileAttributes);
+        /* The store of another LiberNT installation keeps its entries; any other store is replaced */
+        Kept.Count = 0;
+        if (DoesFileExist(NULL, StorePath) &&
+            (!PcAt || GetPcatBootManagerOwner(SystemRootPath->Buffer) == BootManagerLiberNT) &&
+            NT_SUCCESS(NtLoadKey(&KeyAttributes, &FileAttributes)))
+        {
+            KeepOtherBcdEntries(OsElement, &Kept);
+            NtUnloadKey(&KeyAttributes);
+        }
+
+        CombinePaths(Path, ARRAYSIZE(Path), 2, SystemRootPath->Buffer, StoreDirectory);
+        Status = SetupCreateDirectory(Path);
+        if (Status == STATUS_OBJECT_NAME_COLLISION)
+            Status = STATUS_SUCCESS;
+
+        if (NT_SUCCESS(Status))
+        {
+            CombinePaths(Path, ARRAYSIZE(Path), 2, SystemRootPath->Buffer, BootManagerFile);
+            Status = SetupCopyFile(BootManagerPath, Path, FALSE);
+        }
+        if (NT_SUCCESS(Status))
+            Status = SetupCopyFile(TemplatePath, StorePath, FALSE);
+        if (NT_SUCCESS(Status))
+            Status = NtLoadKey(&KeyAttributes, &FileAttributes);
         if (NT_SUCCESS(Status))
         {
             Status = SetBcdElement(BCD_BOOTMGR_OBJECT, BCD_APPLICATION_DEVICE, REG_BINARY,
@@ -803,9 +1263,14 @@ InstallBcdStore(
                                        PCAT_OS_LOADER_PATH, sizeof(PCAT_OS_LOADER_PATH));
             if (NT_SUCCESS(Status) && PcAt)
                 Status = DeleteBcdElement(BCD_BOOTMGR_OBJECT, BCD_APPLICATION_PATH);
+            if (NT_SUCCESS(Status) && Kept.Count != 0)
+                Status = RestoreBcdEntries(&Kept);
 
             NtUnloadKey(&KeyAttributes);
         }
+
+        for (i = 0; i < Kept.Count; i++)
+            FreeBcdKeptEntry(&Kept.Entry[i]);
 
         RtlAdjustPrivilege(SE_BACKUP_PRIVILEGE, PrivilegeSet[1], FALSE, &PrivilegeSet[1]);
     }
@@ -1412,7 +1877,12 @@ InstallPcatBootManager(
         return STATUS_NOT_FOUND;
     }
 
-    /* FIXME: an existing \Boot\BCD and \bootmgr are replaced instead of getting a LiberNT entry */
+    if (GetPcatBootManagerOwner(SystemRootPath->Buffer) == BootManagerForeign)
+    {
+        DPRINT1("%wZ holds another system's boot manager, which stays in place\n", SystemRootPath);
+        return STATUS_OBJECT_NAME_COLLISION;
+    }
+
     return InstallBcdStore(SystemRootPath, TemplatePath, BootManagerPath, DestinationArcPath, TRUE);
 }
 
