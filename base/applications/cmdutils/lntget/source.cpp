@@ -511,6 +511,12 @@ Status SourceManager::LoadArpCorrelation(std::map<std::string, PackageRecord> &p
     return status ? index_.LoadArpCorrelation(productCodes, packages) : status;
 }
 
+Status SourceManager::LoadCatalog(Catalog &catalog)
+{
+    Status status = EnsureReady();
+    return status ? index_.LoadCatalog(catalog) : status;
+}
+
 Status SourceManager::FetchInstallerManifest(const PackageRecord &package, std::string &yaml)
 {
     Status status = EnsureReady();
