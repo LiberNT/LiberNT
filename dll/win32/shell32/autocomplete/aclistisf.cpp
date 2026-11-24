@@ -351,14 +351,13 @@ STDMETHODIMP CACListISF::Expand(LPCOLESTR pszExpand)
     CComHeapPtr<ITEMIDLIST> pidl;
     m_szExpanded = pszExpand;
     HRESULT hr = SHParseDisplayName(m_szExpanded, NULL, &pidl, NULL, NULL);
-    if (SUCCEEDED(hr))
+    if (FAILED(hr))
+        return E_FAIL;
+    hr = SetLocation(pidl.Detach());
+    if (FAILED_UNEXPECTEDLY(hr))
     {
-        hr = SetLocation(pidl.Detach());
-        if (FAILED_UNEXPECTEDLY(hr))
-        {
-            m_szRawPath = L"";
-            m_szExpanded = L"";
-        }
+        m_szRawPath = L"";
+        m_szExpanded = L"";
     }
     return hr;
 }

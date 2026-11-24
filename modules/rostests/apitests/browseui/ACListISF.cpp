@@ -482,19 +482,28 @@ test_ACListISF_CURRENTDIR2()
 
     test_at_end(EnumStr);
 
+    WCHAR szOldDir[MAX_PATH];
+    ok(GetCurrentDirectoryW(_countof(szOldDir), szOldDir) != 0, "GetCurrentDirectoryW failed\n");
+    ok(SetCurrentDirectoryW(SysDrivePath(L"\\")), "SetCurrentDirectoryW failed\n");
+
     ok_hr(hr = ACList->Expand(L"\\BROWSEUI-2\\TEST1\\"), S_OK);
 
+    psz = NULL;
     hr = EnumStr->Next(1, &psz, &cGot);
     ok_hr(hr, S_OK);
     ok_wstr(psz, L"\\BROWSEUI-2\\TEST1\\TEST4");
     CoTaskMemFree(psz);
 
+    psz = NULL;
     hr = EnumStr->Next(1, &psz, &cGot);
     ok_hr(hr, S_OK);
     ok_wstr(psz, L"TEST4");
     CoTaskMemFree(psz);
 
     test_at_end(EnumStr);
+
+    ok_hr(hr = ACList->Expand(L"\\BROWSEUI-MISSING\\"), E_FAIL);
+    SetCurrentDirectoryW(szOldDir);
 
     RemoveDirectoryW(SysDrivePath(L"\\BROWSEUI-1\\TEST1\\TEST3"));
     RemoveDirectoryW(SysDrivePath(L"\\BROWSEUI-1\\TEST1"));
