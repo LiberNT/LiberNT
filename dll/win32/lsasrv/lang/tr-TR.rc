@@ -58,6 +58,14 @@ BEGIN
     IDS_CAPABILITY_REMOVABLE_STORAGE "Removable storage"
     IDS_CAPABILITY_APPOINTMENTS "Your Appointments"
     IDS_CAPABILITY_CONTACTS "Your Contacts"
+    IDS_MANDATORY_LABEL_AUTHORITY "Mandatory Label"
+    IDS_UNTRUSTED_MANDATORY_LEVEL "Untrusted Mandatory Level"
+    IDS_LOW_MANDATORY_LEVEL "Low Mandatory Level"
+    IDS_MEDIUM_MANDATORY_LEVEL "Medium Mandatory Level"
+    IDS_MEDIUM_PLUS_MANDATORY_LEVEL "Medium Plus Mandatory Level"
+    IDS_HIGH_MANDATORY_LEVEL "High Mandatory Level"
+    IDS_SYSTEM_MANDATORY_LEVEL "System Mandatory Level"
+    IDS_PROTECTED_PROCESS_MANDATORY_LEVEL "Protected Process Mandatory Level"
 END
 
 STRINGTABLE

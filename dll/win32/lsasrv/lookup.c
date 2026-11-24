@@ -77,6 +77,7 @@ typedef struct _WELL_KNOWN_SID
 
 LIST_ENTRY WellKnownSidListHead;
 static SID_IDENTIFIER_AUTHORITY AppPackageAuthority = {SECURITY_APP_PACKAGE_AUTHORITY};
+static SID_IDENTIFIER_AUTHORITY MandatoryLabelAuthority = {SECURITY_MANDATORY_LABEL_AUTHORITY};
 PSID LsapWorldSid = NULL;
 PSID LsapNetworkSid = NULL;
 PSID LsapBatchSid = NULL;
@@ -187,7 +188,22 @@ LsapInitSids(VOID)
     WCHAR szDomainName[80];
     ULONG SubAuthorities[8];
     ULONG Capability;
+    ULONG Label;
     HINSTANCE hInstance;
+    static const struct
+    {
+        ULONG Rid;
+        UINT NameId;
+    } MandatoryLabels[] =
+    {
+        { SECURITY_MANDATORY_UNTRUSTED_RID, IDS_UNTRUSTED_MANDATORY_LEVEL },
+        { SECURITY_MANDATORY_LOW_RID, IDS_LOW_MANDATORY_LEVEL },
+        { SECURITY_MANDATORY_MEDIUM_RID, IDS_MEDIUM_MANDATORY_LEVEL },
+        { SECURITY_MANDATORY_MEDIUM_RID + 0x100, IDS_MEDIUM_PLUS_MANDATORY_LEVEL },
+        { SECURITY_MANDATORY_HIGH_RID, IDS_HIGH_MANDATORY_LEVEL },
+        { SECURITY_MANDATORY_SYSTEM_RID, IDS_SYSTEM_MANDATORY_LEVEL },
+        { SECURITY_MANDATORY_PROTECTED_PROCESS_RID, IDS_PROTECTED_PROCESS_MANDATORY_LEVEL },
+    };
 
     InitializeListHead(&WellKnownSidListHead);
 
@@ -728,6 +744,20 @@ LsapInitSids(VOID)
                       szAccountName,
                       szDomainName,
                       SidTypeWellKnownGroup,
+                      NULL);
+    }
+
+    LsapLoadString(hInstance, IDS_MANDATORY_LABEL_AUTHORITY, szDomainName, ARRAYSIZE(szDomainName));
+    for (Label = 0; Label < ARRAYSIZE(MandatoryLabels); Label++)
+    {
+        LsapLoadString(hInstance, MandatoryLabels[Label].NameId, szAccountName, ARRAYSIZE(szAccountName));
+        SubAuthorities[0] = MandatoryLabels[Label].Rid;
+        LsapCreateSid(&MandatoryLabelAuthority,
+                      1,
+                      SubAuthorities,
+                      szAccountName,
+                      szDomainName,
+                      SidTypeLabel,
                       NULL);
     }
 
@@ -1562,7 +1592,6 @@ LsapLookupFullyQualifiedWellKnownNames(DWORD Count,
                                        PLSAPR_TRANSLATED_SID_EX2 SidsBuffer,
                                        PULONG Mapped)
 {
-    UNICODE_STRING EmptyDomainName = RTL_CONSTANT_STRING(L"");
     PWELL_KNOWN_SID ptr, ptr2;
     PSID DomainSid;
     ULONG DomainIndex;
@@ -1634,7 +1663,7 @@ LsapLookupFullyQualifiedWellKnownNames(DWORD Count,
                     }
 
                     Status = LsapAddDomainToDomainsList(DomainsBuffer,
-                                                        &EmptyDomainName,
+                                                        &ptr->DomainName,
                                                         DomainSid,
                                                         &DomainIndex);
 
