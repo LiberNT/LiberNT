@@ -123,6 +123,12 @@ Used Version: rtw89/rtw8852b_fw-2.bin (linux-firmware 20260319)
 License: Realtek binary redistribution license (drivers/network/dd/rtw8852bs/fw/LICENCE.rtlwifi_firmware.txt)
 URL: https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git
 
+Title: Realtek RTL8168/8111 PHY firmware
+Path: drivers/network/dd/rtl8168/fw
+Used Version: rtl_nic/rtl8168h-2.fw, rtl8168h-1.fw, rtl8168g-2.fw, rtl8168g-3.fw, rtl8168fp-3.fw, rtl8411-2.fw (linux-firmware WHENCE commit 57491bfc1b98b792031dacd3487bfed4c7684486)
+License: Realtek binary redistribution license (drivers/network/dd/rtl8168/fw/LICENSE.r8169)
+URL: https://gitlab.com/kernel-firmware/linux-firmware/-/blob/1221848f23764faab10ff63bc5d9ea5d5b39a506/LICENSES/LICENSE.r8169
+
 Title: Linux PowerVR DRM driver (drm/imagination)
 Path: drivers/directx/powervr/upstream
 Used Version: Linux mainline 6addb4f38
