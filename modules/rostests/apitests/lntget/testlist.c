@@ -10,6 +10,7 @@ extern void func_guiagreements(void);
 extern void func_guiuninstall(void);
 extern void func_inno(void);
 extern void func_nullsoft(void);
+extern void func_nullsoftdirectory(void);
 extern void func_portable(void);
 extern void func_portablefiles(void);
 extern void func_upgrade(void);
@@ -27,6 +28,7 @@ const struct test winetest_testlist[] =
     { "guiuninstall", func_guiuninstall },
     { "inno", func_inno },
     { "nullsoft", func_nullsoft },
+    { "nullsoftdirectory", func_nullsoftdirectory },
     { "portable", func_portable },
     { "portablefiles", func_portablefiles },
     { "upgrade", func_upgrade },

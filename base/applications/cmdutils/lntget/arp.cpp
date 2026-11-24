@@ -200,6 +200,15 @@ bool IsNsisExecutable(const std::wstring &path)
     return std::search(begin, begin + bytes.size(), Signature, Signature + sizeof(Signature) - 1) != begin + bytes.size();
 }
 
+std::wstring AppendNsisSwitch(const std::wstring &command, const wchar_t *option)
+{
+    /* NSIS reads everything after _?= as the install directory */
+    const std::size_t directory = command.find(L" _?=");
+    if (directory == std::wstring::npos)
+        return command + L" " + option;
+    return command.substr(0, directory) + L" " + option + command.substr(directory);
+}
+
 std::wstring EntrySubKey(const ArpEntry &entry)
 {
     return std::wstring(UninstallKey) + L"\\" + entry.keyName;
@@ -649,7 +658,7 @@ std::wstring BuildUninstallCommand(const ArpEntry &entry, const std::string &ins
     if (entry.innoSetup || AsciiEquals(installerType, "inno"))
         command += L" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART";
     else if (AsciiEquals(installerType, "nullsoft") || IsNsisExecutable(CommandExecutable(entry.uninstall)))
-        command += L" /S";
+        command = AppendNsisSwitch(command, L"/S");
     else
         TraceArp("no silent uninstall switch is known for " + entry.Identity() + "; running its uninstaller as registered");
     return command;
@@ -731,6 +740,15 @@ Status RunArpSelfTests()
     if (BuildUninstallCommand(entry, std::string(), InstallMode::Silent) != entry.quietUninstall ||
         BuildUninstallCommand(entry, std::string(), InstallMode::Interactive) != entry.uninstall)
         return Status::Fail(ERROR_ASSERTION_FAILURE, "registered quiet uninstall command self-test failed");
+    entry = ArpEntry();
+    entry.keyName = L"foobar2000 (x64)";
+    entry.uninstall = L"\"C:\\Program Files\\foobar2000\\uninstall.exe\" _?=C:\\Program Files\\foobar2000";
+    if (BuildUninstallCommand(entry, "nullsoft", InstallMode::Silent) !=
+        L"\"C:\\Program Files\\foobar2000\\uninstall.exe\" /S _?=C:\\Program Files\\foobar2000")
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "NSIS install directory uninstall command self-test failed");
+    entry.uninstall = L"\"C:\\Program Files\\Notepad++\\uninstall.exe\"";
+    if (BuildUninstallCommand(entry, "nullsoft", InstallMode::Silent) != L"\"C:\\Program Files\\Notepad++\\uninstall.exe\" /S")
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "NSIS uninstall command self-test failed");
     if (CommandExecutable(L"C:\\Program Files\\App\\uninst.exe /x") != L"C:\\Program Files\\App\\uninst.exe" ||
         CommandExecutable(L"\"C:\\A B\\u.exe\" /S") != L"C:\\A B\\u.exe")
         return Status::Fail(ERROR_ASSERTION_FAILURE, "uninstall executable parser self-test failed");

@@ -26,6 +26,7 @@ typedef struct _PACKAGE
 static const PACKAGE ExePackage = { L"7zip.7zip", L"exe", NULL, L"7-Zip", L"%ProgramFiles%\\7-Zip\\7z.exe" };
 static const PACKAGE InnoPackage = { L"WinSCP.WinSCP", L"inno", L"machine", L"WinSCP", L"%ProgramFiles(x86)%\\WinSCP\\WinSCP.exe" };
 static const PACKAGE NullsoftPackage = { L"Notepad++.Notepad++", L"nullsoft", NULL, L"Notepad++", L"%ProgramFiles%\\Notepad++\\notepad++.exe" };
+static const PACKAGE NullsoftDirectoryPackage = { L"PeterPawlowski.foobar2000", L"nullsoft", NULL, L"foobar2000", L"%ProgramFiles%\\foobar2000\\foobar2000.exe" };
 static const PACKAGE PortablePackage = { L"jqlang.jq", L"portable", NULL, L"jq", L"%LOCALAPPDATA%\\Microsoft\\WinGet\\Links\\jq.exe" };
 static const PACKAGE WixPackage = { L"7zip.7zip", L"wix", NULL, L"7-Zip", L"%ProgramFiles%\\7-Zip\\7z.exe" };
 
@@ -249,6 +250,46 @@ START_TEST(inno)
 START_TEST(nullsoft)
 {
     TestPackage(&NullsoftPackage);
+}
+
+START_TEST(nullsoftdirectory)
+{
+    const PACKAGE *Package = &NullsoftDirectoryPackage;
+    DWORD ExitCode;
+
+    if (wcsstr(GetTool(), L"winget"))
+    {
+        skip("winget runs this uninstaller interactively\n");
+        return;
+    }
+    if (ArpHasDisplayName(Package->DisplayName) || PackageFileExists(Package))
+    {
+        skip("%ls is already installed\n", Package->Id);
+        return;
+    }
+    if (!RunTool(L"search --id PeterPawlowski.foobar2000 -e --source winget", &ExitCode))
+        return;
+    if (ExitCode != 0)
+    {
+        skip("the winget source is unavailable: 0x%08lx\n%s\n", ExitCode, Output);
+        return;
+    }
+
+    if (!RunTool(L"install --id PeterPawlowski.foobar2000 -e --source winget --silent --accept-package-agreements --disable-interactivity", &ExitCode))
+        return;
+    ok(ExitCode == 0, "install returned 0x%08lx:\n%s\n", ExitCode, Output);
+    ok(ArpHasDisplayName(Package->DisplayName), "no installed application named %ls\n", Package->DisplayName);
+    ok(PackageFileExists(Package), "%ls is missing\n", Package->File);
+    if (ExitCode != 0)
+        return;
+
+    if (!RunTool(L"uninstall --id PeterPawlowski.foobar2000 -e --source winget --silent --disable-interactivity", &ExitCode))
+        return;
+    ok(ExitCode == 2, "uninstall returned 0x%08lx, not the exit code 2 of the foobar2000 uninstaller:\n%s\n", ExitCode, Output);
+    ok(WaitForRemoval(Package), "%ls is still installed after uninstall\n", Package->Id);
+
+    if (RunTool(L"list --id PeterPawlowski.foobar2000 -e --source winget", &ExitCode))
+        ok(ExitCode != 0, "list still finds %ls:\n%s\n", Package->Id, Output);
 }
 
 START_TEST(portable)
