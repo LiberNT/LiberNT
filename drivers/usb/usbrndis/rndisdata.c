@@ -68,6 +68,24 @@ RndisTxQueuePushChain(
 
 /* RndisTxQueueIsEmpty is defined inline in usbrndis.h */
 
+/* TX completion can find the queue empty before a concurrent send pushes to it */
+static
+VOID
+RndisTxKickIfIdle(
+    _In_ PRNDIS_ADAPTER Adapter)
+{
+    BOOLEAN Idle;
+
+    NdisAcquireSpinLock(&Adapter->TxLock);
+    Idle = !Adapter->TxHot.TxBusy && Adapter->TxHot.TxNcmPartialNbl == NULL;
+    NdisReleaseSpinLock(&Adapter->TxLock);
+
+    if (Idle && !Adapter->Halting)
+    {
+        RndisTxKick(Adapter);
+    }
+}
+
 /*
  * RndisAlignOffset
  *
@@ -1015,7 +1033,6 @@ RndisSendNetBufferListsInternal(
      */
     {
         BOOLEAN ShouldQueue = FALSE;
-        BOOLEAN KickTx = FALSE;
 
         NdisAcquireSpinLock(&Adapter->TxLock);
         if ((!TxAlreadyOwned && Adapter->TxHot.TxBusy) || Adapter->TxHot.TxNcmPartialNbl != NULL ||
@@ -1029,10 +1046,6 @@ RndisSendNetBufferListsInternal(
                 Adapter->TxHot.PendingTxNblCount = 0;
                 Adapter->TxHot.PendingTxDatagramCount = 0;
             }
-            if (!Adapter->TxHot.TxBusy && Adapter->TxHot.TxNcmPartialNbl == NULL)
-            {
-                KickTx = TRUE;
-            }
         }
         NdisReleaseSpinLock(&Adapter->TxLock);
 
@@ -1041,11 +1054,7 @@ RndisSendNetBufferListsInternal(
             /* Push all NBLs to lock-free queue */
             RndisTxQueuePushChain(Adapter, NetBufferList);
 
-            /* Kick TX processing via owner-drain */
-            if (KickTx)
-            {
-                RndisTxKick(Adapter);
-            }
+            RndisTxKickIfIdle(Adapter);
             return;
         }
     }
@@ -1068,6 +1077,7 @@ RndisSendNetBufferListsInternal(
                 RndisTxQueuePush(Adapter, NextNbl);
                 NextNbl = TempNext;
             }
+            RndisTxKickIfIdle(Adapter);
             break;
         }
 
@@ -1086,6 +1096,7 @@ RndisSendNetBufferListsInternal(
                 RndisTxQueuePush(Adapter, NextNbl);
                 NextNbl = TempNext;
             }
+            RndisTxKickIfIdle(Adapter);
             break;
         }
 
