@@ -172,6 +172,7 @@ struct SelectionOptions
 {
     bool hasArchitecture = false;
     std::string architecture;
+    bool skipArchitectureApplicability = false;
     bool hasInstallerType = false;
     std::string installerType;
     bool hasScope = false;

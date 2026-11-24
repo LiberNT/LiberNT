@@ -747,8 +747,16 @@ START_TEST(dependencyagreements)
     STARTUPINFOW Startup = { sizeof(Startup) };
     PROCESS_INFORMATION Process;
     HWND Catalog, Notice, Install, Title, Prompt;
+    SYSTEM_INFO System;
     DWORD ExitCode;
 
+    GetNativeSystemInfo(&System);
+    if (System.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_AMD64 &&
+        System.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_ARM64)
+    {
+        skip("Microsoft.ServiceFabricSDK has only an x64 installer\n");
+        return;
+    }
     if (ServiceFabricInstalled())
     {
         skip("Service Fabric is already installed\n");

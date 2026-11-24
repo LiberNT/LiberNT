@@ -358,7 +358,9 @@ Status ShowCommand(SourceManager &source, const CommandOptions &options)
     if (!status)
         return status;
     InstallerEntry installer;
-    status = SelectInstaller(manifest, options.selection, installer);
+    SelectionOptions selection = options.selection;
+    selection.skipArchitectureApplicability = true;
+    status = SelectInstaller(manifest, selection, installer);
     if (!status)
         return status;
     PrintPackage(package, manifest, installer);
@@ -383,6 +385,7 @@ Status DownloadOrInstallCommand(SourceManager &source, const CommandOptions &opt
     InstallerEntry installer;
     SelectionOptions selection = options.selection;
     selection.downloadOnly = !install;
+    selection.skipArchitectureApplicability = !install;
     status = SelectInstaller(manifest, selection, installer);
     if (!status)
         return status;
