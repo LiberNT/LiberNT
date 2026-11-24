@@ -623,9 +623,9 @@ typedef struct _E1000_ADAPTER
      * ITR values are in 256ns units for the hardware register.
      *
      * ItrSetting modes:
-     *   0=lowest_latency: ITR 5000 (~780 int/sec) - responsive for small packets
-     *   1=low_latency:    ITR 10000 (~390 int/sec) - balanced
-     *   2=bulk_latency:   ITR 20000 (~195 int/sec) - throughput optimized
+     *   0=lowest_latency: 70000 int/sec - responsive for small packets
+     *   1=low_latency:    20000 int/sec - balanced
+     *   2=bulk_latency:   4000 int/sec - throughput optimized
      *   3=dynamic:        Auto-adjust based on traffic patterns
      */
     ULONG                   CurrentItr;         /* Current ITR register value (256ns units) */

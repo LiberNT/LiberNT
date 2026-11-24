@@ -531,13 +531,13 @@ E1000WriteItr(
  *   - low_latency: Moderate traffic -> balanced int rate
  *   - bulk_latency: Large packets/high throughput -> lowest int rate
  *
- * Linux e1000e uses these ITR values (in 256ns units):
- *   - lowest_latency: 70000 (~56 int/sec, very aggressive coalescing)
- *   - low_latency:    20000 (~195 int/sec)
- *   - bulk_latency:    4000 (~976 int/sec, minimal coalescing)
+ * Linux e1000e uses these interrupt rates:
+ *   - lowest_latency: 70000 int/sec
+ *   - low_latency:    20000 int/sec
+ *   - bulk_latency:    4000 int/sec
  *
- * Note: Lower ITR value = higher interrupt rate (less coalescing)
- *       Higher ITR value = lower interrupt rate (more coalescing)
+ * Note: The ITR register holds the interval between interrupts in 256ns
+ *       units, so its value is 1000000000 / (rate * 256).
  *
  * The Linux algorithm uses bytes_per_int thresholds with hysteresis.
  * ============================================================================ */
@@ -562,18 +562,18 @@ E1000UpdateAdaptiveItr(
      * ITR values following Linux e1000e semantics.
      * These are in 256ns units for the hardware register.
      *
-     * Linux values from netdev.c e1000_update_itr():
-     *   lowest_latency = 70000 (very aggressive coalescing, low int rate)
-     *   low_latency    = 20000 (balanced)
-     *   bulk_latency   = 4000  (minimal coalescing, high int rate for throughput)
+     * Linux rates from netdev.c e1000_update_itr():
+     *   lowest_latency = 70000 int/sec
+     *   low_latency    = 20000 int/sec
+     *   bulk_latency   = 4000 int/sec
      *
      * IMPORTANT: In e1000e, LOWER values mean HIGHER interrupt rates.
      * This is counter-intuitive but matches the hardware behavior.
      */
     static const ULONG ItrValues[] = {
-        5000,   /* lowest_latency: ~780 int/sec - responsive for small packets */
-        10000,  /* low_latency: ~390 int/sec - balanced */
-        20000   /* bulk_latency: ~195 int/sec - throughput optimized */
+        1000000000 / (70000 * 256), /* lowest_latency: responsive for small packets */
+        1000000000 / (20000 * 256), /* low_latency: balanced */
+        1000000000 / (4000 * 256)   /* bulk_latency: throughput optimized */
     };
 
     /* Only adjust if in dynamic mode */
