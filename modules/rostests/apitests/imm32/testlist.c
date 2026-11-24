@@ -4,6 +4,7 @@
 
 extern void func_clientimc(void);
 extern void func_coinit(void);
+extern void func_CompositionFollowsFocus(void);
 extern void func_cuas(void);
 extern void func_cuascompwnd(void);
 extern void func_himc(void);
@@ -19,6 +20,7 @@ const struct test winetest_testlist[] =
 {
     { "clientimc", func_clientimc },
     { "coinit", func_coinit },
+    { "CompositionFollowsFocus", func_CompositionFollowsFocus },
     { "cuas", func_cuas },
     { "cuascompwnd", func_cuascompwnd },
     { "himc", func_himc },

@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     clientimc.c
     coinit.c
+    CompositionFollowsFocus.c
     cuas.cpp
     cuascompwnd.cpp
     ../msctf/testtip.cpp
