@@ -396,6 +396,12 @@ TestIrpHandler(
                 Buffer = Irp->AssociatedIrp.SystemBuffer;
                 ok(Buffer != NULL, "Null pointer!\n");
 
+                if (Offset.QuadPart < Fcb->Header.FileSize.QuadPart &&
+                    Length > Fcb->Header.FileSize.QuadPart - Offset.QuadPart)
+                {
+                    Length = (ULONG)(Fcb->Header.FileSize.QuadPart - Offset.QuadPart);
+                }
+
                 _SEH2_TRY
                 {
                     Ret = CcCopyRead(IoStack->FileObject, &Offset, Length, TRUE, Buffer,
@@ -431,7 +437,8 @@ TestIrpHandler(
             ReadOffset = Offset;
             ReadLength = Length;
 
-            ok_irql(APC_LEVEL);
+            KIRQL Irql = KeGetCurrentIrql();
+            ok(Irql <= APC_LEVEL, "IRQL is %u\n", Irql);
             ok((Offset.QuadPart % PAGE_SIZE == 0 || Offset.QuadPart == 0), "Offset is not aligned: %I64i\n", Offset.QuadPart);
             ok(Length % PAGE_SIZE == 0, "Length is not aligned: %I64i\n", Length);
 

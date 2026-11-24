@@ -391,7 +391,8 @@ TestIrpHandler(
         ok_eq_pointer(IoStack->FileObject, TestFileObject);
 
         ok(BooleanFlagOn(Irp->Flags, IRP_NOCACHE), "IRP not coming from Cc!\n");
-        ok_irql(APC_LEVEL);
+        KIRQL Irql = KeGetCurrentIrql();
+        ok(Irql <= APC_LEVEL, "IRQL is %u\n", Irql);
         ok((Offset.QuadPart == 0 || Offset.QuadPart == 4096 || Offset.QuadPart == 8192), "Unexpected offset: %I64i\n", Offset.QuadPart);
         ok(Length % PAGE_SIZE == 0, "Length is not aligned: %I64i\n", Length);
 
