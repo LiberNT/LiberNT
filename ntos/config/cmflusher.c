@@ -49,6 +49,8 @@ CmpDoFlushNextHive(
 {
     PLIST_ENTRY Entry;
     PCMHIVE Hive = NULL;
+    PCMHIVE Candidate;
+    PCMHIVE FailedHive = NULL;
     NTSTATUS Status;
 
     if (Error != NULL) *Error = FALSE;
@@ -58,21 +60,28 @@ CmpDoFlushNextHive(
 
     ExAcquirePushLockShared(&CmpHiveListHeadLock);
 
+    /* FIXME: of the hives whose files failed, the lazy flusher retries only the first; the others wait for an explicit flush */
     for (Entry = CmpHiveListHead.Flink;
          Entry != &CmpHiveListHead;
          Entry = Entry->Flink)
     {
-        Hive = CONTAINING_RECORD(Entry, CMHIVE, HiveList);
+        Candidate = CONTAINING_RECORD(Entry, CMHIVE, HiveList);
 
-        if (Hive->Hive.HiveFlags & HIVE_VOLATILE) continue;
-        if (Hive->Hive.HiveFlags & HIVE_NOLAZYFLUSH) continue;
-        if (!ForceFlush && Hive->Hive.DirtyCount == 0) continue;
+        if (Candidate->Hive.HiveFlags & HIVE_VOLATILE) continue;
+        if (Candidate->Hive.HiveFlags & HIVE_NOLAZYFLUSH) continue;
+        if (!ForceFlush && Candidate->Hive.DirtyCount == 0) continue;
+        if (!ForceFlush && Candidate->DiskFileBad)
+        {
+            if (FailedHive == NULL) FailedHive = Candidate;
+            continue;
+        }
 
-        CmpReferenceHive(Hive);
+        Hive = Candidate;
         break;
     }
 
-    if (Entry == &CmpHiveListHead) Hive = NULL;
+    if (Hive == NULL) Hive = FailedHive;
+    if (Hive != NULL) CmpReferenceHive(Hive);
 
     ExReleasePushLockShared(&CmpHiveListHeadLock);
 
@@ -145,6 +154,7 @@ CmpLazyFlushWorker(
     {
         if (!CmpDoFlushNextHive(FALSE, &Error, NULL)) break;
         Flushed++;
+        if (Error) break;
     }
 
     InterlockedExchange(&CmpLazyWorkItemActive, 0);
