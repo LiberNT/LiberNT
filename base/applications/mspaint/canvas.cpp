@@ -7,6 +7,7 @@
  */
 
 #include "precomp.h"
+#include "modern_layers.h"
 
 CCanvasWindow canvasWindow;
 
@@ -291,7 +292,9 @@ BOOL CCanvasWindow::DoDraw(HDC hDC, RECT& rcClient, RECT& rcPaint)
     HGDIOBJ hbm0Old = ::SelectObject(hdcMem0, hbmCache1);
 
     // Fill the background on hdcMem0
-    ::FillRect(hdcMem0, &rcCanvasDraw, (HBRUSH)(COLOR_APPWORKSPACE + 1));
+    HBRUSH workspaceBrush = ::CreateSolidBrush(RGB(242, 244, 247));
+    ::FillRect(hdcMem0, &rcCanvasDraw, workspaceBrush);
+    ::DeleteObject(workspaceBrush);
 
     // Draw the sizeboxes if necessary
     RECT rcBase = GetBaseRect();
@@ -312,6 +315,9 @@ BOOL CCanvasWindow::DoDraw(HDC hDC, RECT& rcClient, RECT& rcPaint)
     HGDIOBJ hbm1Old = ::SelectObject(hdcMem1, hbmCache2);
     ::BitBlt(hdcMem1, rcImageDraw.left, rcImageDraw.top, rcImageDraw.Width(), rcImageDraw.Height(),
              imageModel.GetDC(), rcImageDraw.left, rcImageDraw.top, SRCCOPY);
+
+    // Compose overlays before Paint scales and presents its back buffer.
+    ModernLayersPaintComposite(hdcMem1);
 
     // Draw overlay #1 on hdcMem1
     toolsModel.OnDrawOverlayOnImage(hdcMem1);

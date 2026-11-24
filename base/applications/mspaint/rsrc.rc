@@ -21,6 +21,9 @@
 
 IDI_APPICON ICON "img/paint.ico"
 
+// Microsoft Fluent UI Wand icon (MIT); see img/fluent_wand_LICENSE.txt
+52001 ICON "img/fluent_wand.ico"
+
 IDB_TOOLBARICONS BITMAP "img/iconbar.bmp"
 
 IDI_TRANSPARENT ICON "img/transparent.ico"

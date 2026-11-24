@@ -8,6 +8,8 @@
  */
 
 #include "precomp.h"
+#include "modern_ui.h"
+#include "modern_layers.h"
 
 #include <dlgs.h>
 #include <mapi.h>
@@ -21,6 +23,7 @@ BOOL g_isAFile = FALSE;
 BOOL g_imageSaved = FALSE;
 BOOL g_showGrid = FALSE;
 HWND g_hStatusBar = NULL;
+static HWND g_hModernRibbon = NULL;
 
 CMainWindow mainWindow;
 
@@ -351,6 +354,19 @@ void CMainWindow::alignChildrenToMainWindow()
         rcSpace.bottom -= rc.bottom - rc.top;
     }
 
+    // Reserve space at the top for the modern command band. The original
+    // toolbox and palette remain available until their controls are migrated.
+    if (::IsWindow(g_hModernRibbon))
+    {
+        const INT height = ModernPaintRibbonHeight(rcSpace.right - rcSpace.left);
+        ::MoveWindow(g_hModernRibbon, rcSpace.left, rcSpace.top,
+                     rcSpace.right - rcSpace.left, height, TRUE);
+        rcSpace.top += height;
+    }
+
+    // Dock layers at the right, outside the canvas viewport.
+    ModernLayersLayout(m_hWnd, &rcSpace);
+
     HDWP hDWP = ::BeginDeferWindowPos(3);
 
     if (::IsWindowVisible(toolBoxContainer))
@@ -553,17 +569,28 @@ LRESULT CMainWindow::OnCreate(UINT nMsg, WPARAM wParam, LPARAM lParam, BOOL& bHa
                                      NULL, g_hinstExe, NULL);
     ::SendMessageW(g_hStatusBar, SB_SETMINHEIGHT, 21, 0);
 
-    // Create the tool box
+    // Create the modern command band, keeping legacy controls available.
+    g_hModernRibbon = ModernPaintCreateRibbon(m_hWnd);
+    if (!g_hModernRibbon)
+        return -1;
+
+    // Keep the original toolbox for model notifications and tool settings.
     toolBoxContainer.DoCreate(m_hWnd);
+    toolBoxContainer.ShowWindow(SW_HIDE);
 
     // Create the palette window
     RECT rcEmpty = { 0, 0, 0, 0 }; // Rely on WM_SIZE
     style = WS_CHILD | (registrySettings.ShowPalette ? WS_VISIBLE : 0);
     paletteWindow.Create(m_hWnd, rcEmpty, NULL, style, WS_EX_STATICEDGE);
+    paletteWindow.ShowWindow(SW_HIDE);
 
     // Create the canvas
     style = WS_CHILD | WS_GROUP | WS_HSCROLL | WS_VSCROLL | WS_VISIBLE;
     canvasWindow.Create(m_hWnd, rcEmpty, NULL, style, WS_EX_CLIENTEDGE);
+
+    // Layer panel is hidden until toggled by the ribbon button.
+    ModernLayersCreate(m_hWnd);
+    ModernLayersAttachCanvas();
 
     // Create and show the miniature if necessary
     if (registrySettings.ShowThumbnail)
@@ -581,6 +608,8 @@ LRESULT CMainWindow::OnCreate(UINT nMsg, WPARAM wParam, LPARAM lParam, BOOL& bHa
 
 LRESULT CMainWindow::OnDestroy(UINT nMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 {
+    ModernLayersShutdown();
+    g_hModernRibbon = NULL;
     registrySettings.WindowPlacement.length = sizeof(WINDOWPLACEMENT);
     GetWindowPlacement(&(registrySettings.WindowPlacement));
 
