@@ -70,6 +70,20 @@ MultiDisplayRect(
     prcl->bottom = prcl->top + (LONG)ppdev->gdiinfo.ulVertRes;
 }
 
+static VOID
+MultiDisplaySurfaceRect(
+    _In_ PMULTIDEV pmultidev,
+    _In_ PPDEVOBJ ppdev,
+    _Out_ PRECTL prcl)
+{
+    MultiDisplayRect(ppdev, prcl);
+    RECTL_vOffsetRect(prcl, -pmultidev->rclDesktop.left, -pmultidev->rclDesktop.top);
+    ASSERT(prcl->left >= 0);
+    ASSERT(prcl->top >= 0);
+    ASSERT(prcl->right <= pmultidev->rclDesktop.right - pmultidev->rclDesktop.left);
+    ASSERT(prcl->bottom <= pmultidev->rclDesktop.bottom - pmultidev->rclDesktop.top);
+}
+
 PPDEVOBJ
 MultiPrimaryDisplay(
     _In_ PMDEVOBJ pmdev)
@@ -144,13 +158,9 @@ MultiEnablePDEV(
         pmultidev->rclDesktop.right = max(pmultidev->rclDesktop.right, rcl.right);
         pmultidev->rclDesktop.bottom = max(pmultidev->rclDesktop.bottom, rcl.bottom);
     }
-    /* FIXME: a display left of or above the primary display needs a desktop origin below zero */
-    pmultidev->rclDesktop.left = 0;
-    pmultidev->rclDesktop.top = 0;
-
     RtlCopyMemory(pdevcaps, &ppdevPrimary->gdiinfo, sizeof(GDIINFO));
-    ((PGDIINFO)pdevcaps)->ulHorzRes = pmultidev->rclDesktop.right;
-    ((PGDIINFO)pdevcaps)->ulVertRes = pmultidev->rclDesktop.bottom;
+    ((PGDIINFO)pdevcaps)->ulHorzRes = pmultidev->rclDesktop.right - pmultidev->rclDesktop.left;
+    ((PGDIINFO)pdevcaps)->ulVertRes = pmultidev->rclDesktop.bottom - pmultidev->rclDesktop.top;
     RtlCopyMemory(pdi, &ppdevPrimary->devinfo, sizeof(DEVINFO));
     pdi->flGraphicsCaps &= ~(GCAPS_PANNING | GCAPS_ASYNCMOVE);
     if (pmultidev->bAsyncMove)
@@ -171,7 +181,12 @@ MultiCompletePDEV(
     _In_ DHPDEV dhpdev,
     _In_ HDEV hdev)
 {
-    ((PMULTIDEV)dhpdev)->hdev = hdev;
+    PMULTIDEV pmultidev = (PMULTIDEV)dhpdev;
+    PPDEVOBJ ppdev = (PPDEVOBJ)hdev;
+
+    pmultidev->hdev = hdev;
+    ppdev->ptlOrigion.x = pmultidev->rclDesktop.left;
+    ppdev->ptlOrigion.y = pmultidev->rclDesktop.top;
 }
 
 VOID
@@ -333,15 +348,15 @@ MultiFlush(
     for (i = 0; i < pmultidev->pmdev->cDev; i++)
     {
         ppdev = pmultidev->pmdev->dev[i].ppdev;
-        MultiDisplayRect(ppdev, &rclDisplay);
+        MultiDisplaySurfaceRect(pmultidev, ppdev, &rclDisplay);
         if (!RECTL_bIntersectRect(&rclCopy, prcl, &rclDisplay))
             continue;
         rclDest.left = rclCopy.left - rclDisplay.left;
         rclDest.top = rclCopy.top - rclDisplay.top;
         rclDest.right = rclCopy.right - rclDisplay.left;
         rclDest.bottom = rclCopy.bottom - rclDisplay.top;
-        ptlSrc.x = rclCopy.left - pmultidev->rclDesktop.left;
-        ptlSrc.y = rclCopy.top - pmultidev->rclDesktop.top;
+        ptlSrc.x = rclCopy.left;
+        ptlSrc.y = rclCopy.top;
 
         EngAcquireSemaphore(ppdev->hsemDevLock);
         psurf = pmultidev->ppsurfDisplay[i];
@@ -606,7 +621,7 @@ MultiForwardSynchronize(
             continue;
         if (prcl != NULL)
         {
-            MultiDisplayRect(ppdev, &rclDisplay);
+            MultiDisplaySurfaceRect(pmultidev, ppdev, &rclDisplay);
             if (!RECTL_bIntersectRect(&rclLocal, prcl, &rclDisplay))
                 continue;
             RECTL_vOffsetRect(&rclLocal, -rclDisplay.left, -rclDisplay.top);
@@ -745,7 +760,7 @@ MultiSetPointerShape(
             Result = SPS_DECLINE;
             break;
         }
-        MultiDisplayRect(ppdev, &rclDisplay);
+        MultiDisplaySurfaceRect(pmultidev, ppdev, &rclDisplay);
         EngAcquireSemaphore(ppdev->hsemDevLock);
         if (MultiPointerOnDisplay(&rclDisplay, x, y))
         {
@@ -816,7 +831,7 @@ MultiMovePointer(
 
     for (i = 0; i < pmultidev->pmdev->cDev && iDisplay == MAXULONG; i++)
     {
-        MultiDisplayRect(pmultidev->pmdev->dev[i].ppdev, &rclDisplay);
+        MultiDisplaySurfaceRect(pmultidev, pmultidev->pmdev->dev[i].ppdev, &rclDisplay);
         if (MultiPointerOnDisplay(&rclDisplay, x, y))
             iDisplay = i;
     }
@@ -825,7 +840,7 @@ MultiMovePointer(
         MultiMoveDisplayPointer(pmultidev, iPrevious, -1, -1);
     if (iDisplay != MAXULONG)
     {
-        MultiDisplayRect(pmultidev->pmdev->dev[iDisplay].ppdev, &rclDisplay);
+        MultiDisplaySurfaceRect(pmultidev, pmultidev->pmdev->dev[iDisplay].ppdev, &rclDisplay);
         MultiMoveDisplayPointer(pmultidev, iDisplay, x - rclDisplay.left, y - rclDisplay.top);
     }
     if (prcl != NULL)

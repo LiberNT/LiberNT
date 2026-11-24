@@ -74,7 +74,7 @@ TestMonitor(HMONITOR Monitor, RECT *Union, ULONG *Primaries)
     MONITORINFOEXW Info;
     DEVMODEW Mode;
     DWORD State;
-    POINT Center;
+    POINT Center, Cursor;
 
     Info.cbSize = sizeof(Info);
     ok(GetMonitorInfoW(Monitor, (MONITORINFO *)&Info), "GetMonitorInfo failed with %lu\n", GetLastError());
@@ -100,6 +100,9 @@ TestMonitor(HMONITOR Monitor, RECT *Union, ULONG *Primaries)
     Center.x = (Info.rcMonitor.left + Info.rcMonitor.right) / 2;
     Center.y = (Info.rcMonitor.top + Info.rcMonitor.bottom) / 2;
     ok(MonitorFromPoint(Center, MONITOR_DEFAULTTONULL) == Monitor, "%ls: its centre belongs to another monitor\n", Info.szDevice);
+    ok(SetCursorPos(Center.x, Center.y), "%ls: SetCursorPos failed with %lu\n", Info.szDevice, GetLastError());
+    ok(GetCursorPos(&Cursor) && Cursor.x == Center.x && Cursor.y == Center.y,
+       "%ls: the cursor went to (%ld,%ld) for (%ld,%ld)\n", Info.szDevice, Cursor.x, Cursor.y, Center.x, Center.y);
 
     if (Info.dwFlags & MONITORINFOF_PRIMARY)
     {
@@ -121,7 +124,9 @@ TestDrawingOnMonitor(HMONITOR Monitor)
     MONITORINFO Info;
     COLORREF Color;
     HBRUSH Brush;
-    RECT Client;
+    HRGN Region;
+    POINT Origin;
+    RECT Client, Box;
     HWND Window;
     HDC Dc;
     int x, y;
@@ -144,6 +149,15 @@ TestDrawingOnMonitor(HMONITOR Monitor)
     FillRect(Dc, &Client, Brush);
     DeleteObject(Brush);
     Color = GetPixel(Dc, 32, 32);
+    ok(GetDCOrgEx(Dc, &Origin), "GetDCOrgEx failed with %lu\n", GetLastError());
+    ok(Origin.x == x && Origin.y == y, "the window DC origin is (%ld,%ld), the window is at (%d,%d)\n", Origin.x,
+       Origin.y, x, y);
+    Region = CreateRectRgn(0, 0, 0, 0);
+    ok(GetRandomRgn(Dc, Region, SYSRGN) == 1, "GetRandomRgn(SYSRGN) failed\n");
+    GetRgnBox(Region, &Box);
+    ok(Box.left == x && Box.top == y && Box.right == x + 64 && Box.bottom == y + 64,
+       "the system region of the window at (%d,%d) is %s\n", x, y, wine_dbgstr_rect(&Box));
+    DeleteObject(Region);
     ReleaseDC(Window, Dc);
     ok(Color == PROBE_COLOR, "the window reads 0x%06lx at (%d,%d), expected 0x%06lx\n", Color, x + 32, y + 32,
        (ULONG)PROBE_COLOR);
@@ -225,6 +239,8 @@ START_TEST(MultiMonitor)
     RECT Union, Virtual;
     ULONG Primaries = 0;
     ULONG Index;
+    POINT Saved, Origin;
+    HDC Dc;
 
     ZeroMemory(&List, sizeof(List));
     ok(EnumDisplayMonitors(NULL, NULL, CollectMonitor, (LPARAM)&List), "EnumDisplayMonitors failed with %lu\n", GetLastError());
@@ -238,9 +254,17 @@ START_TEST(MultiMonitor)
        CountAttachedDevices(), List.Count);
 
     SetRectEmpty(&Union);
+    GetCursorPos(&Saved);
     for (Index = 0; Index < List.Count; Index++)
         TestMonitor(List.Handles[Index], &Union, &Primaries);
+    SetCursorPos(Saved.x, Saved.y);
     ok(Primaries == 1, "%lu primary monitors\n", Primaries);
+
+    /* The screen DC draws in screen coordinates, whatever monitor holds the virtual screen's corner */
+    Dc = GetDC(NULL);
+    ok(Dc != NULL && GetDCOrgEx(Dc, &Origin), "GetDCOrgEx on the screen DC failed with %lu\n", GetLastError());
+    ok(Origin.x == 0 && Origin.y == 0, "the screen DC origin is (%ld,%ld)\n", Origin.x, Origin.y);
+    ReleaseDC(NULL, Dc);
 
     Virtual.left = GetSystemMetrics(SM_XVIRTUALSCREEN);
     Virtual.top = GetSystemMetrics(SM_YVIRTUALSCREEN);

@@ -41,7 +41,8 @@ static INT gaiSysMetVirtual[SM_CMETRICS];
 
 static VOID
 IntInitMetricValues(_Out_writes_(SM_CMETRICS) INT *piSysMet, _In_ ULONG Width, _In_ ULONG Height,
-                    _In_ ULONG VirtualWidth, _In_ ULONG VirtualHeight, _In_ ULONG Monitors, _In_ BOOL Virtual)
+                    _In_ LONG VirtualX, _In_ LONG VirtualY, _In_ ULONG VirtualWidth, _In_ ULONG VirtualHeight,
+                    _In_ ULONG Monitors, _In_ BOOL Virtual)
 {
     PMONITOR pPrimary;
 
@@ -50,8 +51,8 @@ IntInitMetricValues(_Out_writes_(SM_CMETRICS) INT *piSysMet, _In_ ULONG Width, _
     /* Screen sizes */
     piSysMet[SM_CXSCREEN] = V(Width);
     piSysMet[SM_CYSCREEN] = V(Height);
-    piSysMet[SM_XVIRTUALSCREEN] = 0;
-    piSysMet[SM_YVIRTUALSCREEN] = 0;
+    piSysMet[SM_XVIRTUALSCREEN] = Virtual ? UserDpiToLogical(VirtualX) : VirtualX;
+    piSysMet[SM_YVIRTUALSCREEN] = Virtual ? UserDpiToLogical(VirtualY) : VirtualY;
     piSysMet[SM_CXVIRTUALSCREEN] = V(VirtualWidth);
     piSysMet[SM_CYVIRTUALSCREEN] = V(VirtualHeight);
 
@@ -193,6 +194,7 @@ InitMetrics(VOID)
 {
     INT *piSysMet = gpsi->aiSysMet;
     ULONG Width, Height, VirtualWidth, VirtualHeight, Monitors = 1;
+    LONG VirtualX = 0, VirtualY = 0;
 
     /* Note: used for the SM_CLEANBOOT metric */
     DWORD dwValue = 0;
@@ -227,9 +229,14 @@ InitMetrics(VOID)
     }
     VirtualWidth = gpmdev ? gpmdev->ppdevGlobal->gdiinfo.ulHorzRes : Width;
     VirtualHeight = gpmdev ? gpmdev->ppdevGlobal->gdiinfo.ulVertRes : Height;
+    if (gpmdev)
+    {
+        VirtualX = gpmdev->ppdevGlobal->ptlOrigion.x;
+        VirtualY = gpmdev->ppdevGlobal->ptlOrigion.y;
+    }
 
-    IntInitMetricValues(piSysMet, Width, Height, VirtualWidth, VirtualHeight, Monitors, FALSE);
-    IntInitMetricValues(gaiSysMetVirtual, Width, Height, VirtualWidth, VirtualHeight, Monitors, TRUE);
+    IntInitMetricValues(piSysMet, Width, Height, VirtualX, VirtualY, VirtualWidth, VirtualHeight, Monitors, FALSE);
+    IntInitMetricValues(gaiSysMetVirtual, Width, Height, VirtualX, VirtualY, VirtualWidth, VirtualHeight, Monitors, TRUE);
     gaiSysMetVirtual[SM_CLEANBOOT] = piSysMet[SM_CLEANBOOT];
 
     if (UserIsDBCSEnabled())

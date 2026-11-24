@@ -821,6 +821,9 @@ NtGdiGetRandomRgn(
             /// \todo FIXME This is not really correct, since we already modified the region
             if (pdc->fs & DC_REDIRECTION)
                 ret = REGION_bOffsetRgn(prgnDest, pdc->erclWindow.left, pdc->erclWindow.top);
+            else if (pdc->dctype == DCTYPE_DIRECT)
+                ret = REGION_bOffsetRgn(prgnDest, pdc->ptlDCOrig.x + pdc->ppdev->ptlOrigion.x,
+                                        pdc->ptlDCOrig.y + pdc->ppdev->ptlOrigion.y);
             else
                 ret = REGION_bOffsetRgn(prgnDest, pdc->ptlDCOrig.x, pdc->ptlDCOrig.y);
         }

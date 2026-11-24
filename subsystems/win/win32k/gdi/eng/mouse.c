@@ -146,13 +146,13 @@ MouseSafetyOnDrawEnd(
 
     if (ppdev->flFlags & PDEV_HARDWARE_POINTER)
         ppdev->pfnMovePointer(&ppdev->pSurface->SurfObj,
-                              gpsi->ptCursor.x,
-                              gpsi->ptCursor.y,
+                              gpsi->ptCursor.x - ppdev->ptlOrigion.x,
+                              gpsi->ptCursor.y - ppdev->ptlOrigion.y,
                               &pgp->Exclude);
     else if (ppdev->flFlags & PDEV_SOFTWARE_POINTER)
         EngMovePointer(&ppdev->pSurface->SurfObj,
-                       gpsi->ptCursor.x,
-                       gpsi->ptCursor.y,
+                       gpsi->ptCursor.x - ppdev->ptlOrigion.x,
+                       gpsi->ptCursor.y - ppdev->ptlOrigion.y,
                        &pgp->Exclude);
 
     if (psoSafetyBatch != NULL)
@@ -836,6 +836,19 @@ IntEngSetPointerShape(
     return ulResult;
 }
 
+static VOID
+GrepScreenToSurface(
+    _In_ PPDEVOBJ ppdev,
+    _Inout_ PLONG px,
+    _Inout_ PLONG py)
+{
+    /* FIXME: the screen point -1,-1 of a display left of and above the primary hides the pointer */
+    if (*px == -1 && *py == -1)
+        return;
+    *px -= ppdev->ptlOrigion.x;
+    *py -= ppdev->ptlOrigion.y;
+}
+
 ULONG
 NTAPI
 GreSetPointerShape(
@@ -908,6 +921,7 @@ GreSetPointerShape(
         x = -1;
         y = -1;
     }
+    GrepScreenToSurface(pdc->ppdev, &x, &y);
 
     /* Call the driver or eng function */
     ulResult = IntEngSetPointerShape(&psurf->SurfObj,
@@ -965,6 +979,7 @@ GreMovePointer(
         x = -1;
         y = -1;
     }
+    GrepScreenToSurface(pdc->ppdev, &x, &y);
 
     /* GCAPS_ASYNCMOVE permits the selected hardware pointer to move while a
      * different DC is drawing. Keep its shape, callback and surface stable
