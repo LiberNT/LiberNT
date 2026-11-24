@@ -144,6 +144,40 @@ CheckToken(HANDLE Token, SECURITY_LOGON_TYPE Type)
     }
 }
 
+static VOID
+CheckNetworkToken(HANDLE Token, SECURITY_LOGON_TYPE Type)
+{
+    PSECURITY_LOGON_SESSION_DATA Session = NULL;
+    TOKEN_STATISTICS Statistics;
+    TOKEN_TYPE Kind = 0;
+    PTOKEN_GROUPS Groups;
+    DWORD Length = 0;
+    NTSTATUS Status;
+
+    ok(GetTokenInformation(Token, TokenType, &Kind, sizeof(Kind), &Length), "TokenType failed: %lu\n",
+       GetLastError());
+    ok(Kind == TokenImpersonation, "Logon type %d gave token type %d\n", Type, Kind);
+    GetTokenInformation(Token, TokenGroups, NULL, 0, &Length);
+    Groups = HeapAlloc(GetProcessHeap(), 0, Length);
+    ok(Groups && GetTokenInformation(Token, TokenGroups, Groups, Length, &Length), "TokenGroups failed: %lu\n",
+       GetLastError());
+    if (Groups)
+    {
+        ok(HasGroup(Groups, WinNetworkSid), "Logon type %d has no NETWORK group\n", Type);
+        ok(!HasGroup(Groups, WinInteractiveSid), "Logon type %d has the INTERACTIVE group\n", Type);
+        HeapFree(GetProcessHeap(), 0, Groups);
+    }
+    ok(GetTokenInformation(Token, TokenStatistics, &Statistics, sizeof(Statistics), &Length),
+       "TokenStatistics failed: %lu\n", GetLastError());
+    Status = LsaGetLogonSessionData(&Statistics.AuthenticationId, &Session);
+    ok(Status == STATUS_SUCCESS, "LsaGetLogonSessionData returned 0x%08lx\n", Status);
+    if (Session)
+    {
+        ok(Session->LogonType == (ULONG)Type, "The logon session has type %lu, not %d\n", Session->LogonType, Type);
+        LsaFreeReturnBuffer(Session);
+    }
+}
+
 START_TEST(LogonTypes)
 {
     static WCHAR Password[] = PASSWORD;
@@ -176,6 +210,18 @@ START_TEST(LogonTypes)
         if (Token)
         {
             CheckToken(Token, Interactive);
+            CloseHandle(Token);
+        }
+        Token = LogOn(Lsa, Package, User, Network);
+        if (Token)
+        {
+            CheckNetworkToken(Token, Network);
+            CloseHandle(Token);
+        }
+        Token = LogOn(Lsa, Package, User, NetworkCleartext);
+        if (Token)
+        {
+            CheckNetworkToken(Token, NetworkCleartext);
             CloseHandle(Token);
         }
         Token = TryLogOn(Lsa, Package, User, RemoteInteractive, &Status);
