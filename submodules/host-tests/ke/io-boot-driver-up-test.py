@@ -69,7 +69,8 @@ typedef void *PVOID, *HANDLE;
 typedef struct _LIST_ENTRY { struct _LIST_ENTRY *Flink, *Blink; } LIST_ENTRY, *PLIST_ENTRY;
 typedef struct { USHORT Length, MaximumLength; void *Buffer; } UNICODE_STRING, *PUNICODE_STRING;
 typedef struct { USHORT Machine; USHORT Characteristics; } IMAGE_FILE_HEADER;
-typedef struct { IMAGE_FILE_HEADER FileHeader; } IMAGE_NT_HEADERS, *PIMAGE_NT_HEADERS;
+typedef struct { ULONG AddressOfEntryPoint; } IMAGE_OPTIONAL_HEADER;
+typedef struct { IMAGE_FILE_HEADER FileHeader; IMAGE_OPTIONAL_HEADER OptionalHeader; } IMAGE_NT_HEADERS, *PIMAGE_NT_HEADERS;
 typedef struct { PVOID DllBase; } LDR_DATA_TABLE_ENTRY, *PLDR_DATA_TABLE_ENTRY;
 typedef struct { LIST_ENTRY Link; UNICODE_STRING FilePath; UNICODE_STRING RegistryPath; PLDR_DATA_TABLE_ENTRY LdrEntry; } BOOT_DRIVER_LIST_ENTRY, *PBOOT_DRIVER_LIST_ENTRY;
 typedef struct { LIST_ENTRY BootDriverListHead; } LOADER_PARAMETER_BLOCK;
@@ -86,6 +87,7 @@ static ULONG BugCheckCode;
 static ULONG_PTR BugCheckParameter;
 static jmp_buf Stopped;
 static NTSTATUS PiInitCacheGroupInformation(void) { return STATUS_SUCCESS; }
+static NTSTATUS MmCallBootDllInitialize(PLIST_ENTRY List) { (void)List; return STATUS_SUCCESS; }
 static NTSTATUS IopOpenServiceKeyForPath(PUNICODE_STRING Path, HANDLE *Handle) { (void)Path; *Handle = (HANDLE)1; return STATUS_SUCCESS; }
 static NTSTATUS ZwClose(HANDLE Handle) { (void)Handle; return STATUS_SUCCESS; }
 static void IopBootLog(PUNICODE_STRING Path, BOOLEAN Loaded) { (void)Path; (void)Loaded; }
@@ -116,6 +118,7 @@ static void Boot(const char *Name, CCHAR Processors, USHORT Characteristics) {
     Scenario = Name;
     KeNumberProcessors = Processors;
     Image.FileHeader.Characteristics = Characteristics;
+    Image.OptionalHeader.AddressOfEntryPoint = 1;
     Driver.LdrEntry = &Module;
     LoaderBlock.BootDriverListHead.Flink = LoaderBlock.BootDriverListHead.Blink = &Driver.Link;
     Driver.Link.Flink = Driver.Link.Blink = &LoaderBlock.BootDriverListHead;

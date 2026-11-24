@@ -63,7 +63,7 @@ typedef PVOID HANDLE;
 static int Failures;
 #define ASSERT(x) do { if (!(x)) { printf("assertion failed: %s\n", #x); Failures++; } } while (0)
 typedef struct { LONG left, top, right, bottom; } RECT, RECTL;
-typedef struct { BOOLEAN UseDodLayout; } MINIPORT_CONTEXT;
+typedef struct { BOOLEAN UseDodLayout; BOOLEAN IsDisplayOnlyDriver; } MINIPORT_CONTEXT;
 typedef struct { MINIPORT_CONTEXT *MiniportContext; } DXGKRNL_ADAPTER, *PDXGKRNL_ADAPTER;
 typedef struct
 {
@@ -115,6 +115,7 @@ static void DxgkpUpdateMaximum64(LONG64 *v, ULONGLONG n) { if ((LONG64)n > *v) *
 static ULONGLONG DxgkpDisplayTraceNow100ns(void) { return 0; }
 static ULONGLONG DxgkpDisplayTraceElapsedUs(ULONGLONG s) { return s; }
 static BOOLEAN DxgkpBootLogHoldsDisplay(void) { return FALSE; }
+static BOOLEAN DxgkPostDisplayCoreFirmwareScanout(BOOLEAN DisplayOnlyDriver, BOOLEAN VidPnCommitted) { return DisplayOnlyDriver || !VidPnCommitted; }
 static NTSTATUS DxgkpAcquireSharedSurfaceSnapshot(PDXGKRNL_ADAPTER a, PDXGKRNL_SHARED_SURFACE_SNAPSHOT s) { (void)a; *s = Current; return STATUS_SUCCESS; }
 static void DxgkpReleaseSharedSurfaceSnapshot(PDXGKRNL_SHARED_SURFACE_SNAPSHOT s) { (void)s; }
 static NTSTATUS DxgkpCallMiniportShadowPresent(PDXGKRNL_ADAPTER a, DXGKARG_PRESENT_DISPLAYONLY *p, BOOLEAN *h) { (void)a; (void)p; MiniportPresents++; *h = FALSE; return STATUS_NOT_SUPPORTED; }

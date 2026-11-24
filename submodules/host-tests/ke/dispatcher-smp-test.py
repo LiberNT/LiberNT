@@ -294,7 +294,7 @@ for file, name in [('ke_x.h', 'KiAcquireThreadLock'), ('ke_x.h', 'KiReleaseThrea
                    ('ke_x.h', 'KiIsKernelApcDeliverable'), ('ke_x.h', 'KxIsThreadWaitInterrupted'),
                    ('ke_x.h', 'KiBeginThreadWait'), ('ke_x.h', 'KxTryBeginThreadWait'), ('ke_x.h', 'KxExitDispatcherForRetry'),
                    ('ke_x.h', 'KxCommitThreadWait'),
-                   ('dispatch.c', 'KiThreadWaitBlock'), ('dispatch.c', 'KiThreadWaitBlockCount'), ('dispatch.c', 'KiUnlinkOneWaitBlock'),
+                   ('dispatch.c', 'KiThreadWaitBlock'), ('dispatch.c', 'KiThreadWaitBlockCount'), ('dispatch.c', 'KiWaitBlockObject'), ('dispatch.c', 'KiUnlinkOneWaitBlock'),
                    ('dispatch.c', 'KiUnlinkWaitBlocks'), ('dispatch.c', 'KiEndThreadWait'), ('dispatch.c', 'KiUnwaitThread'),
                    ('dispatch.c', 'KiLockCommittedWaiter'), ('dispatch.c', 'KiUnlinkWaitBlock'), ('dispatch.c', 'KiWaitTest'),
                    ('ke_x.h', 'KxUnwaitThread'),

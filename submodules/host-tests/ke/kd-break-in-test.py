@@ -37,7 +37,7 @@ typedef unsigned char BOOLEAN, UCHAR;
 typedef char CHAR;
 typedef unsigned long ULONG, *PULONG;
 static struct { BOOLEAN Net, Serial; } KdpDebugMode;
-static BOOLEAN KdTermSerial, KdTermCrashMode;
+static BOOLEAN KdTermSerial, KdTermCrashMode, KdpTerminalAnswered;
 static int KeyboardReads, SerialReads;
 static CHAR SerialByte = (CHAR)-1, KeyboardByte = (CHAR)-1;
 static BOOLEAN KdpNetPollBreakIn(void) { return FALSE; }

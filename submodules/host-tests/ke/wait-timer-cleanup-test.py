@@ -17,6 +17,7 @@ fixture = kt.PRELUDE + r'''
 #define Waiting 5
 #define DeferredReady 7
 #define GateWait 8
+#define WaitDpc 4
 #define WaitBlockInactive 5
 #define AdjustUnwait 1
 #define KI_WAIT_IN_PROGRESS 0
@@ -47,7 +48,7 @@ static void KiIncrementQueueCurrentCount(PKQUEUE Q) { Q->CurrentCount++; }
 static void KiReadyThread(PKTHREAD T) { CHECK(T->ThreadLock); T->State = DeferredReady; }
 '''
 for file, name in [('ke_x.h', 'KiUnlinkTimerFromTable'), ('ke_x.h', 'KxRemoveTreeTimer'), ('dispatch.c', 'KiThreadWaitBlock'), ('dispatch.c', 'KiThreadWaitBlockCount'),
-                   ('dispatch.c', 'KiUnlinkOneWaitBlock'), ('dispatch.c', 'KiUnlinkWaitBlocks'), ('dispatch.c', 'KiEndThreadWait'), ('dispatch.c', 'KiUnwaitThread')]:
+                   ('dispatch.c', 'KiWaitBlockObject'), ('dispatch.c', 'KiUnlinkOneWaitBlock'), ('dispatch.c', 'KiUnlinkWaitBlocks'), ('dispatch.c', 'KiEndThreadWait'), ('dispatch.c', 'KiUnwaitThread')]:
     fixture += src.definition(file, name)
 fixture += r'''
 static DISPATCHER_HEADER Object;

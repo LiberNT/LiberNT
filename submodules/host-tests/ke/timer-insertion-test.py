@@ -102,7 +102,7 @@ int main(void) {
     CHECK(Waiter.Timer.Header.Inserted && Waiter.Timer.Header.Absolute);
     CHECK(Waiter.Timer.DueTime.QuadPart == 700);
     CHECK(Waiter.Timer.Header.WaitListHead.Flink == &Waiter.WaitBlock[TIMER_WAIT_BLOCK].WaitListEntry);
-    CHECK(Waiter.WaitBlock[TIMER_WAIT_BLOCK].Object == &Waiter.Timer);
+    CHECK(Waiter.WaitBlock[TIMER_WAIT_BLOCK].Thread == &Waiter && Waiter.WaitBlock[TIMER_WAIT_BLOCK].WaitKey == (USHORT)STATUS_TIMEOUT);
 
     Reset("a relative wait does not move with the clock");
     Interval.QuadPart = -500;

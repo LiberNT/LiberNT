@@ -240,7 +240,7 @@ static PVOID ExAllocatePoolZero(int Pool, size_t Size, ULONG Tag) { (void)Pool; 
 '''
 fixture += region('/* PRIVATE DATA', '/* PUBLIC FUNCTIONS')
 for name in ['ExpCreateTimer', 'NtCreateTimer', 'NtSetTimer', 'NtCancelTimer',
-             'ExpRearmHighResolutionTimer', 'ExpFinishTimerDelete', 'ExpDeleteTimerWorker', 'ExpQueueTimerDelete', 'ExpExTimerDpcRoutine', 'ExAllocateTimer', 'ExSetTimer', 'ExCancelTimer']:
+             'ExpRearmHighResolutionTimer', 'ExpNoteTimerSetting', 'ExpFinishTimerDelete', 'ExpDeleteTimerWorker', 'ExpQueueTimerDelete', 'ExpExTimerDpcRoutine', 'ExAllocateTimer', 'ExSetTimer', 'ExCancelTimer']:
     fixture += definition(name)
 fixture += r"""
 static int Callbacks;

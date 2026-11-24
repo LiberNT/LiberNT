@@ -273,13 +273,11 @@ VmCommitDecommitBatch(void)
     {
         LONG64 Invalidations, Generation;
         MACHINE_FAULT_ROUTINE Fault = World.Machine.Fault;
-        ULONG PreviousTable = 0, TableFrame, Cached = 0;
+        ULONG PreviousTable = 0, TableFrame;
         BOOLEAN Reuse;
 
         Region = Base + (ULONG64)Iteration * KB64;
         Reuse = MiPtLookup(&Space, Region, &PreviousTable) != NULL;
-        for (Cpu = 0; Cpu < MI_EMPTY_TABLE_CACHE_SIZE; Cpu++)
-            Cached += Space.EmptyTable[Cpu].Present != FALSE;
         CHECK(NT_SUCCESS(Alloc(&Space, &Region, KB64, MI_MEM_COMMIT, MI_PROT_READWRITE)));
         CHECK(MiPtLookup(&Space, Region, &TableFrame) != NULL);
         if (Reuse)
@@ -291,8 +289,7 @@ VmCommitDecommitBatch(void)
         Invalidations = World.Machine.TlbInvalidations;
         Generation = Space.PageFileGeneration;
         CHECK(NT_SUCCESS(Free(&Space, Region, KB64, MI_MEM_DECOMMIT)));
-        CHECK(World.Machine.TlbInvalidations == Invalidations +
-              ((Cached == MI_EMPTY_TABLE_CACHE_SIZE && !Reuse) ? 2 : 1));
+        CHECK(World.Machine.TlbInvalidations == Invalidations + 1);
         CHECK(Space.PageFileGeneration == Generation);
         CHECK(Space.CommittedPages == 0 && Space.PrivatePages == 0);
         CHECK(Space.PageTablePages >= World.System.Arch->PagingLevels - 1 &&

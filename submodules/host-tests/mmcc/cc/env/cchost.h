@@ -155,6 +155,11 @@ static inline void CcHostResourceReuse(CC_RESOURCE *Resource)
         abort();
     if (pthread_rwlock_unlock(Resource->Native) != 0)
         abort();
+    if (pthread_rwlock_destroy(Resource->Native) != 0 ||
+        pthread_rwlock_init(Resource->Native, NULL) != 0)
+    {
+        abort();
+    }
 }
 
 static inline void CcHostLockAcquire(PCC_LOCK Lock)

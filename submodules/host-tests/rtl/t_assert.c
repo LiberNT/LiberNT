@@ -31,11 +31,8 @@ enum
     ESCAPE_ASKED_FOREVER
 };
 
-ULONG DbgPrint(const char *Format, ...)
+static void RecordPrint(const char *Format, va_list Arguments)
 {
-    va_list Arguments;
-
-    va_start(Arguments, Format);
     if (strncmp(Format, "\n*** Assertion failed", 21) == 0)
     {
         Reports++;
@@ -45,8 +42,33 @@ ULONG DbgPrint(const char *Format, ...)
     {
         ContextHints++;
     }
+}
+
+ULONG DbgPrint(const char *Format, ...)
+{
+    va_list Arguments;
+
+    va_start(Arguments, Format);
+    RecordPrint(Format, Arguments);
     va_end(Arguments);
     return 0;
+}
+
+ULONG DbgPrintEx(ULONG ComponentId, ULONG Level, const char *Format, ...)
+{
+    va_list Arguments;
+
+    (void)ComponentId;
+    (void)Level;
+    va_start(Arguments, Format);
+    RecordPrint(Format, Arguments);
+    va_end(Arguments);
+    return 0;
+}
+
+BOOLEAN RtlpKernelDebuggerEnabled(VOID)
+{
+    return TRUE;
 }
 
 ULONG DbgPrompt(PCCH Prompt, PCH Response, ULONG MaximumResponseLength)
@@ -128,7 +150,7 @@ int main(void)
     CHECK(Fail("", 0, NULL) == 0);
     CHECK(Reports == 1);
     CHECK(Prompts == 1);
-    CHECK(Breaks == 1);
+    CHECK(Breaks == 0);
     CHECK(ContextHints == 0);
     CHECK(PromptBufferSize == 2);
     CHECK(strcmp(LastReport, "\n*** Assertion failed: Count == 0\n***   Source File: driver.c, line 42\n\n") == 0);
@@ -169,7 +191,7 @@ int main(void)
     /* An answer that means nothing, then nobody: the stop */
     CHECK(Fail("x", 0, NULL) == 0);
     CHECK(Prompts == 2);
-    CHECK(Breaks == 1);
+    CHECK(Breaks == 0);
 
     /* Terminations that come back ask again */
     CHECK(Fail("pi", 0, NULL) == 0);

@@ -215,7 +215,7 @@ int main(void) {
     Timer = ExAllocateTimer(Callback, NULL, 0);
     CHECK(ExSetTimer(Timer, -100000, 0, NULL) == FALSE);
     CHECK(ExDeleteTimer(Timer, TRUE, TRUE, &Params) == TRUE);
-    CHECK(Frees == 1 && DeleteCalls == 1 && Flushes == 1 && PendingCount == 0);
+    CHECK(Frees == 1 && DeleteCalls == 1 && Flushes == 0 && PendingCount == 0);
 
     Reset("not set, deleted without waiting");
     Timer = ExAllocateTimer(NULL, NULL, 0);

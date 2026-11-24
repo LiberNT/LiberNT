@@ -38,6 +38,7 @@ fixture = r'''
 typedef unsigned char UCHAR, BOOLEAN, KIRQL;
 typedef unsigned int ULONG;
 typedef int LONG, NTSTATUS;
+typedef long long LONG64;
 typedef void VOID, *PVOID;
 #define TRUE 1
 #define FALSE 0
@@ -63,6 +64,7 @@ static void ExFreePoolWithTag(PVOID p, ULONG Tag) { (void)Tag; Allocations--; fr
 static LONG ReadAcquire(volatile LONG *p) { return __atomic_load_n(p, __ATOMIC_ACQUIRE); }
 static PVOID ReadPointerAcquire(PVOID volatile *p) { return __atomic_load_n(p, __ATOMIC_ACQUIRE); }
 static LONG InterlockedExchange(volatile LONG *p, LONG v) { return __atomic_exchange_n(p, v, __ATOMIC_SEQ_CST); }
+static LONG64 InterlockedExchange64(volatile LONG64 *p, LONG64 v) { return __atomic_exchange_n(p, v, __ATOMIC_SEQ_CST); }
 static PVOID InterlockedExchangePointer(PVOID volatile *p, PVOID v) { return __atomic_exchange_n(p, v, __ATOMIC_SEQ_CST); }
 '''
 
@@ -104,8 +106,11 @@ int main(void)
     Fdo.Miniport.DeviceExtension = &Fdo;
     Miniport.Header.Miniport = &Fdo.Miniport;
 
-    Check(PortAcquireLuEntry(&Fdo, 0, 1, 0, &First) == STATUS_SUCCESS && First == NULL, "no area without a size");
+    Check(PortAcquireLuEntry(&Fdo, 0, 1, 0, &First) == STATUS_SUCCESS && First != NULL && First->Extension == NULL, "no area without a size");
     Check(StorPortGetLogicalUnit(Hw, 0, 1, 0) == NULL, "no area without a size is reported");
+    Release(First);
+    PortFreeLuEntries(&Fdo);
+    First = NULL;
 
     Fdo.Miniport.PortConfig.SpecificLuExtensionSize = 64;
     Check(StorPortGetLogicalUnit(Hw, 0, 1, 0) == NULL, "unknown unit has no area");
@@ -139,6 +144,7 @@ int main(void)
 
 program = fixture + entry.group(0) + types
 program += extract('pdo.c', 'PortAcquireLuEntry')
+program += extract('pdo.c', 'PortFindLuEntry')
 program += extract('pdo.c', 'PortFindLuExtension')
 program += extract('pdo.c', 'PortFreeLuEntries')
 program += extract('storport.c', 'StorPortGetLogicalUnit')
