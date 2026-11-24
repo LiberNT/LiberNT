@@ -1357,7 +1357,10 @@ DesktopWindowProc(PWND Wnd, UINT Msg, WPARAM wParam, LPARAM lParam, LRESULT *lRe
             return TRUE;
 
         case WM_DISPLAYCHANGE:
-            co_WinPosSetWindowPos(Wnd, 0, 0, 0, LOWORD(lParam), HIWORD(lParam), SWP_NOZORDER | SWP_NOACTIVATE);
+            /* The message gives the primary display's size; the desktop window covers every display */
+            co_WinPosSetWindowPos(Wnd, 0, gpsi->aiSysMet[SM_XVIRTUALSCREEN], gpsi->aiSysMet[SM_YVIRTUALSCREEN],
+                                  gpsi->aiSysMet[SM_CXVIRTUALSCREEN], gpsi->aiSysMet[SM_CYVIRTUALSCREEN],
+                                  SWP_NOZORDER | SWP_NOACTIVATE);
             return TRUE;
 
         case WM_ERASEBKGND:
