@@ -228,6 +228,8 @@ static HRESULT signer_check_statement(const CERT_CONTEXT *cert, const SIGNER_ATT
     else if (CryptDecodeObjectEx(X509_ASN_ENCODING, X509_KEY_USAGE_RESTRICTION, ext->Value.pbData,
                                  ext->Value.cbData, CRYPT_DECODE_ALLOC_FLAG, NULL, &restriction, &size))
     {
+        if (!restriction->cCertPolicyId)
+            allowed = authcode->fIndividual;
         for (i = 0; !allowed && i < restriction->cCertPolicyId; i++)
             for (j = 0; !allowed && j < restriction->rgCertPolicyId[i].cCertPolicyElementId; j++)
                 allowed = !strcmp(restriction->rgCertPolicyId[i].rgpszCertPolicyElementId[j], purpose);
