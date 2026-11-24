@@ -116,6 +116,36 @@ CcBcbFindInList(
     return NULL;
 }
 
+/* Whether a pinned BCB shares any byte with the range */
+static
+BOOLEAN
+CcBcbPinnedOverlaps(
+    _In_ PCC_MAP Map,
+    _In_ ULONG64 FileOffset,
+    _In_ ULONG Length)
+{
+    PLIST_ENTRY Entry;
+
+    CC_ASSERT(Length != 0 && FileOffset + Length > FileOffset);
+
+    for (Entry = Map->BcbList.Blink; Entry != &Map->BcbList; Entry = Entry->Blink)
+    {
+        PCC_BCB Bcb = CONTAINING_RECORD(Entry, CC_BCB, Link);
+
+        CC_ASSERT(Bcb->Map == Map);
+        CC_ASSERT(Bcb->BeyondLastByte - Bcb->FileOffset == Bcb->Length);
+
+        /* Pinned BCBs follow every mapped one, so the walk from the tail ends at the first mapped BCB */
+        if (!Bcb->Pinned)
+            break;
+
+        if (Bcb->FileOffset < FileOffset + Length && Bcb->BeyondLastByte > FileOffset)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 static
 PCC_BCB
 CcBcbFind(
@@ -201,8 +231,20 @@ CcBcbAcquire(
         return STATUS_SUCCESS;
     }
 
+    /* PIN_IF_BCB: a pinned BCB anywhere in the range, such as one entry of a metadata page, means the range has work */
     if (OnlyExisting)
-        return STATUS_CANT_WAIT;
+    {
+        BOOLEAN Overlaps = FALSE;
+
+        if (Pinned)
+        {
+            CC_LOCK_ACQUIRE(&Map->BcbLock, &OldIrql);
+            Overlaps = CcBcbPinnedOverlaps(Map, FileOffset, Length);
+            CC_LOCK_RELEASE(&Map->BcbLock, OldIrql);
+        }
+        if (!Overlaps)
+            return STATUS_CANT_WAIT;
+    }
 
     Bcb = CC_ALLOCATE(Bytes);
     if (Bcb == NULL)

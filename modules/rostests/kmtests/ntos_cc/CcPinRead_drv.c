@@ -581,6 +581,38 @@ PerformTest(
                     }
                     trace("DIRTY_BCB_RETENTION_DONE\n");
 
+                    /* A dirty BCB smaller than a page makes the whole page findable through PIN_IF_BCB */
+                    Offset.QuadPart = 0x1404;
+                    Ret = CcPinRead(TestFileObject, &Offset, sizeof(ULONG), PIN_WAIT, &Bcb, (PVOID *)&Buffer);
+                    if (ok(Ret, "Sub-page metadata pin failed\n"))
+                    {
+                        Buffer[0] = 0x5AA5C33C;
+                        CcSetDirtyPinnedData(Bcb, NULL);
+                        CcUnpinData(Bcb);
+                        Offset.QuadPart = 0x1000;
+                        Ret = CcPinRead(TestFileObject, &Offset, PAGE_SIZE, PIN_WAIT | PIN_IF_BCB, &Bcb, (PVOID *)&Buffer);
+                        if (ok(Ret, "The page of a dirty sub-page BCB was not found\n"))
+                        {
+                            ok_eq_ulong(Buffer[0x404 / sizeof(ULONG)], 0x5AA5C33CUL);
+                            CcSetDirtyPinnedData(Bcb, NULL);
+                            CcRepinBcb(Bcb);
+                            CcUnpinData(Bcb);
+                            WriteOffset.QuadPart = -1;
+                            WriteLength = 0;
+                            CcUnpinRepinnedBcb(Bcb, TRUE, &Iosb);
+                            ok_eq_hex(Iosb.Status, STATUS_SUCCESS);
+                            ok(WriteOffset.QuadPart >= 0 && WriteOffset.QuadPart <= 0x1000 && WriteOffset.QuadPart + WriteLength >= 0x2000,
+                               "The page was not written: %I64d/%lu\n", WriteOffset.QuadPart, WriteLength);
+                        }
+                    }
+
+                    Offset.QuadPart = 0x3000;
+                    Ret = CcPinRead(TestFileObject, &Offset, PAGE_SIZE, PIN_WAIT | PIN_IF_BCB, &Bcb, (PVOID *)&Buffer);
+                    ok(!Ret, "A page without a BCB was pinned through PIN_IF_BCB\n");
+                    if (Ret)
+                        CcUnpinData(Bcb);
+                    trace("SUBPAGE_BCB_DONE\n");
+
                     FileSizes.AllocationSize.QuadPart += VACB_MAPPING_GRANULARITY;
                     CcSetFileSizes(TestFileObject, &FileSizes);
 
