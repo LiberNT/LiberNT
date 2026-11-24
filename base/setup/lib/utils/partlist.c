@@ -15,6 +15,7 @@
 #include <drivers/basicvol.h>
 
 #include "partlist.h"
+#include "filesup.h"
 #include "volutil.h"
 #include "fsrec.h" // For FileSystemToMBRPartitionType()
 #include "devutils.h"
@@ -3943,12 +3944,62 @@ DeletePartition(
     return TRUE;
 }
 
+#define LIBERNT_BOOTMGR_MAGIC_OFFSET 0x10
+#define LIBERNT_BOOTMGR_MAGIC        0x50545342
+
+/* LiberNT's PC/AT BOOTMGR carries the signature of its startup block, 'BSTP', at offset 0x10 */
+BOOT_MANAGER_OWNER
+GetPcatBootManagerOwner(
+    _In_ PCWSTR RootPath)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    LARGE_INTEGER Offset;
+    UNICODE_STRING Name;
+    WCHAR Path[MAX_PATH];
+    ULONG Header[(LIBERNT_BOOTMGR_MAGIC_OFFSET / sizeof(ULONG)) + 1];
+    HANDLE File;
+    NTSTATUS Status;
+
+    if (!NT_SUCCESS(CombinePaths(Path, ARRAYSIZE(Path), 2, RootPath, L"bootmgr")))
+        return BootManagerForeign;
+
+    RtlInitUnicodeString(&Name, Path);
+    InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtOpenFile(&File,
+                        FILE_READ_DATA | SYNCHRONIZE,
+                        &ObjectAttributes,
+                        &IoStatusBlock,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
+    if (Status == STATUS_OBJECT_NAME_NOT_FOUND || Status == STATUS_OBJECT_PATH_NOT_FOUND)
+        return BootManagerNone;
+    if (!NT_SUCCESS(Status))
+        return BootManagerForeign;
+
+    Offset.QuadPart = 0;
+    RtlZeroMemory(Header, sizeof(Header));
+    Status = NtReadFile(File, NULL, NULL, NULL, &IoStatusBlock, Header, sizeof(Header), &Offset, NULL);
+    NtClose(File);
+
+    if (!NT_SUCCESS(Status) ||
+        (IoStatusBlock.Information < sizeof(Header)) ||
+        (Header[LIBERNT_BOOTMGR_MAGIC_OFFSET / sizeof(ULONG)] != LIBERNT_BOOTMGR_MAGIC))
+    {
+        return BootManagerForeign;
+    }
+
+    return BootManagerLiberNT;
+}
+
 static
 BOOLEAN
 IsSupportedActivePartition(
     IN PPARTENTRY PartEntry)
 {
     PVOLENTRY Volume;
+    BOOT_MANAGER_OWNER Owner;
+    BOOLEAN Ntfs;
 
     /* Check the type and the file system of this partition */
 
@@ -3996,11 +4047,25 @@ IsSupportedActivePartition(
         ASSERT(*Volume->Info.FileSystem);
 
         /* NOTE: Please keep in sync with the RegisteredFileSystems list! */
+        Ntfs = (_wcsicmp(Volume->Info.FileSystem, L"NTFS") == 0);
         if (_wcsicmp(Volume->Info.FileSystem, L"FAT")   == 0 ||
-            _wcsicmp(Volume->Info.FileSystem, L"FAT32") == 0)
-         // _wcsicmp(Volume->Info.FileSystem, L"NTFS")  == 0 ||
+            _wcsicmp(Volume->Info.FileSystem, L"FAT32") == 0 ||
+            (Ntfs && PartEntry->DiskEntry->DiskStyle == PARTITION_STYLE_MBR))
         {
-            return TRUE;
+            if (PartEntry->DiskEntry->DiskStyle != PARTITION_STYLE_MBR)
+                return TRUE;
+
+            Owner = GetPcatBootManagerOwner(Volume->Info.DeviceName);
+            if (Owner == BootManagerForeign)
+            {
+                /* TODO: start this boot manager from LiberNT's boot menu */
+                DPRINT1("System partition %lu in disk %lu holds another system's boot manager\n",
+                        PartEntry->PartitionNumber, PartEntry->DiskEntry->DiskNumber);
+                return FALSE;
+            }
+
+            /* An NTFS volume is taken as the system partition only when LiberNT already boots from it */
+            return !Ntfs || (Owner == BootManagerLiberNT);
         }
         else
         {

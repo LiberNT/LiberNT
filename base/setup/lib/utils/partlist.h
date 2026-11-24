@@ -289,6 +289,17 @@ BOOLEAN
 IsPartitionActive(
     IN PPARTENTRY PartEntry);
 
+typedef enum _BOOT_MANAGER_OWNER
+{
+    BootManagerNone,
+    BootManagerLiberNT,
+    BootManagerForeign
+} BOOT_MANAGER_OWNER;
+
+BOOT_MANAGER_OWNER
+GetPcatBootManagerOwner(
+    _In_ PCWSTR RootPath);
+
 PPARTLIST
 NTAPI
 CreatePartitionList(VOID);
