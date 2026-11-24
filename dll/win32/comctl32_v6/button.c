@@ -490,6 +490,9 @@ static LRESULT CALLBACK BUTTON_WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, L
         infoPtr->parent = cs->hwndParent;
         infoPtr->style = cs->style;
         infoPtr->split_style = BCSS_STRETCH;
+#ifdef __REACTOS__
+        SetRect(&infoPtr->text_margin, 1, 1, 1, 1);
+#endif
         infoPtr->glyph = (HIMAGELIST)0x36;  /* Marlett down arrow char code */
         infoPtr->glyph_size.cx = get_default_glyph_size(infoPtr);
         return DefWindowProcW(hWnd, uMsg, wParam, lParam);
