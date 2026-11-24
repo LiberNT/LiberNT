@@ -756,7 +756,6 @@ PDEVOBJ_bDynamicModeChange(
     SwitchPointer(&ppdev->pdmwDev, &ppdev2->pdmwDev);
 
     /* Exchange state flags; the desktop of several displays has no graphics device */
-    ASSERT((ppdev->pGraphicsDevice == NULL) == (ppdev2->pGraphicsDevice == NULL));
     if (ppdev->pGraphicsDevice != NULL && ppdev2->pGraphicsDevice != NULL)
     {
         temp.StateFlags = ppdev->pGraphicsDevice->StateFlags;
@@ -869,6 +868,207 @@ leave:
     DPRINT1("leave, ppdev = %p, pSurface = %p\n", ppdev, ppdev->pSurface);
 
     return retval;
+}
+
+/* Adds a display to the desktop. The desktop's PDEV keeps its identity, so its DCs follow: it takes the
+ * internals of a multi-display PDEV built over every display, and when it was the only display, the new
+ * PDEV takes over that display's internals and identity. */
+BOOL
+NTAPI
+PDEVOBJ_bAttachDisplay(
+    _Inout_ PMDEVOBJ *ppmdev,
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice,
+    _In_ PDEVMODEW pdm,
+    _Out_ PPDEVOBJ *pppdevDisplay)
+{
+    PMDEVOBJ pmdevOld = *ppmdev, pmdevNew;
+    PPDEVOBJ ppdevGlobal = pmdevOld->ppdevGlobal;
+    PPDEVOBJ ppdevDisplay, ppdevMeta;
+    BOOL bSingle = pmdevOld->cDev == 1;
+    BOOL bSuccess = FALSE;
+    ULONG i;
+
+    ASSERT(pmdevOld->cDev != 0);
+    ASSERT(bSingle == (ppdevGlobal == pmdevOld->dev[0].ppdev));
+    ASSERT(pGraphicsDevice != NULL);
+    *pppdevDisplay = NULL;
+
+    pmdevNew = ExAllocatePoolZero(PagedPool, sizeof(MDEVOBJ) + (pmdevOld->cDev + 1) * sizeof(MDEVDISPLAY), GDITAG_MDEV);
+    if (pmdevNew == NULL)
+        return FALSE;
+
+    EngAcquireSemaphore(ppdevGlobal->hsemDevLock);
+    EngAcquireSemaphore(ghsemPDEV);
+    ppdevDisplay = PDEVOBJ_Create(pGraphicsDevice, pdm, EngpGetDisplayDriverAccelerationLevel(pGraphicsDevice),
+                                  LDEV_DEVICE_DISPLAY);
+    if (ppdevDisplay != NULL && PDEVOBJ_pSurface(ppdevDisplay) != NULL)
+    {
+        for (i = 0; i < pmdevOld->cDev; i++)
+        {
+            PDEVOBJ_vReference(pmdevOld->dev[i].ppdev);
+            pmdevNew->dev[i].ppdev = pmdevOld->dev[i].ppdev;
+        }
+        pmdevNew->dev[i].ppdev = ppdevDisplay;
+        pmdevNew->cDev = pmdevOld->cDev + 1;
+
+        ppdevMeta = PDEVOBJ_Create(NULL, (PDEVMODEW)pmdevNew, 0, LDEV_DEVICE_META);
+        if (ppdevMeta != NULL && PDEVOBJ_pSurface(ppdevMeta) != NULL)
+        {
+            PDEVOBJ_vSuspendDirectDraw(ppdevGlobal);
+            PDEVOBJ_vSuspendDirectDraw(ppdevMeta);
+            bSuccess = PDEVOBJ_bDynamicModeChange(ppdevGlobal, ppdevMeta);
+            PDEVOBJ_vResumeDirectDraw(ppdevGlobal);
+            PDEVOBJ_vResumeDirectDraw(ppdevMeta);
+        }
+        if (bSuccess && bSingle)
+        {
+            /* The former single display now lives in the new PDEV: it takes that display's identity too */
+            SwitchPointer(&ppdevGlobal->pGraphicsDevice, &ppdevMeta->pGraphicsDevice);
+            SwitchPointer(&ppdevGlobal->hSpooler, &ppdevMeta->hSpooler);
+            SwitchPointer(&ppdevGlobal->ppalSurf, &ppdevMeta->ppalSurf);
+            ppdevMeta->dwAccelerationLevel = ppdevGlobal->dwAccelerationLevel;
+            ppdevGlobal->dwAccelerationLevel = 0;
+            ASSERT(ppdevGlobal->pGraphicsDevice == NULL);
+            ASSERT(pmdevNew->dev[0].ppdev == ppdevGlobal);
+            pmdevNew->dev[0].ppdev = ppdevMeta;
+            PDEVOBJ_vRelease(ppdevGlobal);
+            ppdevMeta = NULL;
+        }
+        if (ppdevMeta != NULL)
+            PDEVOBJ_vRelease(ppdevMeta);
+        if (bSuccess)
+        {
+            PDEVOBJ_vReference(ppdevGlobal);
+            pmdevNew->ppdevGlobal = ppdevGlobal;
+            PDEVOBJ_vGetDeviceCaps(ppdevGlobal, &GdiHandleTable->DevCaps);
+            *pppdevDisplay = ppdevDisplay;
+        }
+        else
+        {
+            for (i = 0; i < pmdevNew->cDev; i++)
+                PDEVOBJ_vRelease(pmdevNew->dev[i].ppdev);
+            ppdevDisplay = NULL;
+        }
+    }
+    else if (ppdevDisplay != NULL)
+    {
+        PDEVOBJ_vRelease(ppdevDisplay);
+    }
+    EngReleaseSemaphore(ghsemPDEV);
+    EngReleaseSemaphore(ppdevGlobal->hsemDevLock);
+
+    if (!bSuccess)
+    {
+        ExFreePoolWithTag(pmdevNew, GDITAG_MDEV);
+        return FALSE;
+    }
+    *ppmdev = pmdevNew;
+    MDEVOBJ_vDestroy(pmdevOld);
+    return TRUE;
+}
+
+/* Removes a display from a desktop of several displays. The desktop's PDEV keeps its identity: it takes the
+ * internals of a multi-display PDEV over the remaining displays, or those of the last remaining display. */
+BOOL
+NTAPI
+PDEVOBJ_bDetachDisplay(
+    _Inout_ PMDEVOBJ *ppmdev,
+    _In_ PPDEVOBJ ppdevDisplay,
+    _Out_ PPDEVOBJ *pppdevRemaining)
+{
+    PMDEVOBJ pmdevOld = *ppmdev, pmdevNew;
+    PPDEVOBJ ppdevGlobal = pmdevOld->ppdevGlobal;
+    PPDEVOBJ ppdevSwap = NULL;
+    BOOL bSingle = pmdevOld->cDev == 2;
+    BOOL bSuccess = FALSE;
+    ULONG i, j;
+
+    ASSERT(pmdevOld->cDev > 1);
+    ASSERT(ppdevGlobal != ppdevDisplay);
+    ASSERT(ppdevGlobal->pGraphicsDevice == NULL);
+    *pppdevRemaining = NULL;
+    for (i = 0; i < pmdevOld->cDev && pmdevOld->dev[i].ppdev != ppdevDisplay; i++)
+        ;
+    if (i == pmdevOld->cDev)
+        return FALSE;
+
+    pmdevNew = ExAllocatePoolZero(PagedPool, sizeof(MDEVOBJ) + (pmdevOld->cDev - 1) * sizeof(MDEVDISPLAY), GDITAG_MDEV);
+    if (pmdevNew == NULL)
+        return FALSE;
+    for (i = 0, j = 0; i < pmdevOld->cDev; i++)
+    {
+        if (pmdevOld->dev[i].ppdev == ppdevDisplay)
+            continue;
+        PDEVOBJ_vReference(pmdevOld->dev[i].ppdev);
+        pmdevNew->dev[j++].ppdev = pmdevOld->dev[i].ppdev;
+    }
+    pmdevNew->cDev = j;
+    ASSERT(j == pmdevOld->cDev - 1);
+
+    EngAcquireSemaphore(ppdevGlobal->hsemDevLock);
+    EngAcquireSemaphore(ghsemPDEV);
+    if (bSingle)
+    {
+        /* The last display moves back into the desktop's PDEV, with its identity */
+        ppdevSwap = pmdevNew->dev[0].ppdev;
+        PDEVOBJ_vSuspendDirectDraw(ppdevGlobal);
+        PDEVOBJ_vSuspendDirectDraw(ppdevSwap);
+        bSuccess = PDEVOBJ_bDynamicModeChange(ppdevGlobal, ppdevSwap);
+        PDEVOBJ_vResumeDirectDraw(ppdevGlobal);
+        PDEVOBJ_vResumeDirectDraw(ppdevSwap);
+        if (bSuccess)
+        {
+            SwitchPointer(&ppdevGlobal->pGraphicsDevice, &ppdevSwap->pGraphicsDevice);
+            SwitchPointer(&ppdevGlobal->hSpooler, &ppdevSwap->hSpooler);
+            SwitchPointer(&ppdevGlobal->ppalSurf, &ppdevSwap->ppalSurf);
+            ppdevGlobal->dwAccelerationLevel = ppdevSwap->dwAccelerationLevel;
+            ppdevSwap->dwAccelerationLevel = 0;
+            ASSERT(ppdevSwap->pGraphicsDevice == NULL);
+            PDEVOBJ_vReference(ppdevGlobal);
+            pmdevNew->dev[0].ppdev = ppdevGlobal;
+            pmdevNew->ppdevGlobal = ppdevGlobal;
+            *pppdevRemaining = ppdevSwap;
+            /* The old MDEV still references the PDEV that now holds the multi-display internals */
+            PDEVOBJ_vRelease(ppdevSwap);
+        }
+    }
+    else
+    {
+        ppdevSwap = PDEVOBJ_Create(NULL, (PDEVMODEW)pmdevNew, 0, LDEV_DEVICE_META);
+        if (ppdevSwap != NULL && PDEVOBJ_pSurface(ppdevSwap) != NULL)
+        {
+            PDEVOBJ_vSuspendDirectDraw(ppdevGlobal);
+            PDEVOBJ_vSuspendDirectDraw(ppdevSwap);
+            bSuccess = PDEVOBJ_bDynamicModeChange(ppdevGlobal, ppdevSwap);
+            PDEVOBJ_vResumeDirectDraw(ppdevGlobal);
+            PDEVOBJ_vResumeDirectDraw(ppdevSwap);
+        }
+        if (ppdevSwap != NULL)
+            PDEVOBJ_vRelease(ppdevSwap);
+        if (bSuccess)
+        {
+            PDEVOBJ_vReference(ppdevGlobal);
+            pmdevNew->ppdevGlobal = ppdevGlobal;
+        }
+    }
+    if (bSuccess)
+    {
+        ppdevDisplay->pGraphicsDevice->StateFlags &= ~DISPLAY_DEVICE_ATTACHED_TO_DESKTOP;
+        PDEVOBJ_vGetDeviceCaps(ppdevGlobal, &GdiHandleTable->DevCaps);
+    }
+    EngReleaseSemaphore(ghsemPDEV);
+    EngReleaseSemaphore(ppdevGlobal->hsemDevLock);
+
+    if (!bSuccess)
+    {
+        for (i = 0; i < pmdevNew->cDev; i++)
+            PDEVOBJ_vRelease(pmdevNew->dev[i].ppdev);
+        ExFreePoolWithTag(pmdevNew, GDITAG_MDEV);
+        return FALSE;
+    }
+    *ppmdev = pmdevNew;
+    MDEVOBJ_vDestroy(pmdevOld);
+    return TRUE;
 }
 
 /* Switches one display of a multi-display desktop, then rebuilds the desktop surface for the new layout */

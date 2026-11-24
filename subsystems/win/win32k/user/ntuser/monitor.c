@@ -224,6 +224,23 @@ UserDetachMonitor(IN HDEV hDev)
     return STATUS_SUCCESS;
 }
 
+/* The monitor of a display whose internals moved to another PDEV follows them */
+NTSTATUS NTAPI
+UserSetMonitorDevice(IN HDEV hDevOld, IN HDEV hDevNew)
+{
+    PMONITOR pMonitor;
+
+    for (pMonitor = gMonitorList; pMonitor != NULL; pMonitor = pMonitor->pMonitorNext)
+    {
+        if (pMonitor->hDev == hDevOld)
+        {
+            pMonitor->hDev = hDevNew;
+            return STATUS_SUCCESS;
+        }
+    }
+    return STATUS_INVALID_PARAMETER;
+}
+
 /* UserUpdateMonitorSize
  *
  * Reset size of the monitor using atached device
