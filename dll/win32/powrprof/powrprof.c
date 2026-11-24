@@ -94,6 +94,7 @@ typedef struct _POWRPROF_SETTING_INFO
     const GUID *Setting;
     LPCWSTR Name;
     LPCWSTR Description;
+    DWORD Attributes;
 } POWRPROF_SETTING_INFO;
 
 typedef struct _POWRPROF_PROCESSOR_POLICY_VALUES
@@ -129,12 +130,12 @@ static const POWRPROF_SETTING_INFO PowrProfSubgroups[] =
 
 static const POWRPROF_SETTING_INFO PowrProfSettings[] =
 {
-    {&GUID_PROCESSOR_SETTINGS_SUBGROUP, &GUID_PROCESSOR_THROTTLE_MINIMUM, L"Minimum processor state", L"Specify the minimum processor performance state in percent."},
-    {&GUID_PROCESSOR_SETTINGS_SUBGROUP, &GUID_PROCESSOR_THROTTLE_MAXIMUM, L"Maximum processor state", L"Specify the maximum processor performance state in percent."},
-    {&GUID_PROCESSOR_SETTINGS_SUBGROUP, &GUID_PROCESSOR_PERF_AUTONOMOUS_MODE, L"Processor performance autonomous mode", L"Specify whether the processor manages its own performance state."},
-    {&GUID_PROCESSOR_SETTINGS_SUBGROUP, &GUID_PROCESSOR_PERF_ENERGY_PERFORMANCE_PREFERENCE, L"Processor energy performance preference policy", L"Specify how much processor performance to trade for energy savings."},
-    {&PowrProfVideoSubgroup, &PowrProfVideoPowerdownTimeout, L"Turn off display after", L"Specify how long the computer is inactive before the display turns off."},
-    {&PowrProfSleepSubgroup, &PowrProfStandbyTimeout, L"Sleep after", L"Specify how long the computer is inactive before it sleeps."},
+    {&GUID_PROCESSOR_SETTINGS_SUBGROUP, &GUID_PROCESSOR_THROTTLE_MINIMUM, L"Minimum processor state", L"Specify the minimum processor performance state in percent.", POWER_ATTRIBUTE_SHOW_AOAC},
+    {&GUID_PROCESSOR_SETTINGS_SUBGROUP, &GUID_PROCESSOR_THROTTLE_MAXIMUM, L"Maximum processor state", L"Specify the maximum processor performance state in percent.", POWER_ATTRIBUTE_SHOW_AOAC},
+    {&GUID_PROCESSOR_SETTINGS_SUBGROUP, &GUID_PROCESSOR_PERF_AUTONOMOUS_MODE, L"Processor performance autonomous mode", L"Specify whether the processor manages its own performance state.", POWER_ATTRIBUTE_HIDE},
+    {&GUID_PROCESSOR_SETTINGS_SUBGROUP, &GUID_PROCESSOR_PERF_ENERGY_PERFORMANCE_PREFERENCE, L"Processor energy performance preference policy", L"Specify how much processor performance to trade for energy savings.", POWER_ATTRIBUTE_HIDE},
+    {&PowrProfVideoSubgroup, &PowrProfVideoPowerdownTimeout, L"Turn off display after", L"Specify how long the computer is inactive before the display turns off.", POWER_ATTRIBUTE_SHOW_AOAC},
+    {&PowrProfSleepSubgroup, &PowrProfStandbyTimeout, L"Sleep after", L"Specify how long the computer is inactive before it sleeps.", POWER_ATTRIBUTE_SHOW_AOAC},
     {&PowrProfSleepSubgroup, &PowrProfHibernateTimeout, L"Hibernate after", L"Specify how long the computer is inactive before it hibernates."}
 };
 
@@ -2408,6 +2409,37 @@ DWORD WINAPI PowerWriteSettingAttributes(const GUID *SubGroupGuid, const GUID *P
     return Error;
 }
 
+static BOOL
+POWRPROF_GetBuiltinAttributes(
+    const GUID *Subgroup,
+    const GUID *Setting,
+    DWORD *Attributes)
+{
+    UINT Index;
+
+    if (!Setting)
+    {
+        for (Index = 0; Index < sizeof(PowrProfSubgroups) / sizeof(PowrProfSubgroups[0]); Index++)
+        {
+            if (IsEqualGUID(PowrProfSubgroups[Index].Subgroup, Subgroup))
+            {
+                *Attributes = PowrProfSubgroups[Index].Attributes;
+                return TRUE;
+            }
+        }
+        return FALSE;
+    }
+    for (Index = 0; Index < sizeof(PowrProfSettings) / sizeof(PowrProfSettings[0]); Index++)
+    {
+        if (IsEqualGUID(PowrProfSettings[Index].Setting, Setting))
+        {
+            *Attributes = PowrProfSettings[Index].Attributes;
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 static DWORD
 POWRPROF_QueryAttributes(
     HKEY Key)
@@ -2452,24 +2484,41 @@ POWRPROF_FindSettingDefinition(
 DWORD WINAPI PowerReadSettingAttributes(const GUID *SubGroupGuid, const GUID *PowerSettingGuid)
 {
     HKEY Key;
-    DWORD Attributes = 0;
+    DWORD Attributes = 0, Value;
 
     TRACE("(%s,%s)\n", debugstr_guid(SubGroupGuid), debugstr_guid(PowerSettingGuid));
 
-    /* TODO: the built-in settings have no definition keys, so their attributes read as 0 */
     if (SubGroupGuid)
     {
-        if (POWRPROF_OpenDefinitionKey(SubGroupGuid, NULL, NULL, KEY_QUERY_VALUE, FALSE, &Key) != ERROR_SUCCESS)
+        if (POWRPROF_OpenDefinitionKey(SubGroupGuid, NULL, NULL, KEY_QUERY_VALUE, FALSE, &Key) == ERROR_SUCCESS)
+        {
+            Attributes = POWRPROF_QueryAttributes(Key);
+            RegCloseKey(Key);
+        }
+        else if (POWRPROF_GetBuiltinAttributes(SubGroupGuid, NULL, &Value))
+        {
+            Attributes = Value;
+        }
+        else
+        {
             return 0;
-        Attributes = POWRPROF_QueryAttributes(Key);
-        RegCloseKey(Key);
+        }
     }
     if (PowerSettingGuid)
     {
-        if (!POWRPROF_FindSettingDefinition(PowerSettingGuid, &Key))
+        if (POWRPROF_FindSettingDefinition(PowerSettingGuid, &Key))
+        {
+            Attributes |= POWRPROF_QueryAttributes(Key);
+            RegCloseKey(Key);
+        }
+        else if (POWRPROF_GetBuiltinAttributes(NULL, PowerSettingGuid, &Value))
+        {
+            Attributes |= Value;
+        }
+        else
+        {
             return 0;
-        Attributes |= POWRPROF_QueryAttributes(Key);
-        RegCloseKey(Key);
+        }
     }
     return Attributes;
 }
