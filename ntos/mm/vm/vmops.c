@@ -2078,6 +2078,7 @@ MiMapFramesUser(
         ULONG64 Va = Start + (ULONG64)i * PAGE_SIZE;
         ULONG TableFrame;
         ULONG PageFlags = LeafFlags;
+        MI_PTE Leaf;
         PMI_PTE Slot;
 
         if (LockedPages)
@@ -2085,6 +2086,12 @@ MiMapFramesUser(
             Status = MiPfnMappingFlags(&Space->System->Pfn, Frames[i], LeafFlags, &PageFlags);
             if (!NT_SUCCESS(Status))
                 break;
+        }
+        Leaf = MiArchPteMakeLeaf(Frames[i], Protection, PageFlags | MI_LEAF_DIRTY | MI_SPACE_LEAF_OWNER(Space));
+        if (Leaf == 0 || MiArchPteFrame(Leaf) != Frames[i])
+        {
+            Status = STATUS_INVALID_PARAMETER;
+            break;
         }
         Slot = MiPtEnsure(Space, Va, &TableFrame);
 
@@ -2094,11 +2101,9 @@ MiMapFramesUser(
             break;
         }
 
-        if (MI_PROT_IS_WRITABLE(Protection))
+        if (MI_PROT_IS_WRITABLE(Protection) && MiPfnTracked(&Space->System->Pfn, Frames[i]))
             MiPfnExecCleanClear(&Space->System->Pfn, (ULONG)Frames[i]);
-        MiPtWrite(Space, Va, Slot, TableFrame,
-                  MiArchPteMakeLeaf(Frames[i], Protection,
-                                    PageFlags | MI_LEAF_DIRTY | MI_SPACE_LEAF_OWNER(Space)));
+        MiPtWrite(Space, Va, Slot, TableFrame, Leaf);
     }
 
     if (!NT_SUCCESS(Status))
