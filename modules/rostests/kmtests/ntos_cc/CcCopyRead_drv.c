@@ -204,12 +204,11 @@ Test_CcCopyRead(PFILE_OBJECT FileObject)
     reset_read();
     KmtStartSeh()
         Ret = CcCopyRead(FileObject, &Offset, 0, TRUE, NULL, &IoStatus);
-    KmtEndSeh(STATUS_SUCCESS);
-    ok_bool_true(Ret, "CcCopyRead(0, NULL) should succeed\n");
-    /* When there is nothing to write, there is no reason to read */
+    KmtEndSeh(STATUS_INVALID_USER_BUFFER);
+    ok_eq_char(Ret, 'x');
     ok_read_not_called();
-    ok_eq_hex(IoStatus.Status, STATUS_SUCCESS);
-    ok_eq_ulongptr(IoStatus.Information, 0);
+    ok_eq_hex(IoStatus.Status, 0xABABABAB);
+    ok_eq_ulongptr(IoStatus.Information, (ULONG_PTR)0xABABABABABABABAB);
 
     Ret = 'x';
     Offset.QuadPart = 0;
@@ -219,12 +218,10 @@ Test_CcCopyRead(PFILE_OBJECT FileObject)
         Ret = CcCopyRead(FileObject, &Offset, 10, TRUE, NULL, &IoStatus);
     KmtEndSeh(STATUS_INVALID_USER_BUFFER);
     ok_eq_char(Ret, 'x');
-    /* This raises an exception, but it actually triggered a read */
-    ok_read_called(0, PAGE_SIZE);
+    ok_read_not_called();
     ok_eq_hex(IoStatus.Status, 0xABABABAB);
     ok_eq_ulongptr(IoStatus.Information, (ULONG_PTR)0xABABABABABABABAB);
 
-    /* So this one succeeds, as the page is now resident */
     Ret = 'x';
     Offset.QuadPart = 0;
     memset(&IoStatus, 0xAB, sizeof(IoStatus));
@@ -232,13 +229,11 @@ Test_CcCopyRead(PFILE_OBJECT FileObject)
     KmtStartSeh()
         Ret = CcCopyRead(FileObject, &Offset, 10, FALSE, Buffer, &IoStatus);
     KmtEndSeh(STATUS_SUCCESS);
-    ok_bool_true(Ret, "CcCopyRead should succeed\n");
-    /* But there was no read triggered, as the page is already resident. */
+    ok_bool_false(Ret, "CcCopyRead should fail\n");
     ok_read_not_called();
-    ok_eq_hex(IoStatus.Status, STATUS_SUCCESS);
-    ok_eq_ulongptr(IoStatus.Information, 10);
+    ok_eq_hex(IoStatus.Status, 0xABABABAB);
+    ok_eq_ulongptr(IoStatus.Information, (ULONG_PTR)0xABABABABABABABAB);
 
-    /* But this one doesn't */
     Ret = 'x';
     Offset.QuadPart = PAGE_SIZE;
     memset(&IoStatus, 0xAB, sizeof(IoStatus));
@@ -247,8 +242,7 @@ Test_CcCopyRead(PFILE_OBJECT FileObject)
         Ret = CcCopyRead(FileObject, &Offset, 10, FALSE, Buffer, &IoStatus);
     KmtEndSeh(STATUS_SUCCESS);
     ok_bool_false(Ret, "CcCopyRead should fail\n");
-    /* But it triggered a read anyway. */
-    ok_read_called(PAGE_SIZE, PAGE_SIZE);
+    ok_read_not_called();
     ok_eq_hex(IoStatus.Status, 0xABABABAB);
     ok_eq_ulongptr(IoStatus.Information, (ULONG_PTR)0xABABABABABABABAB);
 

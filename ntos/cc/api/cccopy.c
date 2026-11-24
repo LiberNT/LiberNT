@@ -88,6 +88,8 @@ CcCopyRead(
 
     if (FileObject == NULL || FileOffset == NULL)
         ExRaiseStatus(STATUS_ACCESS_VIOLATION);
+    if (Buffer == NULL)
+        ExRaiseStatus(STATUS_INVALID_USER_BUFFER);
     Offset = (ULONG64)FileOffset->QuadPart;
     Move.BaseOffset = Offset;
     NtMap = CcNtReferenceFileMap(FileObject);
@@ -107,8 +109,6 @@ CcCopyRead(
     if (!Wait && Length != 0 && !NtMap->Map.Ops.IsResident(NtMap->Map.Context, Offset, Length))
     {
         CcFastReadNoWait++;
-        if (NtMap->Map.Ops.Prefetch != NULL)
-            NtMap->Map.Ops.Prefetch(NtMap->Map.Context, Offset, Length);
         CcNtDereferenceMap(NtMap);
         return FALSE;
     }
@@ -168,8 +168,6 @@ CcCopyWrite(
 
     if (!Wait && Length != 0 && !NtMap->Map.Ops.IsResident(NtMap->Map.Context, Offset, Length))
     {
-        if (NtMap->Map.Ops.Prefetch != NULL)
-            NtMap->Map.Ops.Prefetch(NtMap->Map.Context, Offset, Length);
         CcNtDereferenceMap(NtMap);
         return FALSE;
     }

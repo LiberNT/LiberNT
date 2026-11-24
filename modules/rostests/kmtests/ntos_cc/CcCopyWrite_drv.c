@@ -284,8 +284,7 @@ Test_CcCopyWrite(PFILE_OBJECT FileObject)
         Ret = CcCopyWrite(FileObject, &Offset, 10, FALSE, Buffer);
     KmtEndSeh(STATUS_SUCCESS);
     ok_bool_false(Ret, "CcCopyWrite should fail\n");
-    /* But it triggered a read anyway. */
-    ok_read_called(PAGE_SIZE, PAGE_SIZE);
+    ok_read_not_called();
 
     /* Of course, waiting for it succeeds and triggers the read */
     Ret = 'x';
