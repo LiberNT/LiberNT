@@ -4866,6 +4866,17 @@ static HRESULT STDMETHODCALLTYPE d3d11_device_CheckFormatSupport(ID3D11Device5 *
         case DXGI_FORMAT_R16_UINT: case DXGI_FORMAT_R16_SINT:
         case DXGI_FORMAT_R8_UINT: case DXGI_FORMAT_R8_SINT:
             *format_support &= ~(D3D11_FORMAT_SUPPORT_SHADER_SAMPLE | D3D11_FORMAT_SUPPORT_BLENDABLE);
+            /* Level 9 hardware takes integer formats only as vertex and index formats */
+            if (feature_level < D3D_FEATURE_LEVEL_10_0)
+                *format_support &= D3D11_FORMAT_SUPPORT_IA_VERTEX_BUFFER | D3D11_FORMAT_SUPPORT_IA_INDEX_BUFFER;
+            break;
+        case DXGI_FORMAT_R32G32B32_FLOAT:
+            if (feature_level < D3D_FEATURE_LEVEL_10_0)
+                *format_support &= D3D11_FORMAT_SUPPORT_IA_VERTEX_BUFFER;
+            break;
+        case DXGI_FORMAT_R32G32B32A32_FLOAT:
+            if (feature_level < D3D_FEATURE_LEVEL_9_2)
+                *format_support &= D3D11_FORMAT_SUPPORT_IA_VERTEX_BUFFER;
             break;
         default:
             break;
@@ -4926,7 +4937,8 @@ static HRESULT STDMETHODCALLTYPE d3d11_device_CheckFormatSupport(ID3D11Device5 *
     }
     /* TODO: video processor input and output support once the wined3d device has a video processor */
 
-    if (*format_support)
+    if (feature_level >= D3D_FEATURE_LEVEL_10_0 ? *format_support != 0 : (*format_support & (D3D11_FORMAT_SUPPORT_TEXTURE1D
+            | D3D11_FORMAT_SUPPORT_TEXTURE2D | D3D11_FORMAT_SUPPORT_TEXTURE3D)) != 0)
         *format_support |= D3D11_FORMAT_SUPPORT_CPU_LOCKABLE;
 
     if (feature_level >= D3D_FEATURE_LEVEL_10_0 && (*format_support & (D3D11_FORMAT_SUPPORT_TEXTURE1D
