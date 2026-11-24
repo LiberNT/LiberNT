@@ -245,6 +245,7 @@ set(COMPAT_RUNTIME_MODULES
     qmgrprxy
     quartz
     query
+    qwave
     rasadhlp
     rasapi32
     rasdlg
