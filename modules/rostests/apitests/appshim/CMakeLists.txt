@@ -1,6 +1,7 @@
 project(appcompat)
 
 list(APPEND SOURCE
+    disablethemes.c
     dispmode.c
     forcedxsetup.c
     genral_hooks.c
