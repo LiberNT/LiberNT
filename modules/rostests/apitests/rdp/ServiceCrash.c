@@ -100,12 +100,14 @@ START_TEST(ServiceCrash)
     RDP_TEST_SETUP Setup;
     RDP_CLIENT Client;
     SC_HANDLE Manager, Service;
-    WCHAR User[16];
-    char UserA[16];
-    DWORD Before, Session = 0, Wait, Own = 0;
+    WCHAR User[16], Next[16];
+    char UserA[16], NextA[16];
+    DWORD Before, Session = 0, Restarted = 0, Wait, Own = 0;
 
     _snwprintf(User, ARRAYSIZE(User), L"rdpsc%06lx", GetTickCount() & 0xffffff);
     _snprintf(UserA, sizeof(UserA), "%ls", User);
+    _snwprintf(Next, ARRAYSIZE(Next), L"rdpsn%06lx", GetTickCount() & 0xffffff);
+    _snprintf(NextA, sizeof(NextA), "%ls", Next);
     ProcessIdToSessionId(GetCurrentProcessId(), &Own);
     if (!RdpTestEnableDebugPrivilege())
     {
@@ -138,6 +140,17 @@ START_TEST(ServiceCrash)
                "Winlogon of session %lu did not survive its display\n", Session);
             ok(StartServiceW(Service, 0, NULL), "Cannot start %ls again: %lu\n", SERVICE, GetLastError());
             ok(WaitForState(Service, SERVICE_RUNNING), "%ls did not start again\n", SERVICE);
+            if (RdpTestAddUser(Next))
+            {
+                RdpClientStart(&Client, NextA, NextA);
+                ok(RdpClientWaitConnected(&Client), "%s could not connect after the restart: 0x%08x\n", NextA,
+                   Client.Error);
+                for (Wait = 0; Wait < 200 && (Restarted = NewestSession()) <= Session; Wait++)
+                    Sleep(200);
+                ok(Restarted > Session, "No session started for %s after the restart (newest %lu)\n", NextA, Restarted);
+                RdpClientStop(&Client);
+                NetUserDel(NULL, Next);
+            }
         }
         else
         {

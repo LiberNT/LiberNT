@@ -304,9 +304,11 @@ EngpGraphicsDeviceNotification(
     PTARGET_DEVICE_REMOVAL_NOTIFICATION pNotification = NotificationStructure;
     PGRAPHICS_DEVICE_NOTIFY pNotify = Context;
     PGRAPHICS_DEVICE pGraphicsDevice;
+    PVIDEO_MONITOR_DEVICE pOldMonitors = NULL;
     WCHAR szWinDeviceName[CCHDEVICENAME / 2] = L"";
     BOOLEAN bQueryRemove;
     BOOLEAN bRemove = FALSE;
+    ULONG i, oldCount = 0;
 
     bQueryRemove = IsEqualGUID(&pNotification->Event, &GraphicsDeviceQueryRemove);
     if (!pNotify || (!bQueryRemove && !IsEqualGUID(&pNotification->Event, &GraphicsDeviceRemoveComplete)))
@@ -335,8 +337,21 @@ EngpGraphicsDeviceNotification(
         EngpUnlinkGraphicsDevice(pGraphicsDevice);
         bRemove = TRUE;
     }
+    if (pGraphicsDevice && !bQueryRemove && !bRemove)
+    {
+        pOldMonitors = pGraphicsDevice->pvMonDev;
+        oldCount = pGraphicsDevice->dwMonCnt;
+        pGraphicsDevice->pvMonDev = NULL;
+        pGraphicsDevice->dwMonCnt = 0;
+    }
     EngReleaseSemaphore(ghsemGraphicsDeviceList);
     UserLeave();
+
+    ASSERT(pOldMonitors != NULL || oldCount == 0);
+    for (i = 0; i < oldCount; i++)
+        ObDereferenceObject(pOldMonitors[i].pdo);
+    if (pOldMonitors)
+        ExFreePoolWithTag(pOldMonitors, GDITAG_GDEVICE);
 
     if (bRemove)
     {
