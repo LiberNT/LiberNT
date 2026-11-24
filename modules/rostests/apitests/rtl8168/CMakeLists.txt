@@ -1,0 +1,9 @@
+list(APPEND SOURCE
+    EtherCrc32.c
+    testlist.c)
+
+add_executable(rtl8168_apitest ${SOURCE})
+target_link_libraries(rtl8168_apitest wine)
+set_module_type(rtl8168_apitest win32cui)
+add_importlibs(rtl8168_apitest msvcrt kernel32 ntdll)
+add_rostests_file(TARGET rtl8168_apitest)

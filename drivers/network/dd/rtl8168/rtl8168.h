@@ -29,6 +29,33 @@
 #define RTL8168_TX_RING_SIZE 256
 #define RTL8168_RX_BUDGET 64
 #define RTL8168_RX_RETURN_BATCH 32
+#define RTL8168_TX_HANG_THRESHOLD 3
+#define RTL8168_LINK_DOWN_POLLS 5
+#define RTL8168_PAUSE_RX_WAIT_MS 500
+#define RTL8168_INTR_MITIGATE 0x0000
+#define RTL8168_LINK_HOLD_100NS 50000000ULL
+#define RTL8168_LINK_GRACE_100NS 30000000ULL
+#define RL_CPLUSCMD_INTT_1 0x0001
+#define RTL8168_FW_PATH L"\\SystemRoot\\System32\\drivers\\realtek\\rtl8168h-2.fw"
+#define RTL8168_FW_MAX_SIZE 4096
+#define RTL8168_FW_MIN_SIZE 0x2D
+#define RTL8168_FW_START_OFFSET 0x24
+#define RTL8168_FW_LEN_OFFSET 0x28
+#define RL_FW_PHY_READ 0x0
+#define RL_FW_PHY_OR 0x1
+#define RL_FW_PHY_AND 0x2
+#define RL_FW_PHY_BJMPN 0x3
+#define RL_FW_PHY_MDIO_CHG 0x4
+#define RL_FW_PHY_CLEAR_READCOUNT 0x7
+#define RL_FW_PHY_WRITE 0x8
+#define RL_FW_PHY_READCOUNT_EQ_SKIP 0x9
+#define RL_FW_PHY_COMP_EQ_SKIPN 0xa
+#define RL_FW_PHY_COMP_NEQ_SKIPN 0xb
+#define RL_FW_PHY_WRITE_PREVIOUS 0xc
+#define RL_FW_PHY_SKIPN 0xd
+#define RL_FW_PHY_DELAY_MS 0xe
+#define RTL8168_DEFAULT_PACKET_FILTER (NDIS_PACKET_TYPE_DIRECTED | \
+                                      NDIS_PACKET_TYPE_BROADCAST)
 #define RTL8168_LINK_SPEED_10M 10000000ULL
 #define RTL8168_LINK_SPEED_100M 100000000ULL
 #define RTL8168_LINK_SPEED_1G 1000000000ULL
@@ -65,6 +92,7 @@
 #define RL_ERIAR 0x0074
 #define RL_EPHYAR 0x0080
 #define RL_MACOCP 0x00B0
+#define RL_TDFNR 0x0057
 #define RL_DLLPR 0x00D0
 #define RL_MCU_CMD 0x00D3
 #define RL_RMS 0x00DA
@@ -128,6 +156,7 @@
 
 #define RL_CFG1_PM_ENABLE 0x01
 #define RL_CFG1_DRIVER_LOAD 0x20
+#define RL_CFG2_MSI_ENABLE 0x20
 #define RL_CFG2_CLKREQ_EN 0x80
 #define RL_CFG5_ASPM_EN 0x01
 
@@ -237,6 +266,7 @@ typedef struct _RTL8168_TX_BUFFER
 {
     PVOID VirtualAddress;
     NDIS_PHYSICAL_ADDRESS PhysicalAddress;
+    PMDL Mdl;
     ULONG Length;
 } RTL8168_TX_BUFFER, *PRTL8168_TX_BUFFER;
 
@@ -254,6 +284,7 @@ typedef struct _RTL8168_ADAPTER
     KAFFINITY InterruptAffinity;
     NDIS_HANDLE InterruptHandle;
 
+    NDIS_HANDLE DmaHandle;
     NDIS_HANDLE RxNblPool;
     NDIS_SPIN_LOCK RxLock;
     NDIS_SPIN_LOCK TxLock;
@@ -263,7 +294,7 @@ typedef struct _RTL8168_ADAPTER
     ULONG RxRingLength;
     RTL8168_RX_BUFFER RxBuffers[RTL8168_RX_RING_SIZE];
     ULONG RxTail;
-    volatile LONG RxReturnedSinceKick;
+    volatile LONG RxOutstanding;
 
     PRTL8168_DESC TxRing;
     NDIS_PHYSICAL_ADDRESS TxRingPhysical;
@@ -272,6 +303,7 @@ typedef struct _RTL8168_ADAPTER
     ULONG TxHead;
     ULONG TxTail;
     ULONG TxFree;
+    ULONG TxHangChecks;
 
     UCHAR PermanentMacAddress[ETH_LENGTH_OF_ADDRESS];
     UCHAR CurrentMacAddress[ETH_LENGTH_OF_ADDRESS];
@@ -290,7 +322,11 @@ typedef struct _RTL8168_ADAPTER
     NDIS_MEDIA_DUPLEX_STATE MediaDuplexState;
     NDIS_HANDLE LinkTimer;
     BOOLEAN DatapathReady;
+    BOOLEAN SurpriseRemoved;
     BOOLEAN RingsOwnedByHardware;
+    ULONG64 LinkHoldTicks;
+    ULONG64 LinkGraceTicks;
+    ULONG LinkDownPolls;
 
     ULONG64 TxPackets;
     ULONG64 RxPackets;

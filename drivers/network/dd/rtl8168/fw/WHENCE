@@ -1,0 +1,11 @@
+Firmware for the Realtek RTL8168H/8111H family Ethernet chips. Installed to
+\SystemRoot\system32\drivers\realtek\ and loaded by the rtl8168 driver during
+PHY bring-up.
+
+File: rtl8168h-2.fw
+  Realtek RTL8168H PHY firmware (version rtl8168h-2_0.0.2), distributed by
+  linux-firmware as rtl_nic/rtl8168h-2.fw (linux-firmware 20261019, SHA-256
+  0b4beab008e308f28296c13188ee23edfeff7d865e398a7ade170495c8cec7e6).
+  Copyright (c) 2010, Realtek Semiconductor Corporation. Redistributable in
+  binary form, without modification, under the terms in
+  LICENCE.rtlwifi_firmware.txt (this directory).

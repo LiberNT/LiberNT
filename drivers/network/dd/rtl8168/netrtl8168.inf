@@ -45,7 +45,7 @@ HKR, Ndi\Interfaces, LowerRange, 0, "ethernet"
 [RTL8168_HwAddReg.NT]
 HKR, "Interrupt Management",,0x00000010
 HKR, "Interrupt Management\MessageSignaledInterruptProperties",,0x00000010
-HKR, "Interrupt Management\MessageSignaledInterruptProperties", MSISupported, 0x00010001, 1
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", MSISupported, 0x00010001, 0
 
 [RTL8168_Inst.ndi.NT.Services]
 AddService = rtl8168, 0x00000002, RTL8168_Service_Inst
