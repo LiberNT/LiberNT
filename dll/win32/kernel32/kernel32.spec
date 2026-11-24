@@ -72,7 +72,7 @@
 @ stdcall CancelWaitableTimer(long)
 @ stdcall ChangeTimerQueueTimer(ptr ptr long long)
 @ stdcall -stub -version=0x600+ CheckElevation(ptr ptr ptr ptr ptr)
-@ stdcall -stub -version=0x600+ CheckElevationEnabled(ptr)
+@ stdcall -version=0x600+ CheckElevationEnabled(ptr)
 @ stub -version=0x600+ CheckForReadOnlyResource
 @ stdcall CheckNameLegalDOS8Dot3A(str str long long long)
 @ stdcall CheckNameLegalDOS8Dot3W(wstr str long long long)
