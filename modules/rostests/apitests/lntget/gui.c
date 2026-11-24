@@ -670,3 +670,87 @@ Exit:
     if (PingtInstalled() && RunTool(L"uninstall --id Speed-Soft.Pingt -e --source winget", &ExitCode))
         ok(ExitCode == 0, "uninstall returned 0x%08lx\n", ExitCode);
 }
+
+static BOOL
+ServiceFabricInstalled(void)
+{
+    return ArpViewHasPrefix(HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY, L"Microsoft Azure Service Fabric") ||
+           ArpViewHasPrefix(HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY, L"Microsoft Azure Service Fabric");
+}
+
+START_TEST(dependencyagreements)
+{
+    static WCHAR PromptText[4096];
+    WCHAR CommandLine[1024], Text[256];
+    STARTUPINFOW Startup = { sizeof(Startup) };
+    PROCESS_INFORMATION Process;
+    HWND Catalog, Notice, Install, Title, Prompt;
+    DWORD ExitCode;
+
+    if (ServiceFabricInstalled())
+    {
+        skip("Service Fabric is already installed\n");
+        return;
+    }
+    if (!RunTool(L"search --id Microsoft.ServiceFabricSDK -e --source winget", &ExitCode) || ExitCode != 0)
+    {
+        skip("the winget source is unavailable: 0x%08lx\n", ExitCode);
+        return;
+    }
+
+    ok(RunTool(L"install --id Microsoft.ServiceFabricSDK -e --source winget --silent --disable-interactivity", &ExitCode),
+       "cannot start the install\n");
+    ok(ExitCode != 0, "install without accepting the dependency agreements returned 0\n");
+    ok(!ServiceFabricInstalled(), "Service Fabric was installed without accepting its agreements\n");
+
+    if (wcsstr(GetTool(), L"winget"))
+    {
+        skip("winget has no catalog window\n");
+        return;
+    }
+
+    StringCchPrintfW(CommandLine, _countof(CommandLine), L"\"%s\" gui Microsoft.ServiceFabricSDK", GetTool());
+    if (!CreateProcessW(NULL, CommandLine, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &Startup, &Process))
+    {
+        ok(0, "CreateProcess(%ls) failed with %lu\n", CommandLine, GetLastError());
+        return;
+    }
+    CloseHandle(Process.hThread);
+
+    Catalog = WaitForWindow(Process.hProcess, L"LntGetCatalog", NULL, 60000);
+    ok(Catalog != NULL, "the catalog window did not open\n");
+    if (!Catalog)
+        goto Exit;
+    Notice = WaitForWindow(Process.hProcess, L"#32770", Catalog, 30000);
+    ok(Notice != NULL, "the compatibility notice did not open\n");
+    if (Notice)
+        PostMessageW(Notice, WM_COMMAND, IDOK, 0);
+    ok(WaitForText(Catalog, L" packages)", Text, _countof(Text), GUI_TIMEOUT), "catalog title is '%ls'\n", Text);
+
+    Install = GetDlgItem(Catalog, ID_INSTALL);
+    Title = GetDlgItem(Catalog, ID_OPERATION_TITLE);
+    ok(WaitForEnabled(Install, 30000), "Install stays disabled\n");
+    PostMessageW(Install, BM_CLICK, 0, 0);
+    Prompt = WaitForAgreementPrompt(Process.hProcess, Catalog, PromptText);
+    GetWindowTextW(Title, Text, _countof(Text));
+    ok(Prompt != NULL, "no agreement prompt opened; operation title is '%ls'\n", Text);
+    if (!Prompt)
+        goto Close;
+    ok(wcsstr(PromptText, L"(dependency)") != NULL, "the prompt does not name the dependency: '%ls'\n", PromptText);
+    ok(wcsstr(PromptText, L"https://dotnet.microsoft.com/en-us/dotnet_library_license.htm") != NULL,
+       "the prompt does not show the dependency agreement: '%ls'\n", PromptText);
+    PostMessageW(Prompt, WM_COMMAND, IDNO, 0);
+    ok(WaitForText(Title, L"Installation cancelled", Text, _countof(Text), 30000), "operation title is '%ls'\n", Text);
+    ok(!ServiceFabricInstalled(), "Service Fabric was installed with its agreements declined\n");
+    ok(WaitForEnabled(Install, 30000), "Install stays disabled after the agreements were declined\n");
+
+Close:
+    PostMessageW(Catalog, WM_CLOSE, 0, 0);
+
+Exit:
+    ok(WaitForSingleObject(Process.hProcess, 30000) == WAIT_OBJECT_0, "lntget did not exit after its window closed\n");
+    TerminateProcess(Process.hProcess, ERROR_TIMEOUT);
+    GetExitCodeProcess(Process.hProcess, &ExitCode);
+    ok(ExitCode == 0, "lntget gui returned 0x%08lx\n", ExitCode);
+    CloseHandle(Process.hProcess);
+}

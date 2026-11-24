@@ -3,6 +3,7 @@
 
 extern void func_agreements(void);
 extern void func_dependency(void);
+extern void func_dependencyagreements(void);
 extern void func_exe(void);
 extern void func_gui(void);
 extern void func_guiagreements(void);
@@ -19,6 +20,7 @@ const struct test winetest_testlist[] =
 {
     { "agreements", func_agreements },
     { "dependency", func_dependency },
+    { "dependencyagreements", func_dependencyagreements },
     { "exe", func_exe },
     { "gui", func_gui },
     { "guiagreements", func_guiagreements },

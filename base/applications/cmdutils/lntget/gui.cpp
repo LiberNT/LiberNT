@@ -612,18 +612,14 @@ private:
         if (status) status = ParseInstallerManifest(yaml, manifest);
         if (status && (!AsciiEquals(package.id, manifest.id) || package.version != manifest.version))
             status = Status::Fail(ERROR_BAD_FORMAT, "manifest identity does not match the source index");
-        if (status && manifest.hasAgreements && !acceptAgreements)
-        {
-            update.stage = OperationStage::NeedsAgreement;
-            update.agreements = manifest.agreements;
-            PostOperation(update);
-            return;
-        }
 
         SelectionOptions options;
         options.downloadOnly = !install;
+        options.acceptPackageAgreements = acceptAgreements;
         InstallerEntry installer;
+        std::vector<DependencyStep> dependencies;
         if (status) status = SelectInstaller(manifest, options, installer);
+        if (status && install) status = PlanPackageDependencies(*source_, installer, options, dependencies);
         if (!status)
         {
             update.stage = OperationStage::Failed;
@@ -632,9 +628,28 @@ private:
             return;
         }
 
+        if (!acceptAgreements)
+        {
+            update.agreements = manifest.agreements;
+            for (const DependencyStep &step : dependencies)
+            {
+                for (PackageAgreement agreement : step.manifest.agreements)
+                {
+                    agreement.label = step.package.name + " (dependency)" + (agreement.label.empty() ? "" : ": " + agreement.label);
+                    update.agreements.push_back(agreement);
+                }
+            }
+            if (!update.agreements.empty())
+            {
+                update.stage = OperationStage::NeedsAgreement;
+                PostOperation(update);
+                return;
+            }
+        }
+
         if (install)
         {
-            status = InstallPackageDependencies(*source_, installer, options);
+            status = InstallDependencyPlan(*source_, dependencies, options);
             if (!status)
             {
                 update.stage = OperationStage::Failed;
