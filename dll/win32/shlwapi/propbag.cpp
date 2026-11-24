@@ -476,7 +476,10 @@ CRegPropertyBag::Read(
 
     if (FAILED(hr))
     {
-        ERR("%p: 0x%08X %ld: %s %p\n", this, hr, dwType, debugstr_w(pszPropName), pvari);
+        if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND))
+            TRACE("%p: %s is not set\n", this, debugstr_w(pszPropName));
+        else
+            ERR("%p: 0x%08X %ld: %s %p\n", this, hr, dwType, debugstr_w(pszPropName), pvari);
         ::VariantInit(pvari);
         return hr;
     }
