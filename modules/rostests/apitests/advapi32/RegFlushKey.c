@@ -63,6 +63,51 @@ FileContains(
     return Found;
 }
 
+static
+VOID
+TestFlushWithoutLog(VOID)
+{
+    static const PCWSTR Logs[] = { L".LOG", L".LOG1", L".LOG2" };
+    WCHAR Dir[MAX_PATH], Hive[MAX_PATH], Log[MAX_PATH];
+    DWORD Value = 0x5AA5C33C;
+    HKEY hkApp;
+    ULONG i;
+    LONG lRes;
+
+    GetTempPathW(MAX_PATH, Dir);
+    StringCchCatW(Dir, MAX_PATH, L"LiberNTRegFlushNoLog");
+    CreateDirectoryW(Dir, NULL);
+    StringCchPrintfW(Hive, MAX_PATH, L"%s\\hive", Dir);
+    DeleteFileW(Hive);
+
+    /* A directory in the place of each log file keeps the hive from having one */
+    for (i = 0; i < _countof(Logs); i++)
+    {
+        StringCchPrintfW(Log, MAX_PATH, L"%s%s", Hive, Logs[i]);
+        DeleteFileW(Log);
+        CreateDirectoryW(Log, NULL);
+    }
+
+    lRes = RegLoadAppKeyW(Hive, &hkApp, KEY_ALL_ACCESS, 0, 0);
+    ok_int(lRes, ERROR_SUCCESS);
+    if (!lRes)
+    {
+        ok_int(RegSetValueExW(hkApp, L"NoLog", 0, REG_DWORD, (const BYTE*)&Value, sizeof(Value)), ERROR_SUCCESS);
+        ok_int(RegFlushKey(hkApp), ERROR_SUCCESS);
+        RegCloseKey(hkApp);
+        ok(FileContains(Hive, (const BYTE*)&Value, sizeof(Value)), "the hive file does not hold the value flushed without a log\n");
+    }
+
+    for (i = 0; i < _countof(Logs); i++)
+    {
+        StringCchPrintfW(Log, MAX_PATH, L"%s%s", Hive, Logs[i]);
+        RemoveDirectoryW(Log);
+        DeleteFileW(Log);
+    }
+    DeleteFileW(Hive);
+    RemoveDirectoryW(Dir);
+}
+
 START_TEST(RegFlushKey)
 {
     static BYTE First[VALUE_BYTES], Second[VALUE_BYTES], Data[VALUE_BYTES];
@@ -112,4 +157,6 @@ START_TEST(RegFlushKey)
         RegCloseKey(hkApp);
     }
     DeleteFileW(Path);
+
+    TestFlushWithoutLog();
 }
