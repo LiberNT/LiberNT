@@ -3456,7 +3456,9 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
             (e->Redirect.FrontSection == NULL &&
              e->Redirect.FrontGlobalShare == 0))
         {
-            if (e->Damaged && !PaintDeferred && !HiddenMinimized)
+            if (PaintDeferred)
+                PaintDamageDeferred = TRUE;
+            else if (e->Damaged && !HiddenMinimized)
                 DeferredDamage = TRUE;
             continue;
         }
