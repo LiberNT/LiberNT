@@ -990,6 +990,7 @@ LsapAddDefaultGroups(
                 break;
 
             case Network:
+            case NetworkCleartext:
                 SrcSid = LsapNetworkSid;
                 break;
 
@@ -1863,7 +1864,7 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
         Status = NtCreateToken(&TokenHandle,
                                TOKEN_ALL_ACCESS,
                                &ObjectAttributes,
-                               (LogonType == Network) ? TokenImpersonation : TokenPrimary,
+                               (LogonType == Network || LogonType == NetworkCleartext) ? TokenImpersonation : TokenPrimary,
                                &RequestMsg->LogonUser.Reply.LogonId,
                                &TokenInfo1->ExpirationTime,
                                &TokenInfo1->User,

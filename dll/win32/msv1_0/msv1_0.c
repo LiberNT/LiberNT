@@ -1526,7 +1526,7 @@ LsaApLogonUserEx2(IN PLSA_CLIENT_REQUEST ClientRequest,
     }
     RtlInitUnicodeString(&ComputerName, ComputerNameData);
 
-    PlainNetwork = LogonType == Network &&
+    PlainNetwork = (LogonType == Network || LogonType == NetworkCleartext) &&
                    SubmitBufferSize >= sizeof(MSV1_0_INTERACTIVE_LOGON) &&
                    ((PMSV1_0_INTERACTIVE_LOGON)ProtocolSubmitBuffer)->MessageType == MsV1_0InteractiveLogon;
 
@@ -1916,7 +1916,7 @@ done:
     if (Status == STATUS_NO_SUCH_USER ||
         Status == STATUS_WRONG_PASSWORD)
     {
-        *SubStatus = (LogonType == Network || LogonPwdData.TrustedClient) ? Status : STATUS_SUCCESS;
+        *SubStatus = (LogonType == Network || LogonType == NetworkCleartext || LogonPwdData.TrustedClient) ? Status : STATUS_SUCCESS;
         Status = STATUS_LOGON_FAILURE;
     }
 
