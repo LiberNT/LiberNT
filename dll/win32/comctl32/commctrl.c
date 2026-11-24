@@ -2047,6 +2047,16 @@ HRESULT WINAPI LoadIconWithScaleDown(HINSTANCE hinst, const WCHAR *name, int cx,
         return E_INVALIDARG;
 
 #ifdef __REACTOS__
+    if (!hinst && IS_INTRESOURCE(name))
+    {
+        HICON shared = LoadImageW(NULL, name, IMAGE_ICON, 0, 0, LR_SHARED | LR_DEFAULTSIZE);
+
+        if (!shared)
+            return HRESULT_FROM_WIN32(GetLastError());
+        *icon = CopyImage(shared, IMAGE_ICON, cx, cy, LR_COPYFROMRESOURCE);
+        return *icon ? S_OK : HRESULT_FROM_WIN32(GetLastError());
+    }
+
     flags = (hinst || IS_INTRESOURCE(name)) ? 0 : LR_LOADFROMFILE;
     *icon = scaledown_load(hinst, name, cx, cy, flags);
     if (*icon)
@@ -2062,6 +2072,8 @@ HRESULT WINAPI LoadIconWithScaleDown(HINSTANCE hinst, const WCHAR *name, int cx,
         error = GetLastError();
 #ifdef __REACTOS__
         if (hinst && error == ERROR_RESOURCE_NAME_NOT_FOUND)
+            error = ERROR_RESOURCE_TYPE_NOT_FOUND;
+        if (!hinst && error == ERROR_FILE_NOT_FOUND)
             error = ERROR_RESOURCE_TYPE_NOT_FOUND;
 #endif
         return HRESULT_FROM_WIN32(error);
