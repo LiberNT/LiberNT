@@ -25,7 +25,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#if __has_include(<sys/sysmacros.h>)
 #include <sys/sysmacros.h>
+#endif
 #include <sys/statvfs.h>
 #include <sys/types.h>
 #include <sys/xattr.h>
