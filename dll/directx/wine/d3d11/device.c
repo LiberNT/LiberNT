@@ -5154,7 +5154,12 @@ static HRESULT STDMETHODCALLTYPE d3d11_device_CheckFeatureSupport(ID3D11Device5 
 
             FIXME("Returning fake Options1 support data.\n");
             options->TiledResourcesTier = D3D11_TILED_RESOURCES_NOT_SUPPORTED;
+#ifdef __REACTOS__
+            /* Min/max filtering is reported only with tiled resources tier 2 */
+            options->MinMaxFiltering = FALSE;
+#else
             options->MinMaxFiltering = wined3d_caps.min_max_filtering;
+#endif
             options->ClearViewAlsoSupportsDepthOnlyFormats = FALSE;
 #ifdef __REACTOS__
             options->MapOnDefaultBuffers = device->state->feature_level >= D3D_FEATURE_LEVEL_11_0;
@@ -5182,7 +5187,12 @@ static HRESULT STDMETHODCALLTYPE d3d11_device_CheckFeatureSupport(ID3D11Device5 
                 return hr;
             }
 
+#ifdef __REACTOS__
+            options->PSSpecifiedStencilRefSupported = wined3d_caps.stencil_export &&
+                    device->state->feature_level >= D3D_FEATURE_LEVEL_11_1;
+#else
             options->PSSpecifiedStencilRefSupported = wined3d_caps.stencil_export;
+#endif
             options->TypedUAVLoadAdditionalFormats = FALSE;
             options->ROVsSupported = FALSE;
             options->ConservativeRasterizationTier = D3D11_CONSERVATIVE_RASTERIZATION_NOT_SUPPORTED;
@@ -5264,9 +5274,81 @@ static HRESULT STDMETHODCALLTYPE d3d11_device_CheckFeatureSupport(ID3D11Device5 
             return S_OK;
         }
 
+#ifdef __REACTOS__
+        case D3D11_FEATURE_D3D9_SHADOW_SUPPORT:
+        {
+            D3D11_FEATURE_DATA_D3D9_SHADOW_SUPPORT *data = feature_support_data;
+            if (feature_support_data_size != sizeof(*data))
+                return E_INVALIDARG;
+            data->SupportsDepthAsTextureWithLessEqualComparisonFilter = TRUE;
+            return S_OK;
+        }
+
+        case D3D11_FEATURE_D3D9_OPTIONS1:
+        {
+            D3D11_FEATURE_DATA_D3D9_OPTIONS1 *data = feature_support_data;
+            if (feature_support_data_size != sizeof(*data))
+                return E_INVALIDARG;
+
+            wined3d_mutex_lock();
+            hr = wined3d_device_get_device_caps(device->wined3d_device, &wined3d_caps);
+            wined3d_mutex_unlock();
+            if (FAILED(hr))
+                return hr;
+
+            data->FullNonPow2TextureSupported = !(wined3d_caps.TextureCaps & WINED3DPTEXTURECAPS_POW2);
+            data->DepthAsTextureWithLessEqualComparisonFilterSupported = TRUE;
+            data->SimpleInstancingSupported = wined3d_caps.simple_instancing;
+            data->TextureCubeFaceRenderTargetWithNonCubeDepthStencilSupported = TRUE;
+            return S_OK;
+        }
+
+        case D3D11_FEATURE_D3D11_OPTIONS4:
+        {
+            D3D11_FEATURE_DATA_D3D11_OPTIONS4 *data = feature_support_data;
+            if (feature_support_data_size != sizeof(*data))
+                return E_INVALIDARG;
+            data->ExtendedNV12SharedTextureSupported = FALSE;
+            return S_OK;
+        }
+
+        case D3D11_FEATURE_SHADER_CACHE:
+        {
+            D3D11_FEATURE_DATA_SHADER_CACHE *data = feature_support_data;
+            if (feature_support_data_size != sizeof(*data))
+                return E_INVALIDARG;
+            data->SupportFlags = D3D11_SHADER_CACHE_SUPPORT_NONE;
+            return S_OK;
+        }
+
+        case D3D11_FEATURE_D3D11_OPTIONS5:
+        {
+            D3D11_FEATURE_DATA_D3D11_OPTIONS5 *data = feature_support_data;
+            if (feature_support_data_size != sizeof(*data))
+                return E_INVALIDARG;
+            data->SharedResourceTier = D3D11_SHARED_RESOURCE_TIER_0;
+            return S_OK;
+        }
+
+        case D3D11_FEATURE_DISPLAYABLE:
+        {
+            D3D11_FEATURE_DATA_DISPLAYABLE *data = feature_support_data;
+            if (feature_support_data_size != sizeof(*data))
+                return E_INVALIDARG;
+            data->DisplayableTexture = FALSE;
+            data->SharedResourceTier = D3D11_SHARED_RESOURCE_TIER_0;
+            return S_OK;
+        }
+
+        default:
+            /* TODO: INFO_NEEDED: whether the Windows 11 runtime answers D3D11_FEATURE_D3D11_OPTIONS6 */
+            WARN("Unhandled feature %#x.\n", feature);
+            return E_INVALIDARG;
+#else
         default:
             FIXME("Unhandled feature %#x.\n", feature);
             return E_NOTIMPL;
+#endif
     }
 }
 
