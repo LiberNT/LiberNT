@@ -24,6 +24,7 @@
 #include <windef.h>
 #include <winbase.h>
 #include <winreg.h>
+#include <winuser.h>
 #define NTOS_MODE_USER
 #include <ndk/pofuncs.h>
 #include <ndk/rtlfuncs.h>
@@ -58,6 +59,7 @@ static HANDLE PPRegSemaphore = NULL;
 
 #ifdef __REACTOS__
 static const GUID PowrProfVideoSubgroup = { 0x7516B95F, 0xF776, 0x4464, { 0x8C, 0x53, 0x06, 0x16, 0x7F, 0x40, 0xCC, 0x99 } };
+static const GUID PowrProfAcDcPowerSource = { 0x5D3E9A59, 0xE9D5, 0x4B00, { 0xA6, 0xBD, 0xFF, 0x34, 0xFF, 0x51, 0x65, 0x48 } };
 static const GUID PowrProfVideoPowerdownTimeout = { 0x3C0BC021, 0xC8A8, 0x4E07, { 0xA9, 0x73, 0x6B, 0x14, 0xCB, 0xCB, 0x2B, 0x7E } };
 static const GUID PowrProfSleepSubgroup = { 0x238C9FA8, 0x0AAD, 0x41ED, { 0x83, 0xF4, 0x97, 0xBE, 0x24, 0x2C, 0x8F, 0x20 } };
 static const GUID PowrProfStandbyTimeout = { 0x29F6C1DB, 0x86DA, 0x48C5, { 0x9F, 0xDB, 0xF2, 0xB6, 0x7B, 0x1F, 0x44, 0xDA } };
@@ -2005,30 +2007,203 @@ DWORD WINAPI PowerEnumerate(HKEY key, const GUID *scheme, const GUID *subgroup, 
     }
 }
 
+typedef struct _POWRPROF_NOTIFY_REGISTRATION
+{
+    LIST_ENTRY Entry;
+    GUID Setting;
+    BOOL SuspendResume;
+    PDEVICE_NOTIFY_CALLBACK_ROUTINE Callback;
+    PVOID Context;
+    PTP_WORK Work;
+} POWRPROF_NOTIFY_REGISTRATION, *PPOWRPROF_NOTIFY_REGISTRATION;
+
+static SRWLOCK PowrProfNotifyLock = SRWLOCK_INIT;
+static LIST_ENTRY PowrProfNotifyList = {&PowrProfNotifyList, &PowrProfNotifyList};
+
+static BOOL
+POWRPROF_CurrentSettingValue(
+    const GUID *Setting,
+    BYTE Data[sizeof(GUID)],
+    DWORD *Length)
+{
+    const POWRPROF_SCHEME_DEFAULTS *Defaults;
+    SYSTEM_POWER_STATUS PowerStatus;
+    GUID Scheme;
+    DWORD Value, Error;
+    BOOL Ac = TRUE;
+    UINT Index;
+
+    if (GetSystemPowerStatus(&PowerStatus) && PowerStatus.ACLineStatus == 0)
+        Ac = FALSE;
+    if (IsEqualGUID(Setting, &PowrProfAcDcPowerSource))
+    {
+        Value = Ac ? PoAc : PoDc;
+        RtlCopyMemory(Data, &Value, sizeof(Value));
+        *Length = sizeof(Value);
+        return TRUE;
+    }
+
+    if (AcquirePwrProfSemaphoreError() != ERROR_SUCCESS)
+        return FALSE;
+    Error = POWRPROF_ReadActiveScheme(&Scheme, NULL);
+    if (Error == ERROR_SUCCESS && IsEqualGUID(Setting, &GUID_POWERSCHEME_PERSONALITY))
+    {
+        Defaults = POWRPROF_FindScheme(&Scheme);
+        ReleaseSemaphore(PPRegSemaphore, 1, NULL);
+        if (!Defaults)
+            return FALSE;
+        RtlCopyMemory(Data, Defaults->Guid, sizeof(GUID));
+        *Length = sizeof(GUID);
+        return TRUE;
+    }
+    for (Index = 0; Error == ERROR_SUCCESS && Index < sizeof(PowrProfSettings) / sizeof(PowrProfSettings[0]); Index++)
+    {
+        if (!IsEqualGUID(PowrProfSettings[Index].Setting, Setting))
+            continue;
+        Error = POWRPROF_ReadValueIndex(&Scheme, PowrProfSettings[Index].Subgroup, Setting, Ac, &Value);
+        ReleaseSemaphore(PPRegSemaphore, 1, NULL);
+        if (Error != ERROR_SUCCESS)
+            return FALSE;
+        RtlCopyMemory(Data, &Value, sizeof(Value));
+        *Length = sizeof(Value);
+        return TRUE;
+    }
+    ReleaseSemaphore(PPRegSemaphore, 1, NULL);
+    return FALSE;
+}
+
+static VOID CALLBACK
+POWRPROF_SettingNotifyWork(
+    PTP_CALLBACK_INSTANCE Instance,
+    PVOID Context,
+    PTP_WORK Work)
+{
+    PPOWRPROF_NOTIFY_REGISTRATION Registration = Context;
+    PDEVICE_NOTIFY_CALLBACK_ROUTINE Callback = Registration->Callback;
+    PVOID CallbackContext = Registration->Context;
+    union
+    {
+        POWERBROADCAST_SETTING Setting;
+        BYTE Buffer[FIELD_OFFSET(POWERBROADCAST_SETTING, Data) + sizeof(GUID)];
+    } Broadcast;
+    DWORD Length;
+
+    UNREFERENCED_PARAMETER(Work);
+
+    if (!Callback || !POWRPROF_CurrentSettingValue(&Registration->Setting, Broadcast.Setting.Data, &Length))
+        return;
+    Broadcast.Setting.PowerSetting = Registration->Setting;
+    Broadcast.Setting.DataLength = Length;
+    /* The callback may unregister this registration, which waits for the callbacks of its work */
+    DisassociateCurrentThreadFromCallback(Instance);
+    Callback(CallbackContext, PBT_POWERSETTINGCHANGE, &Broadcast.Setting);
+}
+
+static DWORD
+POWRPROF_RegisterNotification(
+    const GUID *Setting,
+    BOOL SuspendResume,
+    DWORD Flags,
+    HANDLE Recipient,
+    PHPOWERNOTIFY RegistrationHandle)
+{
+    PDEVICE_NOTIFY_SUBSCRIBE_PARAMETERS Parameters = Recipient;
+    PPOWRPROF_NOTIFY_REGISTRATION Registration;
+    DWORD Error;
+
+    if (Flags != DEVICE_NOTIFY_CALLBACK || !Parameters || !RegistrationHandle || (!SuspendResume && !Setting))
+        return ERROR_INVALID_PARAMETER;
+
+    Registration = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*Registration));
+    if (!Registration)
+        return ERROR_NOT_ENOUGH_MEMORY;
+    if (Setting)
+        Registration->Setting = *Setting;
+    Registration->SuspendResume = SuspendResume;
+    Registration->Callback = Parameters->Callback;
+    Registration->Context = Parameters->Context;
+    if (!SuspendResume)
+    {
+        Registration->Work = CreateThreadpoolWork(POWRPROF_SettingNotifyWork, Registration, NULL);
+        if (!Registration->Work)
+        {
+            Error = GetLastError();
+            HeapFree(GetProcessHeap(), 0, Registration);
+            return Error;
+        }
+    }
+
+    AcquireSRWLockExclusive(&PowrProfNotifyLock);
+    InsertTailList(&PowrProfNotifyList, &Registration->Entry);
+    ReleaseSRWLockExclusive(&PowrProfNotifyLock);
+
+    *RegistrationHandle = Registration;
+    if (Registration->Work)
+        SubmitThreadpoolWork(Registration->Work);
+    return ERROR_SUCCESS;
+}
+
+static DWORD
+POWRPROF_UnregisterNotification(
+    HPOWERNOTIFY RegistrationHandle,
+    BOOL SuspendResume)
+{
+    PPOWRPROF_NOTIFY_REGISTRATION Registration = NULL;
+    PLIST_ENTRY Entry;
+
+    AcquireSRWLockExclusive(&PowrProfNotifyLock);
+    for (Entry = PowrProfNotifyList.Flink; Entry != &PowrProfNotifyList; Entry = Entry->Flink)
+    {
+        PPOWRPROF_NOTIFY_REGISTRATION Candidate = CONTAINING_RECORD(Entry, POWRPROF_NOTIFY_REGISTRATION, Entry);
+
+        if (Candidate == RegistrationHandle && Candidate->SuspendResume == SuspendResume)
+        {
+            RemoveEntryList(&Candidate->Entry);
+            Registration = Candidate;
+            break;
+        }
+    }
+    ReleaseSRWLockExclusive(&PowrProfNotifyLock);
+
+    if (!Registration)
+        return ERROR_INVALID_PARAMETER;
+    if (Registration->Work)
+    {
+        WaitForThreadpoolWorkCallbacks(Registration->Work, TRUE);
+        CloseThreadpoolWork(Registration->Work);
+    }
+    HeapFree(GetProcessHeap(), 0, Registration);
+    return ERROR_SUCCESS;
+}
+
 DWORD WINAPI PowerRegisterSuspendResumeNotification(DWORD flags, HANDLE recipient, PHPOWERNOTIFY handle)
 {
-    FIXME("(0x%08lx,%p,%p) stub!\n", flags, recipient, handle);
-    *handle = (HPOWERNOTIFY)0xdeadbeef;
-    return ERROR_SUCCESS;
+    TRACE("(0x%08lx,%p,%p)\n", flags, recipient, handle);
+
+    /* TODO: suspend and resume events need a notification from the kernel; none is delivered yet */
+    return POWRPROF_RegisterNotification(NULL, TRUE, flags, recipient, handle);
 }
 
 DWORD WINAPI PowerUnregisterSuspendResumeNotification(HPOWERNOTIFY handle)
 {
-    FIXME("(%p) stub!\n", handle);
-    return ERROR_SUCCESS;
+    TRACE("(%p)\n", handle);
+
+    return POWRPROF_UnregisterNotification(handle, TRUE);
 }
 
 DWORD WINAPI PowerSettingRegisterNotification(const GUID *setting, DWORD flags, HANDLE recipient, PHPOWERNOTIFY handle)
 {
-    FIXME("(%s,0x%08lx,%p,%p) stub!\n", debugstr_guid(setting), flags, recipient, handle);
-    *handle = (PHPOWERNOTIFY)0xdeadbeef;
-    return ERROR_SUCCESS;
+    TRACE("(%s,0x%08lx,%p,%p)\n", debugstr_guid(setting), flags, recipient, handle);
+
+    /* TODO: later changes, and the console display and monitor states, need a notification from the kernel; only the current power source, scheme personality and scheme settings are delivered */
+    return POWRPROF_RegisterNotification(setting, FALSE, flags, recipient, handle);
 }
 
 DWORD WINAPI PowerSettingUnregisterNotification(HPOWERNOTIFY handle)
 {
-    FIXME("(%p) stub!\n", handle);
-    return ERROR_SUCCESS;
+    TRACE("(%p)\n", handle);
+
+    return POWRPROF_UnregisterNotification(handle, FALSE);
 }
 
 DWORD WINAPI PowerWriteACValueIndex(HKEY key, const GUID *scheme, const GUID *subgroup, const GUID *setting, DWORD index)
