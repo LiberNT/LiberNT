@@ -418,6 +418,8 @@ private:
     void CaptureItemPositions();
     void ApplySavedItemPositions();
     void MoveItemToFreeSlot(INT nItem);
+    UINT GetListWorkAreas(RECT *prcAreas);
+    void PlaceItemsInWorkAreas();
     HRESULT LoadItemPositions(IStream *pStream);
     HRESULT SaveItemPositions(IStream *pStream);
     void FireFolderViewEvent(DISPID dispid);
@@ -2404,8 +2406,49 @@ void CDefView::ApplySavedItemPositions()
                     MoveItemToFreeSlot(i);
             }
         }
+        PlaceItemsInWorkAreas();
     }
     ClearSavedItemPositions();
+}
+
+UINT CDefView::GetListWorkAreas(RECT *prcAreas)
+{
+    UINT nAreas = 0;
+
+    if (!m_ListView)
+        return 0;
+    m_ListView.SendMessage(LVM_GETNUMBEROFWORKAREAS, 0, (LPARAM)&nAreas);
+    nAreas = min(nAreas, (UINT)LV_MAX_WORKAREAS);
+    if (nAreas)
+        m_ListView.SendMessage(LVM_GETWORKAREAS, nAreas, (LPARAM)prcAreas);
+    return nAreas;
+}
+
+static BOOL PointInWorkAreas(const RECT *prcAreas, UINT nAreas, POINT pt)
+{
+    if (!nAreas)
+        return TRUE;
+    for (UINT i = 0; i < nAreas; ++i)
+    {
+        if (PtInRect(&prcAreas[i], pt))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+void CDefView::PlaceItemsInWorkAreas()
+{
+    RECT rcAreas[LV_MAX_WORKAREAS];
+    const UINT nAreas = GetListWorkAreas(rcAreas);
+
+    if (!nAreas || GetAutoArrange() == S_OK || IsComputerTileView())
+        return;
+    for (INT i = 0; i < m_ListView.GetItemCount(); ++i)
+    {
+        POINT pt;
+        if (m_ListView.GetItemPosition(i, &pt) && !PointInWorkAreas(rcAreas, nAreas, pt))
+            MoveItemToFreeSlot(i);
+    }
 }
 
 void CDefView::MoveItemToFreeSlot(INT nItem)
@@ -2443,7 +2486,10 @@ void CDefView::MoveItemToFreeSlot(INT nItem)
         return TRUE;
     };
 
-    if (IsFree(ptItem))
+    RECT rcAreas[LV_MAX_WORKAREAS];
+    const UINT nAreas = GetListWorkAreas(rcAreas);
+    const RECT rcLayout = nAreas ? rcAreas[0] : rcClient;
+    if (IsFree(ptItem) && PointInWorkAreas(rcAreas, nAreas, ptItem))
         return;
 
     RECT rcBounds;
@@ -2454,13 +2500,14 @@ void CDefView::MoveItemToFreeSlot(INT nItem)
         return;
 
     const BOOL bAlignLeft = (m_ListView.GetStyle() & LVS_ALIGNMASK) == LVS_ALIGNLEFT;
-    const INT nLines = max(1, bAlignLeft ? (INT)(rcClient.bottom / cy) : (INT)(rcClient.right / cx));
+    const INT nLines = max(1, bAlignLeft ? (INT)((rcLayout.bottom - rcLayout.top) / cy)
+                                         : (INT)((rcLayout.right - rcLayout.left) / cx));
     for (INT nSlot = 0; nSlot <= nCount + nLines; ++nSlot)
     {
         const INT nMajor = nSlot / nLines, nMinor = nSlot % nLines;
         POINT pt;
-        pt.x = (bAlignLeft ? nMajor : nMinor) * cx + (ptItem.x - rcBounds.left) - ptOrigin.x;
-        pt.y = (bAlignLeft ? nMinor : nMajor) * cy + (ptItem.y - rcBounds.top) - ptOrigin.y;
+        pt.x = rcLayout.left + (bAlignLeft ? nMajor : nMinor) * cx + (ptItem.x - rcBounds.left) - ptOrigin.x;
+        pt.y = rcLayout.top + (bAlignLeft ? nMinor : nMajor) * cy + (ptItem.y - rcBounds.top) - ptOrigin.y;
         if (IsFree(pt))
         {
             m_ListView.SetItemPosition(nItem, &pt);
@@ -3480,6 +3527,7 @@ LRESULT CDefView::OnSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled
     /* Resize the ListView to fit our window */
     ::MoveWindow(m_ListView, 0, 0, wWidth, wHeight, TRUE);
     ArrangeComputerView();
+    PlaceItemsInWorkAreas();
 
     _DoFolderViewCB(SFVM_SIZE, 0, 0);
 
@@ -4241,6 +4289,9 @@ LRESULT CDefView::OnMenuMessage(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &b
 LRESULT CDefView::OnSettingChange(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
 {
     ClearComputerTiles();
+
+    if (wParam == SPI_SETWORKAREA)
+        PlaceItemsInWorkAreas();
 
     /* Wallpaper setting affects drop shadows effect */
     if (wParam == SPI_SETDESKWALLPAPER ||
