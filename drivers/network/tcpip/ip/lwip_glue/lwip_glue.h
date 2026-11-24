@@ -128,6 +128,7 @@ void        LibTCPWfpEstablish(PCONNECTION_ENDPOINT Connection, PTCP_PCB pcb, BO
 NTSTATUS    LibTCPDeferAcceptLocked(PCONNECTION_ENDPOINT Connection, PTCP_PCB pcb);
 void        LibTCPDrainPendingAccept(PCONNECTION_ENDPOINT Connection);
 void        LibTCPSetNoDelay(PTCP_PCB pcb, BOOLEAN Set);
+void        LibTCPSetQosTos(PTCP_PCB pcb, UCHAR QosTos);
 void        LibTCPSetKeepAlive(PTCP_PCB pcb, BOOLEAN Set);
 void        LibTcpSetKeepAliveValues(PTCP_PCB pcb, u32_t KeepAliveTime, u32_t KeepAliveInterval);
 void        LibTcpSetKeepAliveCount(PTCP_PCB pcb, u32_t KeepAliveCount);

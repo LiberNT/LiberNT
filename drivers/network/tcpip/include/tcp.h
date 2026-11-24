@@ -206,6 +206,7 @@ NTSTATUS TCPSetKeepAlive(PCONNECTION_ENDPOINT Connection, BOOLEAN Set);
 
 NTSTATUS TCPSetKeepAliveValues(PCONNECTION_ENDPOINT Connection, DWORD KeepAliveTime, DWORD KeepAliveInterval);
 NTSTATUS TCPSetKeepAliveCount(PCONNECTION_ENDPOINT Connection, ULONG KeepAliveCount);
+NTSTATUS TCPSetQosTos(PCONNECTION_ENDPOINT Connection, UCHAR QosTos);
 
 VOID
 TCPUpdateInterfaceLinkStatus(PIP_INTERFACE IF);

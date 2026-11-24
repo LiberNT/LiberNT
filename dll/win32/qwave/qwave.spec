@@ -11,4 +11,4 @@
 @ stdcall QOSSetFlow(ptr long long long ptr long ptr)
 @ stdcall QOSStartTrackingClient(ptr ptr long)
 @ stdcall QOSStopTrackingClient(ptr ptr long)
-@ stub ServiceMain
+@ stdcall ServiceMain(long ptr)

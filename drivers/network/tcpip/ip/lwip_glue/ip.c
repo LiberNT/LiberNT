@@ -363,6 +363,7 @@ typedef struct _LIB_UDP_SEND
     ip_addr_t Destination;
     u16_t Port;
     const UDP_SEND_CONTROL *Control;
+    UCHAR QosTos;
     NTSTATUS Status;
     err_t Error;
 } LIB_UDP_SEND, *PLIB_UDP_SEND;
@@ -376,7 +377,7 @@ LibUDPSendCallback(void *arg)
     struct udp_pcb *pcb = Send->AddrFile->UdpPcb;
     struct netif *Netif = NULL;
     ip_addr_t Source;
-    u8_t Ttl, MulticastTtl, Tos;
+    u8_t Ttl, MulticastTtl, Tos, QosTos;
 
     if (!pcb)
     {
@@ -410,12 +411,14 @@ LibUDPSendCallback(void *arg)
     Ttl = pcb->ttl;
     MulticastTtl = udp_get_multicast_ttl(pcb);
     Tos = pcb->tos;
+    QosTos = Send->QosTos;
+    ASSERT((QosTos & 3) == 0);
     if (Control->HopLimit)
     {
         pcb->ttl = Control->Ttl;
         udp_set_multicast_ttl(pcb, Control->Ttl);
     }
-    pcb->tos = (u8_t)((Tos & ~3) | Control->Ecn);
+    pcb->tos = (u8_t)((QosTos ? QosTos : (Tos & ~3)) | Control->Ecn);
 
     if (Netif)
         Send->Error = udp_sendto_if_src(pcb, Send->Packet, &Send->Destination, Send->Port, Netif, &Source);
@@ -448,6 +451,9 @@ LibUDPSendChunk(PADDRESS_FILE AddrFile, const ip_addr_t *Destination, u16_t Port
     Send.Destination = *Destination;
     Send.Port = Port;
     Send.Control = Control;
+    LockObject(AddrFile);
+    Send.QosTos = AddrFile->QosTos;
+    UnlockObject(AddrFile);
     Send.Status = STATUS_SUCCESS;
     Send.Error = ERR_OK;
 

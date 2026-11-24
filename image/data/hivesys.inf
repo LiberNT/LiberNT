@@ -2050,13 +2050,29 @@ HKLM,"SYSTEM\CurrentControlSet\Services\Nwifi","ImagePath",0x00020000,"system32\
 HKLM,"SYSTEM\CurrentControlSet\Services\Nwifi","Group",0x00000000,"NDIS"
 HKLM,"SYSTEM\CurrentControlSet\Services\Nwifi","DisplayName",0x00000000,"ReactOS Native WiFi Service"
 
-; qWAVE flow driver
-; FIXME: Windows loads QWAVEdrv on demand (Start 3) as a dependency of the qWAVE service, which LiberNT does not have
+; qWAVE flow driver, started as a dependency of the qWAVE service
 HKLM,"SYSTEM\CurrentControlSet\Services\QWAVEdrv","DisplayName",0x00000000,"QWAVE driver"
 HKLM,"SYSTEM\CurrentControlSet\Services\QWAVEdrv","ErrorControl",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\QWAVEdrv","ImagePath",0x00020000,"system32\drivers\qwavedrv.sys"
-HKLM,"SYSTEM\CurrentControlSet\Services\QWAVEdrv","Start",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVEdrv","Start",0x00010001,0x00000003
 HKLM,"SYSTEM\CurrentControlSet\Services\QWAVEdrv","Type",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVEdrv\Security","Security",0x00000001,01,00,04,80,84,00,00,00,90,00,00,00,00,00,00,00,14,00,00,00,02,00,70,00,04,00,00,00,00,00,14,00,9d,00,00,00,01,01,00,00,00,00,00,05,04,00,00,00,00,00,14,00,9d,00,00,00,01,01,00,00,00,00,00,05,14,00,00,00,00,00,28,00,9d,00,00,00,01,06,00,00,00,00,00,05,54,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,18,00,ff,01,0f,00,01,02,00,00,00,00,00,05,20,00,00,00,20,02,00,00,01,01,00,00,00,00,00,05,12,00,00,00,01,01,00,00,00,00,00,05,12,00,00,00
+
+; Quality Windows Audio Video Experience
+; FIXME: Windows also depends on psched (the packet scheduler); LiberNT marks qWAVE traffic in tcpip instead
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE","DependOnService",0x00010000,"RpcSs","QWAVEdrv"
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE","Description",0x00000000,"Provides network quality of service to audio and video streaming applications."
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE","DisplayName",0x00000000,"Quality Windows Audio Video Experience"
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE","ImagePath",0x00020000,"%SystemRoot%\system32\svchost.exe -k LocalServiceAndNoImpersonation -p"
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE","ObjectName",0x00000000,"NT AUTHORITY\LocalService"
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE","RequiredPrivileges",0x00010000,"SeChangeNotifyPrivilege"
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE","ServiceSidType",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE","Start",0x00010001,0x00000003
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE","Type",0x00010001,0x00000020
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE\Parameters","ServiceDll",0x00020000,"%SystemRoot%\system32\qwave.dll"
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE\Parameters","ServiceDllUnloadOnStop",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\QWAVE\Security","Security",0x00000001,01,00,04,80,84,00,00,00,90,00,00,00,00,00,00,00,14,00,00,00,02,00,70,00,04,00,00,00,00,00,14,00,9d,00,00,00,01,01,00,00,00,00,00,05,04,00,00,00,00,00,14,00,9d,00,00,00,01,01,00,00,00,00,00,05,14,00,00,00,00,00,28,00,9d,00,00,00,01,06,00,00,00,00,00,05,54,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,18,00,ff,01,0f,00,01,02,00,00,00,00,00,05,20,00,00,00,20,02,00,00,01,01,00,00,00,00,00,05,12,00,00,00,01,01,00,00,00,00,00,05,12,00,00,00
 
 ; Packet driver
 HKLM,"SYSTEM\CurrentControlSet\Services\Packet","ErrorControl",0x00010001,0x00000001

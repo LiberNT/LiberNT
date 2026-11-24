@@ -1042,6 +1042,23 @@ TCPSetKeepAliveCount(
 }
 
 NTSTATUS
+TCPSetQosTos(
+    PCONNECTION_ENDPOINT Connection,
+    UCHAR QosTos)
+{
+    ASSERT((QosTos & 3) == 0);
+
+    if (!Connection)
+        return STATUS_UNSUCCESSFUL;
+
+    if (Connection->SocketContext == NULL)
+        return STATUS_UNSUCCESSFUL;
+
+    LibTCPSetQosTos(Connection->SocketContext, QosTos);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
 TCPGetSocketStatus(
     PCONNECTION_ENDPOINT Connection,
     PULONG State)

@@ -142,6 +142,7 @@ typedef struct _ADDRESS_FILE {
     BOOLEAN RecvTclass6;
     BOOLEAN RecvEcn6;
     BOOLEAN NoPortUnreachable;            /* SIO_UDP_CONNRESET turned off */
+    UCHAR QosTos;
     DATAGRAM_COMPLETION_ROUTINE Complete; /* Completion routine for delete request */
     PVOID Context;                        /* Delete request context */
     DATAGRAM_SEND_ROUTINE Send;           /* Routine to send a datagram */

@@ -416,6 +416,7 @@ AfdCreateSocket(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     RtlZeroMemory( FCB, sizeof( *FCB ) );
 
     FCB->Flags = ConnectInfo ? ConnectInfo->EndpointFlags : 0;
+    FCB->QosDscp = QOS_MARK_UNMARKED;
     FCB->GroupID = ConnectInfo ? ConnectInfo->GroupID : 0;
     FCB->GroupType = 0; /* FIXME */
     FCB->SharedData.State = SOCKET_STATE_CREATED;
@@ -1228,6 +1229,13 @@ AfdDispatch(PDEVICE_OBJECT DeviceObject, PIRP Irp)
     case IRP_MJ_QUERY_VOLUME_INFORMATION:
         return AfdQueryVolumeInformation(DeviceObject, Irp, IrpSp);
 
+    case IRP_MJ_INTERNAL_DEVICE_CONTROL:
+        if (IrpSp->Parameters.DeviceIoControl.IoControlCode == IOCTL_AFD_SET_QOS_DSCP)
+            return AfdSetQosDscp(DeviceObject, Irp, IrpSp);
+        Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_INVALID_DEVICE_REQUEST;
+
     case IRP_MJ_DEVICE_CONTROL:
     {
         switch( IrpSp->Parameters.DeviceIoControl.IoControlCode ) {
@@ -1682,6 +1690,7 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
     DriverObject->MajorFunction[IRP_MJ_WRITE] = AfdDispatch;
     DriverObject->MajorFunction[IRP_MJ_READ] = AfdDispatch;
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = AfdDispatch;
+    DriverObject->MajorFunction[IRP_MJ_INTERNAL_DEVICE_CONTROL] = AfdDispatch;
     DriverObject->MajorFunction[IRP_MJ_QUERY_VOLUME_INFORMATION] = AfdDispatch;
     DriverObject->DriverUnload = AfdUnload;
     AfdFastIoDispatch.SizeOfFastIoDispatch = sizeof(AfdFastIoDispatch);

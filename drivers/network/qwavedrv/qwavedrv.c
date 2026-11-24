@@ -6,7 +6,9 @@
  */
 
 #include <ntifs.h>
+#include <winerror.h>
 #include <libernt/qwavedrv.h>
+#include <libernt/drivers/qosmark.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -17,6 +19,8 @@ typedef struct _QWAVE_SOCKET_ENTRY
 {
     LIST_ENTRY Link;
     ULONG64 Socket;
+    PFILE_OBJECT FileObject;
+    ULONG MarkedDscp;
 } QWAVE_SOCKET_ENTRY, *PQWAVE_SOCKET_ENTRY;
 
 typedef struct _QWAVE_FLOW
@@ -34,21 +38,43 @@ typedef struct _QWAVE_FLOW
 
 typedef struct _QWAVE_HANDLE
 {
-    FAST_MUTEX Lock;
+    LIST_ENTRY Link;
+    ERESOURCE Lock;
     LIST_ENTRY Flows;
 } QWAVE_HANDLE, *PQWAVE_HANDLE;
 
+/* DSCP marks of the QOS_TRAFFIC_TYPE values (qos2.h documentation); best effort traffic is not marked */
+static const ULONG QwaveTrafficTypeDscp[QWAVE_TRAFFIC_TYPE_LAST + 1] = { QOS_MARK_UNMARKED, 0x08, 0x28, 0x28, 0x38, 0x38 };
+
+static const UNICODE_STRING QwaveAfdDriverName = RTL_CONSTANT_STRING(L"\\Driver\\AFD");
+
 static PDEVICE_OBJECT QwaveDeviceObject;
 static PSECURITY_DESCRIPTOR QwaveMarkingSd;
+static PSECURITY_DESCRIPTOR QwaveAdminSd;
+static FAST_MUTEX QwaveHandlesLock;
+static LIST_ENTRY QwaveHandles;
 static LONG QwaveLastFlowId;
 
 static
 VOID
-QwaveAssertLocked(
+QwaveLock(
+    _In_ PQWAVE_HANDLE Handle,
+    _In_ BOOLEAN Exclusive)
+{
+    KeEnterCriticalRegion();
+    if (Exclusive)
+        ExAcquireResourceExclusiveLite(&Handle->Lock, TRUE);
+    else
+        ExAcquireResourceSharedLite(&Handle->Lock, TRUE);
+}
+
+static
+VOID
+QwaveUnlock(
     _In_ PQWAVE_HANDLE Handle)
 {
-    ASSERT(Handle->Lock.Owner == KeGetCurrentThread());
-    UNREFERENCED_PARAMETER(Handle);
+    ExReleaseResourceLite(&Handle->Lock);
+    KeLeaveCriticalRegion();
 }
 
 static
@@ -59,17 +85,104 @@ QwaveFindFlowLocked(
 {
     PLIST_ENTRY Entry;
 
-    QwaveAssertLocked(Handle);
+    ASSERT(ExIsResourceAcquiredSharedLite(&Handle->Lock));
     for (Entry = Handle->Flows.Flink; Entry != &Handle->Flows; Entry = Entry->Flink)
     {
         PQWAVE_FLOW Flow = CONTAINING_RECORD(Entry, QWAVE_FLOW, Link);
 
         ASSERT(Flow->FlowId != 0);
         ASSERT(Flow->SocketCount != 0);
+        ASSERT(Flow->TrafficType <= QWAVE_TRAFFIC_TYPE_LAST);
         if (Flow->FlowId == FlowId)
             return Flow;
     }
     return NULL;
+}
+
+static
+ULONG
+QwaveFlowDscpLocked(
+    _In_ PQWAVE_HANDLE Handle,
+    _In_ PQWAVE_FLOW Flow)
+{
+    ASSERT(ExIsResourceAcquiredSharedLite(&Handle->Lock));
+    ASSERT(Flow->TrafficType <= QWAVE_TRAFFIC_TYPE_LAST);
+    UNREFERENCED_PARAMETER(Handle);
+
+    if (Flow->DscpSet)
+        return Flow->Dscp;
+    return QwaveTrafficTypeDscp[Flow->TrafficType];
+}
+
+static
+NTSTATUS
+QwaveMarkSocket(
+    _In_ PQWAVE_SOCKET_ENTRY Socket,
+    _In_ ULONG Dscp)
+{
+    PDEVICE_OBJECT DeviceObject = IoGetRelatedDeviceObject(Socket->FileObject);
+    IO_STATUS_BLOCK Iosb;
+    NTSTATUS Status;
+    KEVENT Event;
+    PIRP Irp;
+
+    PAGED_CODE();
+    ASSERT(Dscp == QOS_MARK_UNMARKED || Dscp <= QOS_MARK_DSCP_LAST);
+
+    if (Socket->MarkedDscp == Dscp)
+        return STATUS_SUCCESS;
+
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(IOCTL_AFD_SET_QOS_DSCP, DeviceObject, &Dscp, sizeof(Dscp), NULL, 0, TRUE,
+                                        &Event, &Iosb);
+    if (!Irp)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    IoGetNextIrpStackLocation(Irp)->FileObject = Socket->FileObject;
+
+    Status = IoCallDriver(DeviceObject, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = Iosb.Status;
+    }
+    if (NT_SUCCESS(Status))
+        Socket->MarkedDscp = Dscp;
+    return Status;
+}
+
+static
+VOID
+QwaveMarkFlowLocked(
+    _In_ PQWAVE_HANDLE Handle,
+    _In_ PQWAVE_FLOW Flow)
+{
+    ULONG Dscp = QwaveFlowDscpLocked(Handle, Flow);
+    PLIST_ENTRY Entry;
+
+    ASSERT(ExIsResourceAcquiredExclusiveLite(&Handle->Lock));
+    for (Entry = Flow->Sockets.Flink; Entry != &Flow->Sockets; Entry = Entry->Flink)
+    {
+        PQWAVE_SOCKET_ENTRY Socket = CONTAINING_RECORD(Entry, QWAVE_SOCKET_ENTRY, Link);
+        NTSTATUS Status = QwaveMarkSocket(Socket, Dscp);
+
+        if (!NT_SUCCESS(Status))
+            DPRINT1("QWAVE: marking socket %I64x of flow %lu failed 0x%08lx\n", Socket->Socket, Flow->FlowId, Status);
+    }
+}
+
+static
+VOID
+QwaveFreeSocket(
+    _In_ PQWAVE_SOCKET_ENTRY Socket)
+{
+    PAGED_CODE();
+
+    if (Socket->FileObject)
+    {
+        (VOID)QwaveMarkSocket(Socket, QOS_MARK_UNMARKED);
+        ObDereferenceObject(Socket->FileObject);
+    }
+    ExFreePoolWithTag(Socket, TAG_QWAVE);
 }
 
 static
@@ -78,7 +191,9 @@ QwaveDestroyFlowLocked(
     _In_ PQWAVE_HANDLE Handle,
     _In_ PQWAVE_FLOW Flow)
 {
-    QwaveAssertLocked(Handle);
+    ASSERT(ExIsResourceAcquiredExclusiveLite(&Handle->Lock));
+    UNREFERENCED_PARAMETER(Handle);
+
     RemoveEntryList(&Flow->Link);
     while (!IsListEmpty(&Flow->Sockets))
     {
@@ -86,7 +201,7 @@ QwaveDestroyFlowLocked(
 
         ASSERT(Flow->SocketCount != 0);
         Flow->SocketCount--;
-        ExFreePoolWithTag(Socket, TAG_QWAVE);
+        QwaveFreeSocket(Socket);
     }
     ASSERT(Flow->SocketCount == 0);
     ExFreePoolWithTag(Flow, TAG_QWAVE);
@@ -99,10 +214,10 @@ QwaveDestroyAllFlows(
 {
     PAGED_CODE();
 
-    ExAcquireFastMutex(&Handle->Lock);
+    QwaveLock(Handle, TRUE);
     while (!IsListEmpty(&Handle->Flows))
         QwaveDestroyFlowLocked(Handle, CONTAINING_RECORD(Handle->Flows.Flink, QWAVE_FLOW, Link));
-    ExReleaseFastMutex(&Handle->Lock);
+    QwaveUnlock(Handle);
 }
 
 static
@@ -112,7 +227,7 @@ QwaveNewFlowIdLocked(
 {
     ULONG FlowId;
 
-    QwaveAssertLocked(Handle);
+    ASSERT(ExIsResourceAcquiredExclusiveLite(&Handle->Lock));
     do
     {
         FlowId = (ULONG)InterlockedIncrement(&QwaveLastFlowId);
@@ -122,8 +237,9 @@ QwaveNewFlowIdLocked(
 
 static
 BOOLEAN
-QwaveCallerMayMark(
-    _In_ PIRP Irp)
+QwaveAccessCheck(
+    _In_ PIRP Irp,
+    _In_ PSECURITY_DESCRIPTOR Sd)
 {
     SECURITY_SUBJECT_CONTEXT Subject;
     ACCESS_MASK Granted;
@@ -131,18 +247,47 @@ QwaveCallerMayMark(
     BOOLEAN Allowed;
 
     PAGED_CODE();
-    ASSERT(QwaveMarkingSd != NULL);
+    ASSERT(Sd != NULL);
 
     if (Irp->RequestorMode == KernelMode)
         return TRUE;
 
     SeCaptureSubjectContext(&Subject);
     SeLockSubjectContext(&Subject);
-    Allowed = SeAccessCheck(QwaveMarkingSd, &Subject, TRUE, FILE_WRITE_DATA, 0, NULL, IoGetFileObjectGenericMapping(),
-                            UserMode, &Granted, &Status);
+    Allowed = SeAccessCheck(Sd, &Subject, TRUE, FILE_WRITE_DATA, 0, NULL, IoGetFileObjectGenericMapping(), UserMode,
+                            &Granted, &Status);
     SeUnlockSubjectContext(&Subject);
     SeReleaseSubjectContext(&Subject);
     return Allowed;
+}
+
+static
+NTSTATUS
+QwaveReferenceSocket(
+    _In_ PIRP Irp,
+    _In_ ULONG64 Socket,
+    _Out_ PFILE_OBJECT *FileObject)
+{
+    PFILE_OBJECT Object;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    *FileObject = NULL;
+    if (Socket == 0 || (ULONG64)(ULONG_PTR)Socket != Socket)
+        return STATUS_INVALID_PARAMETER;
+    Status = ObReferenceObjectByHandle((HANDLE)(ULONG_PTR)Socket, 0, *IoFileObjectType, Irp->RequestorMode,
+                                       (PVOID *)&Object, NULL);
+    if (!NT_SUCCESS(Status))
+        return STATUS_INVALID_PARAMETER;
+    if (!Object->DeviceObject ||
+        !RtlEqualUnicodeString(&Object->DeviceObject->DriverObject->DriverName, &QwaveAfdDriverName, TRUE))
+    {
+        ObDereferenceObject(Object);
+        return STATUS_INVALID_PARAMETER;
+    }
+    *FileObject = Object;
+    return STATUS_SUCCESS;
 }
 
 static
@@ -155,6 +300,7 @@ QwaveAddSocket(
     QWAVE_ADD_SOCKET_INPUT Input;
     PQWAVE_SOCKET_ENTRY Socket;
     PQWAVE_FLOW Flow, NewFlow = NULL;
+    NTSTATUS Status;
     ULONG FlowId;
 
     PAGED_CODE();
@@ -165,11 +311,8 @@ QwaveAddSocket(
         return STATUS_INVALID_PARAMETER;
     }
     RtlCopyMemory(&Input, Irp->AssociatedIrp.SystemBuffer, sizeof(Input));
-    if ((Input.Flags & ~QWAVE_NON_ADAPTIVE_FLOW) != 0 || Input.TrafficType > QWAVE_TRAFFIC_TYPE_LAST ||
-        Input.Socket == 0)
-    {
+    if ((Input.Flags & ~QWAVE_NON_ADAPTIVE_FLOW) != 0 || Input.TrafficType > QWAVE_TRAFFIC_TYPE_LAST)
         return STATUS_INVALID_PARAMETER;
-    }
     if (!(Input.Flags & QWAVE_NON_ADAPTIVE_FLOW))
     {
         /* TODO: adaptive flows need the network experiments (LLTD probing) of the qWAVE service */
@@ -180,23 +323,29 @@ QwaveAddSocket(
     if (!Socket)
         return STATUS_INSUFFICIENT_RESOURCES;
     Socket->Socket = Input.Socket;
+    Socket->MarkedDscp = QOS_MARK_UNMARKED;
+    Status = QwaveReferenceSocket(Irp, Input.Socket, &Socket->FileObject);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Socket, TAG_QWAVE);
+        return Status;
+    }
     if (Input.FlowId == 0)
     {
         NewFlow = ExAllocatePoolZero(PagedPool, sizeof(*NewFlow), TAG_QWAVE);
         if (!NewFlow)
         {
-            ExFreePoolWithTag(Socket, TAG_QWAVE);
+            QwaveFreeSocket(Socket);
             return STATUS_INSUFFICIENT_RESOURCES;
         }
         InitializeListHead(&NewFlow->Sockets);
         NewFlow->TrafficType = Input.TrafficType;
     }
 
-    ExAcquireFastMutex(&Handle->Lock);
+    QwaveLock(Handle, TRUE);
     if (NewFlow)
     {
         NewFlow->FlowId = QwaveNewFlowIdLocked(Handle);
-        InsertTailList(&Handle->Flows, &NewFlow->Link);
         Flow = NewFlow;
     }
     else
@@ -204,16 +353,27 @@ QwaveAddSocket(
         Flow = QwaveFindFlowLocked(Handle, Input.FlowId);
         if (!Flow)
         {
-            ExReleaseFastMutex(&Handle->Lock);
-            ExFreePoolWithTag(Socket, TAG_QWAVE);
+            QwaveUnlock(Handle);
+            QwaveFreeSocket(Socket);
             return STATUS_INVALID_PARAMETER;
         }
     }
+    Status = QwaveMarkSocket(Socket, QwaveFlowDscpLocked(Handle, Flow));
+    if (!NT_SUCCESS(Status))
+    {
+        QwaveUnlock(Handle);
+        QwaveFreeSocket(Socket);
+        if (NewFlow)
+            ExFreePoolWithTag(NewFlow, TAG_QWAVE);
+        return Status;
+    }
+    if (NewFlow)
+        InsertTailList(&Handle->Flows, &NewFlow->Link);
     InsertTailList(&Flow->Sockets, &Socket->Link);
     Flow->SocketCount++;
     ASSERT(Flow->SocketCount != 0);
     FlowId = Flow->FlowId;
-    ExReleaseFastMutex(&Handle->Lock);
+    QwaveUnlock(Handle);
 
     ASSERT(FlowId != 0);
     *(PULONG)Irp->AssociatedIrp.SystemBuffer = FlowId;
@@ -241,7 +401,7 @@ QwaveRemoveSocket(
     if (Input.Flags != 0)
         return STATUS_INVALID_PARAMETER;
 
-    ExAcquireFastMutex(&Handle->Lock);
+    QwaveLock(Handle, TRUE);
     Flow = QwaveFindFlowLocked(Handle, Input.FlowId);
     if (Flow && Input.Socket == 0)
     {
@@ -257,7 +417,7 @@ QwaveRemoveSocket(
             if (Socket->Socket != Input.Socket)
                 continue;
             RemoveEntryList(&Socket->Link);
-            ExFreePoolWithTag(Socket, TAG_QWAVE);
+            QwaveFreeSocket(Socket);
             ASSERT(Flow->SocketCount != 0);
             Flow->SocketCount--;
             ASSERT((Flow->SocketCount == 0) == IsListEmpty(&Flow->Sockets));
@@ -267,7 +427,7 @@ QwaveRemoveSocket(
             break;
         }
     }
-    ExReleaseFastMutex(&Handle->Lock);
+    QwaveUnlock(Handle);
     return Status;
 }
 
@@ -305,7 +465,7 @@ QwaveSetFlow(
                 return STATUS_INVALID_PARAMETER;
             if (Input->Operation == QWAVE_SET_OUTGOING_DSCP && Value > QWAVE_DSCP_LAST)
                 return STATUS_INVALID_PARAMETER;
-            if (Input->Operation == QWAVE_SET_OUTGOING_DSCP && !QwaveCallerMayMark(Irp))
+            if (Input->Operation == QWAVE_SET_OUTGOING_DSCP && !QwaveAccessCheck(Irp, QwaveMarkingSd))
                 return STATUS_ACCESS_DENIED;
             break;
 
@@ -321,14 +481,13 @@ QwaveSetFlow(
             return STATUS_INVALID_PARAMETER;
     }
 
-    ExAcquireFastMutex(&Handle->Lock);
+    QwaveLock(Handle, TRUE);
     Flow = QwaveFindFlowLocked(Handle, Input->FlowId);
     if (!Flow)
     {
-        ExReleaseFastMutex(&Handle->Lock);
+        QwaveUnlock(Handle);
         return STATUS_NOT_FOUND;
     }
-    /* FIXME: no packet scheduler marks or shapes the flow's traffic; the settings are only recorded */
     if (Input->Operation == QWAVE_SET_TRAFFIC_TYPE)
     {
         Flow->TrafficType = Value;
@@ -340,10 +499,131 @@ QwaveSetFlow(
     }
     else
     {
+        /* FIXME: no packet scheduler shapes the flow to its rate; the rate is only recorded */
         Flow->Rate = Rate;
         Flow->RateSet = TRUE;
     }
-    ExReleaseFastMutex(&Handle->Lock);
+    QwaveMarkFlowLocked(Handle, Flow);
+    QwaveUnlock(Handle);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+QwaveQueryFlow(
+    _In_ PQWAVE_HANDLE Handle,
+    _In_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION Stack)
+{
+    ULONG OutputLength = Stack->Parameters.DeviceIoControl.OutputBufferLength;
+    QWAVE_QUERY_FLOW_INPUT Input;
+    QWAVE_PACKET_PRIORITY Priority = { 0 };
+    ULONG64 Rate = 0;
+    PQWAVE_FLOW Flow;
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONG Dscp;
+
+    PAGED_CODE();
+
+    if (Stack->Parameters.DeviceIoControl.InputBufferLength != sizeof(Input))
+        return STATUS_INVALID_PARAMETER;
+    RtlCopyMemory(&Input, Irp->AssociatedIrp.SystemBuffer, sizeof(Input));
+    if ((Input.Flags & ~QWAVE_QUERYFLOW_FRESH) != 0 || Input.FlowId == 0)
+        return STATUS_INVALID_PARAMETER;
+    if ((Input.Operation == QWAVE_QUERY_PACKET_PRIORITY && OutputLength < sizeof(Priority)) ||
+        (Input.Operation == QWAVE_QUERY_OUTGOING_RATE && OutputLength < sizeof(Rate)) ||
+        (Input.Operation == QWAVE_QUERY_FUNDAMENTALS && OutputLength < sizeof(QWAVE_FUNDAMENTALS)) ||
+        Input.Operation > QWAVE_QUERY_OUTGOING_RATE)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    QwaveLock(Handle, FALSE);
+    Flow = QwaveFindFlowLocked(Handle, Input.FlowId);
+    if (!Flow)
+    {
+        Status = STATUS_NOT_FOUND;
+    }
+    else if (Input.Operation == QWAVE_QUERY_PACKET_PRIORITY)
+    {
+        Dscp = QwaveFlowDscpLocked(Handle, Flow);
+        Priority.ConformantDscp = (Dscp == QOS_MARK_UNMARKED) ? 0 : Dscp;
+        /* TODO: INFO_NEEDED: the non-conformant DSCP value Windows uses with QOSUseNonConformantMarkings */
+        Priority.NonConformantDscp = 0;
+        Priority.ConformantL2 = 0;
+        Priority.NonConformantL2 = 0;
+    }
+    else if (Input.Operation == QWAVE_QUERY_OUTGOING_RATE)
+    {
+        if (Flow->RateSet)
+            Rate = Flow->Rate.Bandwidth;
+        else
+            Status = QWAVE_STATUS_FROM_WIN32(ERROR_NO_DATA);
+    }
+    else
+    {
+        /* Non-adaptive flows run no network experiments (QOSAddSocketToFlow documentation) */
+        Status = STATUS_NOT_SUPPORTED;
+    }
+    QwaveUnlock(Handle);
+
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Input.Operation == QWAVE_QUERY_PACKET_PRIORITY)
+    {
+        RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, &Priority, sizeof(Priority));
+        Irp->IoStatus.Information = sizeof(Priority);
+    }
+    else
+    {
+        RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, &Rate, sizeof(Rate));
+        Irp->IoStatus.Information = sizeof(Rate);
+    }
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+QwaveEnumerateFlows(
+    _In_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION Stack)
+{
+    ULONG OutputLength = Stack->Parameters.DeviceIoControl.OutputBufferLength;
+    PQWAVE_FLOW_LIST List = Irp->AssociatedIrp.SystemBuffer;
+    ULONG Capacity, Total = 0, Returned = 0;
+    PLIST_ENTRY HandleEntry, FlowEntry;
+
+    PAGED_CODE();
+
+    if (OutputLength < FIELD_OFFSET(QWAVE_FLOW_LIST, FlowIds))
+        return STATUS_INVALID_PARAMETER;
+    if (!QwaveAccessCheck(Irp, QwaveAdminSd))
+        return STATUS_ACCESS_DENIED;
+    Capacity = (OutputLength - FIELD_OFFSET(QWAVE_FLOW_LIST, FlowIds)) / sizeof(ULONG);
+
+    ExAcquireFastMutex(&QwaveHandlesLock);
+    for (HandleEntry = QwaveHandles.Flink; HandleEntry != &QwaveHandles; HandleEntry = HandleEntry->Flink)
+    {
+        PQWAVE_HANDLE Handle = CONTAINING_RECORD(HandleEntry, QWAVE_HANDLE, Link);
+
+        QwaveLock(Handle, FALSE);
+        for (FlowEntry = Handle->Flows.Flink; FlowEntry != &Handle->Flows; FlowEntry = FlowEntry->Flink)
+        {
+            PQWAVE_FLOW Flow = CONTAINING_RECORD(FlowEntry, QWAVE_FLOW, Link);
+
+            if (Returned < Capacity)
+                List->FlowIds[Returned++] = Flow->FlowId;
+            Total++;
+        }
+        QwaveUnlock(Handle);
+    }
+    ExReleaseFastMutex(&QwaveHandlesLock);
+
+    ASSERT(Returned <= Total);
+    ASSERT(Returned <= Capacity);
+    List->Total = Total;
+    List->Returned = Returned;
+    Irp->IoStatus.Information = FIELD_OFFSET(QWAVE_FLOW_LIST, FlowIds) + Returned * sizeof(ULONG);
     return STATUS_SUCCESS;
 }
 
@@ -375,6 +655,7 @@ QwaveDispatchHandle(
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
     PFILE_OBJECT FileObject = Stack->FileObject;
     PQWAVE_HANDLE Handle;
+    NTSTATUS Status;
 
     PAGED_CODE();
     ASSERT(DeviceObject == QwaveDeviceObject);
@@ -389,9 +670,17 @@ QwaveDispatchHandle(
             Handle = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Handle), TAG_QWAVE);
             if (!Handle)
                 return QwaveCompleteIrp(Irp, STATUS_INSUFFICIENT_RESOURCES);
-            ExInitializeFastMutex(&Handle->Lock);
+            Status = ExInitializeResourceLite(&Handle->Lock);
+            if (!NT_SUCCESS(Status))
+            {
+                ExFreePoolWithTag(Handle, TAG_QWAVE);
+                return QwaveCompleteIrp(Irp, Status);
+            }
             InitializeListHead(&Handle->Flows);
             FileObject->FsContext = Handle;
+            ExAcquireFastMutex(&QwaveHandlesLock);
+            InsertTailList(&QwaveHandles, &Handle->Link);
+            ExReleaseFastMutex(&QwaveHandlesLock);
             return QwaveCompleteIrp(Irp, STATUS_SUCCESS);
 
         case IRP_MJ_CLEANUP:
@@ -403,8 +692,12 @@ QwaveDispatchHandle(
         case IRP_MJ_CLOSE:
             Handle = FileObject->FsContext;
             ASSERT(Handle != NULL);
+            ExAcquireFastMutex(&QwaveHandlesLock);
+            RemoveEntryList(&Handle->Link);
+            ExReleaseFastMutex(&QwaveHandlesLock);
             QwaveDestroyAllFlows(Handle);
             ASSERT(IsListEmpty(&Handle->Flows));
+            ExDeleteResourceLite(&Handle->Lock);
             FileObject->FsContext = NULL;
             ExFreePoolWithTag(Handle, TAG_QWAVE);
             return QwaveCompleteIrp(Irp, STATUS_SUCCESS);
@@ -446,6 +739,12 @@ QwaveDispatchDeviceControl(
         case IOCTL_QWAVE_SET_FLOW:
             Status = QwaveSetFlow(Handle, Irp, Stack);
             break;
+        case IOCTL_QWAVE_QUERY_FLOW:
+            Status = QwaveQueryFlow(Handle, Irp, Stack);
+            break;
+        case IOCTL_QWAVE_ENUMERATE_FLOWS:
+            Status = QwaveEnumerateFlows(Irp, Stack);
+            break;
         default:
             Status = STATUS_INVALID_DEVICE_REQUEST;
             break;
@@ -455,7 +754,9 @@ QwaveDispatchDeviceControl(
 
 static
 NTSTATUS
-QwaveCreateMarkingSd(VOID)
+QwaveCreateSd(
+    _In_ BOOLEAN WithOperators,
+    _Out_ PSECURITY_DESCRIPTOR *SecurityDescriptor)
 {
     static SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
     ULONG SidLength = RtlLengthRequiredSid(2);
@@ -468,6 +769,7 @@ QwaveCreateMarkingSd(VOID)
 
     PAGED_CODE();
 
+    *SecurityDescriptor = NULL;
     Sd = ExAllocatePoolZero(PagedPool, sizeof(SECURITY_DESCRIPTOR) + AclLength + SidLength, TAG_QWAVE);
     if (!Sd)
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -483,7 +785,7 @@ QwaveCreateMarkingSd(VOID)
     }
     if (NT_SUCCESS(Status))
         Status = RtlAddAccessAllowedAce(Acl, ACL_REVISION, FILE_ALL_ACCESS, SeExports->SeAliasAdminsSid);
-    if (NT_SUCCESS(Status))
+    if (NT_SUCCESS(Status) && WithOperators)
         Status = RtlAddAccessAllowedAce(Acl, ACL_REVISION, FILE_ALL_ACCESS, OperatorsSid);
     if (NT_SUCCESS(Status))
         Status = RtlCreateSecurityDescriptor(Sd, SECURITY_DESCRIPTOR_REVISION);
@@ -499,8 +801,20 @@ QwaveCreateMarkingSd(VOID)
         return Status;
     }
     ASSERT(RtlValidSecurityDescriptor(Sd));
-    QwaveMarkingSd = Sd;
+    *SecurityDescriptor = Sd;
     return STATUS_SUCCESS;
+}
+
+static
+VOID
+QwaveFreeSds(VOID)
+{
+    if (QwaveMarkingSd)
+        ExFreePoolWithTag(QwaveMarkingSd, TAG_QWAVE);
+    if (QwaveAdminSd)
+        ExFreePoolWithTag(QwaveAdminSd, TAG_QWAVE);
+    QwaveMarkingSd = NULL;
+    QwaveAdminSd = NULL;
 }
 
 static DRIVER_UNLOAD QwaveUnload;
@@ -514,10 +828,10 @@ QwaveUnload(
     PAGED_CODE();
     UNREFERENCED_PARAMETER(DriverObject);
 
+    ASSERT(IsListEmpty(&QwaveHandles));
     IoDeleteDevice(QwaveDeviceObject);
     QwaveDeviceObject = NULL;
-    ExFreePoolWithTag(QwaveMarkingSd, TAG_QWAVE);
-    QwaveMarkingSd = NULL;
+    QwaveFreeSds();
 }
 
 DRIVER_INITIALIZE DriverEntry;
@@ -534,17 +848,20 @@ DriverEntry(
     PAGED_CODE();
     UNREFERENCED_PARAMETER(RegistryPath);
 
-    Status = QwaveCreateMarkingSd();
-    if (!NT_SUCCESS(Status))
-        return Status;
-
-    Status = IoCreateDevice(DriverObject, 0, &DeviceName, FILE_DEVICE_NETWORK, FILE_DEVICE_SECURE_OPEN, FALSE,
-                            &QwaveDeviceObject);
+    ExInitializeFastMutex(&QwaveHandlesLock);
+    InitializeListHead(&QwaveHandles);
+    Status = QwaveCreateSd(TRUE, &QwaveMarkingSd);
+    if (NT_SUCCESS(Status))
+        Status = QwaveCreateSd(FALSE, &QwaveAdminSd);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IoCreateDevice(DriverObject, 0, &DeviceName, FILE_DEVICE_NETWORK, FILE_DEVICE_SECURE_OPEN, FALSE,
+                                &QwaveDeviceObject);
+    }
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("QWAVE: IoCreateDevice failed 0x%08lx\n", Status);
-        ExFreePoolWithTag(QwaveMarkingSd, TAG_QWAVE);
-        QwaveMarkingSd = NULL;
+        DPRINT1("QWAVE: initialization failed 0x%08lx\n", Status);
+        QwaveFreeSds();
         return Status;
     }
 

@@ -9,6 +9,7 @@
  */
 
 #include "afd.h"
+#include <tdiinfo.h>
 
 BOOLEAN
 AfdTryApplyPendingReceiveWindow(PAFD_FCB FCB)
@@ -422,4 +423,61 @@ AfdGetPeerName( PDEVICE_OBJECT DeviceObject, PIRP Irp,
     }
 
     return UnlockAndMaybeComplete( FCB, Status, Irp, 0 );
+}
+
+NTSTATUS
+AfdApplyQosMarking(PAFD_FCB FCB)
+{
+    ULONG Dscp = FCB->QosDscp;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(FCB->Mutex.OwnerThread == KeGetCurrentThread());
+    ASSERT(Dscp == QOS_MARK_UNMARKED || Dscp <= QOS_MARK_DSCP_LAST);
+
+    if (FCB->AddressFile.Object)
+    {
+        Status = TdiSetInformationEx(FCB->AddressFile.Object, CL_TL_ENTITY, 0, INFO_CLASS_PROTOCOL,
+                                     INFO_TYPE_ADDRESS_OBJECT, AO_OPTION_QOS_DSCP, &Dscp, sizeof(Dscp));
+    }
+    if (NT_SUCCESS(Status) && FCB->Connection.Object)
+    {
+        Status = TdiSetInformationEx(FCB->Connection.Object, CO_TL_ENTITY, 0, INFO_CLASS_PROTOCOL,
+                                     INFO_TYPE_CONNECTION, TCP_SOCKET_QOS_DSCP, &Dscp, sizeof(Dscp));
+    }
+    return Status;
+}
+
+NTSTATUS NTAPI
+AfdSetQosDscp(PDEVICE_OBJECT DeviceObject, PIRP Irp, PIO_STACK_LOCATION IrpSp)
+{
+    PAFD_FCB FCB = IrpSp->FileObject->FsContext;
+    NTSTATUS Status;
+    ULONG Dscp;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(Irp->RequestorMode == KernelMode);
+    ASSERT(IrpSp->MajorFunction == IRP_MJ_INTERNAL_DEVICE_CONTROL);
+
+    if (!FCB || IrpSp->Parameters.DeviceIoControl.InputBufferLength != sizeof(ULONG))
+    {
+        Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_INVALID_PARAMETER;
+    }
+    Dscp = *(PULONG)Irp->AssociatedIrp.SystemBuffer;
+    if (Dscp != QOS_MARK_UNMARKED && Dscp > QOS_MARK_DSCP_LAST)
+    {
+        Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (!SocketAcquireStateLock(FCB))
+        return LostSocket(Irp);
+
+    FCB->QosDscp = Dscp;
+    Status = AfdApplyQosMarking(FCB);
+    return UnlockAndMaybeComplete(FCB, Status, Irp, 0);
 }

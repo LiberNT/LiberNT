@@ -37,3 +37,13 @@ NTSTATUS TdiQueryDeviceControl(
     PVOID OutputBuffer,
     ULONG OutputBufferLength,
     PULONG Return);
+
+NTSTATUS TdiSetInformationEx(
+    PFILE_OBJECT FileObject,
+    ULONG Entity,
+    ULONG Instance,
+    ULONG Class,
+    ULONG Type,
+    ULONG Id,
+    PVOID InputBuffer,
+    ULONG InputLength);

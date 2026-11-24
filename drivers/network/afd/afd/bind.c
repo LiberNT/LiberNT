@@ -34,6 +34,9 @@ NTSTATUS WarmSocketForBind( PAFD_FCB FCB, ULONG ShareType ) {
     if (!NT_SUCCESS(Status))
         return Status;
 
+    if (FCB->QosDscp != QOS_MARK_UNMARKED && !NT_SUCCESS(AfdApplyQosMarking(FCB)))
+        AFD_DbgPrint(MIN_TRACE,("QoS marking of the new address file failed\n"));
+
     if (FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS)
     {
         if (NT_SUCCESS(Status) && !FCB->Recv.Window)
