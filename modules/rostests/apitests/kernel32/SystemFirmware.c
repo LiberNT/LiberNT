@@ -558,6 +558,38 @@ SmbiosString(const UCHAR *Structure, const UCHAR *End, UCHAR Number)
 
 static
 VOID
+test_RawSMBios(VOID)
+{
+    static UCHAR Raw[64 * 1024];
+    const UCHAR *Structure, *End, *Next;
+    UINT Size, Returned, Seen = 0;
+
+    Size = pGetSystemFirmwareTable('RSMB', 0, NULL, 0);
+    ok(Size > 8, "The raw SMBIOS table takes %u bytes\n", Size);
+    if (Size <= 8 || Size > sizeof(Raw))
+        return;
+    Returned = pGetSystemFirmwareTable('RSMB', 0, Raw, sizeof(Raw));
+    ok(Returned == Size, "Returned %u bytes, %u expected\n", Returned, Size);
+    ok(Raw[1] >= 2, "SMBIOS major version is %u\n", Raw[1]);
+    ok(*(DWORD *)(Raw + 4) == Size - 8, "Structure table length is %lu, %u expected\n", *(DWORD *)(Raw + 4), Size - 8);
+
+    End = Raw + Size;
+    for (Structure = Raw + 8; Structure + 4 <= End && Structure[1] >= 4 && Structure + Structure[1] <= End;
+         Structure = Next + 2)
+    {
+        if (Structure[0] <= 1)
+            Seen |= 1u << Structure[0];
+        Next = Structure + Structure[1];
+        while (Next + 1 < End && (Next[0] || Next[1]))
+            ++Next;
+        if (Next + 1 >= End)
+            break;
+    }
+    ok(Seen == 3, "SMBIOS structures of type 0 and 1 seen: 0x%x\n", Seen);
+}
+
+static
+VOID
 test_BiosRegistry(VOID)
 {
     static UCHAR Raw[64 * 1024];
@@ -697,6 +729,7 @@ START_TEST(SystemFirmware)
         return;
     }
     test_Functions();
+    test_RawSMBios();
     test_BiosRegistry();
     test_SystemPartition();
 }
