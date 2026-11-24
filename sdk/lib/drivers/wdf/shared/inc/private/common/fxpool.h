@@ -45,7 +45,7 @@ struct FX_POOL_HEADER {
 
     PFX_DRIVER_GLOBALS    FxDriverGlobals;
 
-    DECLSPEC_ALIGN(MEMORY_ALLOCATION_ALIGNMENT) ULONG AllocationStart[1];
+    DECLSPEC_CACHEALIGN ULONG AllocationStart[1];
 };
 
 typedef FX_POOL_HEADER* PFX_POOL_HEADER;
@@ -88,16 +88,12 @@ typedef FX_POOL *PFX_POOL;
 // This structure is allocated along with the pool item and
 // is used to track it.
 //
-// Note: We would be messing up cache aligned if its greater
-//       than 16.
-//
-//       Our struct is 7 DWORD's on an x86, and 11 DWORDS on 64 bit
-//       machines.
-//
-//       This rounds up to 8 or 12 DWORDS.
+// Note: tracker and FX_POOL_HEADER sizes must each round to a
+//       multiple of SYSTEM_CACHE_ALIGNMENT_SIZE so that the
+//       returned pointer keeps the pool's cache alignment.
 //
 //
-struct DECLSPEC_ALIGN(MEMORY_ALLOCATION_ALIGNMENT) FX_POOL_TRACKER {
+struct DECLSPEC_CACHEALIGN FX_POOL_TRACKER {
     LIST_ENTRY Link;
     PFX_POOL   Pool;
     ULONG      Tag;

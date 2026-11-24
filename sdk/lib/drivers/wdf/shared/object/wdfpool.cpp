@@ -147,6 +147,13 @@ Remarks:
         return NULL;
     }
 
+    //
+    // FX_POOL_HEADER, FX_POOL_TRACKER and Fx objects placed after them are
+    // DECLSPEC_CACHEALIGN, so the base of every allocation must be cache
+    // aligned. Request it from the pool for all callers.
+    //
+    Type = (POOL_TYPE)(Type | NonPagedPoolCacheAligned);
+
     if (FxDriverGlobals->IsPoolTrackingOn()) {
 
         if (FxDriverGlobals->FxVerifierOn &&

@@ -219,7 +219,7 @@ struct FxObjectDebugExtension {
     //
     ULONG Signature;
 
-    DECLSPEC_ALIGN(MEMORY_ALLOCATION_ALIGNMENT) ULONG AllocationStart[1];
+    DECLSPEC_CACHEALIGN ULONG AllocationStart[1];
 };
 
 enum FxObjectDebugExtensionValues {
