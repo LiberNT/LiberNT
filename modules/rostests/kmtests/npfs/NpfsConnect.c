@@ -11,6 +11,8 @@
 #define MAX_INSTANCES   5
 #define IN_QUOTA        4096
 #define OUT_QUOTA       4096
+#define CANCEL_RACE_IRPS        8
+#define CANCEL_RACE_ITERATIONS  400
 
 #define CheckServer(ServerHandle, State)                        \
     NpCheckServerPipe(ServerHandle,                             \
@@ -241,6 +243,180 @@ TestConnect(
     FinishWorkerThread(&ConnectContext);
 }
 
+typedef struct _LISTEN_CANCEL_RACE_CONTEXT
+{
+    HANDLE ServerHandle;
+    HANDLE DisconnectEvent;
+    KEVENT StartEvent;
+    KEVENT DoneEvent;
+    volatile BOOLEAN Stop;
+} LISTEN_CANCEL_RACE_CONTEXT, *PLISTEN_CANCEL_RACE_CONTEXT;
+
+static KSTART_ROUTINE DisconnectRaceWorker;
+static
+VOID
+NTAPI
+DisconnectRaceWorker(
+    IN PVOID Parameter)
+{
+    PLISTEN_CANCEL_RACE_CONTEXT Context = Parameter;
+    IO_STATUS_BLOCK IoStatusBlock;
+    NTSTATUS Status;
+
+    for (;;)
+    {
+        KeWaitForSingleObject(&Context->StartEvent, Executive, KernelMode, FALSE, NULL);
+        if (Context->Stop)
+            break;
+
+        Status = ZwFsControlFile(Context->ServerHandle,
+                                 Context->DisconnectEvent,
+                                 NULL,
+                                 NULL,
+                                 &IoStatusBlock,
+                                 FSCTL_PIPE_DISCONNECT,
+                                 NULL,
+                                 0,
+                                 NULL,
+                                 0);
+        if (Status == STATUS_PENDING)
+            ZwWaitForSingleObject(Context->DisconnectEvent, FALSE, NULL);
+
+        KeSetEvent(&Context->DoneEvent, IO_NO_INCREMENT, FALSE);
+    }
+}
+
+static
+VOID
+TestListenCancelRace(VOID)
+{
+    NTSTATUS Status;
+    HANDLE ServerHandle = NULL;
+    HANDLE Events[CANCEL_RACE_IRPS];
+    IO_STATUS_BLOCK IoStatusBlocks[CANCEL_RACE_IRPS];
+    NTSTATUS ListenStatuses[CANCEL_RACE_IRPS];
+    IO_STATUS_BLOCK CancelIosb;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    LARGE_INTEGER DefaultTimeout;
+    LISTEN_CANCEL_RACE_CONTEXT Context;
+    PKTHREAD WorkerThread;
+    ULONG Iteration, Index;
+    ULONG UnexpectedStatusCount = 0;
+
+    RtlZeroMemory(Events, sizeof(Events));
+    RtlZeroMemory(&Context, sizeof(Context));
+    DefaultTimeout.QuadPart = -50 * 1000 * 10;
+
+    Status = NpCreatePipeEx(&ServerHandle,
+                            DEVICE_NAMED_PIPE L"\\KmtestNpfsListenCancelRacePipe",
+                            BYTE_STREAM,
+                            QUEUE,
+                            BYTE_STREAM,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE,
+                            MAX_INSTANCES,
+                            IN_QUOTA,
+                            OUT_QUOTA,
+                            SYNCHRONIZE | GENERIC_READ | GENERIC_WRITE,
+                            FILE_OPEN_IF,
+                            0,
+                            &DefaultTimeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    InitializeObjectAttributes(&ObjectAttributes,
+                               NULL,
+                               OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+
+    for (Index = 0; Index < CANCEL_RACE_IRPS; Index++)
+    {
+        Status = ZwCreateEvent(&Events[Index],
+                               EVENT_ALL_ACCESS,
+                               &ObjectAttributes,
+                               NotificationEvent,
+                               FALSE);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        if (!NT_SUCCESS(Status))
+            goto Cleanup;
+    }
+
+    Status = ZwCreateEvent(&Context.DisconnectEvent,
+                           EVENT_ALL_ACCESS,
+                           &ObjectAttributes,
+                           NotificationEvent,
+                           FALSE);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        goto Cleanup;
+
+    Context.ServerHandle = ServerHandle;
+    KeInitializeEvent(&Context.StartEvent, SynchronizationEvent, FALSE);
+    KeInitializeEvent(&Context.DoneEvent, SynchronizationEvent, FALSE);
+
+    WorkerThread = KmtStartThread(DisconnectRaceWorker, &Context);
+
+    for (Iteration = 0; Iteration < CANCEL_RACE_ITERATIONS; Iteration++)
+    {
+        for (Index = 0; Index < CANCEL_RACE_IRPS; Index++)
+        {
+            ZwResetEvent(Events[Index], NULL);
+            IoStatusBlocks[Index].Status = STATUS_PENDING;
+            IoStatusBlocks[Index].Information = 0;
+            ListenStatuses[Index] = ZwFsControlFile(ServerHandle,
+                                                    Events[Index],
+                                                    NULL,
+                                                    NULL,
+                                                    &IoStatusBlocks[Index],
+                                                    FSCTL_PIPE_LISTEN,
+                                                    NULL,
+                                                    0,
+                                                    NULL,
+                                                    0);
+        }
+
+        KeSetEvent(&Context.StartEvent, IO_NO_INCREMENT, FALSE);
+        ZwCancelIoFile(ServerHandle, &CancelIosb);
+
+        for (Index = 0; Index < CANCEL_RACE_IRPS; Index++)
+        {
+            NTSTATUS FinalStatus = ListenStatuses[Index];
+
+            if (FinalStatus == STATUS_PENDING)
+            {
+                ZwWaitForSingleObject(Events[Index], FALSE, NULL);
+                FinalStatus = IoStatusBlocks[Index].Status;
+            }
+            if (FinalStatus != STATUS_CANCELLED &&
+                FinalStatus != STATUS_PIPE_DISCONNECTED &&
+                FinalStatus != STATUS_SUCCESS)
+            {
+                UnexpectedStatusCount++;
+            }
+        }
+
+        KeWaitForSingleObject(&Context.DoneEvent, Executive, KernelMode, FALSE, NULL);
+    }
+
+    Context.Stop = TRUE;
+    KeSetEvent(&Context.StartEvent, IO_NO_INCREMENT, FALSE);
+    KmtFinishThread(WorkerThread, NULL);
+
+    ok_eq_ulong(UnexpectedStatusCount, 0UL);
+
+Cleanup:
+    if (Context.DisconnectEvent)
+        ObCloseHandle(Context.DisconnectEvent, KernelMode);
+    for (Index = 0; Index < CANCEL_RACE_IRPS; Index++)
+    {
+        if (Events[Index])
+            ObCloseHandle(Events[Index], KernelMode);
+    }
+    if (ServerHandle)
+        ObCloseHandle(ServerHandle, KernelMode);
+}
+
 static KSTART_ROUTINE RunTest;
 static
 VOID
@@ -267,6 +443,8 @@ RunTest(
         CheckServer(ServerHandle, FILE_PIPE_LISTENING_STATE);
         TestConnect(ServerHandle, DEVICE_NAMED_PIPE L"\\KmtestNpfsConnectTestPipe");
     }
+
+    TestListenCancelRace();
 }
 
 START_TEST(NpfsConnect)
