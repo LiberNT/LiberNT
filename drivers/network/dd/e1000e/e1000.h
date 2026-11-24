@@ -622,17 +622,17 @@ typedef struct _E1000_ADAPTER
      * Uses Linux e1000e-style adaptive interrupt moderation.
      * ITR values are in 256ns units for the hardware register.
      *
-     * ItrSetting modes:
-     *   0=lowest_latency: ITR 5000 (~780 int/sec) - responsive for small packets
-     *   1=low_latency:    ITR 10000 (~390 int/sec) - balanced
-     *   2=bulk_latency:   ITR 20000 (~195 int/sec) - throughput optimized
+     * ItrSetting modes (Linux e1000e values, 256ns units):
+     *   0=lowest_latency: ITR 70000 (~56 int/sec) - sparse small packets, max coalescing
+     *   1=low_latency:    ITR 20000 (~195 int/sec) - balanced
+     *   2=bulk_latency:   ITR 4000 (~976 int/sec) - throughput needs high completion rate
      *   3=dynamic:        Auto-adjust based on traffic patterns
      */
     ULONG                   CurrentItr;         /* Current ITR register value (256ns units) */
     ULONG                   ItrSetting;         /* ITR mode setting */
-#define E1000_ITR_SETTING_LOWEST_LATENCY    0   /* High int rate for responsiveness */
+#define E1000_ITR_SETTING_LOWEST_LATENCY    0   /* Sparse packets, max coalescing */
 #define E1000_ITR_SETTING_LOW_LATENCY       1   /* Balanced mode */
-#define E1000_ITR_SETTING_BULK_LATENCY      2   /* Low int rate for throughput */
+#define E1000_ITR_SETTING_BULK_LATENCY      2   /* High int rate for throughput */
 #define E1000_ITR_SETTING_DYNAMIC           3   /* Auto-adjust based on traffic */
 
     /* Last ITR adjustment timestamp */

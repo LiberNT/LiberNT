@@ -571,9 +571,9 @@ E1000UpdateAdaptiveItr(
      * This is counter-intuitive but matches the hardware behavior.
      */
     static const ULONG ItrValues[] = {
-        5000,   /* lowest_latency: ~780 int/sec - responsive for small packets */
-        10000,  /* low_latency: ~390 int/sec - balanced */
-        20000   /* bulk_latency: ~195 int/sec - throughput optimized */
+        70000,  /* lowest_latency: ~56 int/sec - sparse small packets, max coalescing */
+        20000,  /* low_latency: ~195 int/sec - balanced */
+        4000    /* bulk_latency: ~976 int/sec - throughput needs high completion rate */
     };
 
     /* Only adjust if in dynamic mode */
