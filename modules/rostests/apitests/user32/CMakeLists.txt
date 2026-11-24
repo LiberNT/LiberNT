@@ -4,6 +4,7 @@ list(APPEND SOURCE
     AltTabHook.c
     AnimatedCursor.c
     AttachThreadInput.c
+    BoolReturnValues.c
     ../include/msgtrace.c
     CalculatePopupWindowPosition.c
     CallWindowProc.c

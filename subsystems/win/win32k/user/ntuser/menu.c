@@ -6367,14 +6367,14 @@ Exit:
 /*
  * @implemented
  */
-BOOLEAN APIENTRY
+BOOL APIENTRY
 NtUserGetTitleBarInfo(
     HWND hwnd,
     PTITLEBARINFO bti)
 {
     PWND WindowObject;
     TITLEBARINFO bartitleinfo;
-    BOOLEAN retValue = FALSE;
+    BOOL retValue = FALSE;
 
     TRACE("Enter NtUserGetTitleBarInfo\n");
     UserEnterShared();

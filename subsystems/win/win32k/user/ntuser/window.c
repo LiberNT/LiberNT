@@ -3424,11 +3424,11 @@ BOOLEAN co_UserDestroyWindow(PVOID Object)
 /*
  * @implemented
  */
-BOOLEAN APIENTRY
+BOOL APIENTRY
 NtUserDestroyWindow(HWND Wnd)
 {
    PWND Window;
-   BOOLEAN ret = FALSE;
+   BOOL ret = FALSE;
    USER_REFERENCE_ENTRY Ref;
 
    TRACE("Enter NtUserDestroyWindow\n");
