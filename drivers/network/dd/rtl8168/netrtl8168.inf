@@ -1,0 +1,71 @@
+; PROJECT:     LiberNT Realtek RTL8168/8111 Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     RTL8168/8111 Gigabit Ethernet miniport installation
+; COPYRIGHT:   Copyright 2026 jewchud <kz2hb7hpvp@privaterelay.appleid.com>
+
+[Version]
+Signature  = "$Windows NT$"
+LayoutFile = layout.inf
+Class      = Net
+ClassGUID  = {4D36E972-E325-11CE-BFC1-08002BE10318}
+Provider   = %LiberNT%
+DriverVer  = 11/24/2026,1.00
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%RealtekMfg% = RealtekMfg
+
+[RealtekMfg]
+%RTL8168.DeviceDesc% = RTL8168_Inst.ndi,PCI\VEN_10EC&DEV_8168
+%RTL8168.DeviceDesc% = RTL8168_Inst.ndi,PCI\VEN_10EC&DEV_8161
+%RTL8111.DeviceDesc% = RTL8168_Inst.ndi,PCI\VEN_10EC&DEV_8111
+
+[RTL8168_Inst.ndi.NT]
+Characteristics = 0x4
+*IfType = 6
+*MediaType = 0
+*PhysicalMediaType = 14
+BusType = 5
+AddReg = RTL8168_AddReg.NT
+CopyFiles = RTL8168_CopyFiles.NT
+
+[RTL8168_Inst.ndi.NT.HW]
+AddReg = RTL8168_HwAddReg.NT
+
+[RTL8168_CopyFiles.NT]
+rtl8168.sys
+
+[RTL8168_AddReg.NT]
+HKR, Ndi,            Service,    0, "rtl8168"
+HKR, Ndi\Interfaces, UpperRange, 0, "ndis5"
+HKR, Ndi\Interfaces, LowerRange, 0, "ethernet"
+
+[RTL8168_HwAddReg.NT]
+HKR, "Interrupt Management",,0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties",,0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", MSISupported, 0x00010001, 1
+
+[RTL8168_Inst.ndi.NT.Services]
+AddService = rtl8168, 0x00000002, RTL8168_Service_Inst
+
+[RTL8168_Service_Inst]
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %12%\rtl8168.sys
+LoadOrderGroup = NDIS
+
+[SourceDisksNames]
+1 = %DiskName%,,,
+
+[SourceDisksFiles]
+rtl8168.sys = 1
+
+[Strings]
+LiberNT = "LiberNT Project"
+RealtekMfg = "Realtek"
+DiskName = "LiberNT Realtek RTL8168 Driver Disk"
+RTL8168.DeviceDesc = "Realtek RTL8168/8111 Gigabit Ethernet"
+RTL8111.DeviceDesc = "Realtek RTL8111 Gigabit Ethernet"

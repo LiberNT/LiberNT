@@ -1,0 +1,226 @@
+/*
+ * PROJECT: LiberNT Realtek RTL8168/8111 Driver
+ * LICENSE: GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE: RTL8168/8111H NDIS 6.30 miniport header
+ * COPYRIGHT: Copyright 2026 jewchud <kz2hb7hpvp@privaterelay.appleid.com>
+ */
+
+#pragma once
+
+#include <ntddk.h>
+#include <ndis.h>
+#include <ifdef.h>
+#include <ipifcons.h>
+
+#define NDEBUG
+#include <libernt/debug.h>
+
+#ifndef ETH_LENGTH_OF_ADDRESS
+#define ETH_LENGTH_OF_ADDRESS 6
+#endif
+
+#define RTL8168_TAG '681R'
+#define RTL8168_DRIVER_VERSION 0x0100
+#define RTL8168_MAX_MULTICAST 32
+#define RTL8168_MTU 1500
+#define RTL8168_FRAME_SIZE 1514
+#define RTL8168_BUFFER_SIZE 1536
+#define RTL8168_RX_RING_SIZE 256
+#define RTL8168_TX_RING_SIZE 256
+#define RTL8168_RX_BUDGET 64
+#define RTL8168_RX_RETURN_BATCH 32
+#define RTL8168_LINK_SPEED_10M 10000000ULL
+#define RTL8168_LINK_SPEED_100M 100000000ULL
+#define RTL8168_LINK_SPEED_1G 1000000000ULL
+#define RTL8168_MAC_OPTIONS (NDIS_MAC_OPTION_TRANSFERS_NOT_PEND | \
+                             NDIS_MAC_OPTION_COPY_LOOKAHEAD_DATA | \
+                             NDIS_MAC_OPTION_NO_LOOPBACK)
+#define RTL8168_SUPPORTED_FILTERS (NDIS_PACKET_TYPE_DIRECTED | \
+                                   NDIS_PACKET_TYPE_MULTICAST | \
+                                   NDIS_PACKET_TYPE_ALL_MULTICAST | \
+                                   NDIS_PACKET_TYPE_BROADCAST | \
+                                   NDIS_PACKET_TYPE_PROMISCUOUS)
+
+#define RL_IDR0 0x0000
+#define RL_MAR0 0x0008
+#define RL_TNPDS_LO 0x0020
+#define RL_TNPDS_HI 0x0024
+#define RL_COMMAND 0x0037
+#define RL_GTXPOLL 0x0038
+#define RL_IMR 0x003C
+#define RL_ISR 0x003E
+#define RL_TXCFG 0x0040
+#define RL_RXCFG 0x0044
+#define RL_EECMD 0x0050
+#define RL_CFG1 0x0052
+#define RL_PHYAR 0x0060
+#define RL_BMCR 0x0062
+#define RL_BMSR 0x0064
+#define RL_GMEDIASTAT 0x006C
+#define RL_RMS 0x00DA
+#define RL_CPLUSCMD 0x00E0
+#define RL_RDSAR_LO 0x00E4
+#define RL_RDSAR_HI 0x00E8
+
+#define RL_CMD_TX_ENB 0x04
+#define RL_CMD_RX_ENB 0x08
+#define RL_CMD_RESET 0x10
+
+#define RL_GTXPOLL_NPQ 0x40
+
+#define RL_ISR_RX_OK 0x0001
+#define RL_ISR_RX_ERR 0x0002
+#define RL_ISR_TX_OK 0x0004
+#define RL_ISR_TX_ERR 0x0008
+#define RL_ISR_RX_OVERFLOW 0x0010
+#define RL_ISR_LINK_CHG 0x0020
+#define RL_ISR_TX_DESC_UNAVAIL 0x0080
+#define RL_ISR_SYSTEM_ERR 0x8000
+
+#define RL_INTR_MASK (RL_ISR_RX_OK | RL_ISR_RX_ERR | RL_ISR_TX_OK | \
+                      RL_ISR_TX_ERR | RL_ISR_RX_OVERFLOW | RL_ISR_LINK_CHG | \
+                      RL_ISR_TX_DESC_UNAVAIL | RL_ISR_SYSTEM_ERR)
+
+#define RL_TXCFG_IFG 0x03000000
+#define RL_TXCFG_MAXDMA_UNLIMITED 0x00000700
+#define RL_TXCFG_HWREV_MASK 0x7c800000
+#define RL_TXCFG_CONFIG (RL_TXCFG_IFG | RL_TXCFG_MAXDMA_UNLIMITED)
+
+#define RL_HWREV_8168H 0x54000000
+
+#define RL_RXCFG_AAP 0x00000001
+#define RL_RXCFG_APM 0x00000002
+#define RL_RXCFG_AM 0x00000004
+#define RL_RXCFG_AB 0x00000008
+#define RL_RXCFG_MAXDMA_UNLIMITED 0x00000700
+#define RL_RXCFG_FIFO_NOTHRESH 0x0000E000
+#define RL_RXCFG_BASE (RL_RXCFG_MAXDMA_UNLIMITED | RL_RXCFG_FIFO_NOTHRESH)
+
+#define RL_EEMODE_OFF 0x00
+#define RL_EEMODE_WRITECFG 0xC0
+
+#define RL_CFG1_PM_ENABLE 0x01
+#define RL_CFG1_DRIVER_LOAD 0x20
+
+#define RL_CPLUSCMD_TXENB 0x0001
+#define RL_CPLUSCMD_RXENB 0x0002
+#define RL_CPLUSCMD_PCI_MRW 0x0008
+#define RL_CPLUSCMD_RXCSUM 0x0020
+
+#define RL_PHYAR_DATA_MASK 0x0000FFFF
+#define RL_PHYAR_REG_SHIFT 16
+#define RL_PHYAR_FLAG 0x80000000
+
+#define RL_GMEDIA_FDX 0x01
+#define RL_GMEDIA_LINK 0x02
+#define RL_GMEDIA_10M 0x04
+#define RL_GMEDIA_100M 0x08
+#define RL_GMEDIA_1000M 0x10
+
+#define RL_DESC_OWN 0x80000000
+#define RL_DESC_EOR 0x40000000
+#define RL_TDESC_FS 0x20000000
+#define RL_TDESC_LS 0x10000000
+#define RL_RDESC_FS 0x20000000
+#define RL_RDESC_LS 0x10000000
+#define RL_RDESC_LEN_MASK 0x00003FFF
+#define RL_RDESC_ERR_MASK 0x002C0000
+#define RL_DESC_LEN_MASK 0x00003FFF
+
+#define MII_BMCR 0
+#define MII_BMSR 1
+#define MII_ADVERTISE 4
+#define MII_CTRL1000 9
+#define BMCR_RESET 0x8000
+#define BMCR_ANENABLE 0x1000
+#define BMCR_ANRESTART 0x0200
+#define BMSR_LSTATUS 0x0004
+#define ADVERTISE_CSMA 0x0001
+#define ADVERTISE_10HALF 0x0020
+#define ADVERTISE_10FULL 0x0040
+#define ADVERTISE_100HALF 0x0080
+#define ADVERTISE_100FULL 0x0100
+#define ADVERTISE_PAUSE 0x0400
+#define ADVERTISE_1000FULL 0x0200
+
+typedef struct _RTL8168_DESC
+{
+    ULONG CmdStat;
+    ULONG VlanTag;
+    ULONG AddrLow;
+    ULONG AddrHigh;
+} RTL8168_DESC, *PRTL8168_DESC;
+
+C_ASSERT(sizeof(RTL8168_DESC) == 16);
+
+typedef struct _RTL8168_RX_BUFFER
+{
+    PVOID VirtualAddress;
+    NDIS_PHYSICAL_ADDRESS PhysicalAddress;
+    PMDL Mdl;
+    PNET_BUFFER_LIST NetBufferList;
+    BOOLEAN Indicated;
+} RTL8168_RX_BUFFER, *PRTL8168_RX_BUFFER;
+
+typedef struct _RTL8168_TX_BUFFER
+{
+    PVOID VirtualAddress;
+    NDIS_PHYSICAL_ADDRESS PhysicalAddress;
+    ULONG Length;
+} RTL8168_TX_BUFFER, *PRTL8168_TX_BUFFER;
+
+typedef struct _RTL8168_ADAPTER
+{
+    NDIS_HANDLE MiniportHandle;
+    PDEVICE_OBJECT PhysicalDeviceObject;
+
+    PVOID RegisterBase;
+    ULONG RegisterLength;
+    PHYSICAL_ADDRESS RegisterPhysical;
+
+    ULONG InterruptVector;
+    ULONG InterruptLevel;
+    KAFFINITY InterruptAffinity;
+    NDIS_HANDLE InterruptHandle;
+
+    NDIS_HANDLE RxNblPool;
+    NDIS_SPIN_LOCK RxLock;
+    NDIS_SPIN_LOCK TxLock;
+
+    PRTL8168_DESC RxRing;
+    NDIS_PHYSICAL_ADDRESS RxRingPhysical;
+    ULONG RxRingLength;
+    RTL8168_RX_BUFFER RxBuffers[RTL8168_RX_RING_SIZE];
+    ULONG RxTail;
+    volatile LONG RxReturnedSinceKick;
+
+    PRTL8168_DESC TxRing;
+    NDIS_PHYSICAL_ADDRESS TxRingPhysical;
+    ULONG TxRingLength;
+    RTL8168_TX_BUFFER TxBuffers[RTL8168_TX_RING_SIZE];
+    ULONG TxHead;
+    ULONG TxTail;
+    ULONG TxFree;
+
+    UCHAR PermanentMacAddress[ETH_LENGTH_OF_ADDRESS];
+    UCHAR CurrentMacAddress[ETH_LENGTH_OF_ADDRESS];
+    UCHAR MulticastList[RTL8168_MAX_MULTICAST][ETH_LENGTH_OF_ADDRESS];
+    ULONG MulticastCount;
+    ULONG PacketFilter;
+    ULONG Lookahead;
+    ULONG HwRev;
+    ULONG64 LinkSpeed;
+    NDIS_MEDIA_CONNECT_STATE MediaConnectState;
+    NDIS_MEDIA_DUPLEX_STATE MediaDuplexState;
+    NDIS_HANDLE LinkTimer;
+    BOOLEAN DatapathReady;
+    BOOLEAN RingsOwnedByHardware;
+
+    ULONG64 TxPackets;
+    ULONG64 RxPackets;
+    ULONG64 TxBytes;
+    ULONG64 RxBytes;
+    ULONG64 TxErrors;
+    ULONG64 RxErrors;
+    ULONG64 RxNoBuffer;
+} RTL8168_ADAPTER, *PRTL8168_ADAPTER;
