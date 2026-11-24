@@ -66,14 +66,6 @@ std::string Trim(const std::string &value)
     return value.substr(first, last - first);
 }
 
-std::string UnquoteYaml(const std::string &value)
-{
-    std::string result = Trim(value);
-    if (result.size() >= 2 && ((result[0] == '"' && result[result.size() - 1] == '"') || (result[0] == '\'' && result[result.size() - 1] == '\'')))
-        result = result.substr(1, result.size() - 2);
-    return result;
-}
-
 std::string AsciiLower(const std::string &value)
 {
     std::string result(value);

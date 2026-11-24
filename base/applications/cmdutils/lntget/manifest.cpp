@@ -10,8 +10,10 @@
 
 #include "manifest.hpp"
 #include "util.hpp"
+#include "yaml.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <ctype.h>
 #include <cerrno>
 #include <cstdlib>
@@ -22,69 +24,6 @@ namespace lntget
 
 namespace
 {
-
-enum class NestedSection
-{
-    None,
-    Switches,
-    UnsupportedArchitectures,
-    InstallModes,
-    Commands,
-    SuccessCodes,
-    ExpectedReturnCodes,
-    Dependencies,
-    NestedFiles,
-    Authentication,
-    Markets,
-};
-
-std::string RemoveYamlComment(const std::string &line)
-{
-    bool singleQuoted = false;
-    bool doubleQuoted = false;
-    for (std::size_t index = 0; index < line.size(); ++index)
-    {
-        if (line[index] == '\'' && !doubleQuoted)
-            singleQuoted = !singleQuoted;
-        else if (line[index] == '"' && !singleQuoted && (index == 0 || line[index - 1] != '\\'))
-            doubleQuoted = !doubleQuoted;
-        else if (line[index] == '#' && !singleQuoted && !doubleQuoted &&
-                 (index == 0 || line[index - 1] == ' ' || line[index - 1] == '\t'))
-            return line.substr(0, index);
-    }
-    return line;
-}
-
-bool SplitProperty(const std::string &line, std::string &key, std::string &value)
-{
-    const std::size_t colon = line.find(':');
-    if (colon == std::string::npos)
-        return false;
-    key = Trim(line.substr(0, colon));
-    value = UnquoteYaml(line.substr(colon + 1));
-    return !key.empty();
-}
-
-std::vector<std::string> ParseInlineList(const std::string &value)
-{
-    std::string text = Trim(value);
-    if (text.size() < 2 || text[0] != '[' || text[text.size() - 1] != ']')
-        return std::vector<std::string>();
-    text = text.substr(1, text.size() - 2);
-    std::vector<std::string> result;
-    std::size_t offset = 0;
-    while (offset <= text.size())
-    {
-        const std::size_t comma = text.find(',', offset);
-        const std::string item = UnquoteYaml(text.substr(offset, comma == std::string::npos ? text.size() - offset : comma - offset));
-        if (!item.empty())
-            result.push_back(item);
-        if (comma == std::string::npos)
-            break;
-        offset = comma + 1;
-    }
-    return result;
-}
 
 bool ParseCode(const std::string &value, DWORD &code)
 {
@@ -127,146 +66,199 @@ bool ParseBoolean(const std::string &value, bool &result)
     return false;
 }
 
-std::string FoldBlock(const std::vector<std::string> &lines, bool folded, bool keepTrailing)
+Status ScalarField(const YamlNode &node, const std::string &key, std::string &value)
 {
-    std::string text;
-    for (const std::string &line : lines)
+    if (node.IsNull())
     {
-        if (!folded)
+        value.clear();
+        return Status::Ok();
+    }
+    if (!node.IsScalar())
+        return Status::Fail(ERROR_BAD_FORMAT, "manifest field " + key + " is not a scalar");
+    value = node.scalar;
+    return Status::Ok();
+}
+
+Status ListField(const YamlNode &node, const std::string &key, std::vector<std::string> &values)
+{
+    values.clear();
+    if (node.IsNull())
+        return Status::Ok();
+    if (!node.IsSequence())
+        return Status::Fail(ERROR_BAD_FORMAT, "manifest field " + key + " is not a list");
+    for (const YamlNode &item : node.items)
+    {
+        if (!item.IsScalar())
+            return Status::Fail(ERROR_BAD_FORMAT, "manifest field " + key + " contains a value that is not a scalar");
+        values.push_back(item.scalar);
+    }
+    return Status::Ok();
+}
+
+Status MappingListField(const YamlNode &node, const std::string &key)
+{
+    if (!node.IsNull() && !node.IsSequence())
+        return Status::Fail(ERROR_BAD_FORMAT, "manifest field " + key + " is not a list");
+    for (const YamlNode &item : node.items)
+    {
+        if (!item.IsMapping())
+            return Status::Fail(ERROR_BAD_FORMAT, "manifest field " + key + " contains an entry that is not a mapping");
+    }
+    return Status::Ok();
+}
+
+Status NestedFilesField(const YamlNode &node, std::vector<NestedInstallerFile> &files)
+{
+    files.clear();
+    Status status = MappingListField(node, "NestedInstallerFiles");
+    for (std::size_t index = 0; status && index < node.items.size(); ++index)
+    {
+        NestedInstallerFile file;
+        for (const auto &member : node.items[index].members)
         {
-            text += line;
-            text.push_back('\n');
+            if (member.first == "RelativeFilePath") status = ScalarField(member.second, member.first, file.relativePath);
+            else if (member.first == "PortableCommandAlias") status = ScalarField(member.second, member.first, file.portableCommandAlias);
+            if (!status) break;
+        }
+        files.push_back(file);
+    }
+    return status;
+}
+
+Status SwitchesField(const YamlNode &node, InstallerSwitches &switches)
+{
+    if (node.IsNull())
+        return Status::Ok();
+    if (!node.IsMapping())
+        return Status::Fail(ERROR_BAD_FORMAT, "manifest field InstallerSwitches is not a mapping");
+    for (const auto &member : node.members)
+    {
+        std::string *target = nullptr;
+        if (member.first == "Silent") target = &switches.silent;
+        else if (member.first == "SilentWithProgress") target = &switches.silentWithProgress;
+        else if (member.first == "Interactive") target = &switches.interactive;
+        else if (member.first == "Custom") target = &switches.custom;
+        if (!target || member.second.IsNull()) continue;
+        const Status status = ScalarField(member.second, member.first, *target);
+        if (!status) return status;
+    }
+    return Status::Ok();
+}
+
+Status SuccessCodesField(const YamlNode &node, std::vector<DWORD> &codes)
+{
+    std::vector<std::string> values;
+    Status status = ListField(node, "InstallerSuccessCodes", values);
+    if (!status) return status;
+    codes.clear();
+    for (const std::string &value : values)
+    {
+        DWORD code = 0;
+        if (!ParseReturnCode(value, code))
+            return Status::Fail(ERROR_BAD_FORMAT, "InstallerSuccessCodes contains a non-numeric value");
+        codes.push_back(code);
+    }
+    return Status::Ok();
+}
+
+Status ExpectedReturnCodesField(const YamlNode &node, std::map<DWORD, std::string> &codes)
+{
+    codes.clear();
+    Status status = MappingListField(node, "ExpectedReturnCodes");
+    for (std::size_t index = 0; status && index < node.items.size(); ++index)
+    {
+        const YamlNode &entry = node.items[index];
+        const YamlNode *codeNode = entry.Find("InstallerReturnCode");
+        const YamlNode *responseNode = entry.Find("ReturnResponse");
+        DWORD code = 0;
+        if (!codeNode || !codeNode->IsScalar() || !ParseReturnCode(codeNode->scalar, code))
+            return Status::Fail(ERROR_BAD_FORMAT, "ExpectedReturnCodes contains a non-numeric code");
+        std::string response;
+        if (responseNode)
+            status = ScalarField(*responseNode, "ReturnResponse", response);
+        codes[code] = response.empty() ? "expected installer response" : response;
+    }
+    return status;
+}
+
+Status DependenciesField(const YamlNode &node, InstallerEntry &installer)
+{
+    installer.packageDependencies.clear();
+    installer.hasUnsupportedDependencies = false;
+    if (node.IsNull())
+        return Status::Ok();
+    if (!node.IsMapping())
+        return Status::Fail(ERROR_BAD_FORMAT, "manifest field Dependencies is not a mapping");
+    for (const auto &member : node.members)
+    {
+        const YamlNode &value = member.second;
+        if (member.first != "PackageDependencies")
+        {
+            if (!value.IsNull() && !value.IsSequence())
+                return Status::Fail(ERROR_BAD_FORMAT, "manifest field " + member.first + " is not a list");
+            if (member.first == "WindowsFeatures" || member.first == "WindowsLibraries" || member.first == "ExternalDependencies")
+                installer.hasUnsupportedDependencies = installer.hasUnsupportedDependencies || !value.items.empty();
             continue;
         }
-        if (line.empty())
+        Status status = MappingListField(value, member.first);
+        if (!status) return status;
+        for (const YamlNode &entry : value.items)
         {
-            text.push_back('\n');
+            PackageDependency dependency;
+            const YamlNode *id = entry.Find("PackageIdentifier");
+            const YamlNode *minimumVersion = entry.Find("MinimumVersion");
+            if (!id || !id->IsScalar() || id->scalar.empty())
+                return Status::Fail(ERROR_BAD_FORMAT, "a package dependency has no PackageIdentifier");
+            dependency.id = id->scalar;
+            if (minimumVersion)
+                status = ScalarField(*minimumVersion, "MinimumVersion", dependency.minimumVersion);
+            if (!status) return status;
+            installer.packageDependencies.push_back(dependency);
+        }
+    }
+    return Status::Ok();
+}
+
+Status ApplyInstallerFields(const YamlNode &fields, InstallerEntry &installer)
+{
+    assert(fields.IsMapping());
+    for (const auto &member : fields.members)
+    {
+        const std::string &key = member.first;
+        const YamlNode &value = member.second;
+        if (value.IsNull())
             continue;
-        }
-        if (!text.empty() && text[text.size() - 1] != '\n')
-            text.push_back(' ');
-        text += line;
-    }
-    if (!keepTrailing)
-    {
-        while (!text.empty() && (text[text.size() - 1] == '\n' || text[text.size() - 1] == ' '))
-            text.pop_back();
-    }
-    return text;
-}
-
-enum class DependencyKind
-{
-    None,
-    Package,
-    Other,
-};
-
-void SetNestedFileProperty(NestedInstallerFile &file, const std::string &key, const std::string &value)
-{
-    if (key == "RelativeFilePath") file.relativePath = value;
-    else if (key == "PortableCommandAlias") file.portableCommandAlias = value;
-}
-
-void SetSwitch(InstallerSwitches &switches, const std::string &key, const std::string &value)
-{
-    if (key == "Silent") switches.silent = value;
-    else if (key == "SilentWithProgress") switches.silentWithProgress = value;
-    else if (key == "Interactive") switches.interactive = value;
-    else if (key == "Custom") switches.custom = value;
-}
-
-NestedSection SetInstallerProperty(InstallerEntry &installer, const std::string &key, const std::string &value)
-{
-    if (key == "Architecture") installer.architecture = value;
-    else if (key == "InstallerType") installer.type = value;
-    else if (key == "InstallerUrl") installer.url = value;
-    else if (key == "InstallerSha256") installer.sha256 = value;
-    else if (key == "Scope") installer.scope = value;
-    else if (key == "InstallerLocale") installer.locale = value;
-    else if (key == "MinimumOSVersion") installer.minimumOsVersion = value;
-    else if (key == "NestedInstallerType") installer.nestedType = value;
-    else if (key == "NestedInstallerFiles") return NestedSection::NestedFiles;
-    else if (key == "InstallerSwitches") return NestedSection::Switches;
-    else if (key == "UnsupportedOSArchitectures")
-    {
-        installer.unsupportedOsArchitectures = ParseInlineList(value);
-        return NestedSection::UnsupportedArchitectures;
-    }
-    else if (key == "Commands")
-    {
-        installer.commands = ParseInlineList(value);
-        return NestedSection::Commands;
-    }
-    else if (key == "InstallModes")
-    {
-        installer.installModes = ParseInlineList(value);
-        return NestedSection::InstallModes;
-    }
-    else if (key == "InstallerSuccessCodes")
-    {
-        for (const std::string &item : ParseInlineList(value))
+        Status status;
+        if (key == "Architecture") status = ScalarField(value, key, installer.architecture);
+        else if (key == "InstallerType") status = ScalarField(value, key, installer.type);
+        else if (key == "InstallerUrl") status = ScalarField(value, key, installer.url);
+        else if (key == "InstallerSha256") status = ScalarField(value, key, installer.sha256);
+        else if (key == "Scope") status = ScalarField(value, key, installer.scope);
+        else if (key == "InstallerLocale") status = ScalarField(value, key, installer.locale);
+        else if (key == "MinimumOSVersion") status = ScalarField(value, key, installer.minimumOsVersion);
+        else if (key == "NestedInstallerType") status = ScalarField(value, key, installer.nestedType);
+        else if (key == "NestedInstallerFiles") status = NestedFilesField(value, installer.nestedFiles);
+        else if (key == "InstallerSwitches") status = SwitchesField(value, installer.switches);
+        else if (key == "UnsupportedOSArchitectures") status = ListField(value, key, installer.unsupportedOsArchitectures);
+        else if (key == "InstallModes") status = ListField(value, key, installer.installModes);
+        else if (key == "Commands") status = ListField(value, key, installer.commands);
+        else if (key == "InstallerSuccessCodes") status = SuccessCodesField(value, installer.successCodes);
+        else if (key == "ExpectedReturnCodes") status = ExpectedReturnCodesField(value, installer.expectedReturnCodes);
+        else if (key == "Dependencies") status = DependenciesField(value, installer);
+        else if (key == "Authentication") installer.hasAuthentication = true;
+        else if (key == "Markets") installer.hasMarketRestrictions = true;
+        else if (key == "DownloadCommandProhibited")
         {
-            DWORD code = 0;
-            if (ParseReturnCode(item, code)) installer.successCodes.push_back(code);
+            std::string text;
+            status = ScalarField(value, key, text);
+            if (status && !text.empty() && !ParseBoolean(text, installer.downloadCommandProhibited))
+                status = Status::Fail(ERROR_BAD_FORMAT, "manifest field DownloadCommandProhibited is not a boolean");
         }
-        return NestedSection::SuccessCodes;
+        if (!status) return status;
     }
-    else if (key == "ExpectedReturnCodes") return NestedSection::ExpectedReturnCodes;
-    else if (key == "Dependencies")
-    {
-        installer.hasUnsupportedDependencies = !value.empty();
-        return NestedSection::Dependencies;
-    }
-    else if (key == "Authentication")
-    {
-        installer.hasAuthentication = true;
-        return NestedSection::Authentication;
-    }
-    else if (key == "Markets")
-    {
-        installer.hasMarketRestrictions = true;
-        return NestedSection::Markets;
-    }
-    else if (key == "DownloadCommandProhibited")
-    {
-        bool prohibited = false;
-        if (ParseBoolean(value, prohibited)) installer.downloadCommandProhibited = prohibited;
-    }
-    return NestedSection::None;
+    return Status::Ok();
 }
 
-void InheritString(std::string &value, const std::string &fallback)
-{
-    if (value.empty()) value = fallback;
-}
-
-void InheritInstaller(InstallerEntry &installer, const InstallerEntry &defaults)
-{
-    InheritString(installer.architecture, defaults.architecture);
-    InheritString(installer.type, defaults.type);
-    InheritString(installer.url, defaults.url);
-    InheritString(installer.sha256, defaults.sha256);
-    InheritString(installer.scope, defaults.scope);
-    InheritString(installer.locale, defaults.locale);
-    InheritString(installer.minimumOsVersion, defaults.minimumOsVersion);
-    InheritString(installer.nestedType, defaults.nestedType);
-    if (installer.nestedFiles.empty()) installer.nestedFiles = defaults.nestedFiles;
-    if (installer.packageDependencies.empty()) installer.packageDependencies = defaults.packageDependencies;
-    InheritString(installer.switches.silent, defaults.switches.silent);
-    InheritString(installer.switches.silentWithProgress, defaults.switches.silentWithProgress);
-    InheritString(installer.switches.interactive, defaults.switches.interactive);
-    InheritString(installer.switches.custom, defaults.switches.custom);
-    if (installer.unsupportedOsArchitectures.empty()) installer.unsupportedOsArchitectures = defaults.unsupportedOsArchitectures;
-    if (installer.installModes.empty()) installer.installModes = defaults.installModes;
-    if (installer.commands.empty()) installer.commands = defaults.commands;
-    if (installer.successCodes.empty()) installer.successCodes = defaults.successCodes;
-    if (installer.expectedReturnCodes.empty()) installer.expectedReturnCodes = defaults.expectedReturnCodes;
-    installer.hasUnsupportedDependencies = installer.hasUnsupportedDependencies || defaults.hasUnsupportedDependencies;
-    installer.hasAuthentication = installer.hasAuthentication || defaults.hasAuthentication;
-    installer.hasMarketRestrictions = installer.hasMarketRestrictions || defaults.hasMarketRestrictions;
-    installer.downloadCommandProhibited = installer.downloadCommandProhibited || defaults.downloadCommandProhibited;
-}
 
 int ArchitectureRank(const std::string &installerArchitecture, MachineArchitecture machine)
 {
@@ -424,94 +416,26 @@ bool IsSha256(const std::string &value)
     return true;
 }
 
-Status ParsePackageAgreements(const std::string &yaml, std::vector<PackageAgreement> &agreements)
+Status ParsePackageAgreements(const YamlNode *node, std::vector<PackageAgreement> &agreements)
 {
     agreements.clear();
-    std::vector<std::string> lines;
-    std::size_t offset = 0;
-    while (offset <= yaml.size())
+    if (!node)
+        return Status::Ok();
+    Status status = MappingListField(*node, "Agreements");
+    if (!status) return status;
+    if (node->items.size() > 32)
+        return Status::Fail(ERROR_BAD_FORMAT, "package manifest contains too many agreements");
+    for (const YamlNode &entry : node->items)
     {
-        const std::size_t end = yaml.find('\n', offset);
-        std::string line(yaml.substr(offset, end == std::string::npos ? yaml.size() - offset : end - offset));
-        if (!line.empty() && line[line.size() - 1] == '\r') line.pop_back();
-        lines.push_back(line);
-        if (end == std::string::npos) break;
-        offset = end + 1;
-    }
-
-    bool inAgreements = false;
-    std::size_t agreementsIndent = 0;
-    std::size_t itemIndent = 0;
-    for (std::size_t index = 0; index < lines.size(); ++index)
-    {
-        std::string line = RemoveYamlComment(lines[index]);
-        if (Trim(line).empty()) continue;
-        std::size_t indent = 0;
-        while (indent < line.size() && line[indent] == ' ') ++indent;
-        if (indent < line.size() && line[indent] == '\t')
-            return Status::Fail(ERROR_BAD_FORMAT, "package agreements use a tab for YAML indentation");
-        const std::string content = line.substr(indent);
-        if (!inAgreements)
+        PackageAgreement agreement;
+        for (const auto &member : entry.members)
         {
-            if (Trim(content) == "Agreements:")
-            {
-                inAgreements = true;
-                agreementsIndent = indent;
-            }
-            continue;
+            if (member.first == "AgreementLabel") status = ScalarField(member.second, member.first, agreement.label);
+            else if (member.first == "Agreement") status = ScalarField(member.second, member.first, agreement.text);
+            else if (member.first == "AgreementUrl") status = ScalarField(member.second, member.first, agreement.url);
+            if (!status) return status;
         }
-        if (indent <= agreementsIndent && content.rfind("- ", 0) != 0)
-            break;
-
-        std::string property = content;
-        if (content.rfind("- ", 0) == 0 && (agreements.empty() || indent <= itemIndent))
-        {
-            if (agreements.size() >= 32)
-                return Status::Fail(ERROR_BAD_FORMAT, "package manifest contains too many agreements");
-            agreements.push_back(PackageAgreement());
-            itemIndent = indent;
-            property.erase(0, 2);
-        }
-        else if (agreements.empty() || indent <= itemIndent)
-        {
-            return Status::Fail(ERROR_BAD_FORMAT, "package agreement list is malformed");
-        }
-
-        std::string key;
-        std::string value;
-        if (!SplitProperty(property, key, value)) continue;
-        const bool block = value == "|" || value == "|-" || value == "|+" ||
-                           value == ">" || value == ">-" || value == ">+";
-        if (block)
-        {
-            const bool folded = value[0] == '>';
-            const bool keep = value.size() > 1 && value[1] == '+';
-            std::vector<std::string> blockLines;
-            std::size_t blockIndent = 0;
-            while (index + 1 < lines.size())
-            {
-                const std::string &next = lines[index + 1];
-                std::size_t nextIndent = 0;
-                while (nextIndent < next.size() && next[nextIndent] == ' ') ++nextIndent;
-                if (nextIndent == next.size())
-                {
-                    blockLines.push_back(std::string());
-                    ++index;
-                    continue;
-                }
-                if (nextIndent <= indent) break;
-                if (!blockIndent) blockIndent = nextIndent;
-                if (nextIndent < blockIndent) break;
-                blockLines.push_back(next.substr(blockIndent));
-                ++index;
-            }
-            value = FoldBlock(blockLines, folded, keep);
-        }
-
-        PackageAgreement &agreement = agreements.back();
-        if (key == "AgreementLabel") agreement.label = value;
-        else if (key == "Agreement") agreement.text = value;
-        else if (key == "AgreementUrl") agreement.url = value;
+        agreements.push_back(agreement);
     }
     for (const PackageAgreement &agreement : agreements)
     {
@@ -521,6 +445,7 @@ Status ParsePackageAgreements(const std::string &yaml, std::vector<PackageAgreem
     }
     return Status::Ok();
 }
+
 
 Status SelectInstallerForMachine(const Manifest &manifest, const SelectionOptions &options, MachineArchitecture machine, InstallerEntry &installer)
 {
@@ -582,188 +507,51 @@ Status SelectInstallerForMachine(const Manifest &manifest, const SelectionOption
 Status ParseInstallerManifest(const std::string &yaml, Manifest &manifest)
 {
     manifest = Manifest();
-    InstallerEntry defaults;
-    InstallerEntry *current = nullptr;
-    bool inInstallers = false;
-    std::size_t installerItemIndent = 0;
-    NestedSection section = NestedSection::None;
-    std::size_t sectionIndent = 0;
-    InstallerEntry *sectionTarget = nullptr;
-    bool hasExpectedCode = false;
-    DWORD expectedCode = 0;
-    DependencyKind dependencyKind = DependencyKind::None;
-
-    std::size_t offset = 0;
-    while (offset <= yaml.size())
-    {
-        const std::size_t end = yaml.find('\n', offset);
-        std::string line = RemoveYamlComment(yaml.substr(offset, end == std::string::npos ? yaml.size() - offset : end - offset));
-        if (!line.empty() && line[line.size() - 1] == '\r') line.pop_back();
-        offset = end == std::string::npos ? yaml.size() + 1 : end + 1;
-        if (Trim(line).empty()) continue;
-
-        if (Trim(line) == "Agreements:") manifest.hasAgreements = true;
-
-        std::size_t indent = 0;
-        while (indent < line.size() && line[indent] == ' ') ++indent;
-        if (indent < line.size() && line[indent] == '\t')
-            return Status::Fail(ERROR_BAD_FORMAT, "manifest uses a tab for YAML indentation");
-        const std::string content = line.substr(indent);
-
-        if (inInstallers && content.rfind("- ", 0) == 0 &&
-            (!current || indent <= installerItemIndent))
-        {
-            manifest.installers.push_back(InstallerEntry());
-            current = &manifest.installers.back();
-            installerItemIndent = indent;
-            section = NestedSection::None;
-            sectionTarget = nullptr;
-            hasExpectedCode = false;
-            std::string key;
-            std::string value;
-            if (SplitProperty(content.substr(2), key, value))
-            {
-                section = SetInstallerProperty(*current, key, value);
-                if (section != NestedSection::None)
-                {
-                    sectionIndent = indent;
-                    sectionTarget = current;
-                }
-            }
-            continue;
-        }
-
-        if (section != NestedSection::None && indent >= sectionIndent && content.rfind("- ", 0) == 0 && sectionTarget)
-        {
-            const std::string item = UnquoteYaml(content.substr(2));
-            if (section == NestedSection::UnsupportedArchitectures) sectionTarget->unsupportedOsArchitectures.push_back(item);
-            else if (section == NestedSection::InstallModes) sectionTarget->installModes.push_back(item);
-            else if (section == NestedSection::Commands) sectionTarget->commands.push_back(item);
-            else if (section == NestedSection::SuccessCodes)
-            {
-                DWORD code = 0;
-                if (!ParseReturnCode(item, code)) return Status::Fail(ERROR_BAD_FORMAT, "InstallerSuccessCodes contains a non-numeric value");
-                sectionTarget->successCodes.push_back(code);
-            }
-            else if (section == NestedSection::ExpectedReturnCodes)
-            {
-                std::string key;
-                std::string value;
-                if (SplitProperty(content.substr(2), key, value) && key == "InstallerReturnCode")
-                {
-                    DWORD code = 0;
-                    if (!ParseReturnCode(value, code)) return Status::Fail(ERROR_BAD_FORMAT, "ExpectedReturnCodes contains a non-numeric code");
-                    hasExpectedCode = true;
-                    expectedCode = code;
-                    sectionTarget->expectedReturnCodes[code] = "expected installer response";
-                }
-            }
-            else if (section == NestedSection::Dependencies)
-            {
-                std::string key;
-                std::string value;
-                if (dependencyKind == DependencyKind::Package && SplitProperty(content.substr(2), key, value) &&
-                    key == "PackageIdentifier")
-                {
-                    sectionTarget->packageDependencies.push_back(PackageDependency());
-                    sectionTarget->packageDependencies.back().id = value;
-                }
-                else if (dependencyKind != DependencyKind::Package)
-                {
-                    sectionTarget->hasUnsupportedDependencies = true;
-                }
-            }
-            else if (section == NestedSection::NestedFiles)
-            {
-                sectionTarget->nestedFiles.push_back(NestedInstallerFile());
-                std::string key;
-                std::string value;
-                if (SplitProperty(content.substr(2), key, value))
-                    SetNestedFileProperty(sectionTarget->nestedFiles.back(), key, value);
-            }
-            else if (section == NestedSection::Authentication) sectionTarget->hasAuthentication = true;
-            else if (section == NestedSection::Markets) sectionTarget->hasMarketRestrictions = true;
-            continue;
-        }
-
-        std::string key;
-        std::string value;
-        if (!SplitProperty(content, key, value))
-            continue;
-
-        if (section != NestedSection::None && indent > sectionIndent && sectionTarget)
-        {
-            if (section == NestedSection::Switches) SetSwitch(sectionTarget->switches, key, value);
-            else if (section == NestedSection::ExpectedReturnCodes && key == "ReturnResponse" && hasExpectedCode)
-                sectionTarget->expectedReturnCodes[expectedCode] = value;
-            else if (section == NestedSection::Dependencies)
-            {
-                if (key == "PackageDependencies")
-                {
-                    dependencyKind = DependencyKind::Package;
-                }
-                else if (key == "MinimumVersion" && dependencyKind == DependencyKind::Package &&
-                         !sectionTarget->packageDependencies.empty())
-                {
-                    sectionTarget->packageDependencies.back().minimumVersion = value;
-                }
-                else if (key != "PackageIdentifier")
-                {
-                    dependencyKind = DependencyKind::Other;
-                    if (!value.empty() && value != "[]")
-                        sectionTarget->hasUnsupportedDependencies = true;
-                }
-            }
-            else if (section == NestedSection::NestedFiles && !sectionTarget->nestedFiles.empty())
-                SetNestedFileProperty(sectionTarget->nestedFiles.back(), key, value);
-            else if (section == NestedSection::Authentication) sectionTarget->hasAuthentication = true;
-            else if (section == NestedSection::Markets) sectionTarget->hasMarketRestrictions = true;
-            continue;
-        }
-
-        section = NestedSection::None;
-        dependencyKind = DependencyKind::None;
-        sectionTarget = nullptr;
-        hasExpectedCode = false;
-        if (indent == 0 && key == "Installers")
-        {
-            inInstallers = true;
-            current = nullptr;
-            continue;
-        }
-        if (indent == 0)
-        {
-            inInstallers = false;
-            if (key == "PackageIdentifier") manifest.id = value;
-            else if (key == "PackageVersion") manifest.version = value;
-            else
-            {
-                section = SetInstallerProperty(defaults, key, value);
-                if (section != NestedSection::None)
-                {
-                    sectionIndent = indent;
-                    sectionTarget = &defaults;
-                }
-            }
-            continue;
-        }
-        if (inInstallers && current && indent > installerItemIndent)
-        {
-            section = SetInstallerProperty(*current, key, value);
-            if (section != NestedSection::None)
-            {
-                sectionIndent = indent;
-                sectionTarget = current;
-            }
-        }
-    }
-
+    YamlNode root;
+    Status status = ParseYaml(yaml, root);
+    if (!status) return status;
+    if (!root.IsMapping())
+        return Status::Fail(ERROR_BAD_FORMAT, "manifest is not a YAML mapping");
+    const YamlNode *id = root.Find("PackageIdentifier");
+    const YamlNode *version = root.Find("PackageVersion");
+    if (id) status = ScalarField(*id, "PackageIdentifier", manifest.id);
+    if (status && version) status = ScalarField(*version, "PackageVersion", manifest.version);
+    if (!status) return status;
     if (manifest.id.empty() || manifest.version.empty())
         return Status::Fail(ERROR_BAD_FORMAT, "manifest is missing PackageIdentifier or PackageVersion");
+
+    InstallerEntry defaults;
+    status = ApplyInstallerFields(root, defaults);
+    if (!status) return status;
+    const YamlNode *installers = root.Find("Installers");
+    if (installers)
+    {
+        status = MappingListField(*installers, "Installers");
+        if (!status) return status;
+        for (const YamlNode &entry : installers->items)
+        {
+            InstallerEntry installer(defaults);
+            installer.nestedType.clear();
+            installer.nestedFiles.clear();
+            installer.packageDependencies.clear();
+            installer.hasUnsupportedDependencies = false;
+            status = ApplyInstallerFields(entry, installer);
+            if (!status) return status;
+            if (AsciiEquals(installer.type, "zip"))
+            {
+                if (installer.nestedFiles.empty()) installer.nestedFiles = defaults.nestedFiles;
+                if (installer.nestedType.empty()) installer.nestedType = defaults.nestedType;
+            }
+            if (installer.packageDependencies.empty() && !installer.hasUnsupportedDependencies)
+            {
+                installer.packageDependencies = defaults.packageDependencies;
+                installer.hasUnsupportedDependencies = defaults.hasUnsupportedDependencies;
+            }
+            manifest.installers.push_back(installer);
+        }
+    }
     if (manifest.installers.empty() && (!defaults.architecture.empty() || !defaults.url.empty()))
         manifest.installers.push_back(defaults);
-    for (InstallerEntry &installer : manifest.installers)
-        InheritInstaller(installer, defaults);
 
     manifest.defaultArchitecture = defaults.architecture;
     manifest.defaultType = defaults.type;
@@ -781,248 +569,67 @@ Status ParseInstallerManifest(const std::string &yaml, Manifest &manifest)
     manifest.defaultHasAuthentication = defaults.hasAuthentication;
     manifest.defaultHasMarketRestrictions = defaults.hasMarketRestrictions;
     manifest.defaultDownloadCommandProhibited = defaults.downloadCommandProhibited;
-    Status agreementStatus = ParsePackageAgreements(yaml, manifest.agreements);
-    if (!agreementStatus) return agreementStatus;
-    if (manifest.hasAgreements && manifest.agreements.empty())
-        return Status::Fail(ERROR_BAD_FORMAT, "manifest declares package agreements without displayable terms");
+    status = ParsePackageAgreements(root.Find("Agreements"), manifest.agreements);
+    if (!status) return status;
     manifest.hasAgreements = !manifest.agreements.empty();
     return Status::Ok();
 }
 
-namespace
-{
-
-void SetDetailProperty(PackageDetails &details, const std::string &key, const std::string &value)
-{
-    if (key == "Publisher") details.publisher = value;
-    else if (key == "PublisherUrl") details.publisherUrl = value;
-    else if (key == "PublisherSupportUrl") details.supportUrl = value;
-    else if (key == "Author") details.author = value;
-    else if (key == "PackageName") details.packageName = value;
-    else if (key == "PackageUrl") details.packageUrl = value;
-    else if (key == "License") details.license = value;
-    else if (key == "LicenseUrl") details.licenseUrl = value;
-    else if (key == "Copyright") details.copyright = value;
-    else if (key == "ShortDescription") details.shortDescription = value;
-    else if (key == "Description") details.description = value;
-    else if (key == "ReleaseNotesUrl") details.releaseNotesUrl = value;
-    else if (key == "Documentations" || key == "DocumentUrl") details.documentationUrl = value;
-}
-
-bool FlowScalarComplete(const std::string &text, char quote)
-{
-    if (text.size() < 2)
-        return false;
-    std::size_t index = 1;
-    while (index < text.size())
-    {
-        if (quote == '\'')
-        {
-            if (text[index] != '\'')
-            {
-                ++index;
-                continue;
-            }
-            if (index + 1 < text.size() && text[index + 1] == '\'')
-            {
-                index += 2;
-                continue;
-            }
-            return true;
-        }
-        if (text[index] == '\\')
-        {
-            index += 2;
-            continue;
-        }
-        if (text[index] == '"')
-            return true;
-        ++index;
-    }
-    return false;
-}
-
-void AppendUtf8(std::string &text, unsigned long code)
-{
-    if (code < 0x80)
-    {
-        text.push_back(static_cast<char>(code));
-    }
-    else if (code < 0x800)
-    {
-        text.push_back(static_cast<char>(0xc0 | (code >> 6)));
-        text.push_back(static_cast<char>(0x80 | (code & 0x3f)));
-    }
-    else
-    {
-        text.push_back(static_cast<char>(0xe0 | (code >> 12)));
-        text.push_back(static_cast<char>(0x80 | ((code >> 6) & 0x3f)));
-        text.push_back(static_cast<char>(0x80 | (code & 0x3f)));
-    }
-}
-
-std::string DecodeFlowScalar(const std::string &text, char quote)
-{
-    std::string value;
-    std::size_t index = 1;
-    while (index < text.size())
-    {
-        const char character = text[index];
-        if (character == quote)
-        {
-            if (quote == '\'' && index + 1 < text.size() && text[index + 1] == '\'')
-            {
-                value.push_back('\'');
-                index += 2;
-                continue;
-            }
-            break;
-        }
-        if (character == '\n')
-        {
-            std::size_t breaks = 0;
-            while (index < text.size() && (text[index] == '\n' || text[index] == ' '))
-            {
-                if (text[index] == '\n')
-                    ++breaks;
-                ++index;
-            }
-            if (breaks > 1)
-                value.append(breaks - 1, '\n');
-            else if (!value.empty())
-                value.push_back(' ');
-            continue;
-        }
-        if (quote == '"' && character == '\\' && index + 1 < text.size())
-        {
-            const char escape = text[index + 1];
-            index += 2;
-            switch (escape)
-            {
-                case 'n': value.push_back('\n'); break;
-                case 't': value.push_back('\t'); break;
-                case 'r': value.push_back('\r'); break;
-                case '0': value.push_back('\0'); break;
-                case 'u':
-                {
-                    unsigned long code = 0;
-                    std::size_t digits = 0;
-                    while (digits < 4 && index < text.size() && isxdigit(static_cast<unsigned char>(text[index])))
-                    {
-                        const char digit = text[index];
-                        code = code * 16 + static_cast<unsigned long>(digit <= '9' ? digit - '0' : (digit | 0x20) - 'a' + 10);
-                        ++index;
-                        ++digits;
-                    }
-                    AppendUtf8(value, code);
-                    break;
-                }
-                default: value.push_back(escape); break;
-            }
-            continue;
-        }
-        value.push_back(character);
-        ++index;
-    }
-    return value;
-}
-
-} // namespace
-
 Status ParseLocaleManifest(const std::string &yaml, PackageDetails &details)
 {
     details = PackageDetails();
-    std::vector<std::string> lines;
-    std::size_t offset = 0;
-    while (offset <= yaml.size())
+    YamlNode root;
+    Status status = ParseYaml(yaml, root);
+    if (!status) return status;
+    if (!root.IsMapping())
+        return Status::Fail(ERROR_BAD_FORMAT, "manifest is not a YAML mapping");
+    static const struct
     {
-        const std::size_t end = yaml.find('\n', offset);
-        std::string line(yaml.substr(offset, end == std::string::npos ? yaml.size() - offset : end - offset));
-        offset = end == std::string::npos ? yaml.size() + 1 : end + 1;
-        if (!line.empty() && line[line.size() - 1] == '\r')
-            line.pop_back();
-        lines.push_back(line);
+        const char *key;
+        std::string PackageDetails::*field;
+    } Fields[] = {
+        {"Publisher", &PackageDetails::publisher},
+        {"PublisherUrl", &PackageDetails::publisherUrl},
+        {"PublisherSupportUrl", &PackageDetails::supportUrl},
+        {"Author", &PackageDetails::author},
+        {"PackageName", &PackageDetails::packageName},
+        {"PackageUrl", &PackageDetails::packageUrl},
+        {"License", &PackageDetails::license},
+        {"LicenseUrl", &PackageDetails::licenseUrl},
+        {"Copyright", &PackageDetails::copyright},
+        {"ShortDescription", &PackageDetails::shortDescription},
+        {"Description", &PackageDetails::description},
+        {"ReleaseNotesUrl", &PackageDetails::releaseNotesUrl},
+    };
+    for (const auto &field : Fields)
+    {
+        const YamlNode *node = root.Find(field.key);
+        if (node) details.*field.field = node->Text();
     }
-
-    const auto indentOf = [](const std::string &line) {
-        std::size_t indent = 0;
-        while (indent < line.size() && line[indent] == ' ')
-            ++indent;
-        return indent;
-    };
-    const auto isBlank = [&indentOf](const std::string &line) { return indentOf(line) == line.size(); };
-    const auto isSequence = [](const std::string &line) {
-        const std::string trimmed = Trim(line);
-        return trimmed.size() > 1 && trimmed[0] == '-' && trimmed[1] == ' ';
-    };
-
-    for (std::size_t index = 0; index < lines.size(); ++index)
+    const YamlNode *documentations = root.Find("Documentations");
+    if (documentations && documentations->IsSequence())
     {
-        const std::string line = lines[index];
-        if (isBlank(line) || indentOf(line))
-            continue;
-        const std::size_t colon = line.find(':');
-        if (colon == std::string::npos)
-            continue;
-        const std::string key = Trim(line.substr(0, colon));
-        const std::string raw = Trim(line.substr(colon + 1));
-        if (key.empty())
-            continue;
-
-        if (key == "Tags")
+        for (const YamlNode &entry : documentations->items)
         {
-            while (index + 1 < lines.size() && isSequence(lines[index + 1]))
-                details.tags.push_back(UnquoteYaml(Trim(lines[++index]).substr(2)));
-            continue;
-        }
-        if (raw.empty())
-            continue;
-
-        if (raw == "|" || raw == "|-" || raw == "|+" || raw == ">" || raw == ">-" || raw == ">+")
-        {
-            std::vector<std::string> block;
-            std::size_t blockIndent = 0;
-            while (index + 1 < lines.size())
+            const YamlNode *url = entry.Find("DocumentUrl");
+            if (url && !url->Text().empty())
             {
-                if (isBlank(lines[index + 1]))
-                {
-                    block.push_back(std::string());
-                    ++index;
-                    continue;
-                }
-                const std::size_t indent = indentOf(lines[index + 1]);
-                if (!blockIndent)
-                    blockIndent = indent;
-                if (indent < blockIndent)
-                    break;
-                block.push_back(lines[++index].substr(blockIndent));
+                details.documentationUrl = url->Text();
+                break;
             }
-            SetDetailProperty(details, key, FoldBlock(block, raw[0] == '>', raw.size() > 1 && raw[1] == '+'));
-            continue;
         }
-
-        if (raw[0] == '"' || raw[0] == '\'')
+    }
+    const YamlNode *tags = root.Find("Tags");
+    if (tags && tags->IsSequence())
+    {
+        for (const YamlNode &tag : tags->items)
         {
-            std::string text = raw;
-            while (!FlowScalarComplete(text, raw[0]) && index + 1 < lines.size())
-            {
-                text.push_back('\n');
-                text += Trim(lines[++index]);
-            }
-            SetDetailProperty(details, key, DecodeFlowScalar(text, raw[0]));
-            continue;
+            if (tag.IsScalar()) details.tags.push_back(tag.scalar);
         }
-
-        std::string plain = raw;
-        while (index + 1 < lines.size() && !isBlank(lines[index + 1]) && indentOf(lines[index + 1]) && !isSequence(lines[index + 1]))
-        {
-            plain.push_back(' ');
-            plain += Trim(lines[++index]);
-        }
-        SetDetailProperty(details, key, plain);
     }
     return Status::Ok();
 }
+
 
 MachineArchitecture CurrentMachineArchitecture()
 {
@@ -1143,6 +750,47 @@ Status RunManifestSelfTests()
     if (!status || nestedTail.installers.size() != 2 || nestedTail.installers[0].architecture != "x86" ||
         nestedTail.installers[1].architecture != "x64" || nestedTail.installers[1].url != "https://example.test/x64.exe")
         return Status::Fail(ERROR_ASSERTION_FAILURE, "nested-list installer boundary self-test failed");
+
+    static constexpr char MergedFixture[] =
+        "Dependencies:\n"
+        "  PackageDependencies:\n"
+        "  - MinimumVersion: 8.1\n"
+        "    PackageIdentifier: Example.Runtime\n"
+        "InstallerSwitches:\n"
+        "  Silent: -q -Vdir=\"C:\\Program Files\\Example\"\n"
+        "    -Vservice$Boolean=true\n"
+        "InstallerType: exe\n"
+        "Installers:\n"
+        "- AppsAndFeaturesEntries:\n"
+        "  - DisplayName: Example\n"
+        "    InstallerType: wix\n"
+        "  Architecture: x64\n"
+        "  InstallerSha256: 7777777777777777777777777777777777777777777777777777777777777777\n"
+        "  InstallerUrl: \"https://example.test/\\u7D05.exe\"\n"
+        "  Scope:\n"
+        "- Architecture: x86\n"
+        "  InstallerSha256: 8888888888888888888888888888888888888888888888888888888888888888\n"
+        "  InstallerType: zip\n"
+        "  InstallerUrl: https://example.test/tool.zip\n"
+        "  NestedInstallerFiles:\n"
+        "NestedInstallerFiles:\n"
+        "- RelativeFilePath: Example Tool\n"
+        "    V2.exe\n"
+        "NestedInstallerType: portable\n"
+        "PackageIdentifier: Example.Merged\n"
+        "PackageVersion: 2.0\n"
+        "Scope: machine\n";
+    Manifest merged;
+    status = ParseInstallerManifest(MergedFixture, merged);
+    if (!status || merged.installers.size() != 2 || merged.installers[0].type != "exe" ||
+        merged.installers[0].url != "https://example.test/\xE7\xB4\x85.exe" || merged.installers[0].scope != "machine" ||
+        merged.installers[0].switches.silent != "-q -Vdir=\"C:\\Program Files\\Example\" -Vservice$Boolean=true" ||
+        merged.installers[0].packageDependencies.size() != 1 ||
+        merged.installers[0].packageDependencies[0].id != "Example.Runtime" ||
+        merged.installers[0].packageDependencies[0].minimumVersion != "8.1" || !merged.installers[0].nestedType.empty() ||
+        merged.installers[1].nestedType != "portable" || merged.installers[1].nestedFiles.size() != 1 ||
+        merged.installers[1].nestedFiles[0].relativePath != "Example Tool V2.exe")
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "merged manifest parser self-test failed");
 
     SelectionOptions options;
     options.hasArchitecture = true;

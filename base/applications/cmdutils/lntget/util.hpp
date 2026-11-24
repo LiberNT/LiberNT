@@ -15,7 +15,6 @@ namespace lntget
 std::string Utf8FromWide(const std::wstring &value);
 std::wstring WideFromUtf8(const std::string &value);
 std::string Trim(const std::string &value);
-std::string UnquoteYaml(const std::string &value);
 std::string AsciiLower(const std::string &value);
 bool AsciiEquals(const std::string &left, const std::string &right);
 bool AsciiContains(const std::string &value, const std::string &needle);

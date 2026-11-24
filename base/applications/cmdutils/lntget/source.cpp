@@ -13,6 +13,7 @@
 #include "hash.hpp"
 #include "source_trust.hpp"
 #include "util.hpp"
+#include "yaml.hpp"
 
 #include "minizip/ioapi.h"
 #include "minizip/iowin32.h"
@@ -297,37 +298,24 @@ struct VersionDataRecord
 
 Status ParseVersionData(const std::string &yaml, const std::string &wantedVersion, VersionDataRecord &wanted)
 {
-    bool inVersions = false;
-    VersionDataRecord *current = nullptr;
+    YamlNode root;
+    Status status = ParseYaml(yaml, root);
+    if (!status)
+        return Status::Fail(status.code, "source version metadata is invalid: " + status.message);
+    const YamlNode *versions = root.Find("vD");
+    if (!root.IsMapping() || !versions || !versions->IsSequence())
+        return Status::Fail(ERROR_BAD_FORMAT, "source version metadata has no version list");
     std::vector<VersionDataRecord> records;
-    std::size_t offset = 0;
-    while (offset <= yaml.size())
+    for (const YamlNode &entry : versions->items)
     {
-        const std::size_t end = yaml.find('\n', offset);
-        std::string line = Trim(yaml.substr(offset, end == std::string::npos ? yaml.size() - offset : end - offset));
-        if (!line.empty() && line[line.size() - 1] == '\r') line.pop_back();
-        offset = end == std::string::npos ? yaml.size() + 1 : end + 1;
-        if (line.empty()) continue;
-        if (line == "vD:")
-        {
-            inVersions = true;
-            continue;
-        }
-        if (!inVersions) continue;
-        if (line.rfind("- ", 0) == 0)
-        {
-            records.push_back(VersionDataRecord());
-            current = &records.back();
-            line.erase(0, 2);
-        }
-        if (!current) continue;
-        const std::size_t colon = line.find(':');
-        if (colon == std::string::npos) continue;
-        const std::string key = Trim(line.substr(0, colon));
-        const std::string value = UnquoteYaml(line.substr(colon + 1));
-        if (key == "v") current->version = value;
-        else if (key == "rP") current->relativePath = value;
-        else if (key == "s256H") current->sha256 = value;
+        VersionDataRecord record;
+        const YamlNode *version = entry.Find("v");
+        const YamlNode *relativePath = entry.Find("rP");
+        const YamlNode *sha256 = entry.Find("s256H");
+        if (version) record.version = version->Text();
+        if (relativePath) record.relativePath = relativePath->Text();
+        if (sha256) record.sha256 = sha256->Text();
+        records.push_back(record);
     }
     const auto match = std::find_if(records.begin(), records.end(), [&wantedVersion](const VersionDataRecord &record) {
         return record.version == wantedVersion;
