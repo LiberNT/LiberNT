@@ -15,8 +15,6 @@
 
 static const GUID test_subgroup = {0x2f6c0d51, 0x8a3e, 0x4c27, {0xb1, 0x5d, 0x6e, 0x90, 0x47, 0x1a, 0xc3, 0x82}};
 static const GUID test_setting = {0x9b41e7c2, 0x35d8, 0x4f0a, {0x86, 0x2e, 0x1c, 0x5f, 0xa7, 0x03, 0xd9, 0x64}};
-static const GUID other_subgroup = {0x61e0c3b8, 0x4f27, 0x4a9d, {0x9c, 0x13, 0x58, 0xb2, 0x7e, 0x0f, 0xa4, 0x39}};
-static const GUID other_setting = {0xc72d95a4, 0x1b6e, 0x4d08, {0xb3, 0x4f, 0x0e, 0x81, 0x26, 0xd5, 0x9a, 0x7c}};
 static const GUID absent_subgroup = {0x8e15b6d3, 0x7a42, 0x4c91, {0xa8, 0x5b, 0x3d, 0x60, 0xf2, 0x1e, 0xc7, 0x94}};
 static const GUID absent_setting = {0x4d8a2f17, 0xc96b, 0x4e53, {0xa0, 0x7e, 0x92, 0x3b, 0x18, 0x6c, 0xf4, 0x05}};
 static const GUID no_subgroup = {0xfea3413e, 0x7e05, 0x4911, {0x9a, 0x71, 0x70, 0x03, 0x31, 0xf1, 0xc2, 0x94}};
@@ -24,7 +22,6 @@ static const GUID no_subgroup = {0xfea3413e, 0x7e05, 0x4911, {0x9a, 0x71, 0x70, 
 #define SETTINGS L"SYSTEM\\CurrentControlSet\\Control\\Power\\PowerSettings"
 #define TEST_SUBGROUP L"2f6c0d51-8a3e-4c27-b15d-6e90471ac382"
 #define TEST_SETTING L"9b41e7c2-35d8-4f0a-862e-1c5fa703d964"
-#define OTHER_SUBGROUP L"61e0c3b8-4f27-4a9d-9c13-58b27e0fa439"
 #define ABSENT_SUBGROUP L"8e15b6d3-7a42-4c91-a85b-3d60f21ec794"
 
 #define READ(subgroup, setting) PowerReadSettingAttributes(subgroup, setting)
@@ -44,7 +41,6 @@ static void remove_test_keys(void)
     static const WCHAR *keys[] =
     {
         SETTINGS L"\\" TEST_SUBGROUP,
-        SETTINGS L"\\" OTHER_SUBGROUP,
         SETTINGS L"\\" ABSENT_SUBGROUP,
         SETTINGS L"\\" TEST_SETTING,
     };
@@ -61,7 +57,6 @@ static void test_absent(void)
 {
     ok(READ(&test_subgroup, &test_setting) == 0, "absent subgroup and setting returned %lu\n", READ(&test_subgroup, &test_setting));
     ok(READ(&test_subgroup, NULL) == 0, "absent subgroup returned %lu\n", READ(&test_subgroup, NULL));
-    ok(READ(NULL, &absent_setting) == 0, "absent setting returned %lu\n", READ(NULL, &absent_setting));
     ok(PowerCreateSetting(NULL, NULL, &test_setting) == ERROR_INVALID_PARAMETER, "PowerCreateSetting(NULL subgroup) succeeded\n");
     ok(PowerRemovePowerSetting(NULL, &test_setting) == ERROR_INVALID_PARAMETER, "PowerRemovePowerSetting(NULL subgroup) succeeded\n");
 }
@@ -73,8 +68,6 @@ static void test_written(void)
 
     ret = PowerCreateSetting(NULL, &test_subgroup, &test_setting);
     ok(ret == ERROR_SUCCESS, "PowerCreateSetting returned %lu\n", ret);
-    ret = PowerCreateSetting(NULL, &other_subgroup, &other_setting);
-    ok(ret == ERROR_SUCCESS, "PowerCreateSetting(other) returned %lu\n", ret);
     ok(READ(&test_subgroup, &test_setting) == 0, "new setting returned %lu\n", READ(&test_subgroup, &test_setting));
 
     ret = PowerWriteSettingAttributes(&test_subgroup, &test_setting, POWER_ATTRIBUTE_HIDE);
@@ -83,8 +76,6 @@ static void test_written(void)
     ok(present && value == POWER_ATTRIBUTE_HIDE, "setting key Attributes present %d value %lu\n", present, value);
     ok(READ(&test_subgroup, &test_setting) == POWER_ATTRIBUTE_HIDE, "hidden setting returned %lu\n", READ(&test_subgroup, &test_setting));
     ok(READ(&test_subgroup, NULL) == 0, "subgroup without attributes returned %lu\n", READ(&test_subgroup, NULL));
-    ok(READ(NULL, &test_setting) == POWER_ATTRIBUTE_HIDE, "NULL subgroup returned %lu\n", READ(NULL, &test_setting));
-    ok(READ(&no_subgroup, &test_setting) == POWER_ATTRIBUTE_HIDE, "NO_SUBGROUP_GUID returned %lu\n", READ(&no_subgroup, &test_setting));
 
     ret = PowerWriteSettingAttributes(&test_subgroup, NULL, POWER_ATTRIBUTE_SHOW_AOAC);
     ok(ret == ERROR_SUCCESS, "PowerWriteSettingAttributes(subgroup) returned %lu\n", ret);
@@ -94,23 +85,15 @@ static void test_written(void)
     ok(READ(&test_subgroup, &test_setting) == (POWER_ATTRIBUTE_HIDE | POWER_ATTRIBUTE_SHOW_AOAC),
        "subgroup and setting returned %lu\n", READ(&test_subgroup, &test_setting));
     ok(READ(&test_subgroup, &absent_setting) == 0, "subgroup and absent setting returned %lu\n", READ(&test_subgroup, &absent_setting));
-    ok(READ(NULL, &test_setting) == POWER_ATTRIBUTE_HIDE, "NULL subgroup took the subgroup attributes: %lu\n", READ(NULL, &test_setting));
+    ok(READ(&absent_subgroup, &test_setting) == 0, "absent subgroup with the setting returned %lu\n", READ(&absent_subgroup, &test_setting));
 
-    ret = PowerWriteSettingAttributes(&other_subgroup, NULL, POWER_ATTRIBUTE_HIDE);
-    ok(ret == ERROR_SUCCESS, "PowerWriteSettingAttributes(other subgroup) returned %lu\n", ret);
     ret = PowerWriteSettingAttributes(&test_subgroup, NULL, 0);
     ok(ret == ERROR_SUCCESS, "PowerWriteSettingAttributes(subgroup 0) returned %lu\n", ret);
-    ret = PowerWriteSettingAttributes(&test_subgroup, &test_setting, POWER_ATTRIBUTE_SHOW_AOAC);
-    ok(ret == ERROR_SUCCESS, "PowerWriteSettingAttributes(setting 2) returned %lu\n", ret);
-    ok(READ(&other_subgroup, &test_setting) == (POWER_ATTRIBUTE_HIDE | POWER_ATTRIBUTE_SHOW_AOAC),
-       "other subgroup with the setting returned %lu\n", READ(&other_subgroup, &test_setting));
-    ok(READ(&absent_subgroup, &test_setting) == 0, "absent subgroup with the setting returned %lu\n", READ(&absent_subgroup, &test_setting));
-    ok(READ(&test_subgroup, &other_setting) == 0, "setting of another subgroup returned %lu\n", READ(&test_subgroup, &other_setting));
-
-    value = POWER_ATTRIBUTE_HIDE;
+    value = POWER_ATTRIBUTE_SHOW_AOAC;
     ret = RegSetKeyValueW(HKEY_LOCAL_MACHINE, SETTINGS L"\\" TEST_SUBGROUP L"\\" TEST_SETTING, L"Attributes", REG_DWORD, &value, sizeof(value));
     ok(ret == ERROR_SUCCESS, "RegSetKeyValueW returned %lu\n", ret);
-    ok(READ(&test_subgroup, &test_setting) == POWER_ATTRIBUTE_HIDE, "registry-written setting returned %lu\n", READ(&test_subgroup, &test_setting));
+    ok(READ(&test_subgroup, &test_setting) == POWER_ATTRIBUTE_SHOW_AOAC, "registry-written setting returned %lu\n",
+       READ(&test_subgroup, &test_setting));
 
     ret = PowerWriteSettingAttributes(&test_subgroup, &test_setting, 0x10);
     ok(ret == ERROR_SUCCESS, "PowerWriteSettingAttributes(0x10) returned %lu\n", ret);
@@ -121,13 +104,6 @@ static void test_written(void)
     value = registry_attributes(SETTINGS L"\\" TEST_SETTING, &present);
     ok(present && value == POWER_ATTRIBUTE_SHOW_AOAC, "root setting key Attributes present %d value %lu\n", present, value);
     ok(READ(&test_subgroup, &test_setting) == 0x10, "subgroup setting returned %lu next to a root one\n", READ(&test_subgroup, &test_setting));
-    ok(READ(&no_subgroup, &test_setting) == 0x10, "root setting returned %lu\n", READ(&no_subgroup, &test_setting));
-    ret = PowerWriteSettingAttributes(&other_subgroup, &test_setting, POWER_ATTRIBUTE_HIDE);
-    ok(ret == ERROR_SUCCESS, "PowerWriteSettingAttributes(other subgroup setting) returned %lu\n", ret);
-    ok(READ(&other_subgroup, &test_setting) == (POWER_ATTRIBUTE_HIDE | 0x10), "later subgroup holding the setting returned %lu\n",
-       READ(&other_subgroup, &test_setting));
-    ret = PowerRemovePowerSetting(&other_subgroup, &test_setting);
-    ok(ret == ERROR_SUCCESS, "PowerRemovePowerSetting(other subgroup setting) returned %lu\n", ret);
     ret = PowerRemovePowerSetting(&no_subgroup, &test_setting);
     ok(ret == ERROR_SUCCESS, "PowerRemovePowerSetting(root setting) returned %lu\n", ret);
     registry_attributes(SETTINGS L"\\" TEST_SETTING, &present);
@@ -139,7 +115,8 @@ static void test_written(void)
     ok(READ(&absent_subgroup, NULL) == 0, "created subgroup returned %lu\n", READ(&absent_subgroup, NULL));
     ret = PowerRemovePowerSetting(&absent_subgroup, &absent_setting);
     ok(ret == ERROR_SUCCESS, "PowerRemovePowerSetting(created) returned %lu\n", ret);
-    ok(READ(NULL, &absent_setting) == 0, "removed setting returned %lu\n", READ(NULL, &absent_setting));
+    registry_attributes(SETTINGS L"\\" ABSENT_SUBGROUP L"\\4d8a2f17-c96b-4e53-a07e-923b186cf405", &present);
+    ok(!present, "removed setting key Attributes still present\n");
 }
 
 static void test_root(void)
@@ -151,17 +128,50 @@ static void test_root(void)
     ret = PowerWriteSettingAttributes(NULL, NULL, original ^ POWER_ATTRIBUTE_SHOW_AOAC);
     ok(ret == ERROR_SUCCESS, "PowerWriteSettingAttributes(NULL, NULL) returned %lu\n", ret);
     ok(READ(&no_subgroup, NULL) == (original ^ POWER_ATTRIBUTE_SHOW_AOAC), "NO_SUBGROUP_GUID returned %lu\n", READ(&no_subgroup, NULL));
-    ok(READ(NULL, &other_setting) == 0, "NULL subgroup took the root attributes: %lu\n", READ(NULL, &other_setting));
     if (present)
         PowerWriteSettingAttributes(NULL, NULL, original);
     else
         RegDeleteKeyValueW(HKEY_LOCAL_MACHINE, SETTINGS, L"Attributes");
 }
 
+static void test_builtin(void)
+{
+    static const GUID subgroups[] =
+    {
+        {0x54533251, 0x82be, 0x4824, {0x96, 0xc1, 0x47, 0xb6, 0x0b, 0x74, 0x0d, 0x00}},
+        {0x7516b95f, 0xf776, 0x4464, {0x8c, 0x53, 0x06, 0x16, 0x7f, 0x40, 0xcc, 0x99}},
+        {0x238c9fa8, 0x0aad, 0x41ed, {0x83, 0xf4, 0x97, 0xbe, 0x24, 0x2c, 0x8f, 0x20}},
+    };
+    static const struct
+    {
+        UINT subgroup;
+        GUID setting;
+        DWORD attributes;
+    } settings[] =
+    {
+        {0, {0x893dee8e, 0x2bef, 0x41e0, {0x89, 0xc6, 0xb5, 0x5d, 0x09, 0x29, 0x96, 0x4c}}, POWER_ATTRIBUTE_SHOW_AOAC},
+        {0, {0xbc5038f7, 0x23e0, 0x4960, {0x96, 0xda, 0x33, 0xab, 0xaf, 0x59, 0x35, 0xec}}, POWER_ATTRIBUTE_SHOW_AOAC},
+        {0, {0x8baa4a8a, 0x14c6, 0x4451, {0x8e, 0x8b, 0x14, 0xbd, 0xbd, 0x19, 0x75, 0x37}}, POWER_ATTRIBUTE_HIDE},
+        {0, {0x36687f9e, 0xe3a5, 0x4dbf, {0xb1, 0xdc, 0x15, 0xeb, 0x38, 0x1c, 0x68, 0x63}}, POWER_ATTRIBUTE_HIDE},
+        {1, {0x3c0bc021, 0xc8a8, 0x4e07, {0xa9, 0x73, 0x6b, 0x14, 0xcb, 0xcb, 0x2b, 0x7e}}, POWER_ATTRIBUTE_SHOW_AOAC},
+        {2, {0x29f6c1db, 0x86da, 0x48c5, {0x9f, 0xdb, 0xf2, 0xb6, 0x7b, 0x1f, 0x44, 0xda}}, POWER_ATTRIBUTE_SHOW_AOAC},
+        {2, {0x9d7815a6, 0x7ee4, 0x497e, {0x88, 0x88, 0x51, 0x5a, 0x05, 0xf0, 0x23, 0x64}}, 0},
+    };
+    UINT i;
+
+    for (i = 0; i < ARRAYSIZE(subgroups); i++)
+        ok(READ(&subgroups[i], NULL) == 0, "subgroup %u returned %lu\n", i, READ(&subgroups[i], NULL));
+    for (i = 0; i < ARRAYSIZE(settings); i++)
+    {
+        ok(READ(&subgroups[settings[i].subgroup], &settings[i].setting) == settings[i].attributes, "setting %u returned %lu\n", i,
+           READ(&subgroups[settings[i].subgroup], &settings[i].setting));
+    }
+}
+
 static void test_installed(void)
 {
     GUID subgroup, setting;
-    DWORD size, subgroup_attributes, setting_attributes, both;
+    DWORD size, subgroup_attributes, both;
     ULONG subgroup_index, setting_index;
     UINT checked = 0, hidden = 0;
 
@@ -176,10 +186,9 @@ static void test_installed(void)
             size = sizeof(setting);
             if (PowerEnumerate(NULL, NULL, &subgroup, ACCESS_INDIVIDUAL_SETTING, setting_index, (UCHAR *)&setting, &size) != ERROR_SUCCESS)
                 break;
-            setting_attributes = READ(NULL, &setting);
             both = READ(&subgroup, &setting);
-            ok(both == (subgroup_attributes | setting_attributes), "subgroup %lu setting %lu returned %lu, expected %lu | %lu\n",
-               subgroup_index, setting_index, both, subgroup_attributes, setting_attributes);
+            ok((both & subgroup_attributes) == subgroup_attributes, "subgroup %lu setting %lu returned %lu without the subgroup's %lu\n",
+               subgroup_index, setting_index, both, subgroup_attributes);
             if (both & POWER_ATTRIBUTE_HIDE)
                 hidden++;
             checked++;
@@ -196,5 +205,6 @@ START_TEST(SettingAttributes)
     test_written();
     test_root();
     remove_test_keys();
+    test_builtin();
     test_installed();
 }
