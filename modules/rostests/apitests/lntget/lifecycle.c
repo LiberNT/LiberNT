@@ -688,3 +688,75 @@ START_TEST(agreements)
         ok(!ArpHasDisplayName(L"Remote Help"), "%ls was installed without accepting its agreements\n", Id);
     }
 }
+
+static void
+RemoveDirectoryFiles(PCWSTR Directory)
+{
+    WCHAR Pattern[MAX_PATH], Path[MAX_PATH];
+    WIN32_FIND_DATAW Data;
+    HANDLE Find;
+
+    StringCchPrintfW(Pattern, _countof(Pattern), L"%s\\*", Directory);
+    Find = FindFirstFileW(Pattern, &Data);
+    if (Find != INVALID_HANDLE_VALUE)
+    {
+        do
+        {
+            if (Data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                continue;
+            StringCchPrintfW(Path, _countof(Path), L"%s\\%s", Directory, Data.cFileName);
+            DeleteFileW(Path);
+        } while (FindNextFileW(Find, &Data));
+        FindClose(Find);
+    }
+    RemoveDirectoryW(Directory);
+}
+
+START_TEST(options)
+{
+    WCHAR Temp[MAX_PATH], Directory[MAX_PATH], Pattern[MAX_PATH], Arguments[1024];
+    WIN32_FIND_DATAW Data;
+    HANDLE Find;
+    DWORD ExitCode;
+
+    if (ArpHasDisplayName(WixPackage.DisplayName) || PackageFileExists(&WixPackage))
+    {
+        skip("%ls is already installed\n", WixPackage.Id);
+        return;
+    }
+    if (!RunTool(L"search --id 7zip.7zip -e -s winget --accept-source-agreements", &ExitCode))
+        return;
+    ok(ExitCode == 0, "search with -s and --accept-source-agreements returned 0x%08lx:\n%s\n", ExitCode, Output);
+    if (ExitCode != 0)
+        return;
+    ok(OutputContains(WixPackage.Id), "search output does not name %ls:\n%s\n", WixPackage.Id, Output);
+
+    GetTempPathW(_countof(Temp), Temp);
+    StringCchPrintfW(Directory, _countof(Directory), L"%slntopt%lu", Temp, GetCurrentProcessId());
+    ok(CreateDirectoryW(Directory, NULL), "cannot create %ls: %lu\n", Directory, GetLastError());
+    StringCchPrintfW(Arguments, _countof(Arguments),
+                     L"download --id 7zip.7zip -e -s winget -a x64 --installer-type wix -d \"%s\" --accept-source-agreements --accept-package-agreements",
+                     Directory);
+    if (RunTool(Arguments, &ExitCode))
+    {
+        ok(ExitCode == 0, "download with -a and -d returned 0x%08lx:\n%s\n", ExitCode, Output);
+        StringCchPrintfW(Pattern, _countof(Pattern), L"%s\\*.msi", Directory);
+        Find = FindFirstFileW(Pattern, &Data);
+        ok(Find != INVALID_HANDLE_VALUE, "no installer was downloaded to %ls\n", Directory);
+        if (Find != INVALID_HANDLE_VALUE)
+            FindClose(Find);
+    }
+    RemoveDirectoryFiles(Directory);
+
+    if (!RunTool(L"install --id 7zip.7zip -e -s winget --installer-type wix -h --accept-source-agreements --accept-package-agreements --disable-interactivity", &ExitCode))
+        return;
+    ok(ExitCode == 0, "install with -h returned 0x%08lx:\n%s\n", ExitCode, Output);
+    ok(ArpHasDisplayName(WixPackage.DisplayName), "no installed application named %ls\n", WixPackage.DisplayName);
+    if (!ArpHasDisplayName(WixPackage.DisplayName))
+        return;
+
+    if (!RunTool(L"uninstall --id 7zip.7zip -e -s winget -h --accept-source-agreements --disable-interactivity", &ExitCode))
+        return;
+    ok(ExitCode == 0, "uninstall with -h returned 0x%08lx:\n%s\n", ExitCode, Output);
+    ok(WaitForRemoval(&WixPackage), "%ls is still installed after uninstall\n", WixPackage.Id);
+}

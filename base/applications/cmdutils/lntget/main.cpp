@@ -72,16 +72,19 @@ void PrintHelp()
         "  -n, --count <count>       Limit search results (1-1000)\n"
         "  -r, --all                 Upgrade every package that has an available upgrade\n"
         "  -s, --source winget       Select the community source\n"
-        "  --architecture <arch>     x86, x64, arm, or arm64\n"
+        "  -a, --architecture <arch> x86, x64, arm, or arm64\n"
         "  --installer-type <type>   Require an installer type\n"
         "  --scope <scope>           user or machine\n"
         "  --locale <locale>         Require an installer locale\n"
-        "  --download-directory <p>  Store the verified installer in p\n"
-        "  --silent                  Run with silent installer switches\n"
-        "  --interactive             Run interactively\n"
+        "  -d, --download-directory <p>\n"
+        "                            Store the verified installer in p\n"
+        "  -h, --silent              Run with silent installer switches\n"
+        "  -i, --interactive         Run interactively\n"
         "  --disable-interactivity   Never prompt for user input\n"
         "  --accept-package-agreements\n"
-        "                            Accept package license agreements\n",
+        "                            Accept package license agreements\n"
+        "  --accept-source-agreements\n"
+        "                            Accepted; the winget source has no agreements\n",
         static_cast<int>(sizeof(Version) - 1), Version);
 }
 
@@ -168,7 +171,7 @@ Status ParseOptions(const std::vector<std::string> &arguments, std::size_t first
         {
             options.all = true;
         }
-        else if (argument == "--architecture")
+        else if (argument == "-a" || argument == "--architecture")
         {
             const std::string *value = next();
             if (!value) return Status::Fail(ERROR_INVALID_PARAMETER, "--architecture requires a value");
@@ -201,20 +204,20 @@ Status ParseOptions(const std::vector<std::string> &arguments, std::size_t first
             options.selection.hasLocale = true;
             options.selection.locale = *value;
         }
-        else if (argument == "--download-directory")
+        else if (argument == "-d" || argument == "--download-directory")
         {
             const std::string *value = next();
             if (!value) return Status::Fail(ERROR_INVALID_PARAMETER, "--download-directory requires a value");
             options.hasDownloadDirectory = true;
             options.downloadDirectory = WideFromUtf8(*value);
         }
-        else if (argument == "--silent")
+        else if (argument == "-h" || argument == "--silent")
         {
             if (modeSpecified) return Status::Fail(ERROR_INVALID_PARAMETER, "--silent and --interactive cannot be combined");
             options.selection.mode = InstallMode::Silent;
             modeSpecified = true;
         }
-        else if (argument == "--interactive")
+        else if (argument == "-i" || argument == "--interactive")
         {
             if (modeSpecified) return Status::Fail(ERROR_INVALID_PARAMETER, "--silent and --interactive cannot be combined");
             options.selection.mode = InstallMode::Interactive;
@@ -236,7 +239,6 @@ Status ParseOptions(const std::vector<std::string> &arguments, std::size_t first
         }
         else if (argument == "--accept-source-agreements")
         {
-            return Status::Fail(ERROR_NOT_SUPPORTED, argument + " is not supported until lntget can retrieve and display the corresponding agreement text");
         }
         else if (!argument.empty() && argument[0] == '-')
         {
