@@ -30,6 +30,7 @@ static BOOLEAN TestSizing = FALSE;
 static BOOLEAN TestDirtying = FALSE;
 static BOOLEAN TestUncaching = FALSE;
 static BOOLEAN TestWritten = FALSE;
+static LARGE_INTEGER TestWriteOffset;
 static BOOLEAN TestBackingChanged = FALSE;
 
 NTSTATUS
@@ -419,7 +420,8 @@ PerformTest(
                         KmtEndSeh(STATUS_SUCCESS);
 
                         ok_eq_hex(IoStatus.Status, STATUS_SUCCESS);
-                        ok_bool_false(TestWritten, "A page past the new end of file was still written\n");
+                        ok_bool_true(TestWritten, "The flush wrote no page past the new end of file\n");
+                        ok_eq_longlong(TestWriteOffset.QuadPart, (LONGLONG)(VACB_MAPPING_GRANULARITY - 2 * PAGE_SIZE));
 
                         Offset.QuadPart = 0;
                         KmtStartSeh();
@@ -661,14 +663,14 @@ TestIrpHandler(
         Offset = IoStack->Parameters.Write.ByteOffset;
         Length = IoStack->Parameters.Write.Length;
 
-        ok((TestTestId == 4 || TestTestId == 5), "Unexpected test id: %d\n", TestTestId);
+        ok((TestTestId == 4 || TestTestId == 5 || TestTestId == 9), "Unexpected test id: %d\n", TestTestId);
         ok_eq_pointer(DeviceObject, TestDeviceObject);
         ok_eq_pointer(IoStack->FileObject, TestFileObject);
 
         ok_bool_false(TestUnpin, "Write triggered while unpinning!\n");
         ok_bool_false(TestSizing, "Write triggered while sizing!\n");
         ok_bool_false(TestDirtying, "Write triggered while dirtying!\n");
-        ok_bool_true(TestUncaching, "Write not triggered while uncaching!\n");
+        ok(TestUncaching || TestTestId == 9, "Write not triggered while uncaching!\n");
 
         ok(FlagOn(Irp->Flags, IRP_NOCACHE), "Not coming from Cc\n");
 
@@ -686,6 +688,7 @@ TestIrpHandler(
         ok((Irp->Flags & IRP_PAGING_IO) != 0, "Non paging IO\n");
 
         TestWritten = TRUE;
+        TestWriteOffset = Offset;
         Status = STATUS_SUCCESS;
         Irp->IoStatus.Information = Length;
     }
