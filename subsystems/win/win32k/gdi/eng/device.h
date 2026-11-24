@@ -59,6 +59,10 @@ EngpCaptureListedMode(
     _In_ ULONG iModeNum,
     _Outptr_ PDEVMODEW *ppdm);
 
+VOID
+NTAPI
+EngpReleaseRemovedGraphicsDevices(VOID);
+
 /* Read configuration of a graphics card from registry:
  * - pGraphicsDevice: instance of the graphics card
  * - pdm: on output, contains the values read in registry
