@@ -5,8 +5,13 @@
  * COPYRIGHT: Copyright 2026 jewchud <kz2hb7hpvp@privaterelay.appleid.com>
  *
  * Register offsets and descriptor ownership rules are taken from the
- * lawfully published FreeBSD re(4)/rl(4) headers (BSD-2-Clause). The
- * miniport itself is a LiberNT NDIS 6.30 reimplementation.
+ * lawfully published FreeBSD re(4)/rl(4) headers (BSD-2-Clause).
+ * RTL8168H bring-up register values are hardware facts published in
+ * Realtek/netdev patch mail; the sequences are reimplemented here.
+ * The 8168H PHY script was clean-room recovered from the published
+ * linux-firmware rtl8168h-2.fw opcode stream (v0.0.2) and executed by
+ * a LiberNT interpreter; the Realtek .fw blob is not shipped.
+ * The miniport itself is a LiberNT NDIS 6.30 reimplementation.
  */
 
 #include "rtl8168.h"
@@ -210,6 +215,209 @@ Rtl8168PhyWrite(
     return FALSE;
 }
 
+static BOOLEAN
+Rtl8168PhyRead(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ ULONG Reg,
+    _Out_ PUSHORT Value)
+{
+    ULONG i;
+    ULONG Data;
+
+    *Value = 0xffff;
+    Rtl8168Write32(Adapter,
+                   RL_PHYAR,
+                   (Reg & 0x1f) << RL_PHYAR_REG_SHIFT);
+
+    for (i = 0; i < 200; i++)
+    {
+        Data = Rtl8168Read32(Adapter, RL_PHYAR);
+        if (Data & RL_PHYAR_FLAG)
+        {
+            *Value = (USHORT)(Data & RL_PHYAR_DATA_MASK);
+            return TRUE;
+        }
+        NdisStallExecution(25);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
+Rtl8168EphyWrite(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ ULONG Reg,
+    _In_ USHORT Value)
+{
+    ULONG i;
+
+    Rtl8168Write32(Adapter,
+                   RL_EPHYAR,
+                   RL_EPHYAR_WRITE |
+                   ((Reg & RL_EPHYAR_REG_MASK) << RL_EPHYAR_REG_SHIFT) |
+                   Value);
+
+    for (i = 0; i < 100; i++)
+    {
+        if (!(Rtl8168Read32(Adapter, RL_EPHYAR) & RL_EPHYAR_FLAG))
+        {
+            NdisStallExecution(10);
+            return TRUE;
+        }
+        NdisStallExecution(10);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
+Rtl8168EphyRead(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ ULONG Reg,
+    _Out_ PUSHORT Value)
+{
+    ULONG i;
+    ULONG Data;
+
+    *Value = 0xffff;
+    Rtl8168Write32(Adapter,
+                   RL_EPHYAR,
+                   (Reg & RL_EPHYAR_REG_MASK) << RL_EPHYAR_REG_SHIFT);
+
+    for (i = 0; i < 100; i++)
+    {
+        Data = Rtl8168Read32(Adapter, RL_EPHYAR);
+        if (Data & RL_EPHYAR_FLAG)
+        {
+            *Value = (USHORT)(Data & RL_EPHYAR_DATA_MASK);
+            NdisStallExecution(10);
+            return TRUE;
+        }
+        NdisStallExecution(10);
+    }
+
+    return FALSE;
+}
+
+static VOID
+Rtl8168EphyModify(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ ULONG Reg,
+    _In_ USHORT Clear,
+    _In_ USHORT Set)
+{
+    USHORT Value;
+
+    if (!Rtl8168EphyRead(Adapter, Reg, &Value))
+        return;
+
+    Value = (USHORT)((Value & ~Clear) | Set);
+    Rtl8168EphyWrite(Adapter, Reg, Value);
+}
+
+static BOOLEAN
+Rtl8168EriWrite(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ ULONG Address,
+    _In_ ULONG Mask,
+    _In_ ULONG Value)
+{
+    ULONG i;
+
+    Rtl8168Write32(Adapter, RL_ERIDR, Value);
+    Rtl8168Write32(Adapter,
+                   RL_ERIAR,
+                   RL_ERIAR_WRITE | RL_ERIAR_EXGMAC | Mask | (Address & 0xfff));
+
+    for (i = 0; i < 100; i++)
+    {
+        if (!(Rtl8168Read32(Adapter, RL_ERIAR) & RL_ERIAR_FLAG))
+            return TRUE;
+        NdisStallExecution(100);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
+Rtl8168EriRead(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ ULONG Address,
+    _Out_ PULONG Value)
+{
+    ULONG i;
+
+    *Value = 0xffffffff;
+    Rtl8168Write32(Adapter,
+                   RL_ERIAR,
+                   RL_ERIAR_EXGMAC | RL_ERIAR_MASK_1111 | (Address & 0xfff));
+
+    for (i = 0; i < 100; i++)
+    {
+        if (Rtl8168Read32(Adapter, RL_ERIAR) & RL_ERIAR_FLAG)
+        {
+            *Value = Rtl8168Read32(Adapter, RL_ERIDR);
+            return TRUE;
+        }
+        NdisStallExecution(100);
+    }
+
+    return FALSE;
+}
+
+static VOID
+Rtl8168EriModify(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ ULONG Address,
+    _In_ ULONG Mask,
+    _In_ ULONG Set,
+    _In_ ULONG Clear)
+{
+    ULONG Value;
+
+    if (!Rtl8168EriRead(Adapter, Address, &Value))
+        return;
+
+    Rtl8168EriWrite(Adapter, Address, Mask, (Value & ~Clear) | Set);
+}
+
+static VOID
+Rtl8168MacOcpWrite(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ ULONG Reg,
+    _In_ USHORT Value)
+{
+    Rtl8168Write32(Adapter,
+                   RL_MACOCP,
+                   RL_MACOCP_FLAG |
+                   ((Reg & 0x7fff) << RL_MACOCP_ADDR_SHIFT) |
+                   Value);
+}
+
+static USHORT
+Rtl8168MacOcpRead(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ ULONG Reg)
+{
+    Rtl8168Write32(Adapter,
+                   RL_MACOCP,
+                   (Reg & 0x7fff) << RL_MACOCP_ADDR_SHIFT);
+    return (USHORT)(Rtl8168Read32(Adapter, RL_MACOCP) & RL_MACOCP_DATA_MASK);
+}
+
+static VOID
+Rtl8168MacOcpModify(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ ULONG Reg,
+    _In_ USHORT Clear,
+    _In_ USHORT Set)
+{
+    USHORT Value;
+
+    Value = Rtl8168MacOcpRead(Adapter, Reg);
+    Rtl8168MacOcpWrite(Adapter, Reg, (USHORT)((Value & ~Clear) | Set));
+}
+
 static VOID
 Rtl8168WriteMacAddress(
     _In_ PRTL8168_ADAPTER Adapter)
@@ -234,10 +442,17 @@ static VOID
 Rtl8168ReadMacAddress(
     _In_ PRTL8168_ADAPTER Adapter)
 {
-    ULONG i;
+    ULONG Low;
+    ULONG High;
 
-    for (i = 0; i < ETH_LENGTH_OF_ADDRESS; i++)
-        Adapter->PermanentMacAddress[i] = Rtl8168Read8(Adapter, RL_IDR0 + i);
+    Low = Rtl8168Read32(Adapter, RL_IDR0);
+    High = Rtl8168Read32(Adapter, RL_IDR0 + 4);
+    Adapter->PermanentMacAddress[0] = (UCHAR)(Low & 0xff);
+    Adapter->PermanentMacAddress[1] = (UCHAR)((Low >> 8) & 0xff);
+    Adapter->PermanentMacAddress[2] = (UCHAR)((Low >> 16) & 0xff);
+    Adapter->PermanentMacAddress[3] = (UCHAR)((Low >> 24) & 0xff);
+    Adapter->PermanentMacAddress[4] = (UCHAR)(High & 0xff);
+    Adapter->PermanentMacAddress[5] = (UCHAR)((High >> 8) & 0xff);
 
     if (!Rtl8168IsValidMacAddress(Adapter->PermanentMacAddress))
     {
@@ -279,12 +494,547 @@ Rtl8168EtherCrc32(
 }
 
 static VOID
+Rtl8168IdentifyHardware(
+    _Inout_ PRTL8168_ADAPTER Adapter)
+{
+    Adapter->HwRev = Rtl8168Read32(Adapter, RL_TXCFG) & RL_TXCFG_HWREV_MASK;
+    Adapter->Rtl8168H = (Adapter->HwRev == RL_HWREV_8168H);
+    Adapter->Rtl8168GPlus =
+        (Adapter->HwRev == RL_HWREV_8168G) ||
+        (Adapter->HwRev == RL_HWREV_8168GU) ||
+        Adapter->Rtl8168H ||
+        (Adapter->HwRev == RL_HWREV_8168EP) ||
+        (Adapter->HwRev == RL_HWREV_8168FP) ||
+        (Adapter->HwRev == RL_HWREV_8411B);
+    Adapter->MacStatCplus = Adapter->Rtl8168GPlus;
+    Adapter->PcieHashSwap = TRUE;
+
+    DPRINT1("rtl8168: hwrev=0x%08lx gplus=%u h=%u macstat=%u\n",
+            Adapter->HwRev,
+            Adapter->Rtl8168GPlus ? 1 : 0,
+            Adapter->Rtl8168H ? 1 : 0,
+            Adapter->MacStatCplus ? 1 : 0);
+}
+
+static UCHAR
+Rtl8168FindPcieCapability(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    UCHAR CapPtr = 0;
+    UCHAR CapId;
+    ULONG Bytes;
+
+    if (Adapter->PcieCapOffset)
+        return Adapter->PcieCapOffset;
+
+    Bytes = NdisMGetBusData(Adapter->MiniportHandle,
+                            PCI_WHICHSPACE_CONFIG,
+                            0x34,
+                            &CapPtr,
+                            sizeof(CapPtr));
+    if (Bytes != sizeof(CapPtr))
+        return 0;
+
+    CapPtr &= 0xfc;
+    while (CapPtr >= 0x40)
+    {
+        Bytes = NdisMGetBusData(Adapter->MiniportHandle,
+                                PCI_WHICHSPACE_CONFIG,
+                                CapPtr,
+                                &CapId,
+                                sizeof(CapId));
+        if (Bytes != sizeof(CapId) || CapId == 0xff)
+            break;
+
+        if (CapId == PCI_CAPABILITY_ID_PCI_EXPRESS)
+        {
+            Adapter->PcieCapOffset = CapPtr;
+            return CapPtr;
+        }
+
+        Bytes = NdisMGetBusData(Adapter->MiniportHandle,
+                                PCI_WHICHSPACE_CONFIG,
+                                CapPtr + 1,
+                                &CapPtr,
+                                sizeof(CapPtr));
+        if (Bytes != sizeof(CapPtr))
+            break;
+        CapPtr &= 0xfc;
+    }
+
+    return 0;
+}
+
+static VOID
+Rtl8168DisableAspm(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    UCHAR CapPtr;
+    USHORT LinkControl;
+    ULONG Bytes;
+
+    CapPtr = Rtl8168FindPcieCapability(Adapter);
+    if (!CapPtr)
+        return;
+
+    Bytes = NdisMGetBusData(Adapter->MiniportHandle,
+                            PCI_WHICHSPACE_CONFIG,
+                            CapPtr + 0x10,
+                            &LinkControl,
+                            sizeof(LinkControl));
+    if (Bytes != sizeof(LinkControl))
+        return;
+
+    if (LinkControl & (PCI_EXPRESS_LCTL_ASPMC | PCI_EXPRESS_LCTL_CLKREQ_EN))
+    {
+        LinkControl &= (USHORT)~(PCI_EXPRESS_LCTL_ASPMC |
+                                 PCI_EXPRESS_LCTL_CLKREQ_EN);
+        NdisMSetBusData(Adapter->MiniportHandle,
+                        PCI_WHICHSPACE_CONFIG,
+                        CapPtr + 0x10,
+                        &LinkControl,
+                        sizeof(LinkControl));
+        DPRINT1("rtl8168: disabled PCIe ASPM/CLKREQ\n");
+    }
+}
+
+static VOID
+Rtl8168SetMaxReadRequest(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ ULONG MrssEncoding)
+{
+    UCHAR CapPtr;
+    USHORT DeviceControl;
+    ULONG Bytes;
+
+    CapPtr = Rtl8168FindPcieCapability(Adapter);
+    if (!CapPtr)
+        return;
+
+    Bytes = NdisMGetBusData(Adapter->MiniportHandle,
+                            PCI_WHICHSPACE_CONFIG,
+                            CapPtr + 0x08,
+                            &DeviceControl,
+                            sizeof(DeviceControl));
+    if (Bytes != sizeof(DeviceControl))
+        return;
+
+    DeviceControl &= (USHORT)~PCI_EXPRESS_DCTL_MAX_READ_REQUEST_MASK;
+    DeviceControl |= (USHORT)((MrssEncoding << PCI_EXPRESS_DCTL_MAX_READ_REQUEST_SHIFT) &
+                              PCI_EXPRESS_DCTL_MAX_READ_REQUEST_MASK);
+    NdisMSetBusData(Adapter->MiniportHandle,
+                    PCI_WHICHSPACE_CONFIG,
+                    CapPtr + 0x08,
+                    &DeviceControl,
+                    sizeof(DeviceControl));
+    DPRINT1("rtl8168: set PCIe MaxReadRequest encoding %lu\n", MrssEncoding);
+}
+
+static VOID
+Rtl8168SetPcieEntryLatency(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    UCHAR Latency = PCI_EXPRESS_L0S_L1_ENTRY_LATENCY;
+    ULONG Bytes;
+    ULONG Csi;
+
+    Bytes = NdisMSetBusData(Adapter->MiniportHandle,
+                            PCI_WHICHSPACE_CONFIG,
+                            PCI_EXPRESS_EXTENDED_CFG_LATENCY,
+                            &Latency,
+                            sizeof(Latency));
+    if (Bytes == sizeof(Latency))
+        return;
+
+    Rtl8168Write32(Adapter,
+                   RL_CSIAR,
+                   (0x070c & RL_CSIAR_ADDR_MASK) | RL_CSIAR_BYTE_ENABLE);
+    NdisStallExecution(10);
+    if (!(Rtl8168Read32(Adapter, RL_CSIAR) & RL_CSIAR_FLAG))
+        return;
+
+    Csi = Rtl8168Read32(Adapter, RL_CSIDR) & 0x00ffffff;
+    Csi |= ((ULONG)Latency << 24);
+    Rtl8168Write32(Adapter, RL_CSIDR, Csi);
+    Rtl8168Write32(Adapter,
+                   RL_CSIAR,
+                   RL_CSIAR_WRITE | (0x070c & RL_CSIAR_ADDR_MASK) | RL_CSIAR_BYTE_ENABLE);
+    NdisStallExecution(10);
+}
+
+static VOID
+Rtl8168PhyWake(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    Rtl8168Write8(Adapter,
+                  RL_PMCH,
+                  (UCHAR)(Rtl8168Read8(Adapter, RL_PMCH) | RL_PMCH_PHY_WAKE));
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
+    Rtl8168PhyWrite(Adapter, 0x0e, 0x0000);
+}
+
+
+static VOID
+Rtl8168PhyModify(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ ULONG Reg,
+    _In_ USHORT Clear,
+    _In_ USHORT Set)
+{
+    USHORT Value;
+
+    if (!Rtl8168PhyRead(Adapter, Reg, &Value))
+        return;
+
+    Rtl8168PhyWrite(Adapter, Reg, (USHORT)((Value & ~Clear) | Set));
+}
+
+static const ULONG Rtl8168h2PhyScript[211] =
+{
+    0x40000001u, 0x801f0fc2u, 0x80080000u, 0x800a0000u,
+    0x800c0000u, 0x800e0000u, 0x80100000u, 0x80120000u,
+    0x80140000u, 0x80160000u, 0xe0000003u, 0x80060000u,
+    0x801f0f80u, 0x8000e008u, 0x8002e00fu, 0x8004e011u,
+    0x8006e047u, 0x8008e049u, 0x800ae073u, 0x800ce075u,
+    0x800ee077u, 0x8010c707u, 0x80121d00u, 0x80148de2u,
+    0x801648c1u, 0x8018c502u, 0x801abd00u, 0x801c00e4u,
+    0x801ee0c0u, 0x8020c502u, 0x8022bd00u, 0x80240216u,
+    0x8026c634u, 0x802875c0u, 0x802a49d3u, 0x802cf027u,
+    0x802ec631u, 0x803075c0u, 0x803249d3u, 0x8034f123u,
+    0x8036c627u, 0x803875c0u, 0x803ab405u, 0x803cc525u,
+    0x803e9dc0u, 0x8040c621u, 0x804275c8u, 0x804449d5u,
+    0x8046f00au, 0x804849d6u, 0x804af008u, 0x804c49d7u,
+    0x804ef006u, 0x805049d8u, 0x8052f004u, 0x805475d2u,
+    0x805649d9u, 0x8058f111u, 0x805ac517u, 0x805c9dc8u,
+    0x805ec516u, 0x80609dd2u, 0x8062c618u, 0x806475c0u,
+    0x806649d4u, 0x8068f003u, 0x806a49d0u, 0x806cf104u,
+    0x806ec60au, 0x8070c50eu, 0x80729dc0u, 0x8074b005u,
+    0x8076c607u, 0x80789dc0u, 0x807ab007u, 0x807cc602u,
+    0x807ebe00u, 0x80801a06u, 0x8082b400u, 0x8084e86cu,
+    0x8086a000u, 0x808801e1u, 0x808a0200u, 0x808c9200u,
+    0x808ee84cu, 0x8090e004u, 0x8092e908u, 0x8094c502u,
+    0x8096bd00u, 0x80980b58u, 0x809ab407u, 0x809cb404u,
+    0x809e2195u, 0x80a025bdu, 0x80a29be0u, 0x80a41c1cu,
+    0x80a6484fu, 0x80a89ce2u, 0x80aa72e2u, 0x80ac49aeu,
+    0x80aef1feu, 0x80b00b00u, 0x80b2f116u, 0x80b4c71cu,
+    0x80b6c419u, 0x80b89ce0u, 0x80ba1c13u, 0x80bc484fu,
+    0x80be9ce2u, 0x80c074e2u, 0x80c249ceu, 0x80c4f1feu,
+    0x80c6c412u, 0x80c89ce0u, 0x80ca1c13u, 0x80cc484fu,
+    0x80ce9ce2u, 0x80d074e2u, 0x80d249ceu, 0x80d4f1feu,
+    0x80d6c70cu, 0x80d874f8u, 0x80da48c3u, 0x80dc8cf8u,
+    0x80deb004u, 0x80e0b007u, 0x80e2c502u, 0x80e4bd00u,
+    0x80e60f24u, 0x80e80481u, 0x80ea0c81u, 0x80ecde24u,
+    0x80eee000u, 0x80f0c602u, 0x80f2be00u, 0x80f40ca4u,
+    0x80f6c502u, 0x80f8bd00u, 0x80fa0000u, 0x80fcc602u,
+    0x80febe00u, 0x81000000u, 0x801f0fc2u, 0x80068000u,
+    0x800800e2u, 0x800a0210u, 0x800c1a04u, 0x800e0b26u,
+    0x80100f02u, 0x80120ca0u, 0x8018003fu, 0x40000000u,
+    0x801f0b82u, 0x00100000u, 0x10000010u, 0xc0100000u,
+    0x801f0b80u, 0x70000000u, 0xe0000001u, 0x00100000u,
+    0x20000040u, 0xa0020040u, 0x90000064u, 0x30050000u,
+    0x801f0a43u, 0x80138028u, 0x80146201u, 0x8013b82eu,
+    0x80140001u, 0x801f0a43u, 0x8013b820u, 0x80140290u,
+    0x8013a012u, 0x80140000u, 0x8013a014u, 0x80142c04u,
+    0x80142c09u, 0x80142c09u, 0x80142c09u, 0x8014ad01u,
+    0x8014ad01u, 0x8014ad01u, 0x8014ad01u, 0x8014236cu,
+    0x8013a01au, 0x80140000u, 0x8013a006u, 0x80140fffu,
+    0x8013a004u, 0x80140fffu, 0x8013a002u, 0x80140fffu,
+    0x8013a000u, 0x8014136bu, 0x8013b820u, 0x80140210u,
+    0x801f0a43u, 0x80130000u, 0x80140000u, 0x801f0b82u,
+    0x00170000u, 0x2000fffeu, 0xc0170000u, 0x801f0a43u,
+    0x80138028u, 0x80140000u, 0x801f0b82u, 0x00100000u,
+    0x2000ffefu, 0xc0100000u, 0x801f0a40u,
+};
+
+static VOID
+Rtl8168FwScriptWrite(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ BOOLEAN MacOcp,
+    _In_ ULONG Reg,
+    _In_ USHORT Value)
+{
+    if (MacOcp)
+        Rtl8168MacOcpWrite(Adapter, Reg, Value);
+    else
+        Rtl8168PhyWrite(Adapter, Reg, Value);
+}
+
+static BOOLEAN
+Rtl8168FwScriptRead(
+    _In_ PRTL8168_ADAPTER Adapter,
+    _In_ BOOLEAN MacOcp,
+    _In_ ULONG Reg,
+    _Out_ PUSHORT Value)
+{
+    if (MacOcp)
+    {
+        *Value = Rtl8168MacOcpRead(Adapter, Reg);
+        return TRUE;
+    }
+
+    return Rtl8168PhyRead(Adapter, Reg, Value);
+}
+
+static VOID
+Rtl8168Apply8168hPhyScript(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    ULONG Index;
+    ULONG Predata = 0;
+    ULONG Count = 0;
+    BOOLEAN MacOcp = FALSE;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Rtl8168h2PhyScript); Index++)
+    {
+        ULONG Action = Rtl8168h2PhyScript[Index];
+        ULONG Opcode = Action >> 28;
+        ULONG Reg = (Action >> 16) & 0x0fff;
+        USHORT Value = (USHORT)(Action & 0xffff);
+        USHORT Data;
+
+        switch (Opcode)
+        {
+            case RL_FW_PHY_READ:
+                if (Rtl8168FwScriptRead(Adapter, MacOcp, Reg, &Data))
+                {
+                    Predata = Data;
+                    Count++;
+                }
+                break;
+
+            case RL_FW_PHY_OR:
+                Predata |= Value;
+                break;
+
+            case RL_FW_PHY_AND:
+                Predata &= Value;
+                break;
+
+            case RL_FW_PHY_BJMPN:
+                if (Reg <= Index)
+                    Index -= Reg;
+                break;
+
+            case RL_FW_PHY_MDIO_CHG:
+                MacOcp = (Value == 1);
+                break;
+
+            case RL_FW_PHY_CLEAR_READCOUNT:
+                Count = 0;
+                break;
+
+            case RL_FW_PHY_WRITE:
+                Rtl8168FwScriptWrite(Adapter, MacOcp, Reg, Value);
+                break;
+
+            case RL_FW_PHY_READCOUNT_EQ_SKIP:
+                if (Count == Value)
+                    Index++;
+                break;
+
+            case RL_FW_PHY_COMP_EQ_SKIPN:
+                if (Predata == Value)
+                    Index += Reg;
+                break;
+
+            case RL_FW_PHY_COMP_NEQ_SKIPN:
+                if (Predata != Value)
+                    Index += Reg;
+                break;
+
+            case RL_FW_PHY_WRITE_PREVIOUS:
+                Rtl8168FwScriptWrite(Adapter, MacOcp, Reg, (USHORT)Predata);
+                break;
+
+            case RL_FW_PHY_SKIPN:
+                Index += Reg;
+                break;
+
+            case RL_FW_PHY_DELAY_MS:
+                NdisMSleep(Value);
+                break;
+
+            default:
+                DPRINT1("rtl8168: unknown PHY script opcode 0x%lx\n", Opcode);
+                return;
+        }
+    }
+
+    DPRINT1("rtl8168: applied clean-room 8168H PHY script (%u ops)\n",
+            (ULONG)RTL_NUMBER_OF(Rtl8168h2PhyScript));
+}
+
+static VOID
+Rtl8168Configure8168hPhy(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    ULONG Data;
+    USHORT IoffsetP3;
+    USHORT IoffsetP2;
+    USHORT IoffsetP1;
+    USHORT IoffsetP0;
+    USHORT Rlen;
+    USHORT PhyVal;
+
+    Rtl8168Apply8168hPhyScript(Adapter);
+
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0a43);
+    Rtl8168PhyWrite(Adapter, 0x13, 0x808a);
+    Rtl8168PhyModify(Adapter, 0x14, 0x003f, 0x000a);
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
+
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0a43);
+    Rtl8168PhyWrite(Adapter, 0x13, 0x0811);
+    Rtl8168PhyModify(Adapter, 0x14, 0x0000, 0x0800);
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0a42);
+    Rtl8168PhyModify(Adapter, 0x16, 0x0000, 0x0002);
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
+
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0a44);
+    Rtl8168PhyModify(Adapter, 0x11, 0x0000, 0x0800);
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
+
+    Rtl8168MacOcpWrite(Adapter, 0xdd02, 0x807d);
+    Data = Rtl8168MacOcpRead(Adapter, 0xdd02);
+    IoffsetP3 = (USHORT)((Data & 0x80) >> 7);
+    IoffsetP3 <<= 3;
+
+    Data = Rtl8168MacOcpRead(Adapter, 0xdd00);
+    IoffsetP3 |= (USHORT)((Data & 0xe000) >> 13);
+    IoffsetP2 = (USHORT)((Data & 0x1e00) >> 9);
+    IoffsetP1 = (USHORT)((Data & 0x01e0) >> 5);
+    IoffsetP0 = (USHORT)((Data & 0x0010) >> 4);
+    IoffsetP0 <<= 3;
+    IoffsetP0 |= (USHORT)(Data & 0x07);
+    PhyVal = (USHORT)((IoffsetP3 << 12) | (IoffsetP2 << 8) | (IoffsetP1 << 4) | IoffsetP0);
+
+    if (IoffsetP3 != 0x0f || IoffsetP2 != 0x0f || IoffsetP1 != 0x0f || IoffsetP0 != 0x0f)
+    {
+        Rtl8168PhyWrite(Adapter, 0x1f, 0x0bcf);
+        Rtl8168PhyWrite(Adapter, 0x16, PhyVal);
+        Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
+    }
+
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0bcd);
+    if (Rtl8168PhyRead(Adapter, 0x16, &PhyVal))
+    {
+        PhyVal &= 0x000f;
+        Rlen = 0;
+        if (PhyVal > 3)
+            Rlen = (USHORT)(PhyVal - 3);
+        PhyVal = (USHORT)(Rlen | (Rlen << 4) | (Rlen << 8) | (Rlen << 12));
+        Rtl8168PhyWrite(Adapter, 0x17, PhyVal);
+    }
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
+
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0a44);
+    Rtl8168PhyModify(Adapter, 0x14, 0x0080, 0x0000);
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
+
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0a43);
+    if (Rtl8168PhyRead(Adapter, 0x10, &PhyVal) && (PhyVal & 0x0004))
+        Rtl8168PhyModify(Adapter, 0x10, 0x0004, 0x0000);
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
+}
+
+static VOID
+Rtl8168DisableL2L3(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    Rtl8168EriModify(Adapter, 0x74, RL_ERIAR_MASK_0001, 0x00, 0x07);
+}
+
+static VOID
+Rtl8168Configure8168H(
+    _In_ PRTL8168_ADAPTER Adapter)
+{
+    USHORT SawCount;
+    USHORT SwCount;
+
+    static const struct
+    {
+        ULONG Reg;
+        USHORT Clear;
+        USHORT Set;
+    } EphyTable[] =
+    {
+        { 0x1e, 0x0800, 0x0001 },
+        { 0x1d, 0x0000, 0x0800 },
+        { 0x05, 0xffff, 0x2089 },
+        { 0x06, 0xffff, 0x5881 },
+        { 0x04, 0xffff, 0x854a },
+        { 0x01, 0xffff, 0x068b },
+    };
+    ULONG i;
+
+    for (i = 0; i < RTL_NUMBER_OF(EphyTable); i++)
+        Rtl8168EphyModify(Adapter, EphyTable[i].Reg, EphyTable[i].Clear, EphyTable[i].Set);
+
+    Rtl8168Write32(Adapter,
+                   RL_TXCFG,
+                   Rtl8168Read32(Adapter, RL_TXCFG) | RL_TXCFG_AUTO_FIFO);
+
+    Rtl8168EriWrite(Adapter, 0xc8, RL_ERIAR_MASK_0101, 0x00080002);
+    Rtl8168EriWrite(Adapter, 0xcc, RL_ERIAR_MASK_0001, 0x38);
+    Rtl8168EriWrite(Adapter, 0xd0, RL_ERIAR_MASK_0001, 0x48);
+    Rtl8168EriWrite(Adapter, 0xe8, RL_ERIAR_MASK_1111, 0x00100006);
+
+    Rtl8168SetPcieEntryLatency(Adapter);
+    Rtl8168SetMaxReadRequest(Adapter, PCI_EXPRESS_MRRS_4096);
+
+    Rtl8168EriModify(Adapter, 0xdc, RL_ERIAR_MASK_0001, 0x00, 0x01);
+    Rtl8168EriModify(Adapter, 0xdc, RL_ERIAR_MASK_0001, 0x01, 0x00);
+    Rtl8168EriModify(Adapter, 0xdc, RL_ERIAR_MASK_1111, 0x0010, 0x00);
+    Rtl8168EriModify(Adapter, 0xd4, RL_ERIAR_MASK_1111, 0x1f00, 0x00);
+    Rtl8168EriWrite(Adapter, 0x5f0, RL_ERIAR_MASK_0011, 0x4f87);
+
+    Rtl8168EriWrite(Adapter, 0xc0, RL_ERIAR_MASK_0011, 0x0000);
+    Rtl8168EriWrite(Adapter, 0xb8, RL_ERIAR_MASK_0011, 0x0000);
+
+    Rtl8168Write8(Adapter,
+                  RL_EEE_LED,
+                  (UCHAR)(Rtl8168Read8(Adapter, RL_EEE_LED) & ~0x07));
+    Rtl8168Write8(Adapter,
+                  RL_DLLPR,
+                  (UCHAR)(Rtl8168Read8(Adapter, RL_DLLPR) &
+                          ~(RL_DLLPR_PFM_EN | RL_DLLPR_TX_10M_PS_EN)));
+    Rtl8168Write8(Adapter,
+                  RL_MISC1,
+                  (UCHAR)(Rtl8168Read8(Adapter, RL_MISC1) & ~RL_MISC1_PFM_D3COLD_EN));
+
+    Rtl8168EriModify(Adapter, 0x1b0, RL_ERIAR_MASK_0011, 0x0000, 0x1000);
+    Rtl8168DisableL2L3(Adapter);
+
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0c42);
+    if (Rtl8168PhyRead(Adapter, 0x13, &SawCount) && SawCount != 0)
+    {
+        SwCount = (USHORT)((16000000u / SawCount) & 0x0fff);
+        Rtl8168MacOcpModify(Adapter, 0xd412, 0x0fff, SwCount);
+    }
+    Rtl8168PhyWrite(Adapter, 0x1f, 0x0000);
+
+    Rtl8168MacOcpModify(Adapter, 0xe056, 0x00f0, 0x0070);
+    Rtl8168MacOcpModify(Adapter, 0xe052, 0x6000, 0x8008);
+    Rtl8168MacOcpModify(Adapter, 0xe0d6, 0x01ff, 0x017f);
+    Rtl8168MacOcpModify(Adapter, 0xd420, 0x0fff, 0x047f);
+    Rtl8168MacOcpWrite(Adapter, 0xe63e, 0x0001);
+    Rtl8168MacOcpWrite(Adapter, 0xe63e, 0x0000);
+    Rtl8168MacOcpWrite(Adapter, 0xc094, 0x0000);
+    Rtl8168MacOcpWrite(Adapter, 0xc09e, 0x0000);
+
+    DPRINT1("rtl8168: applied 8168H bring-up quirks\n");
+}
+
+static VOID
 Rtl8168ApplyRxFilter(
     _In_ PRTL8168_ADAPTER Adapter)
 {
     ULONG RxCfg = RL_RXCFG_BASE | RL_RXCFG_APM | RL_RXCFG_AB;
     ULONG Hash[2] = { 0, 0 };
     ULONG i;
+
+    if (Adapter->Rtl8168GPlus)
+        RxCfg |= RL_RXCFG_EARLYOFFV2;
 
     if (Adapter->PacketFilter & NDIS_PACKET_TYPE_PROMISCUOUS)
     {
@@ -309,6 +1059,13 @@ Rtl8168ApplyRxFilter(
 
     if (!(Adapter->PacketFilter & NDIS_PACKET_TYPE_BROADCAST))
         RxCfg &= ~RL_RXCFG_AB;
+
+    if (Adapter->PcieHashSwap && (Hash[0] | Hash[1]))
+    {
+        ULONG Tmp = RtlUlongByteSwap(Hash[0]);
+        Hash[0] = RtlUlongByteSwap(Hash[1]);
+        Hash[1] = Tmp;
+    }
 
     Rtl8168Write32(Adapter, RL_MAR0, Hash[0]);
     Rtl8168Write32(Adapter, RL_MAR0 + 4, Hash[1]);
@@ -431,10 +1188,53 @@ static VOID
 Rtl8168StopHardware(
     _In_ PRTL8168_ADAPTER Adapter)
 {
+    ULONG RxCfg;
+    ULONG i;
+
     Rtl8168DisableInterrupts(Adapter);
-    Rtl8168Write8(Adapter, RL_COMMAND, 0);
+
+    RxCfg = Rtl8168Read32(Adapter, RL_RXCFG);
+    Rtl8168Write32(Adapter,
+                   RL_RXCFG,
+                   RxCfg & ~(RL_RXCFG_AAP | RL_RXCFG_APM | RL_RXCFG_AM | RL_RXCFG_AB));
+
+    if (Adapter->Rtl8168GPlus)
+    {
+        Rtl8168Write32(Adapter,
+                       RL_MISC,
+                       Rtl8168Read32(Adapter, RL_MISC) | RL_MISC_RXDV_GATE);
+        NdisStallExecution(2000);
+
+        Rtl8168Write8(Adapter,
+                      RL_COMMAND,
+                      RL_CMD_STOPREQ | RL_CMD_TX_ENB | RL_CMD_RX_ENB);
+        for (i = 0; i < 1000; i++)
+        {
+            if (Rtl8168Read32(Adapter, RL_TXCFG) & RL_TXCFG_QUEUE_EMPTY)
+                break;
+            NdisStallExecution(100);
+        }
+
+        Rtl8168Write8(Adapter, RL_COMMAND, 0);
+        for (i = 0; i < 3000; i++)
+        {
+            UCHAR Mcu = Rtl8168Read8(Adapter, RL_MCU_CMD);
+            if ((Mcu & (RL_MCU_TXFIFO_EMPTY | RL_MCU_RXFIFO_EMPTY)) ==
+                (RL_MCU_TXFIFO_EMPTY | RL_MCU_RXFIFO_EMPTY))
+                break;
+            NdisStallExecution(20);
+        }
+    }
+    else
+    {
+        Rtl8168Write8(Adapter, RL_COMMAND, 0);
+    }
+
     Adapter->RingsOwnedByHardware = FALSE;
     NdisStallExecution(1000);
+
+    if (!Rtl8168SoftReset(Adapter))
+        DPRINT1("rtl8168: stop reset timed out\n");
 }
 
 static VOID
@@ -443,31 +1243,73 @@ Rtl8168StartHardware(
 {
     USHORT Cplus;
 
+    Rtl8168DisableAspm(Adapter);
+
     if (!Rtl8168SoftReset(Adapter))
         DPRINT1("rtl8168: soft reset timed out\n");
 
-    Adapter->HwRev = Rtl8168Read32(Adapter, RL_TXCFG) & RL_TXCFG_HWREV_MASK;
-    DPRINT("rtl8168: TXCFG hwrev=0x%08lx\n", Adapter->HwRev);
+    Rtl8168IdentifyHardware(Adapter);
+    Rtl8168PhyWake(Adapter);
 
     Rtl8168Write8(Adapter, RL_EECMD, RL_EEMODE_WRITECFG);
     Rtl8168Write8(Adapter,
                   RL_CFG1,
                   (UCHAR)(Rtl8168Read8(Adapter, RL_CFG1) | RL_CFG1_DRIVER_LOAD | RL_CFG1_PM_ENABLE));
+    Rtl8168Write8(Adapter,
+                  RL_CFG2,
+                  (UCHAR)(Rtl8168Read8(Adapter, RL_CFG2) & ~RL_CFG2_CLKREQ_EN));
+    Rtl8168Write8(Adapter,
+                  RL_CFG5,
+                  (UCHAR)(Rtl8168Read8(Adapter, RL_CFG5) & ~RL_CFG5_ASPM_EN));
     Rtl8168Write8(Adapter, RL_EECMD, RL_EEMODE_OFF);
 
-    Rtl8168WriteMacAddress(Adapter);
+    if (Adapter->Rtl8168H)
+    {
+        Rtl8168Configure8168H(Adapter);
+        Rtl8168Configure8168hPhy(Adapter);
+    }
+    else
+        Rtl8168SetMaxReadRequest(Adapter, PCI_EXPRESS_MRRS_4096);
+
     Rtl8168InitRings(Adapter);
 
-    Rtl8168Write32(Adapter, RL_TNPDS_LO, Adapter->TxRingPhysical.LowPart);
-    Rtl8168Write32(Adapter, RL_TNPDS_HI, Adapter->TxRingPhysical.HighPart);
-    Rtl8168Write32(Adapter, RL_RDSAR_LO, Adapter->RxRingPhysical.LowPart);
-    Rtl8168Write32(Adapter, RL_RDSAR_HI, Adapter->RxRingPhysical.HighPart);
-
-    Cplus = (USHORT)(RL_CPLUSCMD_TXENB | RL_CPLUSCMD_RXENB | RL_CPLUSCMD_PCI_MRW);
+    Cplus = RL_CPLUSCMD_PCI_MRW | RL_CPLUSCMD_PCI_DAC;
+    if (Adapter->MacStatCplus)
+        Cplus |= (USHORT)(RL_CPLUSCMD_MACSTAT_DIS | RL_CPLUSCMD_TXENB);
+    else
+        Cplus |= (USHORT)(RL_CPLUSCMD_TXENB | RL_CPLUSCMD_RXENB);
     Rtl8168Write16(Adapter, RL_CPLUSCMD, Cplus);
+
+    Rtl8168WriteMacAddress(Adapter);
+
+    Rtl8168Write32(Adapter, RL_RDSAR_HI, Adapter->RxRingPhysical.HighPart);
+    Rtl8168Write32(Adapter, RL_RDSAR_LO, Adapter->RxRingPhysical.LowPart);
+    Rtl8168Write32(Adapter, RL_TNPDS_HI, Adapter->TxRingPhysical.HighPart);
+    Rtl8168Write32(Adapter, RL_TNPDS_LO, Adapter->TxRingPhysical.LowPart);
+
+    if (Adapter->Rtl8168GPlus)
+    {
+        Rtl8168Write32(Adapter,
+                       RL_MISC,
+                       Rtl8168Read32(Adapter, RL_MISC) & ~RL_MISC_RXDV_GATE);
+    }
+
+    if (!Adapter->Rtl8168GPlus)
+        Rtl8168Write8(Adapter, RL_COMMAND, RL_CMD_TX_ENB | RL_CMD_RX_ENB);
+
+    if (Adapter->Rtl8168GPlus)
+        Rtl8168Write32(Adapter, RL_TXCFG, RL_TXCFG_CONFIG | RL_TXCFG_AUTO_FIFO);
+    else
+        Rtl8168Write32(Adapter, RL_TXCFG, RL_TXCFG_CONFIG);
+
+    if (Adapter->Rtl8168GPlus)
+        Rtl8168Write8(Adapter, RL_EARLY_TX_THRESH, RL_MAX_TX_PACKET_SIZE);
+    else
+        Rtl8168Write8(Adapter, RL_EARLY_TX_THRESH, 16);
+
     Rtl8168Write16(Adapter, RL_RMS, 0x1fff);
-    Rtl8168Write32(Adapter, RL_TXCFG, RL_TXCFG_CONFIG);
     Rtl8168ApplyRxFilter(Adapter);
+    Rtl8168Write16(Adapter, RL_INTRMOD, 0x5100);
 
     Rtl8168PhyWrite(Adapter,
                     MII_ADVERTISE,
@@ -476,7 +1318,9 @@ Rtl8168StartHardware(
     Rtl8168PhyWrite(Adapter, MII_CTRL1000, ADVERTISE_1000FULL);
     Rtl8168PhyWrite(Adapter, MII_BMCR, BMCR_ANENABLE | BMCR_ANRESTART);
 
-    Rtl8168Write8(Adapter, RL_COMMAND, RL_CMD_TX_ENB | RL_CMD_RX_ENB);
+    if (Adapter->Rtl8168GPlus)
+        Rtl8168Write8(Adapter, RL_COMMAND, RL_CMD_TX_ENB | RL_CMD_RX_ENB);
+
     Adapter->RingsOwnedByHardware = TRUE;
     Rtl8168RefreshLink(Adapter, TRUE);
 }
@@ -626,6 +1470,9 @@ Rtl8168PollReceive(
         if (Cmd & RL_DESC_OWN)
             break;
 
+        if (Adapter->RxBuffers[Index].Indicated)
+            break;
+
         Length = Cmd & RL_RDESC_LEN_MASK;
         if (Length >= 4)
             Length -= 4;
@@ -633,8 +1480,7 @@ Rtl8168PollReceive(
         if ((Cmd & (RL_RDESC_FS | RL_RDESC_LS)) != (RL_RDESC_FS | RL_RDESC_LS) ||
             (Cmd & RL_RDESC_ERR_MASK) ||
             Length < ETH_LENGTH_OF_ADDRESS ||
-            Length > RTL8168_FRAME_SIZE ||
-            Adapter->RxBuffers[Index].Indicated)
+            Length > RTL8168_FRAME_SIZE)
         {
             Adapter->RxErrors++;
             Rtl8168RearmRxDescriptor(Adapter, Index);
@@ -651,12 +1497,19 @@ Rtl8168PollReceive(
             continue;
         }
 
+        {
+            PNET_BUFFER Nb = NET_BUFFER_LIST_FIRST_NB(Nbl);
+
+            NET_BUFFER_CURRENT_MDL(Nb) = Adapter->RxBuffers[Index].Mdl;
+            NET_BUFFER_CURRENT_MDL_OFFSET(Nb) = 0;
+            NET_BUFFER_DATA_OFFSET(Nb) = 0;
+            NET_BUFFER_DATA_LENGTH(Nb) = Length;
+        }
+
+        Nbl->SourceHandle = Adapter->MiniportHandle;
         NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
         NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SUCCESS;
-        NET_BUFFER_DATA_LENGTH(NET_BUFFER_LIST_FIRST_NB(Nbl)) = Length;
-        NET_BUFFER_DATA_OFFSET(NET_BUFFER_LIST_FIRST_NB(Nbl)) = 0;
-        NET_BUFFER_CURRENT_MDL_OFFSET(NET_BUFFER_LIST_FIRST_NB(Nbl)) = 0;
-        NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[0] = UlongToPtr(Index);
+        NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[0] = (PVOID)(ULONG_PTR)Index;
 
         Adapter->RxBuffers[Index].Indicated = TRUE;
         Adapter->RxPackets++;
@@ -674,12 +1527,19 @@ Rtl8168PollReceive(
 
     if (IndicateHead)
     {
+        ULONG Flags = 0;
+
+        if (KeGetCurrentIrql() == DISPATCH_LEVEL)
+            Flags |= NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL;
+
+        DPRINT1("rtl8168: indicate %lu rx frame(s) total=%I64u\n",
+                Count,
+                Adapter->RxPackets);
         NdisMIndicateReceiveNetBufferLists(Adapter->MiniportHandle,
                                            IndicateHead,
                                            0,
                                            Count,
-                                           NDIS_RECEIVE_FLAGS_RESOURCES);
-        Rtl8168ReleaseReceiveNetBufferLists(Adapter, IndicateHead);
+                                           Flags);
     }
 }
 
@@ -1111,21 +1971,12 @@ Rtl8168RegisterInterrupt(
     IntChars.DisableInterruptHandler = Rtl8168DisableInterruptEx;
     IntChars.EnableInterruptHandler = Rtl8168EnableInterruptEx;
     IntChars.InterruptType = NDIS_CONNECT_LINE_BASED;
-    IntChars.MsiSupported = TRUE;
+    IntChars.MsiSupported = FALSE;
 
     Status = NdisMRegisterInterruptEx(Adapter->MiniportHandle,
                                       Adapter,
                                       &IntChars,
                                       &Adapter->InterruptHandle);
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        IntChars.MsiSupported = FALSE;
-        IntChars.InterruptType = NDIS_CONNECT_LINE_BASED;
-        Status = NdisMRegisterInterruptEx(Adapter->MiniportHandle,
-                                          Adapter,
-                                          &IntChars,
-                                          &Adapter->InterruptHandle);
-    }
 
     if (Status != NDIS_STATUS_SUCCESS)
         DPRINT1("rtl8168: interrupt registration failed 0x%08x\n", Status);
@@ -1590,7 +2441,14 @@ FailNbl:
     }
 
     if (KickTx)
+    {
+        KeMemoryBarrier();
         Rtl8168Write8(Adapter, RL_GTXPOLL, RL_GTXPOLL_NPQ);
+        DPRINT1("rtl8168: tx kick total=%I64u err=%I64u free=%lu\n",
+                Adapter->TxPackets,
+                Adapter->TxErrors,
+                Adapter->TxFree);
+    }
 
     if (OkHead)
     {
@@ -1612,9 +2470,10 @@ Rtl8168ReturnNetBufferLists(
     _In_ PNET_BUFFER_LIST NetBufferLists,
     _In_ ULONG ReturnFlags)
 {
-    UNREFERENCED_PARAMETER(MiniportAdapterContext);
-    UNREFERENCED_PARAMETER(NetBufferLists);
+    PRTL8168_ADAPTER Adapter = (PRTL8168_ADAPTER)MiniportAdapterContext;
+
     UNREFERENCED_PARAMETER(ReturnFlags);
+    Rtl8168ReleaseReceiveNetBufferLists(Adapter, NetBufferLists);
 }
 
 static VOID
