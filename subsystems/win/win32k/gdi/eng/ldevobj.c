@@ -488,7 +488,13 @@ LDEVOBJ_vDereference(
 
     LDEVOBJ_vDisableDriver(pldev);
 
-    if (LDEVOBJ_bUnloadImage(pldev))
+    if (pldev->pGdiDriverInfo == NULL)
+    {
+        /* A driver built into win32k has no image to unload */
+        RemoveEntryList(&pldev->leLink);
+        LDEVOBJ_vFreeLDEV(pldev);
+    }
+    else if (LDEVOBJ_bUnloadImage(pldev))
     {
         /* Remove ldev from the list */
         RemoveEntryList(&pldev->leLink);
