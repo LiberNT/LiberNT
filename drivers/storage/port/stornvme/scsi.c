@@ -797,6 +797,12 @@ NvmeSubmitReadWrite(_In_ PNVME_DEVICE_EXTENSION Device,
     Command.CDW12 = Blocks - 1;
     if (CanFua && (Srb->Cdb[1] & CDB_FORCE_MEDIA_ACCESS) != 0)
         Command.CDW12 |= 1UL << 30;
+    if (Namespace->ProtectionType != 0)
+    {
+        Command.CDW12 |= NVME_RW_PRINFO_PRACT;
+        if (Namespace->ProtectionType != NVME_PI_TYPE3)
+            Command.CDW14 = (ULONG)Lba;
+    }
 
     return NvmeSubmitIoCommand(Device, NvmeSelectQueue(Device), Srb, &Command);
 

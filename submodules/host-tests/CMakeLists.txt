@@ -47,6 +47,7 @@ endif()
 
 if(BUILD_TESTING AND HOST_TEST_STORPORT)
     add_subdirectory(storport)
+    add_subdirectory(stornvme)
 endif()
 
 if(BUILD_TESTING AND HOST_TEST_DXGKRNL)

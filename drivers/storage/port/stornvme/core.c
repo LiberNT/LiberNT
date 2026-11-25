@@ -444,12 +444,33 @@ NvmeNegotiateQueueCount(_In_ PNVME_DEVICE_EXTENSION Device)
 
 static
 BOOLEAN
+NvmeNamespaceFormatUsable(_In_ PNVME_IDENTIFY_NAMESPACE Identify, _Out_ PUCHAR ProtectionType)
+{
+    ULONG FormatIndex = Identify->FLBAS & NVME_FLBAS_FORMAT_MASK;
+    UCHAR Type = Identify->DPS & NVME_DPS_PI_TYPE_MASK;
+    ULONG MetadataSize;
+
+    *ProtectionType = 0;
+    if (FormatIndex > Identify->NLBAF)
+        return FALSE;
+    MetadataSize = Identify->LBAF[FormatIndex].MS;
+    if (MetadataSize == 0)
+        return TRUE;
+    if (Type == 0 || Type > NVME_PI_TYPE3 || MetadataSize != NVME_PI_SIZE)
+        return FALSE;
+    *ProtectionType = Type;
+    return TRUE;
+}
+
+static
+BOOLEAN
 NvmeScanNamespace(_In_ PNVME_DEVICE_EXTENSION Device, _In_ ULONG Nsid)
 {
     PNVME_IDENTIFY_NAMESPACE Identify = (PNVME_IDENTIFY_NAMESPACE)Device->IdentifyBuffer;
     PNVME_NAMESPACE Namespace;
     NVME_COMMAND Command;
     ULONG FormatIndex;
+    UCHAR ProtectionType;
     UCHAR Lbads;
 
     if (Device->NamespaceCount >= NVME_MAX_NAMESPACES)
@@ -464,13 +485,14 @@ NvmeScanNamespace(_In_ PNVME_DEVICE_EXTENSION Device, _In_ ULONG Nsid)
     if (!NvmeAdminCommandSync(Device, &Command, NULL) || Identify->NSZE == 0)
         return FALSE;
 
-    FormatIndex = Identify->FLBAS & 0xF;
-    if (FormatIndex > Identify->NLBAF || (Identify->FLBAS & 0x10) != 0 ||
-        Identify->LBAF[FormatIndex].MS != 0 || (Identify->DPS & 0x7) != 0)
+    FormatIndex = Identify->FLBAS & NVME_FLBAS_FORMAT_MASK;
+    if (!NvmeNamespaceFormatUsable(Identify, &ProtectionType))
     {
-        DPRINT1("stornvme: namespace %lu uses unsupported metadata or protection information\n", Nsid);
+        DPRINT1("stornvme: namespace %lu uses LBA format %lu of %u with %u bytes of metadata per block and protection settings 0x%x, which need a metadata buffer\n",
+                Nsid, FormatIndex, Identify->NLBAF + 1, Identify->LBAF[FormatIndex].MS, Identify->DPS);
         return FALSE;
     }
+    ASSERT(ProtectionType == 0 || Identify->LBAF[FormatIndex].MS == NVME_PI_SIZE);
     Lbads = Identify->LBAF[FormatIndex].LBADS;
     if (Lbads < NVME_MIN_BLOCK_SHIFT || Lbads > NVME_MAX_BLOCK_SHIFT)
     {
@@ -483,6 +505,7 @@ NvmeScanNamespace(_In_ PNVME_DEVICE_EXTENSION Device, _In_ ULONG Nsid)
     Namespace->Blocks = Identify->NSZE;
     Namespace->BlockShift = Lbads;
     Namespace->BlockSize = 1UL << Lbads;
+    Namespace->ProtectionType = ProtectionType;
     RtlCopyMemory(Namespace->Eui64, Identify->EUI64, sizeof(Namespace->Eui64));
     RtlCopyMemory(Namespace->Nguid, Identify->NGUID, sizeof(Namespace->Nguid));
     Namespace->Ready = TRUE;

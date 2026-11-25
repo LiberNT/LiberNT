@@ -103,6 +103,7 @@ typedef struct _NVME_NAMESPACE
     ULONG BlockSize;
     ULONG BlockShift;
     BOOLEAN Ready;
+    UCHAR ProtectionType;
     UCHAR Eui64[8];
     UCHAR Nguid[16];
 } NVME_NAMESPACE, *PNVME_NAMESPACE;

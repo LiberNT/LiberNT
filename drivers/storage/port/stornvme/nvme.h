@@ -99,6 +99,12 @@
 /* OACS/OAES bits used here. */
 #define NVME_OAES_NS_ATTRIBUTE  0x00000100
 
+#define NVME_FLBAS_FORMAT_MASK  0x0F
+#define NVME_DPS_PI_TYPE_MASK   0x07
+#define NVME_PI_TYPE3           3
+#define NVME_PI_SIZE            8
+#define NVME_RW_PRINFO_PRACT    0x20000000
+
 /* Dataset Management command attributes. */
 #define NVME_DSM_ATTRIBUTE_DEALLOCATE   0x00000004
 
