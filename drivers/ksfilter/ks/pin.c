@@ -2590,7 +2590,7 @@ IKsPin_DispatchDeviceIoControl(
     IKsPinImpl * This;
     NTSTATUS Status;
     UNICODE_STRING GuidString;
-    PKSPROPERTY Property;
+    KSIDENTIFIER Identifier;
     KSRESET ResetValue;
     ULONG SetCount = 0;
 
@@ -2652,15 +2652,15 @@ IKsPin_DispatchDeviceIoControl(
     }
 
     /* get property from input buffer */
-    Property = (PKSPROPERTY)IoStack->Parameters.DeviceIoControl.Type3InputBuffer;
+    KspCaptureIdentifier(Irp, &Identifier);
 
     /* sanity check */
     ASSERT(IoStack->Parameters.DeviceIoControl.InputBufferLength >= sizeof(KSIDENTIFIER));
     ASSERT(This->Pin.Descriptor->AutomationTable);
 
-    if (!NT_SUCCESS(RtlStringFromGUID(&Property->Set, &GuidString)))
+    if (!NT_SUCCESS(RtlStringFromGUID(&Identifier.Set, &GuidString)))
         RtlInitEmptyUnicodeString(&GuidString, NULL, 0);
-    DPRINT("IKsPin_DispatchDeviceIoControl property Set |%S| Id %u Flags %x\n", GuidString.Buffer, Property->Id, Property->Flags);
+    DPRINT("IKsPin_DispatchDeviceIoControl property Set |%S| Id %u Flags %x\n", GuidString.Buffer, Identifier.Id, Identifier.Flags);
     RtlFreeUnicodeString(&GuidString);
 
 
@@ -2724,9 +2724,9 @@ IKsPin_DispatchDeviceIoControl(
         }
     }
 
-    if (!NT_SUCCESS(RtlStringFromGUID(&Property->Set, &GuidString)))
+    if (!NT_SUCCESS(RtlStringFromGUID(&Identifier.Set, &GuidString)))
         RtlInitEmptyUnicodeString(&GuidString, NULL, 0);
-    DPRINT("IKsPin_DispatchDeviceIoControl property Set |%S| Id %u Flags %x Status %lx ResultLength %lu\n", GuidString.Buffer, Property->Id, Property->Flags, Status, Irp->IoStatus.Information);
+    DPRINT("IKsPin_DispatchDeviceIoControl property Set |%S| Id %u Flags %x Status %lx ResultLength %lu\n", GuidString.Buffer, Identifier.Id, Identifier.Flags, Status, Irp->IoStatus.Information);
     RtlFreeUnicodeString(&GuidString);
 
     if (Status != STATUS_PENDING)

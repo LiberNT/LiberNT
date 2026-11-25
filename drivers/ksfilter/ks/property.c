@@ -137,23 +137,16 @@ FindPropertyHandler(
 
 
 NTSTATUS
-KspPropertyHandler(
+KspCapturePropertyRequest(
     IN PIRP Irp,
-    IN  ULONG PropertySetsCount,
-    IN  const KSPROPERTY_SET* PropertySet,
-    IN  PFNKSALLOCATOR Allocator OPTIONAL,
-    IN  ULONG PropertyItemSize OPTIONAL)
+    IN PFNKSALLOCATOR Allocator OPTIONAL,
+    OUT PKSPROPERTY *Request)
 {
     PKSPROPERTY Property;
-    PKSPROPERTY_ITEM PropertyItem;
-    PKSPROPERTY_SET Set;
     PIO_STACK_LOCATION IoStack;
     NTSTATUS Status;
-    PFNKSHANDLER PropertyHandler = NULL;
-    ULONG Index, InputBufferLength, OutputBufferLength, TotalSize;
+    ULONG InputBufferLength, OutputBufferLength, TotalSize;
     ULONG PropertyFlags;
-    LPGUID Guid;
-    //UNICODE_STRING GuidBuffer;
 
     /* get current irp stack */
     IoStack = IoGetCurrentIrpStackLocation(Irp);
@@ -280,6 +273,37 @@ KspPropertyHandler(
         /* use new property buffer */
         Property = (PKSPROPERTY)((ULONG_PTR)Irp->AssociatedIrp.SystemBuffer + OutputBufferLength);
     }
+
+    *Request = Property;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+KspPropertyHandler(
+    IN PIRP Irp,
+    IN  ULONG PropertySetsCount,
+    IN  const KSPROPERTY_SET* PropertySet,
+    IN  PFNKSALLOCATOR Allocator OPTIONAL,
+    IN  ULONG PropertyItemSize OPTIONAL)
+{
+    PKSPROPERTY Property;
+    PKSPROPERTY_ITEM PropertyItem;
+    PKSPROPERTY_SET Set;
+    PIO_STACK_LOCATION IoStack;
+    NTSTATUS Status;
+    PFNKSHANDLER PropertyHandler = NULL;
+    ULONG Index, InputBufferLength, OutputBufferLength;
+    LPGUID Guid;
+    //UNICODE_STRING GuidBuffer;
+
+    IoStack = IoGetCurrentIrpStackLocation(Irp);
+
+    Status = KspCapturePropertyRequest(Irp, Allocator, &Property);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    OutputBufferLength = (IoStack->Parameters.DeviceIoControl.OutputBufferLength + 7) & ~7;
+    InputBufferLength = IoStack->Parameters.DeviceIoControl.InputBufferLength;
 
     //RtlStringFromGUID(&Property->Set, &GuidBuffer);
 

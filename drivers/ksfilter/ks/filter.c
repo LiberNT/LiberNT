@@ -1076,6 +1076,7 @@ IKsFilter_DispatchDeviceIoControl(
     PKSFILTER FilterInstance;
     UNICODE_STRING GuidString;
     PKSPROPERTY Property;
+    KSIDENTIFIER Identifier;
     ULONG SetCount = 0;
     PKSP_NODE NodeProperty;
     PKSNODE_DESCRIPTOR NodeDescriptor;
@@ -1093,6 +1094,7 @@ IKsFilter_DispatchDeviceIoControl(
 
     /* get property from input buffer */
     Property = (PKSPROPERTY)IoStack->Parameters.DeviceIoControl.Type3InputBuffer;
+    KspCaptureIdentifier(Irp, &Identifier);
 
     /* get filter instance */
     FilterInstance = Filter->lpVtbl->GetStruct(Filter);
@@ -1127,10 +1129,18 @@ IKsFilter_DispatchDeviceIoControl(
         const KSPROPERTY_SET *PropertySet = NULL;
         ULONG PropertyItemSize = 0;
 
+        Status = KspCapturePropertyRequest(Irp, NULL, &Property);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+
         /* check if the driver supports method sets */
         if (Property->Flags & KSPROPERTY_TYPE_TOPOLOGY)
         {
-            ASSERT(IoStack->Parameters.DeviceIoControl.InputBufferLength >= sizeof(KSP_NODE));
+            if (IoStack->Parameters.DeviceIoControl.InputBufferLength < sizeof(KSP_NODE))
+            {
+                Status = STATUS_INVALID_BUFFER_SIZE;
+                goto Done;
+            }
             NodeProperty = (PKSP_NODE)Property;
             if (NodeProperty->NodeId >= FilterInstance->Descriptor->NodeDescriptorsCount)
             {
@@ -1187,10 +1197,10 @@ IKsFilter_DispatchDeviceIoControl(
     }
 
 Done:
-    if (!NT_SUCCESS(RtlStringFromGUID(&Property->Set, &GuidString)))
+    if (!NT_SUCCESS(RtlStringFromGUID(&Identifier.Set, &GuidString)))
         RtlInitEmptyUnicodeString(&GuidString, NULL, 0);
     DPRINT("IKsFilter_DispatchDeviceIoControl property PinCount %x\n", FilterInstance->Descriptor->PinDescriptorsCount);
-    DPRINT("IKsFilter_DispatchDeviceIoControl property Set |%S| Id %u Flags %x Status %lx ResultLength %lu\n", GuidString.Buffer, Property->Id, Property->Flags, Status, Irp->IoStatus.Information);
+    DPRINT("IKsFilter_DispatchDeviceIoControl property Set |%S| Id %u Flags %x Status %lx ResultLength %lu\n", GuidString.Buffer, Identifier.Id, Identifier.Flags, Status, Irp->IoStatus.Information);
     RtlFreeUnicodeString(&GuidString);
 
     /* release filter */

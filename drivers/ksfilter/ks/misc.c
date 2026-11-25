@@ -137,6 +137,28 @@ KspCopyCreateRequest(
     return STATUS_SUCCESS;
 }
 
+VOID
+KspCaptureIdentifier(
+    IN PIRP Irp,
+    OUT PKSIDENTIFIER Identifier)
+{
+    PIO_STACK_LOCATION IoStack = IoGetCurrentIrpStackLocation(Irp);
+
+    RtlZeroMemory(Identifier, sizeof(*Identifier));
+    if (IoStack->Parameters.DeviceIoControl.InputBufferLength < sizeof(KSIDENTIFIER))
+        return;
+
+    _SEH2_TRY
+    {
+        RtlCopyMemory(Identifier, IoStack->Parameters.DeviceIoControl.Type3InputBuffer, sizeof(*Identifier));
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        RtlZeroMemory(Identifier, sizeof(*Identifier));
+    }
+    _SEH2_END;
+}
+
 /*
     @implemented
 */

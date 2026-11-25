@@ -114,6 +114,17 @@ KspCopyCreateRequest(
     IN OUT PULONG Size,
     OUT PVOID * Result);
 
+VOID
+KspCaptureIdentifier(
+    IN PIRP Irp,
+    OUT PKSIDENTIFIER Identifier);
+
+NTSTATUS
+KspCapturePropertyRequest(
+    IN PIRP Irp,
+    IN PFNKSALLOCATOR Allocator OPTIONAL,
+    OUT PKSPROPERTY *Request);
+
 NTSTATUS
 KspCreatePin(
     IN PDEVICE_OBJECT DeviceObject,
