@@ -12,6 +12,17 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(msv1_0);
 
+typedef struct _LSA_TOKEN_INFORMATION_V1
+{
+    LARGE_INTEGER ExpirationTime;
+    TOKEN_USER User;
+    PTOKEN_GROUPS Groups;
+    TOKEN_PRIMARY_GROUP PrimaryGroup;
+    PTOKEN_PRIVILEGES Privileges;
+    TOKEN_OWNER Owner;
+    TOKEN_DEFAULT_DACL DefaultDacl;
+} LSA_TOKEN_INFORMATION_V1, *PLSA_TOKEN_INFORMATION_V1;
+
 typedef struct _LOGON_LIST_ENTRY
 {
     LIST_ENTRY ListEntry;
@@ -1535,6 +1546,7 @@ LsaApLogonUserEx2(IN PLSA_CLIENT_REQUEST ClientRequest,
         LogonType == Batch ||
         LogonType == Service ||
         LogonType == Unlock ||
+        LogonType == NetworkCleartext ||
         PlainNetwork)
     {
         PMSV1_0_INTERACTIVE_LOGON LogonInfo;
