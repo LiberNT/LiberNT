@@ -4044,8 +4044,12 @@ DxgkpPresentAcquireDmaPass(
         PresentArgs->pPatchLocationListOut = NULL;
         PresentArgs->PatchLocationListOutSize = 0;
         PresentArgs->DmaBufferGpuVirtualAddress = DmaBuffer->GpuVirtualAddress;
+        PresentArgs->pAllocationInfo = PresentAllocationInfo;
     }
-    ASSERT(PresentArgs->pAllocationList == PresentAllocationList);
+    if (VirtualPresent)
+        ASSERT(PresentArgs->pAllocationInfo == PresentAllocationInfo);
+    else
+        ASSERT(PresentArgs->pAllocationList == PresentAllocationList);
     ASSERT(PresentAllocationList[0].hDeviceSpecificAllocation == NULL);
     ASSERT(PresentAllocationList[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation == SourceDeviceSpecificHandle);
     ASSERT(PresentAllocationList[DXGK_PRESENT_DESTINATION_INDEX].hDeviceSpecificAllocation == DestinationDeviceSpecificHandle);
