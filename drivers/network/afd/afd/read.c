@@ -351,7 +351,49 @@ VOID AfdSatisfyAcceptData( PAFD_FCB FCB ) {
     if( Consumed ) RefillSocketBuffer( FCB );
 }
 
-static NTSTATUS ReceiveActivity( PAFD_FCB FCB, PIRP Irp ) {
+/* IRPs whose user buffers are released and cancel routine cleared, queued
+ * to be completed once the socket state lock is dropped. Completing an IRP
+ * runs MmUnlockPages and IoCompleteRequest, work that does not need the
+ * FCB mutex but used to hold it for every satisfied receive. The queue is
+ * split by buffer layout at enqueue time: Normal carries IRPs without
+ * address mapbuf extras, Address the datagram recvfrom IRPs. The drain runs
+ * after SocketStateUnlock, where the FCB may already be freed by a racing
+ * close, so it must never dereference the FCB; CheckUnlockExtraBuffers is
+ * therefore evaluated under the lock instead. */
+typedef struct _AFD_DEFERRED_RECV {
+    LIST_ENTRY Normal;
+    LIST_ENTRY Address;
+} AFD_DEFERRED_RECV, *PAFD_DEFERRED_RECV;
+
+static VOID CompleteDeferredRecv( PLIST_ENTRY List, BOOLEAN Address )
+{
+    while( !IsListEmpty( List ) )
+    {
+        PLIST_ENTRY Entry = RemoveHeadList( List );
+        PIRP NextIrp = CONTAINING_RECORD( Entry, IRP, Tail.Overlay.ListEntry );
+        PIO_STACK_LOCATION NextIrpSp = IoGetCurrentIrpStackLocation( NextIrp );
+        PAFD_RECV_INFO RecvReq = GetLockedData( NextIrp, NextIrpSp );
+
+        UnlockBuffers( RecvReq->BufferArray, RecvReq->BufferCount, Address );
+        if( NextIrp->MdlAddress )
+            UnlockRequest( NextIrp, NextIrpSp );
+        IoCompleteRequest( NextIrp, IO_NETWORK_INCREMENT );
+    }
+}
+
+static VOID DrainDeferredRecv( PAFD_DEFERRED_RECV Deferred )
+{
+    CompleteDeferredRecv( &Deferred->Normal, FALSE );
+    CompleteDeferredRecv( &Deferred->Address, TRUE );
+}
+
+static VOID InitDeferredRecv( PAFD_DEFERRED_RECV Deferred )
+{
+    InitializeListHead( &Deferred->Normal );
+    InitializeListHead( &Deferred->Address );
+}
+
+static NTSTATUS ReceiveActivity( PAFD_FCB FCB, PIRP Irp, PAFD_DEFERRED_RECV Deferred ) {
     PLIST_ENTRY NextIrpEntry;
     PIRP NextIrp;
     PIO_STACK_LOCATION NextIrpSp;
@@ -383,18 +425,17 @@ static NTSTATUS ReceiveActivity( PAFD_FCB FCB, PIRP Irp ) {
                 NextIrpEntry = RemoveHeadList(&FCB->PendingIrpList[FUNCTION_RECV]);
             }
             NextIrp = CONTAINING_RECORD(NextIrpEntry, IRP, Tail.Overlay.ListEntry);
-            NextIrpSp = IoGetCurrentIrpStackLocation( NextIrp );
-            RecvReq = GetLockedData(NextIrp, NextIrpSp);
 
             AFD_DbgPrint(MID_TRACE,("Completing recv %p (%u)\n", NextIrp,
                                     TotalBytesCopied));
-            UnlockBuffers( RecvReq->BufferArray,
-                           RecvReq->BufferCount, FALSE );
 
             /* A local receive shutdown must report WSAESHUTDOWN, not the peer's status */
             Status = FCB->ReceiveShutdown ? STATUS_END_OF_FILE
                                           : FCB->LastReceiveStatus;
 
+            NextIrpSp = IoGetCurrentIrpStackLocation( NextIrp );
+            RecvReq = GetLockedData(NextIrp, NextIrpSp);
+            UnlockBuffers( RecvReq->BufferArray, RecvReq->BufferCount, FALSE );
             NextIrp->IoStatus.Status = Status;
             NextIrp->IoStatus.Information = 0;
             if( NextIrp == Irp ) RetStatus = Status;
@@ -432,16 +473,15 @@ static NTSTATUS ReceiveActivity( PAFD_FCB FCB, PIRP Irp ) {
             } else {
                 AFD_DbgPrint(MID_TRACE,("Completing recv %p (%u)\n", NextIrp,
                                         TotalBytesCopied));
-                UnlockBuffers( RecvReq->BufferArray,
-                               RecvReq->BufferCount, FALSE );
                 NextIrp->IoStatus.Status = Status;
                 NextIrp->IoStatus.Information = TotalBytesCopied;
                 if( NextIrp == Irp ) {
                     RetStatus = Status;
                 }
-                if( NextIrp->MdlAddress ) UnlockRequest( NextIrp, IoGetCurrentIrpStackLocation( NextIrp ) );
                 (void)IoSetCancelRoutine(NextIrp, NULL);
-                IoCompleteRequest( NextIrp, IO_NETWORK_INCREMENT );
+                InsertTailList( CheckUnlockExtraBuffers( FCB, NextIrpSp )
+                                ? &Deferred->Address : &Deferred->Normal,
+                              &NextIrp->Tail.Overlay.ListEntry );
             }
         }
     }
@@ -529,10 +569,15 @@ NTSTATUS NTAPI ReceiveComplete
 
     HandleReceiveComplete( FCB, Irp->IoStatus.Status, Irp->IoStatus.Information );
 
-    ReceiveActivity( FCB, NULL );
+    {
+        AFD_DEFERRED_RECV Deferred;
 
-    if (FCB->TdiRundownEvent) AfdSignalTdiRundown(FCB);
-    SocketStateUnlock( FCB );
+        InitDeferredRecv( &Deferred );
+        ReceiveActivity( FCB, NULL, &Deferred );
+        if (FCB->TdiRundownEvent) AfdSignalTdiRundown(FCB);
+        SocketStateUnlock( FCB );
+        DrainDeferredRecv( &Deferred );
+    }
 
     return STATUS_SUCCESS;
 }
@@ -810,7 +855,12 @@ AfdConnectedSocketReadData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
     /************ From this point, the IRP is not ours ************/
 
-    Status = ReceiveActivity( FCB, Irp );
+    {
+        AFD_DEFERRED_RECV Deferred;
+
+        InitDeferredRecv( &Deferred );
+        Status = ReceiveActivity( FCB, Irp, &Deferred );
+
 
     if( Status == STATUS_PENDING &&
         !(RecvReq->AfdFlags & AFD_OVERLAPPED) &&
@@ -820,8 +870,10 @@ AfdConnectedSocketReadData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         TotalBytesCopied = 0;
         RemoveEntryList( &Irp->Tail.Overlay.ListEntry );
         UnlockBuffers( RecvReq->BufferArray, RecvReq->BufferCount, FALSE );
-        return UnlockAndMaybeComplete( FCB, Status, Irp,
-                                       TotalBytesCopied );
+        Status = UnlockAndMaybeComplete( FCB, Status, Irp,
+                                         TotalBytesCopied );
+        DrainDeferredRecv( &Deferred );
+        return Status;
     } else if( Status == STATUS_PENDING ) {
         AFD_DbgPrint(MID_TRACE,("Leaving read irp\n"));
         IoMarkIrpPending( Irp );
@@ -831,7 +883,9 @@ AfdConnectedSocketReadData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     }
 
     SocketStateUnlock( FCB );
+    DrainDeferredRecv( &Deferred );
     return Status;
+    }
 }
 
 BOOLEAN
@@ -977,6 +1031,7 @@ PacketSocketRecvProcess(
     UINT ControlLen = 0;
     UINT DGSize;
     PLIST_ENTRY NextIrpEntry, DatagramRecvEntry;
+    AFD_DEFERRED_RECV Deferred;
     BOOLEAN Unreachable = (Irp->IoStatus.Status == STATUS_PORT_UNREACHABLE);
 
     ASSERT(FCB->ReceiveIrp.InFlightRequest == Irp);
@@ -1087,6 +1142,8 @@ PacketSocketRecvProcess(
 SatisfyRequests:
     /* Satisfy as many requests as we can */
 
+    InitDeferredRecv( &Deferred );
+
     while( !IsListEmpty( &FCB->DatagramList ) &&
            !IsListEmpty( &FCB->PendingIrpList[FUNCTION_RECV] ) ) {
         AFD_DbgPrint(MID_TRACE,("Looping trying to satisfy request\n"));
@@ -1115,11 +1172,9 @@ SatisfyRequests:
         AFD_DbgPrint(MID_TRACE,("Unlocking\n"));
         UnlockBuffers( RecvReq->BufferArray, RecvReq->BufferCount, CheckUnlockExtraBuffers(FCB, NextIrpSp) );
         if ( NextIrp->MdlAddress ) UnlockRequest( NextIrp, IoGetCurrentIrpStackLocation( NextIrp ) );
-
         AFD_DbgPrint(MID_TRACE,("Completing\n"));
         (void)IoSetCancelRoutine(NextIrp, NULL);
         NextIrp->IoStatus.Status = Status;
-
         IoCompleteRequest( NextIrp, IO_NETWORK_INCREMENT );
     }
 
@@ -1139,6 +1194,7 @@ SatisfyRequests:
 
     if (FCB->TdiRundownEvent) AfdSignalTdiRundown(FCB);
     SocketStateUnlock( FCB );
+    DrainDeferredRecv( &Deferred );
 
     return STATUS_SUCCESS;
 }
