@@ -459,6 +459,73 @@ CiHashFile(CI_READ_FILE Read, void *Context, uint64_t Size, unsigned char Digest
 }
 
 int
+CiCatalogImage(CI_READ_FILE Read, void *Context, uint64_t Size, uint64_t *Extent, unsigned char Digest[32])
+{
+    unsigned char Header[264], *Buffer;
+    uint32_t NtOffset, DirectoryOffset, CertificateOffset, CertificateSize;
+    uint64_t End, ChecksumOffset, DirectoryEntry, Start;
+    mbedtls_md_context_t Hash;
+    size_t Length, Index;
+    int Result = 0;
+
+    if (Size < sizeof(Header) || !Read(Context, 0, Header, 64) || CiU16(Header) != 0x5a4d)
+        return 0;
+    NtOffset = CiU32(Header + 60);
+    if (NtOffset > Size - sizeof(Header) || !Read(Context, NtOffset, Header, sizeof(Header)) || CiU32(Header) != 0x4550)
+        return 0;
+    if (CiU16(Header + 24) == 0x20b)
+        DirectoryOffset = 24 + 112;
+    else if (CiU16(Header + 24) == 0x10b)
+        DirectoryOffset = 24 + 96;
+    else
+        return 0;
+    if (CiU16(Header + 20) < DirectoryOffset - 24 + 40 || CiU32(Header + DirectoryOffset - 4) < 5)
+        return 0;
+    ChecksumOffset = (uint64_t)NtOffset + 24 + 64;
+    DirectoryEntry = (uint64_t)NtOffset + DirectoryOffset + 32;
+    CertificateOffset = CiU32(Header + DirectoryOffset + 32);
+    CertificateSize = CiU32(Header + DirectoryOffset + 36);
+    End = Size;
+    if (CertificateSize && CertificateOffset <= Size && CertificateSize == Size - CertificateOffset)
+        End = CertificateOffset;
+    if (End < DirectoryEntry + 8)
+        return 0;
+
+    Buffer = CiAllocate(1, CI_HASH_BUFFER_SIZE);
+    if (!Buffer)
+        return 0;
+    while (End > DirectoryEntry + 8)
+    {
+        Length = End - (DirectoryEntry + 8) > CI_HASH_BUFFER_SIZE ? CI_HASH_BUFFER_SIZE : (size_t)(End - (DirectoryEntry + 8));
+        Start = End - Length;
+        if (!Read(Context, Start, Buffer, Length))
+            goto Exit;
+        for (Index = Length; Index && !Buffer[Index - 1]; --Index)
+            ;
+        End = Start + Index;
+        if (Index)
+            break;
+    }
+    *Extent = End;
+    if (!Digest)
+    {
+        Result = 1;
+        goto Exit;
+    }
+
+    mbedtls_md_init(&Hash);
+    if (!mbedtls_md_setup(&Hash, mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), 0) && !mbedtls_md_starts(&Hash) &&
+        CiHashRange(Read, Context, 0, ChecksumOffset, &Hash, Buffer) &&
+        CiHashRange(Read, Context, ChecksumOffset + 4, DirectoryEntry, &Hash, Buffer) &&
+        CiHashRange(Read, Context, DirectoryEntry + 8, End, &Hash, Buffer) && !mbedtls_md_finish(&Hash, Digest))
+        Result = 1;
+    mbedtls_md_free(&Hash);
+Exit:
+    CiFree(Buffer);
+    return Result;
+}
+
+int
 CiVerifyMicrosoftImage(CI_READ_FILE Read, void *Context, uint64_t Size, uint64_t Now)
 {
     unsigned char Header[264], Section[40], Digest[64];
@@ -559,6 +626,10 @@ CiVerifyMicrosoftImage(CI_READ_FILE Read, void *Context, uint64_t Size, uint64_t
     Inner = CiContents(Sequence);
     if (!CiReadAlgorithm(&Inner, &ImageDigestType) || !CiReadDer(&Inner, 4, &ImageHash) || Inner.Size || ImageHash.Size != mbedtls_md_get_size(mbedtls_md_info_from_type(ImageDigestType)))
         goto Exit;
+    if (!CiVerifyTimestamp(&Signed, Now, &SigningTime))
+        SigningTime = Now;
+    if (!CiVerifySigner(&Signed, SigningTime, 0))
+        goto Exit;
     if (mbedtls_md_setup(&Hash, mbedtls_md_info_from_type(ImageDigestType), 0) || mbedtls_md_starts(&Hash))
         goto Exit;
     if (!CiHashRange(Read, Context, 0, (uint64_t)NtOffset + 24 + 64, &Hash, Buffer) || !CiHashRange(Read, Context, (uint64_t)NtOffset + 24 + 68, (uint64_t)NtOffset + DirectoryOffset + 32, &Hash, Buffer) || !CiHashRange(Read, Context, (uint64_t)NtOffset + DirectoryOffset + 40, HeaderSize, &Hash, Buffer))
@@ -570,9 +641,7 @@ CiVerifyMicrosoftImage(CI_READ_FILE Read, void *Context, uint64_t Size, uint64_t
     }
     if (!CiHashRange(Read, Context, Sum, CertificateOffset, &Hash, Buffer) || mbedtls_md_finish(&Hash, Digest) || memcmp(Digest, ImageHash.Data, ImageHash.Size))
         goto Exit;
-    if (!CiVerifyTimestamp(&Signed, Now, &SigningTime))
-        SigningTime = Now;
-    Result = CiVerifySigner(&Signed, SigningTime, 0);
+    Result = 1;
 Exit:
     mbedtls_md_free(&Hash);
     CiFree(Certificates);

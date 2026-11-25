@@ -91,6 +91,7 @@ MiVerifyImageSigning(
     SIZE_T Low = 0, High = RTL_NUMBER_OF(MiSystemImageCatalog), Middle;
     LARGE_INTEGER Size, Time;
     BOOLEAN Verified = FALSE;
+    ULONGLONG Extent = 0;
     UCHAR Digest[32];
     NTSTATUS Status;
 
@@ -109,24 +110,34 @@ MiVerifyImageSigning(
     if (File.Bounce == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
 
+    if (!CiCatalogImage(MiCiReadFile, &File, Size.QuadPart, &Extent, NULL))
+    {
+        if (!NT_SUCCESS(File.Status))
+        {
+            ExFreePoolWithTag(File.Bounce, TAG_CODE_INTEGRITY);
+            return File.Status;
+        }
+        Extent = 0;
+    }
+
     while (Low < High)
     {
         Middle = Low + (High - Low) / 2;
-        if (MiSystemImageCatalog[Middle].Size < (ULONGLONG)Size.QuadPart)
+        if (MiSystemImageCatalog[Middle].Size < Extent)
             Low = Middle + 1;
         else
             High = Middle;
     }
 
-    if (Low < RTL_NUMBER_OF(MiSystemImageCatalog) && MiSystemImageCatalog[Low].Size == (ULONGLONG)Size.QuadPart)
+    if (Extent != 0 && Low < RTL_NUMBER_OF(MiSystemImageCatalog) && MiSystemImageCatalog[Low].Size == Extent)
     {
-        if (!CiHashFile(MiCiReadFile, &File, Size.QuadPart, Digest))
+        if (!CiCatalogImage(MiCiReadFile, &File, Size.QuadPart, &Extent, Digest))
         {
             ExFreePoolWithTag(File.Bounce, TAG_CODE_INTEGRITY);
             return NT_SUCCESS(File.Status) ? STATUS_INSUFFICIENT_RESOURCES : File.Status;
         }
 
-        while (Low < RTL_NUMBER_OF(MiSystemImageCatalog) && MiSystemImageCatalog[Low].Size == (ULONGLONG)Size.QuadPart)
+        while (Low < RTL_NUMBER_OF(MiSystemImageCatalog) && MiSystemImageCatalog[Low].Size == Extent)
         {
             if (RtlCompareMemory(Digest, MiSystemImageCatalog[Low].Hash, sizeof(Digest)) == sizeof(Digest))
             {

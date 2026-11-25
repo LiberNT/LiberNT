@@ -11,6 +11,8 @@ typedef int (*CI_READ_FILE)(void *Context, uint64_t Offset, void *Buffer, size_t
 /* The caller supplies an immutable file and seconds since 1970 UTC. */
 int CiVerifyMicrosoftImage(CI_READ_FILE Read, void *Context, uint64_t Size, uint64_t Now);
 int CiHashFile(CI_READ_FILE Read, void *Context, uint64_t Size, unsigned char Digest[32]);
+/* Hashes a PE image as signing leaves it unchanged: no CheckSum, certificate entry, certificate or trailing zeros. */
+int CiCatalogImage(CI_READ_FILE Read, void *Context, uint64_t Size, uint64_t *Extent, unsigned char Digest[32]);
 
 /* Allocation is supplied by the kernel or the host test runner. */
 void *CiAllocate(size_t Count, size_t Size);
