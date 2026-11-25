@@ -339,8 +339,7 @@ DbgSetDebugFilterState(IN ULONG ComponentId,
                        IN ULONG Level,
                        IN BOOLEAN State)
 {
-    /* Call the Nt routine */
-    return NtSetDebugFilterState(ComponentId, Level, State);
+    return ZwSetDebugFilterState(ComponentId, Level, State);
 }
 
 /*
