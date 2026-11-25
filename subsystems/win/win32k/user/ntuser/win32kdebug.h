@@ -138,7 +138,7 @@
     #define DBG_PRINT(ppi,ch,level,fmt, ...)    \
     do {    \
     if ((level == ERR_LEVEL) || (ppi && DBG_IS_CHANNEL_ENABLED(ppi,ch,level)))  \
-        DbgPrint("(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__);         \
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__); \
     } while (0)
 
     #define ERR(fmt, ...)     DBG_PRINT(DBG_GET_PPI, DbgDefaultChannel, ERR_LEVEL,"err: " fmt, ##__VA_ARGS__)
@@ -156,7 +156,7 @@
     #define WARN_PPI(ppi,ch,fmt, ...)  DBG_PRINT(ppi, DbgCh##ch, WARN_LEVEL,"warn: " fmt, ##__VA_ARGS__)
     #define TRACE_PPI(ppi,ch,fmt, ...) DBG_PRINT(ppi, DbgCh##ch, TRACE_LEVEL,"trace: " fmt, ##__VA_ARGS__)
 
-    #define STUB         DbgPrint("WARNING:  %s at %s:%d is UNIMPLEMENTED!\n",__FUNCTION__,__RELFILE__,__LINE__);
+    #define STUB         DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "WARNING:  %s at %s:%d is UNIMPLEMENTED!\n",__FUNCTION__,__RELFILE__,__LINE__);
 
 #else
     #define DBG_GET_PPI
