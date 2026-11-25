@@ -829,6 +829,11 @@ GdiFlushUserBatch(PDC dc, PGDIBATCHHDR pHdr, ULONG cjAvailable)
      case GdiBCDelObj:
      {
         PGDIBSOBJECT pgO = (PGDIBSOBJECT) pHdr;
+        if (GDI_HANDLE_GET_TYPE(pgO->hgdiobj) == GDI_OBJECT_TYPE_DC ||
+            GreIsObjectUndeletable(pgO->hgdiobj))
+        {
+            break;
+        }
         GreDeleteObject( pgO->hgdiobj );
         break;
      }
