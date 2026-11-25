@@ -165,7 +165,7 @@ add_custom_target(bootloaderimg
         -guid ebd0a0a2-b9e5-4433-87c0-68b6b72699c7
         -id ${BOOTLOADER_SYSTEM_ID}
         -name LiberNT
-    DEPENDS native-mkdiskimg ${CMAKE_CURRENT_BINARY_DIR}/esp.fat
+    DEPENDS native-mkdiskimg ${CMAKE_CURRENT_BINARY_DIR}/esp.fat preinstall_partition
     VERBATIM)
 
 set(BOOTLOADER_MEDIA_RAMDISK_EXTRA "64M" CACHE STRING "Writable space added to the RAM disk of the live medium")
