@@ -599,7 +599,7 @@ NtGdiEngBitBlt(
             ProbeForRead(pptlBrush, sizeof(POINTL), 1);
             ptlBrush = *pptlBrush;
 
-            ProbeForRead(psoSrcUMPD, sizeof(SURFOBJ), 1);
+            ProbeForRead(pboUMPD, sizeof(BRUSHOBJ), 1);
             hBrushObj = pboUMPD->pvRbrush; // FIXME
         }
     }
