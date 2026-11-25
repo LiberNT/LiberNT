@@ -1713,6 +1713,11 @@ NTSTATUS DispTdiQueryInformationEx(
                 IoFreeMdl(OutputMdl);
             }
 
+            if (QueryContext->KernelInputBuffer)
+                ExFreePoolWithTag(QueryContext->KernelInputBuffer, QUERY_CONTEXT_TAG);
+            if (QueryContext->KernelOutputBuffer)
+                ExFreePoolWithTag(QueryContext->KernelOutputBuffer, QUERY_CONTEXT_TAG);
+
             ExFreePoolWithTag(QueryContext, QUERY_CONTEXT_TAG);
         } else
             Status = STATUS_INSUFFICIENT_RESOURCES;
