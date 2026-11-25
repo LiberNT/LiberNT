@@ -1034,16 +1034,34 @@ PnpRootPnp(
         }
 
         case IRP_MN_QUERY_RESOURCES:
-            if (PdoExtension == NULL ||
-                PdoExtension->Device == NULL ||
-                PdoExtension->Device->ResourceList == NULL)
-            {
-                Status = STATUS_NOT_SUPPORTED;
+            if (PdoExtension == NULL || PdoExtension->Device == NULL)
                 break;
-            }
 
-            Irp->IoStatus.Information =
-                (ULONG_PTR)PdoExtension->Device->ResourceList;
+            /* A device without a boot configuration has nothing to report, which is not a failure */
+            if (PdoExtension->Device->ResourceList != NULL)
+            {
+                ULONG Size = PnpDetermineResourceListSize(PdoExtension->Device->ResourceList);
+                PCM_RESOURCE_LIST Copy;
+
+                ASSERT(Size >= FIELD_OFFSET(CM_RESOURCE_LIST, List));
+                Copy = ExAllocatePoolWithTag(PagedPool, Size, TAG_PNP_ROOT);
+                if (Copy == NULL)
+                {
+                    Status = STATUS_INSUFFICIENT_RESOURCES;
+                    break;
+                }
+
+                RtlCopyMemory(Copy, PdoExtension->Device->ResourceList, Size);
+                Irp->IoStatus.Information = (ULONG_PTR)Copy;
+            }
+            Status = STATUS_SUCCESS;
+            break;
+
+        case IRP_MN_QUERY_RESOURCE_REQUIREMENTS:
+            if (PdoExtension == NULL || PdoExtension->Device == NULL)
+                break;
+
+            /* TODO: the requirements of a registry instance's LogConf are not reported */
             Status = STATUS_SUCCESS;
             break;
 

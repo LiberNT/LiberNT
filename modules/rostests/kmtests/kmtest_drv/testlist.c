@@ -184,6 +184,7 @@ KMT_TESTFUNC Test_KsDispatchFileObject;
 KMT_TESTFUNC Test_HalRealTimeClock;
 KMT_TESTFUNC Test_HalSystemInfo;
 KMT_TESTFUNC Test_IoContainerId;
+KMT_TESTFUNC Test_IoRootPdo;
 KMT_TESTFUNC Test_IoDriverKeyOpen;
 KMT_TESTFUNC Test_IoDriverState;
 KMT_TESTFUNC Test_IoAllocateIrpEx;
@@ -631,6 +632,7 @@ const KMT_TEST TestList[] =
     { "HalRealTimeClock",                   Test_HalRealTimeClock },
     { "HalSystemInfo",                      Test_HalSystemInfo },
     { "IoContainerId",                      Test_IoContainerId },
+    { "IoRootPdo",                          Test_IoRootPdo },
     { "-IoDriverKeyOpen",                   Test_IoDriverKeyOpen },
     { "IoDriverState",                      Test_IoDriverState },
     { "IoAllocateIrpEx",                    Test_IoAllocateIrpEx },
