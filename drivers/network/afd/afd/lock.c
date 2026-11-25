@@ -650,9 +650,11 @@ AfdLockMessageBuffers(PAFD_WSABUF Buf, UINT Count, PAFD_RECV_MSG_INFO Message, K
 
 VOID UnlockBuffers( PAFD_WSABUF Buf, UINT Count, BOOL Address ) {
     UINT Lock = Address ? EXTRA_LOCK_BUFFERS : 0;
-    PAFD_MAPBUF Map = (PAFD_MAPBUF)(Buf + Count + Lock);
+    PAFD_MAPBUF Map;
 
     if( !Buf ) return;
+
+    Map = (PAFD_MAPBUF)(Buf + Count + Lock);
 
     AfdUnlockMdlArray( Map, Count + Lock );
     ExFreePoolWithTag(Buf, TAG_AFD_WSA_BUFFER);
