@@ -156,6 +156,7 @@ Directory::CreateNode(
     if (!NT_SUCCESS(Status) ||
         RtlCompareMemory(NodeBuffer->RecordHeader.TypeID, "INDX", 4) != 4 ||
         NodeBuffer->VCN != *VCN ||
+        (NodeBuffer->IndexHeader.IndexOffset & 7) != 0 ||
         NodeBuffer->IndexHeader.IndexOffset >
             NodeBuffer->IndexHeader.TotalIndexSize ||
         (ULONG)FIELD_OFFSET(IndexBuffer, IndexHeader) +
@@ -297,6 +298,7 @@ Directory::CreateRootNode(_In_  PFileRecord File,
     if (((ULONG)FIELD_OFFSET(IndexRootEx, Header) +
          IndexRootData->Header.TotalIndexSize) >
         IndexRootAttribute->Resident.DataLength ||
+        (IndexRootData->Header.IndexOffset & 7) != 0 ||
         IndexRootData->Header.IndexOffset >
             IndexRootData->Header.TotalIndexSize)
     {

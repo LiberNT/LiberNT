@@ -408,6 +408,7 @@ Directory::LoadDirectNode(_In_ ULONG Depth,
 
     if (*HeaderBytes < sizeof(IndexNodeHeader) ||
         (*Header)->IndexOffset < sizeof(IndexNodeHeader) ||
+        ((*Header)->IndexOffset & 7) != 0 ||
         (*Header)->IndexOffset > (*Header)->TotalIndexSize ||
         (*Header)->TotalIndexSize > *HeaderBytes)
     {

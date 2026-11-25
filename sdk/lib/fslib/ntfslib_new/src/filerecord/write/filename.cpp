@@ -72,6 +72,7 @@ UpdateIndexNodeInformation(
     if (!Header ||
         HeaderBytes < sizeof(*Header) ||
         Header->IndexOffset < sizeof(*Header) ||
+        (Header->IndexOffset & 7) != 0 ||
         Header->IndexOffset > Header->TotalIndexSize ||
         Header->TotalIndexSize > Header->AllocatedSize ||
         Header->AllocatedSize > HeaderBytes ||

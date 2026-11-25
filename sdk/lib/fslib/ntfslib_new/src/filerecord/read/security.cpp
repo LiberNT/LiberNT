@@ -715,6 +715,7 @@ FindSecurityIdInNode(
 
     if (HeaderBytes < sizeof(*Header) ||
         Header->IndexOffset < sizeof(*Header) ||
+        (Header->IndexOffset & 7) != 0 ||
         Header->IndexOffset > Header->TotalIndexSize ||
         Header->TotalIndexSize > HeaderBytes ||
         (Header->Flags & ~NTFS_INDEX_HEADER_LARGE) != 0)
@@ -1707,6 +1708,7 @@ FindSecurityByHashInNode(
     if (Depth > 32 ||
         HeaderBytes < sizeof(*Header) ||
         Header->IndexOffset < sizeof(*Header) ||
+        (Header->IndexOffset & 7) != 0 ||
         Header->IndexOffset > Header->TotalIndexSize ||
         Header->TotalIndexSize > HeaderBytes)
     {
@@ -1852,6 +1854,7 @@ FindLastSecurityLocation(
         if (Depth > 32 ||
             HeaderBytes < sizeof(*Header) ||
             Header->IndexOffset < sizeof(*Header) ||
+            (Header->IndexOffset & 7) != 0 ||
             Header->IndexOffset > Header->TotalIndexSize ||
             Header->TotalIndexSize > HeaderBytes)
         {

@@ -193,6 +193,7 @@ NtfsFindIndexInsertionPoint(
 
     if (HeaderBytes < sizeof(*Header) ||
         Header->IndexOffset < sizeof(*Header) ||
+        (Header->IndexOffset & 7) != 0 ||
         Header->IndexOffset >
             Header->TotalIndexSize ||
         Header->TotalIndexSize >
@@ -2380,6 +2381,7 @@ Directory::PushDownResidentRoot(
         IndexRecordSize % AllocationUnit != 0 ||
         IndexRoot->Header.IndexOffset <
             sizeof(IndexNodeHeader) ||
+        (IndexRoot->Header.IndexOffset & 7) != 0 ||
         IndexRoot->Header.TotalIndexSize <=
             IndexRoot->Header.IndexOffset ||
         IndexRoot->Header.TotalIndexSize >
@@ -3258,6 +3260,7 @@ FindTrailingIndexEntries(
     *EndEntry = NULL;
     if (HeaderBytes < sizeof(*Header) ||
         Header->IndexOffset < sizeof(*Header) ||
+        (Header->IndexOffset & 7) != 0 ||
         Header->IndexOffset >
             Header->TotalIndexSize ||
         Header->TotalIndexSize >
