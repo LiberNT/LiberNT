@@ -135,6 +135,8 @@ unsigned int Random(void);
 
 #define LWIP_STATS                      1
 
+#define MIB2_STATS                      1
+
 #define LINK_STATS                      0
 
 #define IP_STATS                        0

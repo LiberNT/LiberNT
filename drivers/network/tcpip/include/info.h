@@ -42,9 +42,11 @@ LibIP6FlushPaths(VOID);
 #include <tcpioctl.h>
 /* FIXME */
 #define DWORD ULONG
+#define BYTE UCHAR
 #include <in6addr.h>
 #include <tcpmib.h>
 #include <udpmib.h>
+#include <ipmib.h>
 
 #define MAX_PHYSADDR_LEN 8
 #define MAX_IFDESCR_LEN  256
@@ -151,6 +153,27 @@ TDI_STATUS InfoTdiQueryGetIPSnmpInfo( TDIEntityID ID,
                                       PIP_INTERFACE IF,
 				      PNDIS_BUFFER Buffer,
 				      PUINT BufferSize );
+
+TDI_STATUS InfoTdiQueryGetTcpStats( PNDIS_BUFFER Buffer,
+                                    PUINT BufferSize );
+
+TDI_STATUS InfoTdiQueryGetUdpStats( PNDIS_BUFFER Buffer,
+                                    PUINT BufferSize );
+
+TDI_STATUS InfoTdiQueryGetIcmpStats( PNDIS_BUFFER Buffer,
+                                     PUINT BufferSize );
+
+/* Packet counters maintained by the IP/ICMP/UDP paths; TCP counters live in
+ * lwIP's lwip_stats.mib2 (MIB2_STATS). Incremented under DISPATCH_LEVEL, so
+ * all updates go through the atomic macro; readers copy the fields directly. */
+extern IPSNMPInfo IPSnmpStats;
+extern MIBICMPINFO IcmpSnmpStats;
+extern ULONG UdpInDatagrams;
+extern ULONG UdpNoPorts;
+extern ULONG UdpInErrors;
+extern ULONG UdpOutDatagrams;
+
+#define TCPIP_STATS_INC(Field) (void)InterlockedIncrement((PLONG)&(Field))
 
 TDI_STATUS InfoTdiQueryGetRouteTable( PIP_INTERFACE IF,
                                       PNDIS_BUFFER Buffer,

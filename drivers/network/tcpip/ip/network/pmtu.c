@@ -420,7 +420,10 @@ VOID ICMPSendDestinationUnreachable(PIP_INTERFACE Interface, PIP_PACKET IPPacket
 
     NCE = RouteGetRouteToDestination(&IPPacket->SrcAddr);
     if (!NCE)
+    {
+        TCPIP_STATS_INC(IPSnmpStats.ipsi_outnoroutes);
         return;
+    }
 
     Message = ExAllocatePoolZero(NonPagedPool, DataSize, PMTU_TAG);
     if (!Message)
@@ -442,7 +445,10 @@ VOID ICMPSendDestinationUnreachable(PIP_INTERFACE Interface, PIP_PACKET IPPacket
     FakeAddrFile.Protocol = IPPROTO_ICMP;
     FakeAddrFile.TTL = 128;
     if (NT_SUCCESS(BuildRawIpPacket(&FakeAddrFile, &NewPacket, &IPPacket->SrcAddr, 0, &Source, 0, (PCHAR)Message, DataSize)))
+    {
+        IcmpCountOut(ICMP_TYPE_DEST_UNREACH);
         IPSendDatagram(&NewPacket, NCE);
+    }
 
     ExFreePoolWithTag(Message, PMTU_TAG);
     NBDereferenceNeighbor(NCE);

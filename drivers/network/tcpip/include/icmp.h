@@ -29,6 +29,8 @@ typedef struct ICMP_HEADER {
 #define ICMP_TYPE_TIMESTAMP_REPLY   14 /* Timestamp reply */
 #define ICMP_TYPE_INFO_REQUEST      15 /* Information request */
 #define ICMP_TYPE_INFO_REPLY        16 /* Information reply */
+#define ICMP_TYPE_MASK_REQUEST      17 /* Address mask request */
+#define ICMP_TYPE_MASK_REPLY        18 /* Address mask reply */
 #define ICMP_TYPE_ROUTER_ADVERT     9
 #define ICMP_TYPE_ROUTER_SOLICIT    10
 
@@ -89,6 +91,7 @@ VOID RdiscStartup(VOID);
 VOID PmtuStartup(VOID);
 VOID PmtuReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket);
 VOID PmtuFlushInterface(PIP_INTERFACE Interface);
+VOID IcmpCountOut(UCHAR Type);
 VOID ICMPSendFragmentationNeeded(PIP_INTERFACE Interface, PIP_PACKET IPPacket, ULONG Mtu);
 VOID ICMPSendDestinationUnreachable(PIP_INTERFACE Interface, PIP_PACKET IPPacket, PVOID Transport, UCHAR Code, ULONG Mtu);
 VOID PathTouch(PIP_INTERFACE Interface, IPv4_RAW_ADDRESS Source, IPv4_RAW_ADDRESS Destination, IPv4_RAW_ADDRESS NextHop);

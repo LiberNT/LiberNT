@@ -142,6 +142,7 @@ TCPSendDataCallback(struct netif *netif, struct pbuf *p, const ip4_addr_t *dest)
     }
     if (!NCE)
     {
+        TCPIP_STATS_INC(IPSnmpStats.ipsi_outnoroutes);
         return ERR_RTE;
     }
 

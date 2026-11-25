@@ -27,6 +27,8 @@ BOOLEAN IpWorkItemQueued = FALSE;
 
 IP_PROTOCOL_HANDLER ProtocolTable[IP_PROTOCOL_TABLE_SIZE];
 
+VOID DefaultProtocolHandler(PIP_INTERFACE Interface, PIP_PACKET IPPacket);
+
 ULONG IpTimerExpirations;
 
 VOID
@@ -193,10 +195,18 @@ VOID IPDispatchProtocol(
 
     NBResetNeighborTimeout(&SrcAddress);
 
-    if (Protocol < IP_PROTOCOL_TABLE_SIZE)
+    if (Protocol < IP_PROTOCOL_TABLE_SIZE &&
+        ProtocolTable[Protocol] != DefaultProtocolHandler)
     {
+       TCPIP_STATS_INC(IPSnmpStats.ipsi_indelivers);
        /* Call the appropriate protocol handler */
        (*ProtocolTable[Protocol])(Interface, IPPacket);
+    }
+    else
+    {
+       TCPIP_STATS_INC(IPSnmpStats.ipsi_inunknownprotos);
+       if (Protocol < IP_PROTOCOL_TABLE_SIZE)
+           (*ProtocolTable[Protocol])(Interface, IPPacket);
     }
 }
 

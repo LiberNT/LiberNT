@@ -329,6 +329,8 @@ VOID ProcessFragment(
 
   /* FIXME: Assume IPv4 */
 
+  TCPIP_STATS_INC(IPSnmpStats.ipsi_reasmreqds);
+
   IPv4Header = (PIPv4_HEADER)IPPacket->Header;
   FragFirst = (WN2H(IPv4Header->FlagsFragOfs) & IPv4_FRAGOFS_MASK) << 3;
   MoreFragments = (WN2H(IPv4Header->FlagsFragOfs) & IPv4_MF_MASK) > 0;
@@ -336,10 +338,16 @@ VOID ProcessFragment(
   FragEnd = FragFirst + FragSize;
 
   if (MoreFragments && (FragSize == 0 || (FragSize & 7)))
+  {
+      TCPIP_STATS_INC(IPSnmpStats.ipsi_reasmfails);
       return;
+  }
 
   if (IPPacket->HeaderSize + FragEnd > 65535)
+  {
+      TCPIP_STATS_INC(IPSnmpStats.ipsi_reasmfails);
       return;
+  }
 
   /* Check if we already have an reassembly structure for this datagram */
   IPDR = GetReassemblyInfo(IPPacket, &OldIrql);
@@ -559,8 +567,13 @@ VOID ProcessFragment(
     DereferenceIPDR(IPDR);
 
     if (!Success)
+    {
       /* Not enough free resources, discard the packet */
+      TCPIP_STATS_INC(IPSnmpStats.ipsi_reasmfails);
       return;
+    }
+
+    TCPIP_STATS_INC(IPSnmpStats.ipsi_reasmoks);
 
     DISPLAY_IP_PACKET(&Datagram);
 
@@ -583,6 +596,7 @@ Discard:
   TcpipReleaseSpinLock(&IPDR->Lock, OldIrql);
   RemoveIPDR(IPDR);
   DereferenceIPDR(IPDR);
+  TCPIP_STATS_INC(IPSnmpStats.ipsi_reasmfails);
 }
 
 
@@ -652,6 +666,7 @@ VOID IPDatagramReassemblyTimeout(
            CurrentIPDR->Removed = TRUE;
            TcpipReleaseSpinLockFromDpcLevel(&CurrentIPDR->Lock);
            InsertTailList(&RemovedList, CurrentEntry);
+           TCPIP_STATS_INC(IPSnmpStats.ipsi_reasmfails);
        }
        else
        {
@@ -761,6 +776,8 @@ VOID IPv4Receive(PIP_INTERFACE IF, PIP_PACKET IPPacket)
     USHORT FragmentOffset;
     BOOLEAN Forward;
 
+    TCPIP_STATS_INC(IPSnmpStats.ipsi_inreceives);
+
     AvailableSize = IPPacket->TotalSize >= IPPacket->Position ?
                     IPPacket->TotalSize - IPPacket->Position : 0;
     /* Read in the first IP header byte for size information */
@@ -772,6 +789,7 @@ VOID IPv4Receive(PIP_INTERFACE IF, PIP_PACKET IPPacket)
     {
         TI_DbgPrint(MIN_TRACE, ("Failed to copy in first byte\n"));
         /* Discard packet */
+        TCPIP_STATS_INC(IPSnmpStats.ipsi_inhdrerrors);
         return;
     }
 
@@ -783,6 +801,7 @@ VOID IPv4Receive(PIP_INTERFACE IF, PIP_PACKET IPPacket)
         TI_DbgPrint(MIN_TRACE, ("Datagram received with incorrect header size (%d).\n",
 	      IPPacket->HeaderSize));
         /* Discard packet */
+        TCPIP_STATS_INC(IPSnmpStats.ipsi_inhdrerrors);
         return;
     }
 
@@ -794,6 +813,7 @@ VOID IPv4Receive(PIP_INTERFACE IF, PIP_PACKET IPPacket)
     {
         TI_DbgPrint(MIN_TRACE, ("No resources to allocate header\n"));
         /* Discard packet */
+        TCPIP_STATS_INC(IPSnmpStats.ipsi_indiscards);
         return;
     }
 
@@ -807,12 +827,14 @@ VOID IPv4Receive(PIP_INTERFACE IF, PIP_PACKET IPPacket)
     {
         TI_DbgPrint(MIN_TRACE, ("Failed to copy in header\n"));
         /* Discard packet */
+        TCPIP_STATS_INC(IPSnmpStats.ipsi_inhdrerrors);
         return;
     }
 
     /* Checksum IPv4 header */
     if (!IPv4CorrectChecksum(IPPacket->Header, IPPacket->HeaderSize)) {
         /* Discard packet */
+        TCPIP_STATS_INC(IPSnmpStats.ipsi_inhdrerrors);
         return;
     }
 
@@ -821,6 +843,7 @@ VOID IPv4Receive(PIP_INTERFACE IF, PIP_PACKET IPPacket)
     if (IPPacket->TotalSize < IPPacket->HeaderSize ||
         IPPacket->TotalSize > AvailableSize)
     {
+        TCPIP_STATS_INC(IPSnmpStats.ipsi_inhdrerrors);
         return;
     }
 
@@ -831,7 +854,10 @@ VOID IPv4Receive(PIP_INTERFACE IF, PIP_PACKET IPPacket)
         (Forward || !IPv4IsDhcpClientDatagram(IPPacket)))
     {
         if (!Forward)
+        {
+            TCPIP_STATS_INC(IPSnmpStats.ipsi_inaddrerrors);
             return;
+        }
         if ((WN2H(((PIPv4_HEADER)IPPacket->Header)->FlagsFragOfs) & (IPv4_FRAGOFS_MASK | IPv4_MF_MASK)) == 0)
         {
             PacketData = NULL;
@@ -843,6 +869,7 @@ VOID IPv4Receive(PIP_INTERFACE IF, PIP_PACKET IPPacket)
                 IPPacket->Header = PacketData;
                 IPPacket->MappedHeader = TRUE;
                 IPPacket->Data = PacketData + IPPacket->HeaderSize;
+                TCPIP_STATS_INC(IPSnmpStats.ipsi_forwdatagrams);
                 IPv4Forward(IF, IPPacket);
                 return;
             }

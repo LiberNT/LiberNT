@@ -288,6 +288,10 @@ TDI_STATUS InfoTdiQueryInformationEx(
                          return InfoTdiQueryGetIPSnmpInfo(ID->toi_entity, EntityListContext, Buffer, BufferSize);
                      else
                          return TDI_INVALID_PARAMETER;
+                 else if (ID->toi_entity.tei_entity == CO_TL_ENTITY)
+                     return InfoTdiQueryGetTcpStats(Buffer, BufferSize);
+                 else if (ID->toi_entity.tei_entity == CL_TL_ENTITY)
+                     return InfoTdiQueryGetUdpStats(Buffer, BufferSize);
                  else if (ID->toi_entity.tei_entity == AT_ENTITY)
                      if ((EntityListContext = GetContext(ID->toi_entity)))
                          return InfoTdiQueryGetATInfo(ID->toi_entity, EntityListContext, Buffer, BufferSize);
@@ -367,6 +371,16 @@ TDI_STATUS InfoTdiQueryInformationEx(
                      return TDI_INVALID_PARAMETER;
 
                  return InfoTdiQueryGetIFInfo(Context, Buffer, BufferSize);
+
+              case ICMP_MIB_STATS_ID:
+                 if (ID->toi_type != INFO_TYPE_PROVIDER)
+                     return TDI_INVALID_PARAMETER;
+
+                 if (ID->toi_entity.tei_entity == CL_NL_ENTITY ||
+                     ID->toi_entity.tei_entity == CO_NL_ENTITY)
+                     return InfoTdiQueryGetIcmpStats(Buffer, BufferSize);
+                 else
+                     return TDI_INVALID_PARAMETER;
 
               default:
                  return TDI_INVALID_REQUEST;

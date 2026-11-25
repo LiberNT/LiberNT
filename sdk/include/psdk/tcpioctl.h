@@ -57,6 +57,10 @@
 /* Non public TOIID used to query modules info */
 #ifdef __REACTOS__
 #define IP_SPECIFIC_MODULE_ENTRY_ID     0x110
+/* LiberNT-private TOIID for the ICMP statistics. The public MIB stat ids
+ * are all 1 and the NL entities already carry the IP statistics there,
+ * so the ICMP statistics get their own private id. */
+#define ICMP_MIB_STATS_ID               0x111
 #endif
 #define MAX_PHYSADDR_SIZE               8
 
