@@ -547,6 +547,7 @@ VOID MiDeleteUnclonedPte(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAd
                          _In_ ULONG TableFrame, _In_ MI_PTE NewValue);
 PMI_VAD MiVadLocate(_In_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress);
 VOID MiSetVadNoChange(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Base, _In_ BOOLEAN NoChange);
+BOOLEAN MiClearVadNoChangeIfPresent(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Base);
 PMI_VAD MiVadAllocateAndLock(_Inout_ PMI_ADDRESS_SPACE Space);
 PMI_VAD MiVadPopFree(_Inout_ PMI_ADDRESS_SPACE Space);
 BOOLEAN MiVadCacheFree(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PMI_VAD Vad);

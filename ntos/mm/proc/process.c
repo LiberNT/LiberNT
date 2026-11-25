@@ -274,7 +274,8 @@ MiProcessDeleteTeb(
 {
     ULONG64 Size = 0;
 
-    MiSetVadNoChange(&Process->Space, Teb, FALSE);
+    if (!MiClearVadNoChangeIfPresent(&Process->Space, Teb))
+        return STATUS_SUCCESS;
     return MiFreeVirtualMemory(&Process->Space, &Teb, &Size, MI_MEM_RELEASE);
 }
 

@@ -1262,6 +1262,27 @@ MiSetVadNoChange(
     MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
 }
 
+BOOLEAN
+MiClearVadNoChangeIfPresent(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 Base)
+{
+    PMI_VAD Vad;
+
+    MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
+    Vad = MiVadLocate(Space, Base);
+    if (Vad == NULL)
+    {
+        MI_ASSERT(MiVadFirst(&Space->VadRoot) == NULL);
+        MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+        return FALSE;
+    }
+    MI_ASSERT(MI_VAD_START(Vad) == Base);
+    Vad->NoChange = FALSE;
+    MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+    return TRUE;
+}
+
 NTSTATUS
 MiFreeVirtualMemory(
     _Inout_ PMI_ADDRESS_SPACE Space,
