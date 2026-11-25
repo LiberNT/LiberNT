@@ -12655,9 +12655,9 @@ DxgkpDispatchBufferedIoctlWorker(
                 return STATUS_BUFFER_TOO_SMALL;
 
             Status = DxgkOpenResource((D3DKMT_OPENRESOURCE *)SystemBuffer);
-            if (NT_SUCCESS(Status) || Status == STATUS_BUFFER_TOO_SMALL)
+            if (NT_SUCCESS(Status))
                 KmtRequest->Information = sizeof(D3DKMT_OPENRESOURCE);
-            return Status == STATUS_BUFFER_TOO_SMALL ? STATUS_BUFFER_OVERFLOW : Status;
+            return Status;
         }
 
 #if (REACTOS_WDDM_TARGET_LEVEL >= 2000)

@@ -2070,7 +2070,7 @@ NtGdiDdDDIOpenResourceFromNtHandle(_Inout_ struct _D3DKMT_OPENRESOURCEFROMNTHAND
         Captured.TotalPrivateDriverDataBufferSize;
 
     Status = D3DKMTOpenResource(&OpenResource);
-    if (!NT_SUCCESS(Status) && Status != STATUS_BUFFER_TOO_SMALL)
+    if (!NT_SUCCESS(Status))
         return Status;
 
     Captured.NumAllocations = OpenResource.NumAllocations;

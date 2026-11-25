@@ -8103,7 +8103,7 @@ DxgkOpenResource(
     UINT TotalPrivateCapacity;
     UINT Offset;
     UINT Index;
-    BOOLEAN BufferTooSmall = FALSE;
+    BOOLEAN BuffersShort = FALSE;
     NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
@@ -8131,21 +8131,18 @@ DxgkOpenResource(
     if (!NT_SUCCESS(Status))
         goto Cleanup;
 
-    pOpenResource->NumAllocations = AllocationCount;
-    pOpenResource->PrivateRuntimeDataSize = Resource->PrivateRuntimeDataSize;
-    pOpenResource->ResourcePrivateDriverDataSize = Resource->ResourcePrivateDriverDataSize;
-    pOpenResource->TotalPrivateDriverDataBufferSize = TotalPrivateSize;
+    /* The sizes come from D3DKMTQueryResourceInfo; short buffers are refused without reporting them */
     if (AllocationCapacity < AllocationCount || pOpenResource->pOpenAllocationInfo == NULL)
-        BufferTooSmall = TRUE;
+        BuffersShort = TRUE;
     if (Resource->PrivateRuntimeDataSize != 0 && (pOpenResource->pPrivateRuntimeData == NULL || RuntimeCapacity < Resource->PrivateRuntimeDataSize))
-        BufferTooSmall = TRUE;
+        BuffersShort = TRUE;
     if (Resource->ResourcePrivateDriverDataSize != 0 && (pOpenResource->pResourcePrivateDriverData == NULL || ResourcePrivateCapacity < Resource->ResourcePrivateDriverDataSize))
-        BufferTooSmall = TRUE;
+        BuffersShort = TRUE;
     if (TotalPrivateSize != 0 && (pOpenResource->pTotalPrivateDriverDataBuffer == NULL || TotalPrivateCapacity < TotalPrivateSize))
-        BufferTooSmall = TRUE;
-    if (BufferTooSmall)
+        BuffersShort = TRUE;
+    if (BuffersShort)
     {
-        Status = STATUS_BUFFER_TOO_SMALL;
+        Status = STATUS_INVALID_PARAMETER;
         goto Cleanup;
     }
 

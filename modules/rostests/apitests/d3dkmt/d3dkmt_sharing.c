@@ -661,17 +661,17 @@ static void Test_SharedPrimary_OpenRoundTrip(void)
     if (Query.NumAllocations == 0 || Query.NumAllocations > MAX_TEST_SHARED_ALLOCATIONS)
         goto Cleanup;
 
+    /* There is no discovery call: without buffers the open is refused and nothing is reported back */
     memset(&Discovery, 0, sizeof(Discovery));
     Discovery.hDevice = hDevice1;
     Discovery.hGlobalShare = hGlobalShare;
     Status = pOpen(&Discovery);
-    ok(Status == STATUS_BUFFER_TOO_SMALL, "OpenResource discovery returned 0x%08lX instead of STATUS_BUFFER_TOO_SMALL\n", (long)Status);
-    ok(Discovery.NumAllocations == Query.NumAllocations, "OpenResource discovery count %u, expected %u\n", Discovery.NumAllocations, Query.NumAllocations);
-    ok(Discovery.PrivateRuntimeDataSize == Query.PrivateRuntimeDataSize, "OpenResource runtime-private size %u, expected %u\n", Discovery.PrivateRuntimeDataSize, Query.PrivateRuntimeDataSize);
-    ok(Discovery.ResourcePrivateDriverDataSize == Query.ResourcePrivateDriverDataSize, "OpenResource resource-private size %u, expected %u\n", Discovery.ResourcePrivateDriverDataSize, Query.ResourcePrivateDriverDataSize);
-    ok(Discovery.TotalPrivateDriverDataBufferSize == Query.TotalPrivateDriverDataSize, "OpenResource allocation-private size %u, expected %u\n", Discovery.TotalPrivateDriverDataBufferSize, Query.TotalPrivateDriverDataSize);
-    if (Status != STATUS_BUFFER_TOO_SMALL || Discovery.NumAllocations != Query.NumAllocations)
-        goto Cleanup;
+    ok(Status == STATUS_INVALID_PARAMETER, "OpenResource without buffers returned 0x%08lX\n", (long)Status);
+    ok(Discovery.NumAllocations == 0, "OpenResource without buffers reported %u allocations\n", Discovery.NumAllocations);
+    ok(Discovery.PrivateRuntimeDataSize == 0, "OpenResource without buffers reported runtime-private size %u\n", Discovery.PrivateRuntimeDataSize);
+    ok(Discovery.ResourcePrivateDriverDataSize == 0, "OpenResource without buffers reported resource-private size %u\n", Discovery.ResourcePrivateDriverDataSize);
+    ok(Discovery.TotalPrivateDriverDataBufferSize == 0, "OpenResource without buffers reported allocation-private size %u\n", Discovery.TotalPrivateDriverDataBufferSize);
+    ok(Discovery.hResource == 0, "OpenResource without buffers returned resource 0x%08lX\n", (unsigned long)Discovery.hResource);
 
     if (!InitializeSharedOpenBuffers(&FirstOpen, hDevice1, hGlobalShare, &Query) || !InitializeSharedOpenBuffers(&SecondOpen, hDevice2, hGlobalShare, &Query))
     {

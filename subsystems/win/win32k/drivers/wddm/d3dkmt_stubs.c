@@ -1695,24 +1695,6 @@ D3DKMTOpenResource(
         goto Cleanup;
 
     Status = WddmBridgeSendIoctlWithInformation(IOCTL_D3DKMT_OPENRESOURCE, &Captured, sizeof(Captured), &Captured, sizeof(Captured), &Information);
-    if (Status == STATUS_BUFFER_OVERFLOW)
-        Status = STATUS_BUFFER_TOO_SMALL;
-    if (Status == STATUS_BUFFER_TOO_SMALL)
-    {
-        if (Information != sizeof(Captured))
-        {
-            Status = STATUS_INFO_LENGTH_MISMATCH;
-            goto Cleanup;
-        }
-        Captured.pOpenAllocationInfo = UserOpenAllocationInfo;
-        Captured.pPrivateRuntimeData = UserPrivateRuntimeData;
-        Captured.pResourcePrivateDriverData = UserResourcePrivateDriverData;
-        Captured.pTotalPrivateDriverDataBuffer = UserTotalPrivateDriverData;
-        Status = WddmBridgeSafeCopyTo(pData, &Captured, sizeof(Captured));
-        if (NT_SUCCESS(Status))
-            Status = STATUS_BUFFER_TOO_SMALL;
-        goto Cleanup;
-    }
     if (!NT_SUCCESS(Status))
         goto Cleanup;
     KernelOpenSucceeded = TRUE;
