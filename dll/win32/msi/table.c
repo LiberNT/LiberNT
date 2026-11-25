@@ -570,11 +570,16 @@ static UINT table_get_column_info( MSIDATABASE *db, const WCHAR *name, struct co
 
     /* get the number of columns in this table */
     column_count = 0;
+#ifdef __REACTOS__
+    *pcount = 0;
+#endif
     r = get_tablecolumns( db, name, NULL, &column_count );
     if (r != ERROR_SUCCESS)
         return r;
 
+#ifndef __REACTOS__
     *pcount = column_count;
+#endif
 
     /* if there are no columns, there's no table */
     if (!column_count)
@@ -593,6 +598,9 @@ static UINT table_get_column_info( MSIDATABASE *db, const WCHAR *name, struct co
         return ERROR_FUNCTION_FAILED;
     }
     *pcols = columns;
+#ifdef __REACTOS__
+    *pcount = column_count;
+#endif
     return r;
 }
 
