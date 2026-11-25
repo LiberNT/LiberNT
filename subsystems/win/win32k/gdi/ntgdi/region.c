@@ -3888,11 +3888,15 @@ NtGdiExtCreateRegion(
         if (Xform != NULL)
         {
             ULONG ret;
+            XFORM xfCaptured;
+
+            ProbeForRead(Xform, sizeof(XFORM), 1);
+            xfCaptured = *Xform;
 
             /* Init the XFORMOBJ from the Xform struct */
             Status = STATUS_INVALID_PARAMETER;
             XFORMOBJ_vInit(&xo, &matrix);
-            ret = XFORMOBJ_iSetXform(&xo, (XFORML*)Xform);
+            ret = XFORMOBJ_iSetXform(&xo, (XFORML*)&xfCaptured);
 
             /* Check for error */
             if (ret != DDI_ERROR)
