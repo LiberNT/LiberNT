@@ -1666,6 +1666,9 @@ NtCreateToken(
     PSID Owner = NULL;
     PSID PrimaryGroup = NULL;
     PACL DefaultDacl = NULL;
+    PSID CallerOwner = NULL;
+    PSID CallerPrimaryGroup = NULL;
+    PACL CallerDefaultDacl = NULL;
     ULONG GroupCount = 0;
     ULONG PrivilegeCount = 0;
     ULONG Length;
@@ -1709,6 +1712,11 @@ NtCreateToken(
         Contents.Source = *TokenSource;
         GroupCount = TokenGroups->GroupCount;
         PrivilegeCount = TokenPrivileges->PrivilegeCount;
+        if (TokenOwner != NULL)
+            CallerOwner = TokenOwner->Owner;
+        CallerPrimaryGroup = TokenPrimaryGroup->PrimaryGroup;
+        if (TokenDefaultDacl != NULL)
+            CallerDefaultDacl = TokenDefaultDacl->DefaultDacl;
         Status = STATUS_SUCCESS;
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -1774,7 +1782,7 @@ NtCreateToken(
 
     if (NT_SUCCESS(Status) && TokenOwner != NULL)
     {
-        Status = SepCaptureSid(TokenOwner->Owner,
+        Status = SepCaptureSid(CallerOwner,
                                PreviousMode,
                                PagedPool,
                                TRUE,
@@ -1783,17 +1791,16 @@ NtCreateToken(
 
     if (NT_SUCCESS(Status))
     {
-        Status = SepCaptureSid(TokenPrimaryGroup->PrimaryGroup,
+        Status = SepCaptureSid(CallerPrimaryGroup,
                                PreviousMode,
                                PagedPool,
                                TRUE,
                                &PrimaryGroup);
     }
 
-    if (NT_SUCCESS(Status) && TokenDefaultDacl != NULL &&
-        TokenDefaultDacl->DefaultDacl != NULL)
+    if (NT_SUCCESS(Status) && CallerDefaultDacl != NULL)
     {
-        Status = SepCaptureAcl(TokenDefaultDacl->DefaultDacl,
+        Status = SepCaptureAcl(CallerDefaultDacl,
                                PreviousMode,
                                PagedPool,
                                TRUE,
