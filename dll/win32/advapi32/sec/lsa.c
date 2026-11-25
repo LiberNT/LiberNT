@@ -1119,6 +1119,35 @@ LsaLookupSids(IN LSA_HANDLE PolicyHandle,
 
 
 /******************************************************************************
+ * LsaManageSidNameMapping
+ *
+ * PARAMS
+ *   OpType   [I]
+ *   OpInput  [I]
+ *   OpOutput [O]
+ *
+ * @unimplemented: the LSARPC LsarManageSidNameMapping server call is not
+ * implemented yet; report it instead of failing so callers that treat the
+ * mapping as best-effort can proceed.
+ */
+NTSTATUS
+WINAPI
+LsaManageSidNameMapping(IN ULONG OpType,
+                        IN PVOID OpInput,
+                        OUT PVOID *OpOutput)
+{
+    TRACE("LsaManageSidNameMapping(0x%lx %p %p)\n", OpType, OpInput, OpOutput);
+
+    if (OpInput == NULL || OpOutput == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    *OpOutput = NULL;
+
+    return STATUS_NOT_IMPLEMENTED;
+}
+
+
+/******************************************************************************
  * LsaNtStatusToWinError
  *
  * PARAMS

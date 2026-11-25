@@ -400,6 +400,7 @@
 @ stdcall LsaLookupPrivilegeName(ptr ptr ptr)
 @ stdcall LsaLookupPrivilegeValue(ptr ptr ptr)
 @ stdcall LsaLookupSids(ptr long ptr ptr ptr)
+@ stdcall LsaManageSidNameMapping(long ptr ptr)
 @ stdcall LsaNtStatusToWinError(long)
 @ stdcall LsaOpenAccount(ptr ptr long ptr)
 @ stdcall LsaOpenPolicy(ptr ptr long ptr)
