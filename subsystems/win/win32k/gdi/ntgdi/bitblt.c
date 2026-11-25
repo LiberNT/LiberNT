@@ -1861,6 +1861,12 @@ NtGdiPolyPatBlt(
     NTSTATUS Status = STATUS_SUCCESS;
     BOOL Ret;
 
+    if ((ULONG_PTR)cRects > MAXULONG_PTR / sizeof(PATRECT))
+    {
+        EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+
     if (cRects > 0)
     {
         rb = ExAllocatePoolWithTag(PagedPool, sizeof(PATRECT) * cRects, GDITAG_PLGBLT_DATA);

@@ -314,6 +314,12 @@ NtUserCallOneParam(
             /* Windows allows zero count, in which case it allocates context for 8 moves */
             if (count == 0) count = 8;
 
+            if ((ULONG_PTR)count > MAXULONG_PTR / sizeof(CVR))
+            {
+                Result = 0;
+                break;
+            }
+
             psmwp = (PSMWP)UserCreateObject(gHandleTable,
                                             NULL,
                                             NULL,
