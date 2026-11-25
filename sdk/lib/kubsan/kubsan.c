@@ -7,6 +7,7 @@
 
 #include <ntddk.h>
 #include <ntstrsafe.h>
+#define KUBSAN_MSR_GS_BASE 0xC0000101
 
 #define KUBSAN_REPORTED 0x80000000
 #define KUBSAN_PENDING_MAX 32
@@ -76,6 +77,19 @@ typedef struct _KUBSAN_NONNULL_RETURN_DATA
 {
     KUBSAN_LOCATION AttributeLocation;
 } KUBSAN_NONNULL_RETURN_DATA, *PKUBSAN_NONNULL_RETURN_DATA;
+
+typedef struct _KUBSAN_TYPE_MISMATCH_DATA
+{
+    KUBSAN_LOCATION Location;
+    PKUBSAN_TYPE Type;
+    UCHAR Alignment;
+    UCHAR TypeCheckKind;
+} KUBSAN_TYPE_MISMATCH_DATA, *PKUBSAN_TYPE_MISMATCH_DATA;
+
+typedef struct _KUBSAN_POINTER_OVERFLOW_DATA
+{
+    KUBSAN_LOCATION Location;
+} KUBSAN_POINTER_OVERFLOW_DATA, *PKUBSAN_POINTER_OVERFLOW_DATA;
 
 typedef struct _KUBSAN_REPORT
 {
@@ -149,6 +163,11 @@ KubsanCurrentIrql(VOID)
 {
 #if defined(_M_IX86)
     return __readfsbyte(FIELD_OFFSET(KPCR, Irql));
+#elif defined(_M_AMD64)
+    /* Early AP code can report before GS base is written; no PCR exists then */
+    if (__readmsr(KUBSAN_MSR_GS_BASE) == 0)
+        return HIGH_LEVEL;
+    return __readgsbyte(FIELD_OFFSET(KPCR, Irql));
 #else
     return KeGetCurrentIrql();
 #endif
@@ -413,4 +432,47 @@ __ubsan_handle_nonnull_return_v1(
 {
     UNREFERENCED_PARAMETER(Data);
     KubsanReport(Location, __builtin_return_address(0), "null pointer returned from function declared to never return null");
+}
+
+VOID
+__cdecl
+__ubsan_handle_type_mismatch_v1(
+    _Inout_ PKUBSAN_TYPE_MISMATCH_DATA Data,
+    _In_ ULONG_PTR Pointer)
+{
+    static PCSTR const KindText[] =
+    {
+        "load of", "store to", "reference binding to", "member access within",
+        "member call on", "constructor call on", "downcast of", "downcast of",
+        "upcast of", "upcast to virtual base of", "assignment to", "dynamic operation on"
+    };
+    PCSTR Kind = Data->TypeCheckKind < RTL_NUMBER_OF(KindText) ? KindText[Data->TypeCheckKind] : "operation on";
+    ULONG_PTR RequiredAlignment = (ULONG_PTR)1 << Data->Alignment;
+
+    if (Pointer == 0)
+    {
+        KubsanReport(&Data->Location, __builtin_return_address(0), "%s null pointer of type %s",
+                     Kind, Data->Type->Name);
+    }
+    else if (Pointer & (RequiredAlignment - 1))
+    {
+        KubsanReport(&Data->Location, __builtin_return_address(0), "%s misaligned address %p for type %s, which requires %Iu byte alignment",
+                     Kind, (PVOID)Pointer, Data->Type->Name, RequiredAlignment);
+    }
+    else
+    {
+        KubsanReport(&Data->Location, __builtin_return_address(0), "%s address %p with insufficient space for an object of type %s",
+                     Kind, (PVOID)Pointer, Data->Type->Name);
+    }
+}
+
+VOID
+__cdecl
+__ubsan_handle_pointer_overflow(
+    _Inout_ PKUBSAN_POINTER_OVERFLOW_DATA Data,
+    _In_ ULONG_PTR Base,
+    _In_ ULONG_PTR Result)
+{
+    KubsanReport(&Data->Location, __builtin_return_address(0), "pointer index expression with base %p overflowed to %p",
+                 (PVOID)Base, (PVOID)Result);
 }

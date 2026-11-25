@@ -348,6 +348,10 @@ endif()
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     cmake_dependent_option(ENABLE_KERNEL_UBSAN "Whether to report undefined behavior in kernel-mode modules at run time" ON
                            "CMAKE_BUILD_TYPE STREQUAL Debug" OFF)
+    cmake_dependent_option(KERNEL_UBSAN_NULL "Whether kernel UBSan also instruments null-pointer accesses; noisy today, enable while cleaning up" OFF
+                           "ENABLE_KERNEL_UBSAN" OFF)
+    cmake_dependent_option(KERNEL_UBSAN_ALIGNMENT "Whether kernel UBSan also instruments misaligned accesses; very noisy today, enable while cleaning up" OFF
+                           "ENABLE_KERNEL_UBSAN" OFF)
 endif()
 
 set(USE_DUMMY_PSEH FALSE CACHE BOOL
