@@ -2049,6 +2049,8 @@ NtGdiCreateDIBitmapInternal(
 {
     NTSTATUS Status = STATUS_SUCCESS;
     PBYTE safeBits = NULL;
+    PBITMAPINFO pbmiSafe = NULL;
+    UINT cjInfo = 0;
     HBITMAP hbmResult = NULL;
 
     if (pjInit == NULL)
@@ -2056,21 +2058,37 @@ NtGdiCreateDIBitmapInternal(
         fInit &= ~CBM_INIT;
     }
 
-    if(pjInit && (fInit & CBM_INIT))
+    if (pbmi)
     {
-        if (cjMaxBits == 0) return NULL;
-        safeBits = ExAllocatePoolWithTag(PagedPool, cjMaxBits, TAG_DIB);
-        if(!safeBits)
+        if (cjMaxInitInfo < sizeof(BITMAPCOREHEADER)) return NULL;
+        cjInfo = min(cjMaxInitInfo, sizeof(BITMAPV5HEADER) + 256 * sizeof(RGBQUAD));
+        pbmiSafe = ExAllocatePoolZero(PagedPool, sizeof(BITMAPV5HEADER) + 256 * sizeof(RGBQUAD), 'imBG');
+        if (!pbmiSafe)
         {
-            DPRINT1("Failed to allocate %lu bytes\n", cjMaxBits);
             EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
             return NULL;
         }
     }
 
+    if(pjInit && (fInit & CBM_INIT))
+    {
+        if (cjMaxBits == 0) goto cleanup;
+        safeBits = ExAllocatePoolWithTag(PagedPool, cjMaxBits, TAG_DIB);
+        if(!safeBits)
+        {
+            DPRINT1("Failed to allocate %lu bytes\n", cjMaxBits);
+            EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            goto cleanup;
+        }
+    }
+
     _SEH2_TRY
     {
-        if(pbmi) ProbeForRead(pbmi, cjMaxInitInfo, 1);
+        if (pbmi)
+        {
+            ProbeForRead(pbmi, cjMaxInitInfo, 1);
+            RtlCopyMemory(pbmiSafe, pbmi, cjInfo);
+        }
         if(pjInit && (fInit & CBM_INIT))
         {
             ProbeForRead(pjInit, cjMaxBits, 1);
@@ -2090,12 +2108,18 @@ NtGdiCreateDIBitmapInternal(
         goto cleanup;
     }
 
+    if (pbmiSafe &&
+        (pbmiSafe->bmiHeader.biSize < sizeof(BITMAPCOREHEADER) || pbmiSafe->bmiHeader.biSize > cjInfo))
+    {
+        goto cleanup;
+    }
+
     hbmResult =  GreCreateDIBitmapInternal(hDc,
                                            cx,
                                            cy,
                                            fInit,
                                            safeBits,
-                                           pbmi,
+                                           pbmiSafe,
                                            iUsage,
                                            fl,
                                            cjMaxBits,
@@ -2103,6 +2127,7 @@ NtGdiCreateDIBitmapInternal(
 
 cleanup:
     if (safeBits) ExFreePoolWithTag(safeBits, TAG_DIB);
+    if (pbmiSafe) ExFreePoolWithTag(pbmiSafe, 'imBG');
     return hbmResult;
 }
 
