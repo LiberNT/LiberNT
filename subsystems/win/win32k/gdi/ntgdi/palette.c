@@ -1306,6 +1306,11 @@ NtGdiEngCreatePalette(
     else
     {
         pulcSafe = ExAllocatePoolWithTag(PagedPool, cColors * sizeof(ULONG), GDITAG_UMPD );
+        if (!pulcSafe)
+        {
+            EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            return NULL;
+        }
     }
 
         _SEH2_TRY
@@ -1334,6 +1339,9 @@ APIENTRY
 NtGdiEngDeletePalette(
     _In_ HPALETTE hPal)
 {
+    if (GreGetObjectOwner(hPal) != GDI_OBJ_HMGR_POWNED)
+        return FALSE;
+
     return EngDeletePalette(hPal);
 }
 
