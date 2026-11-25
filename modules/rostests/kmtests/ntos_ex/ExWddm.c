@@ -950,11 +950,6 @@ TestKsrPersistMemoryWithMetadata(VOID)
     ok_eq_ulonglong(PersistedLength, 0xA5A5A5A5A5A5A5A5ULL);
 }
 
-NTKERNELAPI
-FIRMWARE_TYPE
-NTAPI
-ExGetFirmwareType(VOID);
-
 static
 VOID
 CheckBootGraphicsSize(
