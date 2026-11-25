@@ -614,7 +614,18 @@ function(set_module_type MODULE TYPE)
     endif()
 
     # Set entry point
-    if(__module_ENTRYPOINT OR (__module_ENTRYPOINT STREQUAL "0"))
+    if(TYPE MATCHES "^(win32dll|win32ocx|cpl)$" AND (__module_ENTRYPOINT OR (__module_ENTRYPOINT STREQUAL "0")) AND
+       (__module_HOSTBOUND OR NOT (__module_ANYHOST OR CMAKE_CURRENT_SOURCE_DIR MATCHES "/modules/rostests(/|$)")) AND
+       NOT MODULE MATCHES "^ntdll")
+        add_library(${MODULE}_hostentry OBJECT ${REACTOS_SOURCE_DIR}/sdk/lib/crt/startup/hostentry.c)
+        add_dependencies(${MODULE}_hostentry psdk)
+        list(GET __module_ENTRYPOINT 0 _host_entry)
+        if(NOT _host_entry STREQUAL "0")
+            target_compile_definitions(${MODULE}_hostentry PRIVATE LIBERNT_HOST_ENTRY=${_host_entry})
+        endif()
+        target_sources(${MODULE} PRIVATE $<TARGET_OBJECTS:${MODULE}_hostentry> $<TARGET_OBJECTS:libernt_hostcheck>)
+        set_entrypoint(${MODULE} __libernt_host_entry 12)
+    elseif(__module_ENTRYPOINT OR (__module_ENTRYPOINT STREQUAL "0"))
         set_entrypoint(${MODULE} ${__module_ENTRYPOINT})
     elseif(${TYPE} STREQUAL nativecui)
         set_entrypoint(${MODULE} NtProcessStartup 4)

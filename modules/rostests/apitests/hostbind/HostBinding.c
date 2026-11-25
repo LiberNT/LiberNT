@@ -51,32 +51,63 @@ BesideSelf(
     return TRUE;
 }
 
+static
+HMODULE
+LoadBound(
+    PCWSTR Name,
+    BOOL LiberNT)
+{
+    WCHAR Path[MAX_PATH];
+    HMODULE Module;
+    DWORD Error;
+
+    ok(BesideSelf(Name, Path, ARRAYSIZE(Path)), "No path for %ls\n", Name);
+    SetLastError(0xDEADBEEF);
+    Module = LoadLibraryW(Path);
+    Error = GetLastError();
+    if (LiberNT)
+    {
+        ok(Module != NULL, "%ls was refused on LiberNT with %lu\n", Name, Error);
+    }
+    else
+    {
+        ok(Module == NULL, "%ls loaded on another system\n", Name);
+        ok(Error == ERROR_DLL_INIT_FAILED, "%ls was refused with %lu\n", Name, Error);
+    }
+    return Module;
+}
+
 START_TEST(HostBinding)
 {
     WCHAR Path[MAX_PATH];
     STARTUPINFOW Startup = { sizeof(Startup) };
     PROCESS_INFORMATION Process;
     HMODULE Module;
-    DWORD Error, ExitCode = 0xDEADBEEF;
+    LONG *Attached;
+    DWORD ExitCode = 0xDEADBEEF;
     BOOL LiberNT = HostIsLiberNT();
 
     trace("host is %s\n", LiberNT ? "LiberNT" : "not LiberNT");
 
-    ok(BesideSelf(L"hostbind_dll.dll", Path, ARRAYSIZE(Path)), "No path for the DLL\n");
-    SetLastError(0xDEADBEEF);
-    Module = LoadLibraryW(Path);
-    Error = GetLastError();
-    if (LiberNT)
-    {
-        ok(Module != NULL, "A bound DLL was refused on LiberNT with %lu\n", Error);
-    }
-    else
-    {
-        ok(Module == NULL, "A bound DLL loaded on another system\n");
-        ok(Error == ERROR_DLL_INIT_FAILED, "A bound DLL was refused with %lu\n", Error);
-    }
+    Module = LoadBound(L"hostbind_dll.dll", LiberNT);
     if (Module)
         FreeLibrary(Module);
+
+    Module = LoadBound(L"hostbind_entry.dll", LiberNT);
+    if (Module)
+    {
+        Attached = (LONG *)GetProcAddress(Module, "HostbindAttached");
+        ok(Attached && *Attached == 1, "The DLL entry point ran %ld times\n", Attached ? *Attached : -1);
+        FreeLibrary(Module);
+    }
+
+    Module = LoadBound(L"hostbind_noentry.dll", LiberNT);
+    if (Module)
+    {
+        Attached = (LONG *)GetProcAddress(Module, "HostbindAttached");
+        ok(Attached && *Attached == 0, "The unused DllMain ran %ld times\n", Attached ? *Attached : -1);
+        FreeLibrary(Module);
+    }
 
     ok(BesideSelf(L"hostbind_child.exe", Path, ARRAYSIZE(Path)), "No path for the child\n");
     if (!CreateProcessW(Path, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &Startup, &Process))

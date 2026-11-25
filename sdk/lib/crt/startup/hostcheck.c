@@ -8,10 +8,30 @@
 #include <windows.h>
 #include <winternl.h>
 #include <ntverp.h>
-#include <string.h>
 
 #define HOSTCHECK_WIDEN_(x) L##x
 #define HOSTCHECK_WIDEN(x) HOSTCHECK_WIDEN_(x)
+
+static
+int
+HostCheckEqualFold(const WCHAR *Left, const WCHAR *Right, SIZE_T Length)
+{
+    SIZE_T Index;
+
+    for (Index = 0; Index < Length; Index++)
+    {
+        WCHAR A = Left[Index], B = Right[Index];
+
+        if (A >= L'A' && A <= L'Z')
+            A += L'a' - L'A';
+        if (B >= L'A' && B <= L'Z')
+            B += L'a' - L'A';
+        if (A != B)
+            return 0;
+    }
+
+    return 1;
+}
 
 static
 const BYTE *
@@ -36,7 +56,7 @@ HostCheckNtdllBase(void)
             continue;
         if (Length > NameLength && Path[Length - NameLength - 1] != L'\\')
             continue;
-        if (!_wcsnicmp(Path + Length - NameLength, Name, NameLength))
+        if (HostCheckEqualFold(Path + Length - NameLength, Name, NameLength))
             return Module->DllBase;
     }
 
@@ -123,7 +143,11 @@ HostCheckNtdll(void)
     Count = Data->Size / sizeof(WCHAR);
     for (Index = 0; Index + Length <= Count; Index++)
     {
-        if (Block[Index] == Product[0] && !memcmp(Block + Index, Product, Length * sizeof(WCHAR)))
+        SIZE_T Char;
+
+        for (Char = 0; Char < Length && Block[Index + Char] == Product[Char]; Char++)
+            ;
+        if (Char == Length)
             return 1;
     }
 
