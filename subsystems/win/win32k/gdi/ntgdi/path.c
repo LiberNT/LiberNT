@@ -2174,6 +2174,7 @@ PATH_WidenPathEx(DC *dc, PPATH pPath)
     DWORD obj_type;
     LPEXTLOGPEN elp;
     PDC_ATTR pdcattr = dc->pdcattr;
+    HPEN hPen = pdcattr->hpen;
 
     if (pPath->state != PATH_Closed)
     {
@@ -2182,8 +2183,8 @@ PATH_WidenPathEx(DC *dc, PPATH pPath)
         return NULL;
     }
 
-    size = GreGetObject(pdcattr->hpen, 0, NULL);
-    if (!size)
+    size = GreGetObject(hPen, 0, NULL);
+    if (size < (INT)sizeof(LOGPEN))
     {
         TRACE("PWP 2\n");
         EngSetLastError(ERROR_CAN_NOT_COMPLETE);
@@ -2198,9 +2199,14 @@ PATH_WidenPathEx(DC *dc, PPATH pPath)
         return NULL;
     }
 
-    GreGetObject(pdcattr->hpen, size, elp);
+    if (GreGetObject(hPen, size, elp) != size)
+    {
+        EngSetLastError(ERROR_CAN_NOT_COMPLETE);
+        ExFreePoolWithTag(elp, TAG_PATH);
+        return NULL;
+    }
 
-    obj_type = GDI_HANDLE_GET_TYPE(pdcattr->hpen);
+    obj_type = GDI_HANDLE_GET_TYPE(hPen);
     if (obj_type == GDI_OBJECT_TYPE_PEN)
     {
         penStyle = ((LOGPEN*)elp)->lopnStyle;
