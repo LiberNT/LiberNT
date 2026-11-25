@@ -23,9 +23,6 @@ FIRMWARE_TYPE ExpFirmwareType = FirmwareTypeUnknown;
 /* The longest name a firmware variable may be given */
 #define EXP_FIRMWARE_NAME_MAXIMUM 1024
 
-/* The most a firmware variable may hold */
-#define EXP_FIRMWARE_VALUE_MAXIMUM (32 * 1024)
-
 /* The longest description table and the most tables taken from the ACPI driver */
 #define EXP_ACPI_TABLE_MAXIMUM (16 * 1024 * 1024)
 #define EXP_ACPI_TABLE_COUNT_MAXIMUM 4096
@@ -692,16 +689,132 @@ ExpEnumerateEntries(
     return STATUS_SUCCESS;
 }
 
+C_ASSERT(FIELD_OFFSET(BOOT_ENTRY, Length) == FIELD_OFFSET(FILE_PATH, Length));
+C_ASSERT(FIELD_OFFSET(EFI_DRIVER_ENTRY, Length) == FIELD_OFFSET(FILE_PATH, Length));
+C_ASSERT(FIELD_OFFSET(BOOT_ENTRY, Id) == FIELD_OFFSET(EFI_DRIVER_ENTRY, Id));
+C_ASSERT(FIELD_OFFSET(BOOT_OPTIONS, HeadlessRedirection) + sizeof(WCHAR) <= sizeof(BOOT_OPTIONS));
+
+static EX_PUSH_LOCK ExpFirmwareEntryLock;
+
+static
 NTSTATUS
-NTAPI
-NtAddBootEntry(
-    _In_ PBOOT_ENTRY BootEntry,
-    _In_ ULONG Id)
+ExpCaptureFirmwareRecord(
+    _In_ PVOID Record,
+    _In_ ULONG HeaderLength,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Outptr_result_bytebuffer_(*Length) PVOID *Captured,
+    _Out_ PULONG Length)
 {
+    PVOID Copy;
+    ULONG Size;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    ASSERT(HeaderLength >= FIELD_OFFSET(FILE_PATH, Length) + sizeof(ULONG));
+
+    *Captured = NULL;
+    *Length = 0;
+
+    if (Record == NULL)
+    {
+        return STATUS_INVALID_PARAMETER_1;
+    }
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            ProbeForRead(Record, HeaderLength, sizeof(ULONG));
+        }
+
+        Size = ((PFILE_PATH)Record)->Length;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    if ((Size < HeaderLength) || (Size > EXP_FIRMWARE_VALUE_MAXIMUM))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Copy = ExAllocatePoolWithTag(PagedPool, Size, EXP_FIRMWARE_TAG);
+    if (Copy == NULL)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            ProbeForRead(Record, Size, sizeof(ULONG));
+        }
+
+        RtlCopyMemory(Copy, Record, Size);
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Copy, EXP_FIRMWARE_TAG);
+        return Status;
+    }
+
+    ((PFILE_PATH)Copy)->Length = Size;
+
+    *Captured = Copy;
+    *Length = Size;
+
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+ExpFindFreeEntryId(
+    _In_ PCWSTR Format,
+    _Out_ PULONG Id)
+{
+    ULONG Candidate;
+    ULONG Length;
+    NTSTATUS Status;
+
+    for (Candidate = 0; Candidate <= MAXUSHORT; Candidate++)
+    {
+        Length = 0;
+        Status = ExpReadBootVariable(Format, Candidate, NULL, &Length);
+        if (Status == STATUS_VARIABLE_NOT_FOUND)
+        {
+            *Id = Candidate;
+            return STATUS_SUCCESS;
+        }
+    }
+
+    return STATUS_INSUFFICIENT_RESOURCES;
+}
+
+static
+NTSTATUS
+ExpAddEntry(
+    _In_ PCWSTR Format,
+    _In_ PVOID Record,
+    _In_ ULONG HeaderLength,
+    _Out_opt_ PULONG Id)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    PVOID Captured;
+    ULONG Length;
+    ULONG NewId = 0;
+    NTSTATUS Status;
+
     PAGED_CODE();
 
-    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege,
-                                ExGetPreviousMode()))
+    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege, PreviousMode))
     {
         return STATUS_PRIVILEGE_NOT_HELD;
     }
@@ -711,15 +824,197 @@ NtAddBootEntry(
         return STATUS_NOT_IMPLEMENTED;
     }
 
-    if (BootEntry == NULL)
+    if ((Id != NULL) && (PreviousMode != KernelMode))
     {
-        return STATUS_INVALID_PARAMETER_1;
+        _SEH2_TRY
+        {
+            ProbeForWriteUlong(Id);
+        }
+        _SEH2_EXCEPT(ExSystemExceptionFilter())
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
     }
 
-    return ExpWriteBootVariable(L"Boot",
-                                Id,
-                                BootEntry,
-                                BootEntry->Length);
+    Status = ExpCaptureFirmwareRecord(Record, HeaderLength, PreviousMode, &Captured, &Length);
+    if (!NT_SUCCESS(Status))
+    {
+        return Status;
+    }
+
+    KeEnterCriticalRegion();
+    ExAcquirePushLockExclusive(&ExpFirmwareEntryLock);
+
+    Status = ExpFindFreeEntryId(Format, &NewId);
+    if (NT_SUCCESS(Status))
+    {
+        Status = ExpWriteBootVariable(Format, NewId, Captured, Length);
+    }
+
+    ExReleasePushLockExclusive(&ExpFirmwareEntryLock);
+    KeLeaveCriticalRegion();
+
+    ExFreePoolWithTag(Captured, EXP_FIRMWARE_TAG);
+
+    if (NT_SUCCESS(Status) && (Id != NULL))
+    {
+        _SEH2_TRY
+        {
+            *Id = NewId;
+        }
+        _SEH2_EXCEPT(ExSystemExceptionFilter())
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+    }
+
+    return Status;
+}
+
+static
+NTSTATUS
+ExpModifyEntry(
+    _In_ PCWSTR Format,
+    _In_ PVOID Record,
+    _In_ ULONG HeaderLength)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    PVOID Captured;
+    ULONG Length;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege, PreviousMode))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    if (!ExpFirmwareHasVariables())
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
+
+    Status = ExpCaptureFirmwareRecord(Record, HeaderLength, PreviousMode, &Captured, &Length);
+    if (!NT_SUCCESS(Status))
+    {
+        return Status;
+    }
+
+    ASSERT(HeaderLength >= FIELD_OFFSET(BOOT_ENTRY, Id) + sizeof(ULONG));
+
+    KeEnterCriticalRegion();
+    ExAcquirePushLockExclusive(&ExpFirmwareEntryLock);
+    Status = ExpWriteBootVariable(Format, ((PBOOT_ENTRY)Captured)->Id, Captured, Length);
+    ExReleasePushLockExclusive(&ExpFirmwareEntryLock);
+    KeLeaveCriticalRegion();
+
+    ExFreePoolWithTag(Captured, EXP_FIRMWARE_TAG);
+
+    return Status;
+}
+
+static
+NTSTATUS
+ExpEnumerateEntriesForCaller(
+    _In_ PCWSTR Format,
+    _Out_opt_ PVOID Buffer,
+    _Inout_ PULONG BufferLength)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    PVOID Entries = NULL;
+    ULONG Capacity;
+    ULONG Needed = 0;
+    ULONG Length;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (BufferLength == NULL)
+    {
+        return STATUS_INVALID_PARAMETER_2;
+    }
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            ProbeForWriteUlong(BufferLength);
+        }
+
+        Capacity = *BufferLength;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    Status = ExpEnumerateEntries(Format, NULL, &Needed);
+    if (Status != STATUS_BUFFER_TOO_SMALL)
+    {
+        ASSERT(!NT_SUCCESS(Status));
+        Length = 0;
+        goto Report;
+    }
+
+    if ((Buffer == NULL) || (Capacity < Needed))
+    {
+        Length = Needed;
+        goto Report;
+    }
+
+    Entries = ExAllocatePoolWithTag(PagedPool, max(Needed, sizeof(ULONG)), EXP_FIRMWARE_TAG);
+    if (Entries == NULL)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Length = Needed;
+    Status = ExpEnumerateEntries(Format, Entries, &Length);
+
+Report:
+    _SEH2_TRY
+    {
+        if (NT_SUCCESS(Status) && (Length != 0))
+        {
+            ASSERT(Length <= Capacity);
+
+            if (PreviousMode != KernelMode)
+            {
+                ProbeForWrite(Buffer, Length, sizeof(ULONG));
+            }
+
+            RtlCopyMemory(Buffer, Entries, Length);
+        }
+
+        *BufferLength = Length;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (Entries != NULL)
+    {
+        ExFreePoolWithTag(Entries, EXP_FIRMWARE_TAG);
+    }
+
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+NtAddBootEntry(
+    _In_ PBOOT_ENTRY BootEntry,
+    _Out_opt_ PULONG Id)
+{
+    PAGED_CODE();
+
+    return ExpAddEntry(L"Boot", BootEntry, FIELD_OFFSET(BOOT_ENTRY, OsOptions), Id);
 }
 
 NTSTATUS
@@ -751,18 +1046,13 @@ NtModifyBootEntry(
 {
     PAGED_CODE();
 
-    if (BootEntry == NULL)
-    {
-        return STATUS_INVALID_PARAMETER_1;
-    }
-
-    return NtAddBootEntry(BootEntry, BootEntry->Id);
+    return ExpModifyEntry(L"Boot", BootEntry, FIELD_OFFSET(BOOT_ENTRY, OsOptions));
 }
 
 NTSTATUS
 NTAPI
 NtEnumerateBootEntries(
-    _Out_opt_ PVOID Buffer,
+    _Out_writes_bytes_opt_(*BufferLength) PVOID Buffer,
     _Inout_ PULONG BufferLength)
 {
     PAGED_CODE();
@@ -778,22 +1068,24 @@ NtEnumerateBootEntries(
         return STATUS_NOT_IMPLEMENTED;
     }
 
-    return ExpEnumerateEntries(L"Boot", Buffer, BufferLength);
+    return ExpEnumerateEntriesForCaller(L"Boot", Buffer, BufferLength);
 }
 
 NTSTATUS
 NTAPI
 NtQueryBootEntryOrder(
-    _Out_opt_ PULONG Ids,
+    _Out_writes_opt_(*Count) PULONG Ids,
     _Inout_ PULONG Count)
 {
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    ULONG Order[EXP_BOOT_ORDER_MAXIMUM];
+    ULONG Capacity;
     ULONG Found = 0;
     NTSTATUS Status;
 
     PAGED_CODE();
 
-    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege,
-                                ExGetPreviousMode()))
+    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege, PreviousMode))
     {
         return STATUS_PRIVILEGE_NOT_HELD;
     }
@@ -803,11 +1095,50 @@ NtQueryBootEntryOrder(
         return STATUS_NOT_IMPLEMENTED;
     }
 
-    Status = ExpReadBootOrder(Ids,
-                              (Ids != NULL) ? *Count : 0,
-                              &Found);
+    if (Count == NULL)
+    {
+        return STATUS_INVALID_PARAMETER_2;
+    }
 
-    *Count = Found;
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            ProbeForWriteUlong(Count);
+        }
+
+        Capacity = (Ids != NULL) ? *Count : 0;
+        Capacity = min(Capacity, (ULONG)RTL_NUMBER_OF(Order));
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    Status = ExpReadBootOrder(Order, Capacity, &Found);
+
+    _SEH2_TRY
+    {
+        if (NT_SUCCESS(Status) && (Found != 0))
+        {
+            ASSERT(Found <= Capacity);
+
+            if (PreviousMode != KernelMode)
+            {
+                ProbeForWrite(Ids, Found * sizeof(ULONG), sizeof(ULONG));
+            }
+
+            RtlCopyMemory(Ids, Order, Found * sizeof(ULONG));
+        }
+
+        *Count = Found;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
 
     return Status;
 }
@@ -815,13 +1146,15 @@ NtQueryBootEntryOrder(
 NTSTATUS
 NTAPI
 NtSetBootEntryOrder(
-    _In_ PULONG Ids,
-    _In_ PULONG Count)
+    _In_reads_(Count) PULONG Ids,
+    _In_ ULONG Count)
 {
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    ULONG Order[EXP_BOOT_ORDER_MAXIMUM];
+
     PAGED_CODE();
 
-    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege,
-                                ExGetPreviousMode()))
+    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege, PreviousMode))
     {
         return STATUS_PRIVILEGE_NOT_HELD;
     }
@@ -831,12 +1164,32 @@ NtSetBootEntryOrder(
         return STATUS_NOT_IMPLEMENTED;
     }
 
-    if ((Ids == NULL) || (Count == NULL))
+    if (Ids == NULL)
     {
         return STATUS_INVALID_PARAMETER;
     }
 
-    return ExpWriteBootOrder(Ids, *Count);
+    if (Count > RTL_NUMBER_OF(Order))
+    {
+        return STATUS_INVALID_PARAMETER_2;
+    }
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            ProbeForRead(Ids, Count * sizeof(ULONG), sizeof(ULONG));
+        }
+
+        RtlCopyMemory(Order, Ids, Count * sizeof(ULONG));
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    return ExpWriteBootOrder(Order, Count);
 }
 
 /*
@@ -846,18 +1199,22 @@ NtSetBootEntryOrder(
 NTSTATUS
 NTAPI
 NtQueryBootOptions(
-    _Out_opt_ PBOOT_OPTIONS BootOptions,
+    _Out_writes_bytes_opt_(*BootOptionsLength) PBOOT_OPTIONS BootOptions,
     _Inout_ PULONG BootOptionsLength)
 {
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     ULONG Needed = (ULONG)FIELD_OFFSET(BOOT_OPTIONS, HeadlessRedirection) +
                    (ULONG)sizeof(WCHAR);
+    BOOT_OPTIONS Options;
     USHORT Value;
     ULONG Length;
+    ULONG Capacity;
+    NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
-    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege,
-                                ExGetPreviousMode()))
+
+    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege, PreviousMode))
     {
         return STATUS_PRIVILEGE_NOT_HELD;
     }
@@ -867,16 +1224,41 @@ NtQueryBootOptions(
         return STATUS_NOT_IMPLEMENTED;
     }
 
-    if ((BootOptions == NULL) || (*BootOptionsLength < Needed))
+    if (BootOptionsLength == NULL)
     {
-        *BootOptionsLength = Needed;
-        return STATUS_BUFFER_TOO_SMALL;
+        return STATUS_INVALID_PARAMETER_2;
     }
 
-    RtlZeroMemory(BootOptions, Needed);
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            ProbeForWriteUlong(BootOptionsLength);
+        }
 
-    BootOptions->Version = 1;
-    BootOptions->Length = Needed;
+        Capacity = *BootOptionsLength;
+
+        if ((BootOptions == NULL) || (Capacity < Needed))
+        {
+            *BootOptionsLength = Needed;
+            Status = STATUS_BUFFER_TOO_SMALL;
+        }
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    if (!NT_SUCCESS(Status))
+    {
+        return Status;
+    }
+
+    RtlZeroMemory(&Options, sizeof(Options));
+
+    Options.Version = 1;
+    Options.Length = Needed;
 
     Length = sizeof(Value);
     if (NT_SUCCESS(HalGetEnvironmentVariableEx(EXP_BOOT_TIMEOUT_NAME,
@@ -885,7 +1267,7 @@ NtQueryBootOptions(
                                                &Length,
                                                NULL)))
     {
-        BootOptions->Timeout = Value;
+        Options.Timeout = Value;
     }
 
     Length = sizeof(Value);
@@ -895,7 +1277,7 @@ NtQueryBootOptions(
                                                &Length,
                                                NULL)))
     {
-        BootOptions->CurrentBootEntryId = Value;
+        Options.CurrentBootEntryId = Value;
     }
 
     Length = sizeof(Value);
@@ -905,12 +1287,26 @@ NtQueryBootOptions(
                                                &Length,
                                                NULL)))
     {
-        BootOptions->NextBootEntryId = Value;
+        Options.NextBootEntryId = Value;
     }
 
-    *BootOptionsLength = Needed;
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            ProbeForWrite(BootOptions, Needed, sizeof(ULONG));
+        }
 
-    return STATUS_SUCCESS;
+        RtlCopyMemory(BootOptions, &Options, Needed);
+        *BootOptionsLength = Needed;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
 }
 
 NTSTATUS
@@ -919,13 +1315,15 @@ NtSetBootOptions(
     _In_ PBOOT_OPTIONS BootOptions,
     _In_ ULONG FieldsToChange)
 {
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    ULONG Timeout;
+    ULONG NextBootEntryId;
     USHORT Value;
     NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
-    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege,
-                                ExGetPreviousMode()))
+    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege, PreviousMode))
     {
         return STATUS_PRIVILEGE_NOT_HELD;
     }
@@ -940,9 +1338,27 @@ NtSetBootOptions(
         return STATUS_INVALID_PARAMETER_1;
     }
 
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            ProbeForRead(BootOptions,
+                         FIELD_OFFSET(BOOT_OPTIONS, HeadlessRedirection),
+                         sizeof(ULONG));
+        }
+
+        Timeout = BootOptions->Timeout;
+        NextBootEntryId = BootOptions->NextBootEntryId;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
     if (FieldsToChange & BOOT_OPTIONS_FIELD_TIMEOUT)
     {
-        Value = (USHORT)BootOptions->Timeout;
+        Value = (USHORT)Timeout;
 
         Status = HalSetEnvironmentVariableEx(
                      EXP_BOOT_TIMEOUT_NAME,
@@ -958,7 +1374,7 @@ NtSetBootOptions(
 
     if (FieldsToChange & BOOT_OPTIONS_FIELD_NEXT_BOOT_ENTRY_ID)
     {
-        Value = (USHORT)BootOptions->NextBootEntryId;
+        Value = (USHORT)NextBootEntryId;
 
         Status = HalSetEnvironmentVariableEx(
                      EXP_BOOT_NEXT_NAME,
@@ -981,67 +1397,91 @@ NTAPI
 NtTranslateFilePath(
     _In_ PFILE_PATH InputFilePath,
     _In_ ULONG OutputType,
-    _Out_opt_ PFILE_PATH OutputFilePath,
-    _In_ ULONG OutputFilePathLength)
+    _Out_writes_bytes_opt_(*OutputFilePathLength) PFILE_PATH OutputFilePath,
+    _Inout_opt_ PULONG OutputFilePathLength)
 {
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    PFILE_PATH Captured;
+    ULONG Length;
+    ULONG Capacity = 0;
+    NTSTATUS Status;
+
     PAGED_CODE();
 
-    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege,
-                                ExGetPreviousMode()))
+    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege, PreviousMode))
     {
         return STATUS_PRIVILEGE_NOT_HELD;
     }
 
-    if (InputFilePath == NULL)
+    Status = ExpCaptureFirmwareRecord(InputFilePath,
+                                      FIELD_OFFSET(FILE_PATH, FilePath),
+                                      PreviousMode,
+                                      (PVOID *)&Captured,
+                                      &Length);
+    if (!NT_SUCCESS(Status))
     {
-        return STATUS_INVALID_PARAMETER_1;
+        return Status;
     }
 
-    if (InputFilePath->Type != OutputType)
+    if (Captured->Type != OutputType)
     {
+        ExFreePoolWithTag(Captured, EXP_FIRMWARE_TAG);
+
         /* TODO: no translation between the firmware's forms is carried out. */
         return STATUS_NOT_IMPLEMENTED;
     }
 
-    if ((OutputFilePath == NULL) ||
-        (OutputFilePathLength < InputFilePath->Length))
+    _SEH2_TRY
     {
-        return STATUS_BUFFER_TOO_SMALL;
+        if (OutputFilePathLength != NULL)
+        {
+            if (PreviousMode != KernelMode)
+            {
+                ProbeForWriteUlong(OutputFilePathLength);
+            }
+
+            Capacity = *OutputFilePathLength;
+        }
+
+        if ((OutputFilePath == NULL) || (Capacity < Length))
+        {
+            Status = STATUS_BUFFER_TOO_SMALL;
+        }
+        else
+        {
+            if (PreviousMode != KernelMode)
+            {
+                ProbeForWrite(OutputFilePath, Length, sizeof(ULONG));
+            }
+
+            RtlCopyMemory(OutputFilePath, Captured, Length);
+        }
+
+        if (OutputFilePathLength != NULL)
+        {
+            *OutputFilePathLength = Length;
+        }
     }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
 
-    RtlCopyMemory(OutputFilePath, InputFilePath, InputFilePath->Length);
+    ExFreePoolWithTag(Captured, EXP_FIRMWARE_TAG);
 
-    return STATUS_SUCCESS;
+    return Status;
 }
 
 NTSTATUS
 NTAPI
 NtAddDriverEntry(
     _In_ PEFI_DRIVER_ENTRY DriverEntry,
-    _In_ ULONG Id)
+    _Out_opt_ PULONG Id)
 {
     PAGED_CODE();
 
-    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege,
-                                ExGetPreviousMode()))
-    {
-        return STATUS_PRIVILEGE_NOT_HELD;
-    }
-
-    if (!ExpFirmwareHasVariables())
-    {
-        return STATUS_NOT_IMPLEMENTED;
-    }
-
-    if (DriverEntry == NULL)
-    {
-        return STATUS_INVALID_PARAMETER_1;
-    }
-
-    return ExpWriteBootVariable(L"Driver",
-                                Id,
-                                DriverEntry,
-                                DriverEntry->Length);
+    return ExpAddEntry(L"Driver", DriverEntry, sizeof(EFI_DRIVER_ENTRY), Id);
 }
 
 NTSTATUS
@@ -1072,18 +1512,13 @@ NtModifyDriverEntry(
 {
     PAGED_CODE();
 
-    if (DriverEntry == NULL)
-    {
-        return STATUS_INVALID_PARAMETER_1;
-    }
-
-    return NtAddDriverEntry(DriverEntry, DriverEntry->Id);
+    return ExpModifyEntry(L"Driver", DriverEntry, sizeof(EFI_DRIVER_ENTRY));
 }
 
 NTSTATUS
 NTAPI
 NtEnumerateDriverEntries(
-    _Out_opt_ PVOID Buffer,
+    _Out_writes_bytes_opt_(*BufferLength) PVOID Buffer,
     _Inout_ PULONG BufferLength)
 {
     PAGED_CODE();
@@ -1099,15 +1534,17 @@ NtEnumerateDriverEntries(
         return STATUS_NOT_IMPLEMENTED;
     }
 
-    return ExpEnumerateEntries(L"Driver", Buffer, BufferLength);
+    return ExpEnumerateEntriesForCaller(L"Driver", Buffer, BufferLength);
 }
 
 NTSTATUS
 NTAPI
 NtQueryDriverEntryOrder(
-    _Out_opt_ PULONG Ids,
+    _Out_writes_opt_(*Count) PULONG Ids,
     _Inout_ PULONG Count)
 {
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+
     PAGED_CODE();
 
     /*
@@ -1117,15 +1554,27 @@ NtQueryDriverEntryOrder(
      */
     UNREFERENCED_PARAMETER(Ids);
 
-    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege,
-                                ExGetPreviousMode()))
+    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege, PreviousMode))
     {
         return STATUS_PRIVILEGE_NOT_HELD;
     }
 
     if (Count != NULL)
     {
-        *Count = 0;
+        _SEH2_TRY
+        {
+            if (PreviousMode != KernelMode)
+            {
+                ProbeForWriteUlong(Count);
+            }
+
+            *Count = 0;
+        }
+        _SEH2_EXCEPT(ExSystemExceptionFilter())
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
     }
 
     return ExpFirmwareHasVariables() ? STATUS_SUCCESS :
@@ -1135,8 +1584,8 @@ NtQueryDriverEntryOrder(
 NTSTATUS
 NTAPI
 NtSetDriverEntryOrder(
-    _In_ PULONG Ids,
-    _In_ PULONG Count)
+    _In_reads_(Count) PULONG Ids,
+    _In_ ULONG Count)
 {
     PAGED_CODE();
 

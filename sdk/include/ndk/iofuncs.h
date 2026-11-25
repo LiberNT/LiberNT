@@ -99,15 +99,15 @@ NTSTATUS
 NTAPI
 NtAddBootEntry(
     _In_ PBOOT_ENTRY BootEntry,
-    _In_ ULONG Id
+    _Out_opt_ PULONG Id
 );
 
 NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtAddDriverEntry(
-    _In_ PEFI_DRIVER_ENTRY BootEntry,
-    _In_ ULONG Id
+    _In_ PEFI_DRIVER_ENTRY DriverEntry,
+    _Out_opt_ PULONG Id
 );
 
 NTSYSCALLAPI
@@ -241,16 +241,16 @@ NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtEnumerateBootEntries(
-    _In_ PVOID Buffer,
-    _In_ PULONG BufferLength
+    _Out_writes_bytes_opt_(*BufferLength) PVOID Buffer,
+    _Inout_ PULONG BufferLength
 );
 
 NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtEnumerateDriverEntries(
-    _In_ PVOID Buffer,
-    _In_ PULONG BufferLength
+    _Out_writes_bytes_opt_(*BufferLength) PVOID Buffer,
+    _Inout_ PULONG BufferLength
 );
 
 NTSYSCALLAPI
@@ -416,24 +416,24 @@ NtQueryAttributesFile(
 NTSTATUS
 NTAPI
 NtQueryDriverEntryOrder(
-    _In_ PULONG Ids,
-    _In_ PULONG Count
+    _Out_writes_opt_(*Count) PULONG Ids,
+    _Inout_ PULONG Count
 );
 
 NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtQueryBootEntryOrder(
-    _In_ PULONG Ids,
-    _In_ PULONG Count
+    _Out_writes_opt_(*Count) PULONG Ids,
+    _Inout_ PULONG Count
 );
 
 NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtQueryBootOptions(
-    _In_ PBOOT_OPTIONS BootOptions,
-    _In_ PULONG BootOptionsLength
+    _Out_writes_bytes_opt_(*BootOptionsLength) PBOOT_OPTIONS BootOptions,
+    _Inout_ PULONG BootOptionsLength
 );
 
 __kernel_entry
@@ -615,8 +615,8 @@ NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtSetBootEntryOrder(
-    _In_ PULONG Ids,
-    _In_ PULONG Count
+    _In_reads_(Count) PULONG Ids,
+    _In_ ULONG Count
 );
 
 NTSYSCALLAPI
@@ -630,8 +630,8 @@ NtSetBootOptions(
 NTSTATUS
 NTAPI
 NtSetDriverEntryOrder(
-    _In_ PULONG Ids,
-    _In_ PULONG Count
+    _In_reads_(Count) PULONG Ids,
+    _In_ ULONG Count
 );
 
 NTSYSCALLAPI
@@ -705,10 +705,10 @@ NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtTranslateFilePath(
-    PFILE_PATH InputFilePath,
-    ULONG OutputType,
-    PFILE_PATH OutputFilePath,
-    ULONG OutputFilePathLength
+    _In_ PFILE_PATH InputFilePath,
+    _In_ ULONG OutputType,
+    _Out_writes_bytes_opt_(*OutputFilePathLength) PFILE_PATH OutputFilePath,
+    _Inout_opt_ PULONG OutputFilePathLength
 );
 
 NTSYSCALLAPI
@@ -765,8 +765,8 @@ NTSYSAPI
 NTSTATUS
 NTAPI
 ZwAddBootEntry(
-    _In_ PUNICODE_STRING EntryName,
-    _In_ PUNICODE_STRING EntryValue
+    _In_ PBOOT_ENTRY BootEntry,
+    _Out_opt_ PULONG Id
 );
 
 NTSYSAPI
@@ -852,8 +852,7 @@ NTSYSAPI
 NTSTATUS
 NTAPI
 ZwDeleteBootEntry(
-    _In_ PUNICODE_STRING EntryName,
-    _In_ PUNICODE_STRING EntryValue
+    _In_ ULONG Id
 );
 
 NTSYSAPI

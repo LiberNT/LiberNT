@@ -42,6 +42,9 @@ extern LIST_ENTRY ExpFirmwareTableProviderListHead;
 
 extern FIRMWARE_TYPE ExpFirmwareType;
 
+/* The most a firmware variable may hold */
+#define EXP_FIRMWARE_VALUE_MAXIMUM (32 * 1024)
+
 extern SYSTEM_BOOT_ENVIRONMENT_INFORMATION ExpBootEnvironmentInformation;
 
 extern ULONG ExpResourceTimeoutCount;

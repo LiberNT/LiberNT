@@ -997,13 +997,13 @@ NTSTATUS NTAPI ChpeAutoNtAddAtom(PWSTR a0, ULONG a1, PRTL_ATOM a2)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoNtAddAtom), __typeof__(&NtAddAtom)), "NtAddAtom bridge signature mismatch");
 
-NTSTATUS NTAPI ChpeAutoNtAddBootEntry(PBOOT_ENTRY a0, ULONG a1)
+NTSTATUS NTAPI ChpeAutoNtAddBootEntry(PBOOT_ENTRY a0, PULONG a1)
 {
     return NtAddBootEntry(a0, a1);
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoNtAddBootEntry), __typeof__(&NtAddBootEntry)), "NtAddBootEntry bridge signature mismatch");
 
-NTSTATUS NTAPI ChpeAutoNtAddDriverEntry(PEFI_DRIVER_ENTRY a0, ULONG a1)
+NTSTATUS NTAPI ChpeAutoNtAddDriverEntry(PEFI_DRIVER_ENTRY a0, PULONG a1)
 {
     return NtAddDriverEntry(a0, a1);
 }
@@ -2721,7 +2721,7 @@ NTSTATUS NTAPI ChpeAutoNtSecureConnectPort(PHANDLE a0, PUNICODE_STRING a1, PSECU
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoNtSecureConnectPort), __typeof__(&NtSecureConnectPort)), "NtSecureConnectPort bridge signature mismatch");
 
-NTSTATUS NTAPI ChpeAutoNtSetBootEntryOrder(PULONG a0, PULONG a1)
+NTSTATUS NTAPI ChpeAutoNtSetBootEntryOrder(PULONG a0, ULONG a1)
 {
     return NtSetBootEntryOrder(a0, a1);
 }
@@ -2758,7 +2758,7 @@ NTSTATUS NTAPI ChpeAutoNtSetDefaultUILanguage(LANGID a0)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoNtSetDefaultUILanguage), __typeof__(&NtSetDefaultUILanguage)), "NtSetDefaultUILanguage bridge signature mismatch");
 
-NTSTATUS NTAPI ChpeAutoNtSetDriverEntryOrder(PULONG a0, PULONG a1)
+NTSTATUS NTAPI ChpeAutoNtSetDriverEntryOrder(PULONG a0, ULONG a1)
 {
     return NtSetDriverEntryOrder(a0, a1);
 }
@@ -3067,7 +3067,7 @@ NTSTATUS NTAPI ChpeAutoNtTraceEvent(HANDLE a0, ULONG a1, ULONG a2, PEVENT_TRACE_
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoNtTraceEvent), __typeof__(&NtTraceEvent)), "NtTraceEvent bridge signature mismatch");
 
-NTSTATUS NTAPI ChpeAutoNtTranslateFilePath(PFILE_PATH a0, ULONG a1, PFILE_PATH a2, ULONG a3)
+NTSTATUS NTAPI ChpeAutoNtTranslateFilePath(PFILE_PATH a0, ULONG a1, PFILE_PATH a2, PULONG a3)
 {
     return NtTranslateFilePath(a0, a1, a2, a3);
 }
@@ -7882,13 +7882,13 @@ NTSTATUS NTAPI ChpeAutoZwAddAtom(PWSTR a0, ULONG a1, PRTL_ATOM a2)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoZwAddAtom), __typeof__(&ZwAddAtom)), "ZwAddAtom bridge signature mismatch");
 
-NTSTATUS NTAPI ChpeAutoZwAddBootEntry(PUNICODE_STRING a0, PUNICODE_STRING a1)
+NTSTATUS NTAPI ChpeAutoZwAddBootEntry(PBOOT_ENTRY a0, PULONG a1)
 {
     return ZwAddBootEntry(a0, a1);
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoZwAddBootEntry), __typeof__(&ZwAddBootEntry)), "ZwAddBootEntry bridge signature mismatch");
 
-NTSTATUS NTAPI ChpeAutoZwAddDriverEntry(PEFI_DRIVER_ENTRY a0, ULONG a1)
+NTSTATUS NTAPI ChpeAutoZwAddDriverEntry(PEFI_DRIVER_ENTRY a0, PULONG a1)
 {
     return NtAddDriverEntry(a0, a1);
 }
@@ -8477,9 +8477,9 @@ NTSTATUS NTAPI ChpeAutoZwDeleteAtom(RTL_ATOM a0)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoZwDeleteAtom), __typeof__(&ZwDeleteAtom)), "ZwDeleteAtom bridge signature mismatch");
 
-NTSTATUS NTAPI ChpeAutoZwDeleteBootEntry(PUNICODE_STRING a0, PUNICODE_STRING a1)
+NTSTATUS NTAPI ChpeAutoZwDeleteBootEntry(ULONG a0)
 {
-    return ZwDeleteBootEntry(a0, a1);
+    return ZwDeleteBootEntry(a0);
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoZwDeleteBootEntry), __typeof__(&ZwDeleteBootEntry)), "ZwDeleteBootEntry bridge signature mismatch");
 
@@ -9816,7 +9816,7 @@ NTSTATUS NTAPI ChpeAutoZwSecureConnectPort(PHANDLE a0, PUNICODE_STRING a1, PSECU
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoZwSecureConnectPort), __typeof__(&ZwSecureConnectPort)), "ZwSecureConnectPort bridge signature mismatch");
 
-NTSTATUS NTAPI ChpeAutoZwSetBootEntryOrder(PULONG a0, PULONG a1)
+NTSTATUS NTAPI ChpeAutoZwSetBootEntryOrder(PULONG a0, ULONG a1)
 {
     return NtSetBootEntryOrder(a0, a1);
 }
@@ -9859,7 +9859,7 @@ NTSTATUS NTAPI ChpeAutoZwSetDefaultUILanguage(LANGID a0)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoZwSetDefaultUILanguage), __typeof__(&ZwSetDefaultUILanguage)), "ZwSetDefaultUILanguage bridge signature mismatch");
 
-NTSTATUS NTAPI ChpeAutoZwSetDriverEntryOrder(PULONG a0, PULONG a1)
+NTSTATUS NTAPI ChpeAutoZwSetDriverEntryOrder(PULONG a0, ULONG a1)
 {
     return NtSetDriverEntryOrder(a0, a1);
 }
@@ -10198,7 +10198,7 @@ NTSTATUS NTAPI ChpeAutoZwTraceEvent(HANDLE a0, ULONG a1, ULONG a2, PEVENT_TRACE_
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoZwTraceEvent), __typeof__(&ZwTraceEvent)), "ZwTraceEvent bridge signature mismatch");
 
-NTSTATUS NTAPI ChpeAutoZwTranslateFilePath(PFILE_PATH a0, ULONG a1, PFILE_PATH a2, ULONG a3)
+NTSTATUS NTAPI ChpeAutoZwTranslateFilePath(PFILE_PATH a0, ULONG a1, PFILE_PATH a2, PULONG a3)
 {
     return NtTranslateFilePath(a0, a1, a2, a3);
 }
