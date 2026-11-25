@@ -402,6 +402,8 @@ NwifiReasonFromStatus(NDIS_STATUS Status)
             return WLAN_REASON_CODE_MSMSEC_KEY_START_TIMEOUT;
         case NWIFI_STATUS_KEY_SUCCESS_TIMEOUT:
             return WLAN_REASON_CODE_MSMSEC_KEY_SUCCESS_TIMEOUT;
+        case NWIFI_STATUS_PSK_MISMATCH:
+            return WLAN_REASON_CODE_MSMSEC_PSK_MISMATCH_SUSPECTED;
         default:
             return WLAN_REASON_CODE_UNKNOWN;
     }
@@ -460,7 +462,15 @@ NwifiDispatchNotification(const NWIFI_NOTIFICATION *pNotif)
         case NwifiNotifyConnectComplete:
             if (iface != NULL)
             {
+                PWLANSVC_PROFILE profile = (iface->ConnectedProfile[0] != L'\0')
+                                               ? WlanSvcFindProfile(iface, iface->ConnectedProfile)
+                                               : NULL;
+
                 WlanSvcUpdateLinkState(iface);
+                if (profile != NULL && pNotif->StatusCode == NWIFI_STATUS_PSK_MISMATCH)
+                    profile->KeyRejected = TRUE;
+                else if (profile != NULL && pNotif->StatusCode == 0 /* NDIS_STATUS_SUCCESS */)
+                    profile->KeyRejected = FALSE;
                 if (pNotif->StatusCode == 0 /* NDIS_STATUS_SUCCESS */ &&
                     iface->Connected)
                 {
