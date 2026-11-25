@@ -110,6 +110,39 @@ MiScanMemoryDescriptors(
 
 static
 VOID
+MiClipMemoryDescriptors(
+    _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    ULONG64 Limit = 1ULL << (MiArchDescribe()->PhysicalAddressBits - PAGE_SHIFT);
+    ULONG64 Clipped = 0;
+    PLIST_ENTRY Entry;
+
+    for (Entry = LoaderBlock->MemoryDescriptorListHead.Flink;
+         Entry != &LoaderBlock->MemoryDescriptorListHead;
+         Entry = Entry->Flink)
+    {
+        PMEMORY_ALLOCATION_DESCRIPTOR Descriptor = CONTAINING_RECORD(Entry, MEMORY_ALLOCATION_DESCRIPTOR,
+                                                                     ListEntry);
+        ULONG64 Kept;
+
+        if ((ULONG64)Descriptor->BasePage >= Limit)
+            Kept = 0;
+        else if ((ULONG64)Descriptor->PageCount > Limit - Descriptor->BasePage)
+            Kept = Limit - Descriptor->BasePage;
+        else
+            continue;
+
+        if (!MiMemoryTypeIsInvisible(Descriptor->MemoryType))
+            Clipped += Descriptor->PageCount - Kept;
+        Descriptor->PageCount = (PFN_NUMBER)Kept;
+    }
+
+    if (Clipped != 0)
+        DbgPrint("Physical memory: %I64u MB above the addressable limit ignored\n", Clipped >> (20 - PAGE_SHIFT));
+}
+
+static
+VOID
 MiBuildPhysicalMemoryBlock(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
@@ -407,6 +440,7 @@ MiInitializePhase0(
     MiPageFileCreationInitialize();
 
     DbgPrint("Memory manager: starting\n");
+    MiClipMemoryDescriptors(LoaderBlock);
     Largest = MiScanMemoryDescriptors(LoaderBlock, &LargestEnd);
     if (Largest == NULL || MmNumberOfPhysicalPages < MI_MINIMUM_PHYSICAL_PAGES)
         KeBugCheckEx(INSTALL_MORE_MEMORY, MmNumberOfPhysicalPages, MmLowestPhysicalPage, MmHighestPhysicalPage, 0);
