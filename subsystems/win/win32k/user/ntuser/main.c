@@ -525,40 +525,54 @@ UserSyncWow64ClientInfo(PTHREADINFO pti)
     PTEB32 Teb32;
     PCLIENTINFO Source;
     PCLIENTINFO32 Destination;
+    LONG WowTebOffset;
 
     if (!PsGetCurrentProcessWow64Process()) return;
 
     Teb = NtCurrentTeb();
-    if (!Teb || Teb->WowTebOffset <= 0) return;
+    if (!Teb) return;
 
-    Source = pti->pClientInfo;
-    Teb32 = (PTEB32)((PUCHAR)Teb + Teb->WowTebOffset);
-    Destination = (PCLIENTINFO32)Teb32->Win32ClientInfo;
+    _SEH2_TRY
+    {
+        ProbeForRead(&Teb->WowTebOffset, sizeof(Teb->WowTebOffset), sizeof(LONG));
+        WowTebOffset = *(volatile LONG *)&Teb->WowTebOffset;
+        if (WowTebOffset <= 0) _SEH2_LEAVE;
 
-    Teb32->Win32ThreadInfo = PtrToUlong(pti);
-    Destination->dwExpWinVer = Source->dwExpWinVer;
-    Destination->dwCompatFlags = Source->dwCompatFlags;
-    Destination->dwCompatFlags2 = Source->dwCompatFlags2;
-    Destination->dwTIFlags = Source->dwTIFlags;
-    Destination->pDeskInfo = PtrToUlong(Source->pDeskInfo);
-    Destination->ulClientDelta = (ULONG)Source->ulClientDelta;
-    Destination->phkCurrent = PtrToUlong(Source->phkCurrent);
-    Destination->fsHooks = Source->fsHooks;
-    Destination->CallbackWnd.hWnd = PtrToUlong(Source->CallbackWnd.hWnd);
-    Destination->CallbackWnd.pWnd = PtrToUlong(Source->CallbackWnd.pWnd);
-    Destination->CallbackWnd.pActCtx = PtrToUlong(Source->CallbackWnd.pActCtx);
-    Destination->dwHookCurrent = Source->dwHookCurrent;
-    Destination->cInDDEMLCallback = Source->cInDDEMLCallback;
-    Destination->pClientThreadInfo = PtrToUlong(Source->pClientThreadInfo);
-    Destination->dwKeyCache = Source->dwKeyCache;
-    RtlCopyMemory(Destination->afKeyState, Source->afKeyState, sizeof(Destination->afKeyState));
-    Destination->dwAsyncKeyCache = Source->dwAsyncKeyCache;
-    RtlCopyMemory(Destination->afAsyncKeyState, Source->afAsyncKeyState, sizeof(Destination->afAsyncKeyState));
-    RtlCopyMemory(Destination->afAsyncKeyStateRecentDow, Source->afAsyncKeyStateRecentDow, sizeof(Destination->afAsyncKeyStateRecentDow));
-    Destination->hKL = PtrToUlong(Source->hKL);
-    Destination->CodePage = Source->CodePage;
-    RtlCopyMemory(Destination->achDbcsCF, Source->achDbcsCF, sizeof(Destination->achDbcsCF));
-    Destination->ppi = PtrToUlong(Source->ppi);
+        Source = pti->pClientInfo;
+        Teb32 = (PTEB32)((PUCHAR)Teb + WowTebOffset);
+        ProbeForWrite(Teb32, sizeof(*Teb32), sizeof(ULONG));
+        Destination = (PCLIENTINFO32)Teb32->Win32ClientInfo;
+
+        Teb32->Win32ThreadInfo = PtrToUlong(pti);
+        Destination->dwExpWinVer = Source->dwExpWinVer;
+        Destination->dwCompatFlags = Source->dwCompatFlags;
+        Destination->dwCompatFlags2 = Source->dwCompatFlags2;
+        Destination->dwTIFlags = Source->dwTIFlags;
+        Destination->pDeskInfo = PtrToUlong(Source->pDeskInfo);
+        Destination->ulClientDelta = (ULONG)Source->ulClientDelta;
+        Destination->phkCurrent = PtrToUlong(Source->phkCurrent);
+        Destination->fsHooks = Source->fsHooks;
+        Destination->CallbackWnd.hWnd = PtrToUlong(Source->CallbackWnd.hWnd);
+        Destination->CallbackWnd.pWnd = PtrToUlong(Source->CallbackWnd.pWnd);
+        Destination->CallbackWnd.pActCtx = PtrToUlong(Source->CallbackWnd.pActCtx);
+        Destination->dwHookCurrent = Source->dwHookCurrent;
+        Destination->cInDDEMLCallback = Source->cInDDEMLCallback;
+        Destination->pClientThreadInfo = PtrToUlong(Source->pClientThreadInfo);
+        Destination->dwKeyCache = Source->dwKeyCache;
+        RtlCopyMemory(Destination->afKeyState, Source->afKeyState, sizeof(Destination->afKeyState));
+        Destination->dwAsyncKeyCache = Source->dwAsyncKeyCache;
+        RtlCopyMemory(Destination->afAsyncKeyState, Source->afAsyncKeyState, sizeof(Destination->afAsyncKeyState));
+        RtlCopyMemory(Destination->afAsyncKeyStateRecentDow, Source->afAsyncKeyStateRecentDow, sizeof(Destination->afAsyncKeyStateRecentDow));
+        Destination->hKL = PtrToUlong(Source->hKL);
+        Destination->CodePage = Source->CodePage;
+        RtlCopyMemory(Destination->achDbcsCF, Source->achDbcsCF, sizeof(Destination->achDbcsCF));
+        Destination->ppi = PtrToUlong(Source->ppi);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        NOTHING;
+    }
+    _SEH2_END;
 #else
     UNREFERENCED_PARAMETER(pti);
 #endif
@@ -599,7 +613,20 @@ InitThreadCallback(PETHREAD Thread)
     int i;
     NTSTATUS Status = STATUS_SUCCESS;
     PTEB pTeb;
-    PRTL_USER_PROCESS_PARAMETERS ProcessParams;
+    PPEB Peb;
+    PRTL_USER_PROCESS_PARAMETERS ProcessParams = NULL;
+    struct
+    {
+        ULONG WindowFlags;
+        ULONG ShowWindowFlags;
+        ULONG StartingX;
+        ULONG StartingY;
+        ULONG CountX;
+        ULONG CountY;
+        HANDLE StandardInput;
+        HANDLE StandardOutput;
+        USHORT DesktopInfoLength;
+    } Startup;
     PKL pDefKL;
     BOOLEAN bFirstThread;
 
@@ -608,7 +635,35 @@ InitThreadCallback(PETHREAD Thread)
     pTeb = NtCurrentTeb();
     ASSERT(pTeb);
 
-    ProcessParams = pTeb->ProcessEnvironmentBlock->ProcessParameters;
+    RtlZeroMemory(&Startup, sizeof(Startup));
+    Peb = PsGetProcessPeb(Process);
+    if (Peb)
+    {
+        _SEH2_TRY
+        {
+            ProbeForRead(&Peb->ProcessParameters, sizeof(Peb->ProcessParameters), sizeof(PVOID));
+            ProcessParams = *(PRTL_USER_PROCESS_PARAMETERS volatile *)&Peb->ProcessParameters;
+            if (ProcessParams)
+            {
+                ProbeForRead(ProcessParams, sizeof(*ProcessParams), sizeof(ULONG));
+                Startup.WindowFlags = ProcessParams->WindowFlags;
+                Startup.ShowWindowFlags = ProcessParams->ShowWindowFlags;
+                Startup.StartingX = ProcessParams->StartingX;
+                Startup.StartingY = ProcessParams->StartingY;
+                Startup.CountX = ProcessParams->CountX;
+                Startup.CountY = ProcessParams->CountY;
+                Startup.StandardInput = ProcessParams->StandardInput;
+                Startup.StandardOutput = ProcessParams->StandardOutput;
+                Startup.DesktopInfoLength = ProcessParams->DesktopInfo.Length;
+            }
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            ProcessParams = NULL;
+            RtlZeroMemory(&Startup, sizeof(Startup));
+        }
+        _SEH2_END;
+    }
 
     /* Allocate a new Win32 thread info */
     Status = AllocW32Thread(Thread, &ptiCurrent);
@@ -717,39 +772,39 @@ InitThreadCallback(PETHREAD Thread)
     {
        if ( ptiCurrent->ppi->usi.cb == 0 )      // Not initialized yet.
        {
-          if ( ProcessParams->WindowFlags != 0 ) // Need window flags set.
+          if ( Startup.WindowFlags != 0 ) // Need window flags set.
           {
              ptiCurrent->ppi->usi.cb          = sizeof(USERSTARTUPINFO);
-             ptiCurrent->ppi->usi.dwX         = ProcessParams->StartingX;
-             ptiCurrent->ppi->usi.dwY         = ProcessParams->StartingY;
-             ptiCurrent->ppi->usi.dwXSize     = ProcessParams->CountX;
-             ptiCurrent->ppi->usi.dwYSize     = ProcessParams->CountY;
-             ptiCurrent->ppi->usi.dwFlags     = ProcessParams->WindowFlags;
-             ptiCurrent->ppi->usi.wShowWindow = (WORD)ProcessParams->ShowWindowFlags;
+             ptiCurrent->ppi->usi.dwX         = Startup.StartingX;
+             ptiCurrent->ppi->usi.dwY         = Startup.StartingY;
+             ptiCurrent->ppi->usi.dwXSize     = Startup.CountX;
+             ptiCurrent->ppi->usi.dwYSize     = Startup.CountY;
+             ptiCurrent->ppi->usi.dwFlags     = Startup.WindowFlags;
+             ptiCurrent->ppi->usi.wShowWindow = (WORD)Startup.ShowWindowFlags;
           }
        }
 
         if (bFirstThread)
         {
-            if (!(ProcessParams->WindowFlags & STARTF_FORCEOFFFEEDBACK) &&
-                ((ProcessParams->WindowFlags & STARTF_FORCEONFEEDBACK) ||
+            if (!(Startup.WindowFlags & STARTF_FORCEOFFFEEDBACK) &&
+                ((Startup.WindowFlags & STARTF_FORCEONFEEDBACK) ||
                  IntIsGuiImage(Process)))
             {
                 IntCalcStartCursorHide(ptiCurrent->ppi, 5000);
             }
 
             /* Note: Only initialize once so it can be set back to 0 after being used */
-            if (ProcessParams->WindowFlags & STARTF_USEHOTKEY)
-                ptiCurrent->ppi->dwHotkey = HandleToUlong(ProcessParams->StandardInput);
+            if (Startup.WindowFlags & STARTF_USEHOTKEY)
+                ptiCurrent->ppi->dwHotkey = HandleToUlong(Startup.StandardInput);
             /* TODO:
             else if (ProcessParams->ShellInfo.Buffer)
                 ..->dwHotkey = ParseShellInfo(ProcessParams->ShellInfo.Buffer, L"hotkey.");
             */
 
-            if (ProcessParams->WindowFlags & STARTF_SHELLPRIVATE)
+            if (Startup.WindowFlags & STARTF_SHELLPRIVATE)
             {
               /* We need to validate this handle because it can also be a HICON */
-                HMONITOR hMonitor = (HMONITOR)ProcessParams->StandardOutput;
+                HMONITOR hMonitor = (HMONITOR)Startup.StandardOutput;
                 if (hMonitor && UserGetMonitorObject(hMonitor))
                     ptiCurrent->ppi->hMonitor = hMonitor;
             }
@@ -775,7 +830,7 @@ InitThreadCallback(PETHREAD Thread)
          * from the process startup info structure. See documentation of CreateProcess().
          */
         Status = STATUS_UNSUCCESSFUL;
-        if (ProcessParams && ProcessParams->DesktopInfo.Length > 0)
+        if (ProcessParams && Startup.DesktopInfoLength > 0)
         {
             Status = IntSafeCopyUnicodeStringTerminateNULL(&DesktopPath, &ProcessParams->DesktopInfo);
         }
@@ -786,7 +841,7 @@ InitThreadCallback(PETHREAD Thread)
 
         Status = IntResolveDesktop(Process,
                                    &DesktopPath,
-                                   !!(ProcessParams->WindowFlags & STARTF_INHERITDESKTOP),
+                                   !!(Startup.WindowFlags & STARTF_INHERITDESKTOP),
                                    &hWinSta,
                                    &hDesk);
 
