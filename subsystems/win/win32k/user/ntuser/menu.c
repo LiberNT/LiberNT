@@ -6801,6 +6801,7 @@ NtUserGetMenuItemRect(
 
    _SEH2_TRY
    {
+      ProbeForWrite(lprcItem, sizeof(RECTL), 1);
       RtlCopyMemory(lprcItem, &Rect, sizeof(RECTL));
    }
    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -7219,12 +7220,30 @@ NtUserThunkedMenuItemInfo(
    }
 
    /* Check if we got a Caption */
-   if (lpszCaption && lpszCaption->Buffer)
+   if (lpszCaption)
    {
-      /* Copy the string to kernel mode */
-      Status = ProbeAndCaptureUnicodeString( &lstrCaption,
-                                                 UserMode,
-                                              lpszCaption);
+      PWSTR CaptionBuffer = NULL;
+
+      Status = STATUS_SUCCESS;
+      _SEH2_TRY
+      {
+         ProbeForRead(lpszCaption, sizeof(*lpszCaption), sizeof(ULONG));
+         CaptionBuffer = lpszCaption->Buffer;
+      }
+      _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+      {
+         Status = _SEH2_GetExceptionCode();
+      }
+      _SEH2_END;
+
+      if (NT_SUCCESS(Status) && CaptionBuffer)
+      {
+         /* Copy the string to kernel mode */
+         Status = ProbeAndCaptureUnicodeString( &lstrCaption,
+                                                    UserMode,
+                                                 lpszCaption);
+      }
+
       if (!NT_SUCCESS(Status))
       {
          ERR("Failed to capture MenuItem Caption (status 0x%08x)\n",Status);
