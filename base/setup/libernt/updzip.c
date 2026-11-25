@@ -9,6 +9,7 @@
 #include <zlib.h>
 
 #include "update.h"
+#include <wimboot.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -469,6 +470,148 @@ VerifyWrittenFile(
     return Error;
 }
 
+static DWORD
+WriteExtractedFile(
+    _In_ PCWSTR OutPath,
+    _In_reads_bytes_(Length) const BYTE* Data,
+    _In_ ULONG Length)
+{
+    HANDLE Out;
+    DWORD Written, Error;
+
+    Out = CreateFileW(OutPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (Out == INVALID_HANDLE_VALUE)
+        return GetLastError();
+    Error = (WriteFile(Out, Data, Length, &Written, NULL) && Written == Length && FlushFileBuffers(Out)) ?
+            ERROR_SUCCESS : GetLastError();
+    CloseHandle(Out);
+    if (Error == ERROR_SUCCESS)
+        Error = VerifyWrittenFile(OutPath, Data, Length);
+    return Error;
+}
+
+typedef struct _PACKED_SOURCE
+{
+    HANDLE Image;
+    ULONGLONG Offset;
+} PACKED_SOURCE, *PPACKED_SOURCE;
+
+typedef struct _PACKED_FIND
+{
+    CHAR Path[MAX_PATH];
+    BOOL Found;
+    uint64_t Size;
+    uint8_t Hash[20];
+} PACKED_FIND, *PPACKED_FIND;
+
+static void*
+PackedAllocate(
+    _In_ size_t Size,
+    _In_opt_ void* Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    return HeapAlloc(ProcessHeap, 0, Size);
+}
+
+static void
+PackedFree(
+    _In_ void* Memory,
+    _In_opt_ void* Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    HeapFree(ProcessHeap, 0, Memory);
+}
+
+static int
+PackedRead(
+    _In_ void* Context,
+    _In_ uint64_t Offset,
+    _Out_writes_bytes_(Size) void* Buffer,
+    _In_ size_t Size)
+{
+    PPACKED_SOURCE Source = (PPACKED_SOURCE)Context;
+
+    return Size <= MAXDWORD && ReadAt(Source->Image, Source->Offset + Offset, Buffer, (DWORD)Size) ? 0 : -1;
+}
+
+static int
+FindPackedFile(
+    _In_ void* Context,
+    _In_ const WIMBOOT_ENTRY* Entry)
+{
+    PPACKED_FIND Find = (PPACKED_FIND)Context;
+
+    if (Entry->IsDirectory || _stricmp(Entry->Path, Find->Path) != 0)
+        return 0;
+    Find->Found = TRUE;
+    Find->Size = Entry->Size;
+    CopyMemory(Find->Hash, Entry->Hash, sizeof(Find->Hash));
+    return 1;
+}
+
+/* A medium that keeps its system in boot.wim has the file in its boot image */
+static DWORD
+ExtractPackedFile(
+    _In_ HANDLE Image,
+    _In_ ULONG RootBlock,
+    _In_ ULONG RootLength,
+    _In_ PCWSTR FileName,
+    _In_ PCWSTR OutPath)
+{
+    static const WimCoreAllocator Allocator = { PackedAllocate, PackedFree, NULL };
+    ULONG Block = RootBlock, Length = RootLength;
+    BOOL IsDirectory = TRUE;
+    WIMBOOT_IMAGE WimImage;
+    PACKED_SOURCE Source;
+    PACKED_FIND Find;
+    WimCoreCtx Wim;
+    PBYTE Data = NULL;
+    PCHAR Char;
+    DWORD Error = ERROR_SUCCESS;
+
+    while (*FileName == L'\\')
+        FileName++;
+    ZeroMemory(&Find, sizeof(Find));
+    if (!WideCharToMultiByte(CP_UTF8, 0, FileName, -1, Find.Path, sizeof(Find.Path), NULL, NULL))
+        return GetLastError();
+    for (Char = Find.Path; *Char; Char++)
+    {
+        if (*Char == '\\')
+            *Char = '/';
+    }
+    if (!FindIsoRecord(Image, &Block, &Length, &IsDirectory, "boot.wim") || IsDirectory)
+        return ERROR_FILE_NOT_FOUND;
+
+    Source.Image = Image;
+    Source.Offset = (ULONGLONG)Block * ISO_BLOCK_SIZE;
+    wimcore_init(&Wim);
+    if (wimcore_open(&Wim, &Allocator, PackedRead, &Source, Length) != 0 ||
+        WimBootOpenImage(&Wim, 0, &WimImage) != WIMBOOT_OK)
+    {
+        Error = ERROR_INVALID_DATA;
+    }
+    else
+    {
+        WimBootWalk(&Wim, &WimImage, FindPackedFile, &Find);
+        if (!Find.Found)
+            Error = ERROR_FILE_NOT_FOUND;
+        else if (Find.Size == 0 || Find.Size > MAXDWORD)
+            Error = ERROR_INVALID_DATA;
+        else if (!(Data = HeapAlloc(ProcessHeap, 0, (SIZE_T)Find.Size)))
+            Error = ERROR_NOT_ENOUGH_MEMORY;
+        else if (wimcore_read_blob_into(&Wim, Find.Hash, Data, (size_t)Find.Size, NULL, NULL, Find.Path) != 0)
+            Error = ERROR_READ_FAULT;
+        else
+            Error = WriteExtractedFile(OutPath, Data, (ULONG)Find.Size);
+    }
+
+    if (Data)
+        HeapFree(ProcessHeap, 0, Data);
+    wimcore_close(&Wim);
+    DPRINT1("%S from the boot image of boot.wim: %lu\n", FileName, Error);
+    return Error;
+}
+
 DWORD
 ExtractImageFile(
     _In_ PCWSTR ImagePath,
@@ -478,11 +621,11 @@ ExtractImageFile(
     BYTE Descriptor[ISO_BLOCK_SIZE];
     CHAR Component[ISO_NAME_CHARS];
     PCWSTR Path = FileName;
-    ULONG Block, Length, i;
+    ULONG Block, Length, RootBlock, RootLength, i;
     BOOL IsDirectory = TRUE;
     PBYTE Data;
-    HANDLE Image, Out;
-    DWORD Written, Error = ERROR_FILE_NOT_FOUND;
+    HANDLE Image;
+    DWORD Error = ERROR_FILE_NOT_FOUND;
 
     Image = CreateFileW(ImagePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
     if (Image == INVALID_HANDLE_VALUE)
@@ -495,8 +638,8 @@ ExtractImageFile(
         return ERROR_INVALID_DATA;
     }
 
-    Block = Le32(Descriptor + ISO_ROOT_RECORD + ISO_RECORD_EXTENT);
-    Length = Le32(Descriptor + ISO_ROOT_RECORD + ISO_RECORD_LENGTH);
+    RootBlock = Block = Le32(Descriptor + ISO_ROOT_RECORD + ISO_RECORD_EXTENT);
+    RootLength = Length = Le32(Descriptor + ISO_ROOT_RECORD + ISO_RECORD_LENGTH);
     while (*Path)
     {
         while (*Path == L'\\')
@@ -509,29 +652,16 @@ ExtractImageFile(
             break;
         if (!FindIsoRecord(Image, &Block, &Length, &IsDirectory, Component))
         {
+            Error = ExtractPackedFile(Image, RootBlock, RootLength, FileName, OutPath);
             CloseHandle(Image);
-            return ERROR_FILE_NOT_FOUND;
+            return Error;
         }
     }
 
     if (!IsDirectory && Length != 0 && (Data = HeapAlloc(ProcessHeap, 0, Length)) != NULL)
     {
         if (ReadAt(Image, (ULONGLONG)Block * ISO_BLOCK_SIZE, Data, Length))
-        {
-            Out = CreateFileW(OutPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-            if (Out != INVALID_HANDLE_VALUE)
-            {
-                Error = (WriteFile(Out, Data, Length, &Written, NULL) && Written == Length &&
-                         FlushFileBuffers(Out)) ? ERROR_SUCCESS : GetLastError();
-                CloseHandle(Out);
-                if (Error == ERROR_SUCCESS)
-                    Error = VerifyWrittenFile(OutPath, Data, Length);
-            }
-            else
-            {
-                Error = GetLastError();
-            }
-        }
+            Error = WriteExtractedFile(OutPath, Data, Length);
         HeapFree(ProcessHeap, 0, Data);
     }
 
