@@ -16,3 +16,14 @@ static const ULONG NdisSgMappings[NDISSG_MAPPING_COUNT] = { 1514, 0x10000 };
 static const PCWSTR NdisSgStatusNames[NDISSG_MAPPING_COUNT] = { L"Status0", L"Status1" };
 static const PCWSTR NdisSgSizeNames[NDISSG_MAPPING_COUNT] = { L"Size0", L"Size1" };
 static const PCWSTR NdisSgRequiredNames[NDISSG_MAPPING_COUNT] = { L"Required0", L"Required1" };
+
+#define NDISSG_WIDTH_COUNT 2
+#define NDISSG_HIGH_OFFSET 0x80
+#define NDISSG_HIGH_LENGTH 1500
+
+static const ULONG NdisSgWidthFlags[NDISSG_WIDTH_COUNT] = { 0, 0x00000001 };
+static const PCWSTR NdisSgWidthNames[NDISSG_WIDTH_COUNT][8] =
+{
+    { L"Status32", L"SharedHigh32", L"ListStatus32", L"Elements32", L"Length32", L"Reachable32", L"Matches32", L"Direct32" },
+    { L"Status64", L"SharedHigh64", L"ListStatus64", L"Elements64", L"Length64", L"Reachable64", L"Matches64", L"Direct64" },
+};
