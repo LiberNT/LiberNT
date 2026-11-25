@@ -623,6 +623,10 @@ NtGdiSetDIBitsToDeviceInternal(
     BOOL bTopDown;
     LONGLONG llHeight, llSrcY;
     LONG lHeight, lBandHeight;
+    ULONGLONG cjNeeded;
+    HANDLE hSecureBits = NULL;
+    ULONG_PTR Page;
+    BOOL bCompressed;
 
     if (!Bits) return 0;
 
@@ -798,6 +802,48 @@ NtGdiSetDIBitsToDeviceInternal(
        IntUpdateBoundsRect(pDC, &rcDest);
     }
 
+    bCompressed = (bmi->bmiHeader.biCompression == BI_RLE8) ||
+                  (bmi->bmiHeader.biCompression == BI_RLE4) ||
+                  (bmi->bmiHeader.biCompression == BI_JPEG) ||
+                  (bmi->bmiHeader.biCompression == BI_PNG);
+    if (bCompressed)
+    {
+        cjNeeded = bmi->bmiHeader.biSizeImage;
+    }
+    else
+    {
+        cjNeeded = (((ULONGLONG)(ULONG)bmi->bmiHeader.biWidth * bmi->bmiHeader.biBitCount + 31) & ~31ULL) >> 3;
+        cjNeeded *= (ULONG)lBandHeight;
+    }
+    if (cjNeeded == 0 || cjNeeded > cjMaxBits)
+    {
+        ret = 0;
+        goto Exit;
+    }
+
+    hSecureBits = MmSecureVirtualMemory(Bits, (SIZE_T)cjNeeded, PAGE_READONLY);
+    if (!hSecureBits)
+    {
+        ret = 0;
+        goto Exit;
+    }
+    _SEH2_TRY
+    {
+        for (Page = (ULONG_PTR)PAGE_ALIGN(Bits); Page < (ULONG_PTR)Bits + cjNeeded; Page += PAGE_SIZE)
+            (VOID)*(volatile const UCHAR *)max(Page, (ULONG_PTR)Bits);
+        bResult = TRUE;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        bResult = FALSE;
+    }
+    _SEH2_END;
+    if (!bResult)
+    {
+        ret = 0;
+        goto Exit;
+    }
+
     SourceSize.cx = bmi->bmiHeader.biWidth;
     SourceSize.cy = lBandHeight;
 
@@ -809,7 +855,7 @@ NtGdiSetDIBitsToDeviceInternal(
                                       BitmapFormat(bmi->bmiHeader.biBitCount,
                                                    bmi->bmiHeader.biCompression),
                                       bTopDown ? BMF_TOPDOWN : 0,
-                                      bmi->bmiHeader.biSizeImage,
+                                      bCompressed ? (ULONG)cjNeeded : bmi->bmiHeader.biSizeImage,
                                       Bits,
                                       0);
 
@@ -834,7 +880,7 @@ NtGdiSetDIBitsToDeviceInternal(
             lBandHeight,
             bmi->bmiHeader.biCompression,
             Bits,
-            cjMaxBits);
+            (ULONG)cjNeeded);
         if (!hMaskBitmap)
         {
             EngSetLastError(ERROR_NO_SYSTEM_RESOURCES);
@@ -916,6 +962,7 @@ Exit:
     if (pMaskSurf) EngUnlockSurface(pMaskSurf);
     if (hMaskBitmap) EngDeleteSurface((HSURF)hMaskBitmap);
     if (pDC) DC_UnlockDc(pDC);
+    if (hSecureBits) MmUnsecureVirtualMemory(hSecureBits);
     ExFreePoolWithTag(pbmiSafe, 'pmTG');
 
     return ret;
