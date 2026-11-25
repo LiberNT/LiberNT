@@ -436,8 +436,14 @@ UINT Native12ConvertResourceBarriers(UINT count, const D3D12_RESOURCE_BARRIER *b
                     target.UAV.hResource = Native12UnwrapResource(barriers[i].UAV.pResource)->driver;
                 break;
             default:
-                FIXME("Barrier type %u is not implemented.\n", barriers[i].Type);
+            {
+                static LONG reported;
+
+                /* FIXME: aliasing barriers are dropped; INFO_NEEDED how the 0022 DDI ranged form encodes them */
+                if (!InterlockedExchange(&reported, 1))
+                    FIXME("Barrier type %u is not implemented.\n", barriers[i].Type);
                 continue;
+            }
         }
         ++used;
     }
