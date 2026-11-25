@@ -23,6 +23,7 @@ void wined3d_get_wddm_adapter_identifier(D3DKMT_HANDLE kmt_adapter,
     D3DKMT_QUERY_DEVICE_IDS ids = {0};
     D3DKMT_UMDFILENAMEINFO umd = {0};
     D3DKMT_ADAPTERREGISTRYINFO registry = {0};
+    D3DKMT_ADAPTERTYPE type = {0};
     D3DKMT_DRIVER_DESCRIPTION *description;
     LARGE_INTEGER version;
     const WCHAR *name;
@@ -66,6 +67,19 @@ void wined3d_get_wddm_adapter_identifier(D3DKMT_HANDLE kmt_adapter,
             }
         }
         free(description);
+    }
+
+    query.Type = KMTQAITYPE_ADAPTERTYPE;
+    query.pPrivateDriverData = &type;
+    query.PrivateDriverDataSize = sizeof(type);
+    if (!D3DKMTQueryAdapterInfo(&query) && type.SoftwareDevice)
+    {
+        identifier->vendor_id = 0x1414;
+        identifier->device_id = 0x008c;
+        identifier->subsystem_id = 0;
+        identifier->revision = 0;
+        if (identifier->description_size)
+            lstrcpynA(identifier->description, "Microsoft Basic Render Driver", identifier->description_size);
     }
 
     umd.Version = KMTUMDVERSION_DX9;

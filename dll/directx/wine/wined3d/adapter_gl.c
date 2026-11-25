@@ -2225,6 +2225,14 @@ static enum wined3d_pci_device wined3d_guess_card(enum wined3d_feature_level fea
     if (*card_vendor == HW_VENDOR_BROADCOM)
         return wined3d_gpu_from_feature_level(card_vendor, feature_level);
 
+#ifdef __REACTOS__
+    if (*card_vendor == HW_VENDOR_SOFTWARE)
+    {
+        *card_vendor = HW_VENDOR_MICROSOFT;
+        return CARD_MICROSOFT_BASIC_RENDER;
+    }
+#endif
+
     for (i = 0; i < ARRAY_SIZE(card_vendor_table); ++i)
     {
         if (card_vendor_table[i].card_vendor != *card_vendor)

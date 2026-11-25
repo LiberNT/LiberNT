@@ -143,7 +143,7 @@ static HRESULT STDMETHODCALLTYPE dxgi_adapter_EnumOutputs(IWineDXGIAdapter *ifac
         return E_INVALIDARG;
 
 #ifdef __REACTOS__
-    if (adapter->factory->null_driver)
+    if (adapter->factory->software)
     {
         *output = NULL;
         return DXGI_ERROR_NOT_FOUND;
@@ -233,6 +233,11 @@ static HRESULT dxgi_adapter_get_desc(struct dxgi_adapter *adapter, DXGI_ADAPTER_
             desc->SharedSystemMemory = 0;
         }
     }
+    else if (adapter_id.vendor_id == 0x1414 && adapter_id.device_id == 0x008c)
+    {
+        desc->DedicatedVideoMemory = 0;
+        desc->Flags = 0;
+    }
     else
 #endif
     desc->Flags = 0;
@@ -240,7 +245,7 @@ static HRESULT dxgi_adapter_get_desc(struct dxgi_adapter *adapter, DXGI_ADAPTER_
     desc->ComputePreemptionGranularity = 0; /* FIXME */
 
 #if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
-    if (!adapter->factory->software)
+    if (!adapter->factory->software && !(adapter_id.vendor_id == 0x1414 && adapter_id.device_id == 0x008c))
         dxgi_get_wddm_adapter_desc(desc->AdapterLuid, desc);
 #endif
 

@@ -852,6 +852,29 @@ static HRESULT dxgi_factory_init(struct dxgi_factory *factory, BOOL extended)
 }
 
 #ifdef __REACTOS__
+static struct wined3d *dxgi_create_software_rasterizer(void)
+{
+    struct wined3d_adapter_identifier adapter_id = {0};
+    struct wined3d_adapter *adapter;
+    struct wined3d *wined3d;
+
+    if (dxgi_is_icd_initializing() || dxgi_wined3d_initializing_thread == GetCurrentThreadId())
+        return NULL;
+
+    dxgi_wined3d_initializing_thread = GetCurrentThreadId();
+    wined3d = wined3d_create(0);
+    dxgi_wined3d_initializing_thread = 0;
+    if (!wined3d)
+        return NULL;
+
+    if ((adapter = wined3d_get_adapter(wined3d, 0)) && SUCCEEDED(wined3d_adapter_get_identifier(adapter, 0, &adapter_id))
+            && adapter_id.vendor_id == 0x1414 && adapter_id.device_id == 0x008c)
+        return wined3d;
+
+    wined3d_decref(wined3d);
+    return NULL;
+}
+
 static HRESULT dxgi_factory_init_software(struct dxgi_factory *factory, unsigned int flags)
 {
     factory->IWineDXGIFactory_iface.lpVtbl = &dxgi_factory_vtbl;
@@ -859,7 +882,10 @@ static HRESULT dxgi_factory_init_software(struct dxgi_factory *factory, unsigned
     wined3d_private_store_init(&factory->private_store);
 
     dxgi_factory_lock(factory);
-    factory->wined3d = wined3d_create(WINED3D_NO3D | flags);
+    if (!(flags & WINED3D_NULL_DRIVER))
+        factory->wined3d = dxgi_create_software_rasterizer();
+    if (!factory->wined3d)
+        factory->wined3d = wined3d_create(WINED3D_NO3D | flags);
     dxgi_factory_unlock(factory);
     if (!factory->wined3d)
     {

@@ -359,6 +359,10 @@ static const struct wined3d_gpu_description gpu_description_table[] =
      * come from GL, and DRIVER_WINE names the wrapper, not a software GPU. */
     {HW_VENDOR_BROADCOM, CARD_BROADCOM_VIDEOCORE, "Broadcom VideoCore", DRIVER_WINE, 128},
 
+#ifdef __REACTOS__
+    {HW_VENDOR_MICROSOFT, CARD_MICROSOFT_BASIC_RENDER, "Microsoft Basic Render Driver", DRIVER_WINE, 1280},
+#endif
+
     /* Nvidia cards */
     {HW_VENDOR_NVIDIA,     CARD_NVIDIA_RIVA_128,           "NVIDIA RIVA 128",                  DRIVER_NVIDIA_TNT,       4   },
     {HW_VENDOR_NVIDIA,     CARD_NVIDIA_RIVA_TNT,           "NVIDIA RIVA TNT",                  DRIVER_NVIDIA_TNT,       16  },

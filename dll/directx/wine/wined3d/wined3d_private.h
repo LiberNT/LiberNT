@@ -2086,6 +2086,9 @@ enum wined3d_pci_vendor
     HW_VENDOR_SOFTWARE              = 0x0000,
     HW_VENDOR_AMD                   = 0x1002,
     HW_VENDOR_NVIDIA                = 0x10de,
+#ifdef __REACTOS__
+    HW_VENDOR_MICROSOFT             = 0x1414,
+#endif
     HW_VENDOR_BROADCOM              = 0x14e4,
     HW_VENDOR_VMWARE                = 0x15ad,
     HW_VENDOR_REDHAT                = 0x1af4,
@@ -2098,6 +2101,10 @@ enum wined3d_pci_device
 
     /* VideoCore is an SoC GPU; zero denotes an unspecified device, not a PCI model. */
     CARD_BROADCOM_VIDEOCORE         = 0x0000,
+
+#ifdef __REACTOS__
+    CARD_MICROSOFT_BASIC_RENDER     = 0x008c,
+#endif
 
     CARD_AMD_RAGE_128PRO            = 0x5246,
     CARD_AMD_RADEON_7200            = 0x5144,

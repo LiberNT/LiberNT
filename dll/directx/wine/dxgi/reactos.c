@@ -233,6 +233,17 @@ HRESULT dxgi_get_wddm_adapter_desc(LUID luid, DXGI_ADAPTER_DESC3 *desc)
         desc->DedicatedSystemMemory = segments.DedicatedSystemMemorySize;
         desc->SharedSystemMemory = segments.SharedSystemMemorySize;
     }
+    if (type.SoftwareDevice)
+    {
+        desc->VendorId = 0x1414;
+        desc->DeviceId = 0x008c;
+        desc->SubSysId = 0;
+        desc->Revision = 0;
+        desc->DedicatedVideoMemory = 0;
+        desc->DedicatedSystemMemory = 0;
+        lstrcpynW(desc->Description, L"Microsoft Basic Render Driver", ARRAY_SIZE(desc->Description));
+        desc->Flags = type.DisplaySupported ? 0 : DXGI_ADAPTER_FLAG3_SOFTWARE;
+    }
     hr = S_OK;
 done:
     close_adapter.hAdapter = open_adapter.hAdapter;
