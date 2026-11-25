@@ -13,10 +13,13 @@
 #define IOCTL_NTFSTXF_QUERY         3
 #define IOCTL_NTFSTXF_DISARM        4
 #define IOCTL_NTFSTXF_UNREGISTER    5
+#define IOCTL_NTFSTXF_WAIT_PAUSED   6
+#define IOCTL_NTFSTXF_RESUME        7
 
 #define NTFSTXF_TRAP_NONE           0
 #define NTFSTXF_TRAP_NAMESPACE      1
 #define NTFSTXF_TRAP_WRITE          2
+#define NTFSTXF_TRAP_PAUSE          3
 
 typedef struct _NTFSTXF_TRAP
 {

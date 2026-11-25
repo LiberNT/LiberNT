@@ -223,6 +223,130 @@ TestInterruptedCommit(VOID)
         Remove(Names[Index]);
 }
 
+typedef struct _COMMIT_THREAD
+{
+    HANDLE Transaction;
+    HANDLE Armed;
+    DWORD ArmError;
+    BOOL Committed;
+    DWORD Error;
+} COMMIT_THREAD, *PCOMMIT_THREAD;
+
+static
+DWORD
+WINAPI
+CommitThread(
+    _In_ PVOID Parameter)
+{
+    PCOMMIT_THREAD Commit = Parameter;
+
+    Commit->ArmError = Arm(NTFSTXF_TRAP_PAUSE, 2);
+    SetEvent(Commit->Armed);
+    if (Commit->ArmError != ERROR_SUCCESS)
+        return 0;
+    Commit->Committed = pCommitTransaction(Commit->Transaction);
+    Commit->Error = GetLastError();
+    return 0;
+}
+
+static
+ULONGLONG
+FileRecordOf(
+    _In_ PCWSTR Name)
+{
+    BY_HANDLE_FILE_INFORMATION Information;
+    WCHAR Path[MAX_PATH];
+    HANDLE File;
+    BOOL Result;
+
+    PathOf(Name, Path);
+    File = CreateFileW(Path, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                       OPEN_EXISTING, 0, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+        return 0;
+    Result = GetFileInformationByHandle(File, &Information);
+    CloseHandle(File);
+    if (!Result)
+        return 0;
+    return (((ULONGLONG)Information.nFileIndexHigh << 32) | Information.nFileIndexLow) & 0x0000FFFFFFFFFFFFULL;
+}
+
+static
+VOID
+TestCommitFreesRecord(VOID)
+{
+    static const PCWSTR Names[] = { L"gone1.txt", L"gone2.txt", L"reuse.txt" };
+    COMMIT_THREAD Commit = { 0 };
+    WCHAR Path[MAX_PATH];
+    ULONGLONG Freed;
+    HANDLE Thread, File;
+    DWORD Error;
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Names); Index++)
+        Remove(Names[Index]);
+    if (!PutFile(L"gone1.txt", "1") || !PutFile(L"gone2.txt", "2"))
+    {
+        ok(0, "cannot prepare the test files (%lu)\n", GetLastError());
+        return;
+    }
+    Freed = FileRecordOf(L"gone1.txt");
+    ok(Freed != 0, "cannot read the file record of the first file\n");
+
+    Commit.Transaction = pCreateTransaction(NULL, NULL, 0, 0, 0, 0, NULL);
+    ok(Commit.Transaction != INVALID_HANDLE_VALUE, "CreateTransaction failed with %lu\n", GetLastError());
+    if (Commit.Transaction == INVALID_HANDLE_VALUE)
+        return;
+    ok(DeleteTransacted(L"gone1.txt", Commit.Transaction), "transacted delete failed with %lu\n", GetLastError());
+    ok(DeleteTransacted(L"gone2.txt", Commit.Transaction), "transacted delete failed with %lu\n", GetLastError());
+
+    /* The commit deletes the first file, then waits in the second delete while the transaction is still in progress */
+    Commit.Armed = CreateEventW(NULL, TRUE, FALSE, NULL);
+    ok(Commit.Armed != NULL, "CreateEvent failed with %lu\n", GetLastError());
+    Thread = Commit.Armed ? CreateThread(NULL, 0, CommitThread, &Commit, 0, NULL) : NULL;
+    ok(Thread != NULL, "CreateThread failed with %lu\n", GetLastError());
+    if (!Thread)
+    {
+        if (Commit.Armed)
+            CloseHandle(Commit.Armed);
+        CloseHandle(Commit.Transaction);
+        return;
+    }
+    /* The driver handle is synchronous: wait for the pause only once the commit thread is done arming */
+    ok(WaitForSingleObject(Commit.Armed, 10000) == WAIT_OBJECT_0, "the commit thread did not arm the trap\n");
+    Error = KmtSendToDriver(IOCTL_NTFSTXF_WAIT_PAUSED);
+    ok_eq_int(Error, ERROR_SUCCESS);
+    if (Error == ERROR_SUCCESS)
+    {
+        ok(!Exists(L"gone1.txt"), "the commit has not deleted the first file before it paused\n");
+        PathOf(L"reuse.txt", Path);
+        File = CreateFileW(Path, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+        ok(File != INVALID_HANDLE_VALUE, "opening a new file for write during the commit failed with %lu\n",
+           GetLastError());
+        if (File != INVALID_HANDLE_VALUE)
+        {
+            ok(WriteText(File, "r"), "write failed with %lu\n", GetLastError());
+            CloseHandle(File);
+        }
+        if (FileRecordOf(L"reuse.txt") != Freed)
+            trace("the new file did not take the file record the commit freed\n");
+    }
+    ok_eq_int(KmtSendToDriver(IOCTL_NTFSTXF_RESUME), ERROR_SUCCESS);
+    ok(WaitForSingleObject(Thread, 30000) == WAIT_OBJECT_0, "the commit did not finish\n");
+    CloseHandle(Thread);
+    CloseHandle(Commit.Armed);
+    ok_eq_int(Commit.ArmError, ERROR_SUCCESS);
+    ok(Commit.Committed, "CommitTransaction failed with %lu\n", Commit.Error);
+    ok_eq_ulong(Fired(), 1UL);
+    ok_eq_int(KmtSendToDriver(IOCTL_NTFSTXF_DISARM), ERROR_SUCCESS);
+    CloseHandle(Commit.Transaction);
+    ok(!Exists(L"gone1.txt") && !Exists(L"gone2.txt"), "the commit did not delete both files\n");
+    ok(ReadsBack(L"reuse.txt", "r"), "the file created during the commit lost its data\n");
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Names); Index++)
+        Remove(Names[Index]);
+}
+
 static
 VOID
 TestFailedPrepare(VOID)
@@ -315,6 +439,7 @@ START_TEST(NtfsTxfRecovery)
     {
         TestInterruptedCommit();
         TestFailedPrepare();
+        TestCommitFreesRecord();
     }
     KmtSendToDriver(IOCTL_NTFSTXF_UNREGISTER);
     KmtCloseDriver();

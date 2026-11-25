@@ -10,7 +10,6 @@
 
 #define NTFS_TXF_STAGING_ROOT L"\\$Extend\\$TxfStaging"
 #define NTFS_TXF_COPY_CHUNK (64 * 1024)
-#define NTFS_TXF_RECORD_MASK 0x0000FFFFFFFFFFFFULL
 #define NTFS_TXF_WRITE_ACCESS (FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_ATTRIBUTES | \
                                FILE_WRITE_EA | WRITE_DAC | WRITE_OWNER | MAXIMUM_ALLOWED)
 #define NTFS_TXF_MODIFY_ACCESS (NTFS_TXF_WRITE_ACCESS | DELETE)
@@ -426,7 +425,7 @@ NtfsTxfIsLockedLocked(_In_ PVolumeContextBlock VolCB,
     ASSERT(KeGetCurrentIrql() == APC_LEVEL);
     PLIST_ENTRY TxEntry, Entry;
 
-    FileReference &= NTFS_TXF_RECORD_MASK;
+    ASSERT((FileReference >> 48) != 0);
     for (TxEntry = VolCB->TxfTransactions.Flink; TxEntry != &VolCB->TxfTransactions; TxEntry = TxEntry->Flink)
     {
         PNTFS_TXF_TRANSACTION Txf = CONTAINING_RECORD(TxEntry, NTFS_TXF_TRANSACTION, Link);
@@ -437,7 +436,7 @@ NtfsTxfIsLockedLocked(_In_ PVolumeContextBlock VolCB,
         {
             PNTFS_TXF_CHANGE Change = CONTAINING_RECORD(Entry, NTFS_TXF_CHANGE, Link);
 
-            if (Change->FileReference && (Change->FileReference & NTFS_TXF_RECORD_MASK) == FileReference)
+            if (Change->FileReference && Change->FileReference == FileReference)
                 return TRUE;
         }
         if (!Readers)
@@ -446,7 +445,7 @@ NtfsTxfIsLockedLocked(_In_ PVolumeContextBlock VolCB,
         {
             PNTFS_TXF_READER Reader = CONTAINING_RECORD(Entry, NTFS_TXF_READER, Link);
 
-            if ((Reader->FileReference & NTFS_TXF_RECORD_MASK) == FileReference)
+            if (Reader->FileReference == FileReference)
                 return TRUE;
         }
     }
@@ -462,12 +461,13 @@ NtfsTxfHasLockLocked(_In_ PNTFS_TXF_TRANSACTION Txf,
 
 
     ASSERT(Txf != NULL);
+    ASSERT((FileReference >> 48) != 0);
     for (Entry = Txf->Changes.Flink; Entry != &Txf->Changes; Entry = Entry->Flink)
     {
         PNTFS_TXF_CHANGE Change = CONTAINING_RECORD(Entry, NTFS_TXF_CHANGE, Link);
 
         if (Change->FileReference &&
-            (Change->FileReference & NTFS_TXF_RECORD_MASK) == (FileReference & NTFS_TXF_RECORD_MASK))
+            Change->FileReference == FileReference)
         {
             return TRUE;
         }
@@ -510,6 +510,8 @@ NtfsTxfRecord(_In_ PNTFS_TXF_TRANSACTION Txf,
     PNTFS_TXF_CHANGE Change;
     NTSTATUS Status;
 
+    ASSERT(FileReference == 0 || (FileReference >> 48) != 0);
+    ASSERT(Identity == 0 || (Identity >> 48) != 0);
     if (Result)
         *Result = NULL;
     Change = ExAllocatePoolZero(PagedPool, sizeof(*Change), TAG_NTFS_TXF);
@@ -1349,7 +1351,7 @@ BOOLEAN
 NtfsTxfSameFile(_In_ ULONGLONG Actual,
                 _In_ ULONGLONG Identity)
 {
-    return Identity != 0 && (Actual & NTFS_TXF_RECORD_MASK) == (Identity & NTFS_TXF_RECORD_MASK);
+    return Identity != 0 && Actual == Identity;
 }
 
 static
@@ -2144,7 +2146,7 @@ NtfsTxfStreamHasWriters(_In_ PVolumeContextBlock VolCB,
     {
         PStreamContextBlock StreamCB = CONTAINING_RECORD(Entry, StreamContextBlock, HashEntry);
 
-        if ((StreamCB->FileReference & NTFS_TXF_RECORD_MASK) == (FileReference & NTFS_TXF_RECORD_MASK) &&
+        if (StreamCB->FileReference == FileReference &&
             StreamCB->ShareAccess.Writers != 0)
         {
             Writers = TRUE;
@@ -2171,7 +2173,7 @@ NtfsTxfSectionKeepsFile(_In_ PVolumeContextBlock VolCB,
     {
         PStreamContextBlock StreamCB = CONTAINING_RECORD(Entry, StreamContextBlock, HashEntry);
 
-        if ((StreamCB->FileReference & NTFS_TXF_RECORD_MASK) == (FileReference & NTFS_TXF_RECORD_MASK) &&
+        if (StreamCB->FileReference == FileReference &&
             StreamCB->RequestedType == TypeData && !StreamCB->RequestedStream.Length)
         {
             DataStream = StreamCB;

@@ -23,6 +23,8 @@ static LONG TrapKind;
 static LONG TrapFailAt;
 static LONG TrapSeen;
 static LONG TrapFired;
+static KEVENT TrapPaused;
+static KEVENT TrapResume;
 
 static
 BOOLEAN
@@ -56,6 +58,28 @@ TrapCount(
 
 static
 FLT_PREOP_CALLBACK_STATUS
+TrapPause(
+    _Inout_ PFLT_CALLBACK_DATA Data)
+{
+    LARGE_INTEGER Timeout;
+
+    if (FLT_IS_FASTIO_OPERATION(Data))
+    {
+        return FLT_PREOP_DISALLOW_FASTIO;
+    }
+    if (InterlockedIncrement(&TrapSeen) != TrapFailAt)
+    {
+        return FLT_PREOP_SUCCESS_NO_CALLBACK;
+    }
+    InterlockedIncrement(&TrapFired);
+    KeSetEvent(&TrapPaused, IO_NO_INCREMENT, FALSE);
+    Timeout.QuadPart = -20LL * 10 * 1000 * 1000;
+    KeWaitForSingleObject(&TrapResume, Executive, KernelMode, FALSE, &Timeout);
+    return FLT_PREOP_SUCCESS_NO_CALLBACK;
+}
+
+static
+FLT_PREOP_CALLBACK_STATUS
 FLTAPI
 PreSetInformation(
     _Inout_ PFLT_CALLBACK_DATA Data,
@@ -67,10 +91,17 @@ PreSetInformation(
     UNREFERENCED_PARAMETER(FltObjects);
 
     *CompletionContext = NULL;
-    if (!TrapMatches(Data, NTFSTXF_TRAP_NAMESPACE) ||
-        (Class != FileRenameInformation && Class != FileRenameInformationEx &&
-         Class != FileDispositionInformation && Class != FileDispositionInformationEx &&
-         Class != FileLinkInformation && Class != FileLinkInformationEx))
+    if (Class != FileRenameInformation && Class != FileRenameInformationEx &&
+        Class != FileDispositionInformation && Class != FileDispositionInformationEx &&
+        Class != FileLinkInformation && Class != FileLinkInformationEx)
+    {
+        return FLT_PREOP_SUCCESS_NO_CALLBACK;
+    }
+    if (TrapMatches(Data, NTFSTXF_TRAP_PAUSE))
+    {
+        return TrapPause(Data);
+    }
+    if (!TrapMatches(Data, NTFSTXF_TRAP_NAMESPACE))
     {
         return FLT_PREOP_SUCCESS_NO_CALLBACK;
     }
@@ -224,6 +255,7 @@ TestDisarm(VOID)
 {
     InterlockedExchange(&TrapKind, NTFSTXF_TRAP_NONE);
     TrapThread = NULL;
+    KeSetEvent(&TrapResume, IO_NO_INCREMENT, FALSE);
 }
 
 static
@@ -250,6 +282,8 @@ TestEntry(
     UNREFERENCED_PARAMETER(Flags);
 
     TestDriverObject = DriverObject;
+    KeInitializeEvent(&TrapPaused, NotificationEvent, FALSE);
+    KeInitializeEvent(&TrapResume, NotificationEvent, FALSE);
     if (RegistryPath->Length >= sizeof(ServicePath))
     {
         return STATUS_NAME_TOO_LONG;
@@ -294,11 +328,14 @@ TestMessageHandler(
 
         case IOCTL_NTFSTXF_ARM:
             if (!Buffer || InLength < sizeof(*Trap) || Trap->FailAt == 0 ||
-                (Trap->Kind != NTFSTXF_TRAP_NAMESPACE && Trap->Kind != NTFSTXF_TRAP_WRITE))
+                (Trap->Kind != NTFSTXF_TRAP_NAMESPACE && Trap->Kind != NTFSTXF_TRAP_WRITE &&
+                 Trap->Kind != NTFSTXF_TRAP_PAUSE))
             {
                 return STATUS_INVALID_PARAMETER;
             }
             TestDisarm();
+            KeClearEvent(&TrapPaused);
+            KeClearEvent(&TrapResume);
             TrapSeen = 0;
             TrapFired = 0;
             TrapFailAt = (LONG)Trap->FailAt;
@@ -323,6 +360,24 @@ TestMessageHandler(
 
         case IOCTL_NTFSTXF_UNREGISTER:
             TestUnregister();
+            *OutLength = 0;
+            break;
+
+        case IOCTL_NTFSTXF_WAIT_PAUSED:
+        {
+            LARGE_INTEGER Timeout;
+
+            Timeout.QuadPart = -10LL * 10 * 1000 * 1000;
+            *OutLength = 0;
+            if (KeWaitForSingleObject(&TrapPaused, Executive, KernelMode, FALSE, &Timeout) != STATUS_SUCCESS)
+            {
+                return STATUS_IO_TIMEOUT;
+            }
+            break;
+        }
+
+        case IOCTL_NTFSTXF_RESUME:
+            KeSetEvent(&TrapResume, IO_NO_INCREMENT, FALSE);
             *OutLength = 0;
             break;
 
