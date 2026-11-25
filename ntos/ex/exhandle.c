@@ -290,7 +290,7 @@ ExpAllocateHandleTable(
     Size = sizeof(HANDLE_TABLE) +
            (SIZE_T)(ExpFreeListCount - 1) * sizeof(HANDLE_TABLE_FREE_LIST);
 
-    HandleTable = ExAllocatePoolZero(NonPagedPool, Size, EXP_HANDLE_TABLE_TAG);
+    HandleTable = ExAllocatePoolZero(NonPagedPoolCacheAligned, Size, EXP_HANDLE_TABLE_TAG);
     if (HandleTable == NULL)
     {
         return NULL;

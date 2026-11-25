@@ -441,6 +441,9 @@ IopCreateDeviceObject(
                             MEMORY_ALLOCATION_ALIGNMENT - 1) &
                            ~(MEMORY_ALLOCATION_ALIGNMENT - 1);
 
+    /* Leave headroom to bump the extension pointer up to cache-line alignment */
+    AlignedExtensionSize += SYSTEM_CACHE_ALIGNMENT_SIZE - MEMORY_ALLOCATION_ALIGNMENT;
+
     TotalSize = sizeof(DEVICE_OBJECT) + AlignedExtensionSize +
                 sizeof(EXTENDED_DEVOBJ_EXTENSION);
 
@@ -476,7 +479,10 @@ IopCreateDeviceObject(
 
     if (DeviceExtensionSize != 0)
     {
-        CreatedDevice->DeviceExtension = CreatedDevice + 1;
+        /* Align the extension itself to cache-line; extensions carrying
+         * cache-aligned members (SLIST_HEADER and friends) require it. */
+        CreatedDevice->DeviceExtension =
+            (PVOID)ALIGN_UP_BY(CreatedDevice + 1, SYSTEM_CACHE_ALIGNMENT_SIZE);
     }
 
     DeviceExtension = (PEXTENDED_DEVOBJ_EXTENSION)

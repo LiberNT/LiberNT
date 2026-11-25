@@ -17,7 +17,7 @@ ULONG MmProductType;
 
 BOOLEAN MiPoolReady;
 
-static UCHAR MiBootArena[MI_BOOT_ARENA_BYTES];
+static DECLSPEC_ALIGN(128) UCHAR MiBootArena[MI_BOOT_ARENA_BYTES];
 static volatile LONG MiBootArenaUsed;
 
 PVOID
@@ -27,12 +27,12 @@ MiKmAllocate(
     LONG Size, Offset;
 
     if (MiPoolReady)
-        return ExAllocatePoolWithTag(NonPagedPool, Bytes, MI_CORE_TAG);
+        return ExAllocatePoolWithTag(NonPagedPoolCacheAligned, Bytes, MI_CORE_TAG);
 
     if (Bytes > MI_BOOT_ARENA_BYTES)
         return NULL;
 
-    Size = (LONG)ROUND_UP(Bytes, 16);
+    Size = (LONG)ROUND_UP(Bytes, 128);
     for (;;)
     {
         Offset = InterlockedCompareExchange(&MiBootArenaUsed, 0, 0);

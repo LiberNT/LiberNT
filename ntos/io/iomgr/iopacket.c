@@ -571,6 +571,8 @@ IoBuildPartialMdl(
                              MDL_SOURCE_IS_NONPAGED_POOL |
                              MDL_ALLOCATED_MUST_SUCCEED);
     TargetMdl->MdlFlags |= MDL_PARTIAL;
+    if (SourceMdl->MdlFlags & MDL_SOURCE_IS_NONPAGED_POOL)
+        TargetMdl->MdlFlags |= MDL_SOURCE_IS_NONPAGED_POOL;
     TargetMdl->MappedSystemVa = (PVOID)((ULONG_PTR)SourceMdl->MappedSystemVa + Offset);
 
     if (SourceMdl->MdlFlags & MDL_IO_SPACE)

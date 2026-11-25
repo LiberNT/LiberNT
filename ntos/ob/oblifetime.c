@@ -356,22 +356,30 @@ ObpAllocateObject(
     UCHAR InfoMask;
     PVOID Base;
 
-    InfoMask = ObpInformationMaskFor(ObjectCreateInfo, ObjectName, ObjectType);
+    InfoMask = ObpInformationMaskFor(ObjectCreateInfo, ObjectName, ObjectType) |
+               OBP_PADDING_INFO_MASK;
     HeaderSize = ObpInfoMaskToOffset[InfoMask];
 
     PoolType = (ObjectType != NULL) ?
-               (POOL_TYPE)ObjectType->TypeInfo.PoolType : NonPagedPool;
+               (POOL_TYPE)(ObjectType->TypeInfo.PoolType |
+                           NonPagedPoolCacheAligned) : NonPagedPoolCacheAligned;
 
     Base = ExAllocatePoolWithTag(PoolType,
                                  HeaderSize + sizeof(OBJECT_HEADER) +
-                                 ObjectSize,
+                                 ObjectSize + 127,
                                  (ObjectType != NULL) ?
                                  ObjectType->Key : TAG_OBJECT_TYPE);
     if (Base == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
     /* The optional headers sit in front of the header, youngest last */
-    RtlZeroMemory(Base, HeaderSize + sizeof(OBJECT_HEADER));
-    Header = (POBJECT_HEADER)((PUCHAR)Base + HeaderSize);
+    RtlZeroMemory((PUCHAR)Base,
+                  HeaderSize + sizeof(OBJECT_HEADER) + 127);
+    Header = (POBJECT_HEADER)((((ULONG_PTR)Base + HeaderSize +
+                               FIELD_OFFSET(OBJECT_HEADER, Body) + 127) &
+                              ~(ULONG_PTR)127) -
+                             FIELD_OFFSET(OBJECT_HEADER, Body));
+    ((POBJECT_HEADER_PADDING_INFO)((PUCHAR)Header - HeaderSize))->PaddingAmount =
+        (ULONG)((PUCHAR)Header - HeaderSize - (PUCHAR)Base);
     Header->InfoMask = InfoMask;
 
     if (InfoMask & OBP_CREATOR_INFO_MASK)
@@ -495,7 +503,17 @@ ObpDeallocateObject(
 
     InterlockedDecrement((PLONG)&ObjectType->TotalNumberOfObjects);
 
-    ExFreePool((PUCHAR)Header - ObpInfoMaskToOffset[Header->InfoMask]);
+    if (Header->InfoMask & OBP_PADDING_INFO_MASK)
+    {
+        POBJECT_HEADER_PADDING_INFO PaddingInfo =
+            (POBJECT_HEADER_PADDING_INFO)((PUCHAR)Header -
+                                          ObpInfoMaskToOffset[Header->InfoMask]);
+        ExFreePool((PUCHAR)PaddingInfo - PaddingInfo->PaddingAmount);
+    }
+    else
+    {
+        ExFreePool((PUCHAR)Header - ObpInfoMaskToOffset[Header->InfoMask]);
+    }
 }
 
 VOID
