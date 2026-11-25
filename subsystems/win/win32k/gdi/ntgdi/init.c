@@ -43,8 +43,17 @@ GdiProcessCreate(PEPROCESS Process)
             MappedTable = GDI_MapHandleTable(Process);
             if (!MappedTable) return STATUS_NO_MEMORY;
 
-            Peb->GdiSharedHandleTable = MappedTable;
-            Peb->GdiDCAttributeList = GDI_BATCH_LIMIT;
+            _SEH2_TRY
+            {
+                ProbeForWrite(Peb, sizeof(*Peb), sizeof(ULONG));
+                Peb->GdiSharedHandleTable = MappedTable;
+                Peb->GdiDCAttributeList = GDI_BATCH_LIMIT;
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                NOTHING;
+            }
+            _SEH2_END;
 
 #ifdef _WIN64
             {
@@ -53,8 +62,17 @@ GdiProcessCreate(PEPROCESS Process)
                 if (Peb32)
                 {
                     if ((ULONG_PTR)MappedTable > MAXULONG) return STATUS_NO_MEMORY;
-                    Peb32->GdiSharedHandleTable = PtrToUlong(MappedTable);
-                    Peb32->GdiDCAttributeList = GDI_BATCH_LIMIT;
+                    _SEH2_TRY
+                    {
+                        ProbeForWrite(Peb32, sizeof(*Peb32), sizeof(ULONG));
+                        Peb32->GdiSharedHandleTable = PtrToUlong(MappedTable);
+                        Peb32->GdiDCAttributeList = GDI_BATCH_LIMIT;
+                    }
+                    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                    {
+                        NOTHING;
+                    }
+                    _SEH2_END;
                 }
             }
 #endif
@@ -85,9 +103,12 @@ GdiProcessDestroy(PEPROCESS Process)
     GDI_CleanupForProcess(Process);
 
     /* So we can now free the pools */
-    GdiPoolDestroy(ppiCurrent->pPoolDcAttr);
-    GdiPoolDestroy(ppiCurrent->pPoolBrushAttr);
-    GdiPoolDestroy(ppiCurrent->pPoolRgnAttr);
+    if (ppiCurrent->pPoolDcAttr)
+        GdiPoolDestroy(ppiCurrent->pPoolDcAttr);
+    if (ppiCurrent->pPoolBrushAttr)
+        GdiPoolDestroy(ppiCurrent->pPoolBrushAttr);
+    if (ppiCurrent->pPoolRgnAttr)
+        GdiPoolDestroy(ppiCurrent->pPoolRgnAttr);
 
     return STATUS_SUCCESS;
 }
