@@ -293,7 +293,8 @@ static HRESULT STDMETHODCALLTYPE dxgi_adapter_CheckInterfaceSupport(IWineDXGIAda
     if (SUCCEEDED(hr) && !adapter->factory->software && dxgi_wddm_adapter_has_d3d11_umd(
             adapter->wddm_foreign ? adapter->wddm_luid : adapter_id.adapter_luid))
     {
-        if (umd_version)
+        if (umd_version && FAILED(dxgi_get_wddm_umd_version(
+                adapter->wddm_foreign ? adapter->wddm_luid : adapter_id.adapter_luid, umd_version)))
             *umd_version = adapter_id.driver_version;
         return S_OK;
     }

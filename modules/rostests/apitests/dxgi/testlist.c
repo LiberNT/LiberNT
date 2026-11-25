@@ -43,6 +43,7 @@ extern void func_volume_readback(void);
 extern void func_viewport_levels(void);
 extern void func_wait_vblank(void);
 extern void func_sampler_default(void);
+extern void func_umd_version(void);
 
 const struct test winetest_testlist[] =
 {
@@ -88,5 +89,6 @@ const struct test winetest_testlist[] =
     { "viewport_levels", func_viewport_levels },
     { "wait_vblank", func_wait_vblank },
     { "sampler_default", func_sampler_default },
+    { "umd_version", func_umd_version },
     { 0, 0 }
 };

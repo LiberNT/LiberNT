@@ -262,6 +262,30 @@ BOOL dxgi_wddm_adapter_has_d3d11_umd(LUID luid)
     return found;
 }
 
+HRESULT dxgi_get_wddm_umd_version(LUID luid, LARGE_INTEGER *version)
+{
+    D3DKMT_OPENADAPTERFROMLUID open_adapter = {0};
+    D3DKMT_CLOSEADAPTER close_adapter;
+    D3DKMT_QUERYADAPTERINFO query = {0};
+    D3DKMT_UMD_DRIVER_VERSION umd = {0};
+    NTSTATUS status;
+
+    open_adapter.AdapterLuid = luid;
+    if (!NT_SUCCESS(D3DKMTOpenAdapterFromLuid(&open_adapter)))
+        return E_FAIL;
+    query.hAdapter = open_adapter.hAdapter;
+    query.Type = KMTQAITYPE_UMD_DRIVER_VERSION;
+    query.pPrivateDriverData = &umd;
+    query.PrivateDriverDataSize = sizeof(umd);
+    status = D3DKMTQueryAdapterInfo(&query);
+    close_adapter.hAdapter = open_adapter.hAdapter;
+    D3DKMTCloseAdapter(&close_adapter);
+    if (!NT_SUCCESS(status))
+        return E_FAIL;
+    *version = umd.DriverVersion;
+    return S_OK;
+}
+
 BOOL dxgi_wddm_adapters_have_d3d11_umd(void)
 {
     D3DKMT_ENUMADAPTERS2 enum_adapters = {0};
