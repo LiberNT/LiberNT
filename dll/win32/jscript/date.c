@@ -90,7 +90,11 @@ static inline DOUBLE days_in_year(DOUBLE year)
 {
     int y;
 
+#ifdef __REACTOS__
+    if(!(fabs(year) <= INT_MAX) || year != floor(year))
+#else
     if(year != (int)year)
+#endif
         return NAN;
 
     y = year;
@@ -103,7 +107,11 @@ static inline DOUBLE days_in_year(DOUBLE year)
 /* ECMA-262 3rd Edition    15.9.1.3 */
 static inline DOUBLE day_from_year(DOUBLE year)
 {
+#ifdef __REACTOS__
+    if(!(fabs(year) <= INT_MAX) || year != floor(year))
+#else
     if(year != (int)year)
+#endif
         return NAN;
 
     return floor(365.0*(year-1970) + floor((year-1969)/4)
@@ -154,6 +162,10 @@ static inline DOUBLE year_from_time(DOUBLE time)
 
     if(isnan(time))
         return NAN;
+#ifdef __REACTOS__
+    if(!(fabs(time/365.25/MS_PER_DAY) < INT_MAX/2))
+        return NAN;
+#endif
 
     y = 1970 + time/365.25/MS_PER_DAY;
 
@@ -276,10 +288,18 @@ static inline DOUBLE convert_time(int year, SYSTEMTIME st)
 /* ECMA-262 3rd Edition    15.9.1.9 */
 static inline DOUBLE daylight_saving_ta(DOUBLE time, DateInstance *date)
 {
+#ifdef __REACTOS__
+    DOUBLE year = year_from_time(time);
+#else
     int year = year_from_time(time);
+#endif
     DOUBLE standardTime, daylightTime;
 
+#ifdef __REACTOS__
+    if(isnan(year))
+#else
     if(isnan(time))
+#endif
         return 0;
 
     standardTime = convert_time(year, date->standardDate);
@@ -373,6 +393,10 @@ static inline DOUBLE ms_from_time(DOUBLE time)
 /* ECMA-262 3rd Edition    15.9.1.11 */
 static inline DOUBLE make_time(DOUBLE hour, DOUBLE min, DOUBLE sec, DOUBLE ms)
 {
+#ifdef __REACTOS__
+    if(!isfinite(hour) || !isfinite(min) || !isfinite(sec) || !isfinite(ms))
+        return NAN;
+#endif
     return hour*MS_PER_HOUR + min*MS_PER_MINUTE + sec*1000 + ms;
 }
 
@@ -380,6 +404,11 @@ static inline DOUBLE make_time(DOUBLE hour, DOUBLE min, DOUBLE sec, DOUBLE ms)
 static inline DOUBLE make_day(DOUBLE year, DOUBLE month, DOUBLE day)
 {
     DOUBLE time;
+
+#ifdef __REACTOS__
+    if(!isfinite(year) || !isfinite(month) || !isfinite(day))
+        return NAN;
+#endif
 
     year += floor(month/12);
 
@@ -397,6 +426,10 @@ static inline DOUBLE make_day(DOUBLE year, DOUBLE month, DOUBLE day)
 /* ECMA-262 3rd Edition    15.9.1.13 */
 static inline DOUBLE make_date(DOUBLE day, DOUBLE time)
 {
+#ifdef __REACTOS__
+    if(!isfinite(day) || !isfinite(time))
+        return NAN;
+#endif
     return day*MS_PER_DAY + time;
 }
 
