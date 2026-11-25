@@ -345,22 +345,24 @@ IntSetSysColors(UINT nColors, CONST INT *Elements, CONST COLORREF *Colors, BOOL 
     PPROCESSINFO ppi = PsGetCurrentProcessWin32Process();
     BOOL bDefaultColors = UpdateDefaults && ppi && (ppi->W32PF_flags & W32PF_DEFAULTSYSCOLORS);
     UINT i;
+    UINT Element;
+    COLORREF Color;
 
     for (i = 0; i < nColors; i++)
     {
-        if ((UINT)(*Elements) < NUM_SYSCOLORS)
+        Element = (UINT)*(volatile const INT *)&Elements[i];
+        Color = *(volatile const COLORREF *)&Colors[i];
+        if (Element < NUM_SYSCOLORS)
         {
-            gpsi->argbSystem[*Elements] = *Colors;
-            IntGdiSetSolidBrushColor(gpsi->ahbrSystem[*Elements], *Colors);
+            gpsi->argbSystem[Element] = Color;
+            IntGdiSetSolidBrushColor(gpsi->ahbrSystem[Element], Color);
             if (bDefaultColors)
             {
-                DefaultSysColors[*Elements] = *Colors;
-                if (DefaultSysColorBrushes[*Elements])
-                    IntGdiSetSolidBrushColor(DefaultSysColorBrushes[*Elements], *Colors);
+                DefaultSysColors[Element] = Color;
+                if (DefaultSysColorBrushes[Element])
+                    IntGdiSetSolidBrushColor(DefaultSysColorBrushes[Element], Color);
             }
         }
-        Elements++;
-        Colors++;
     }
 }
 
