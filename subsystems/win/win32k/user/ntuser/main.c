@@ -183,8 +183,28 @@ UserProcessCreate(PEPROCESS Process)
     ppiCurrent->W32PF_flags |= W32PF_PROCESSCONNECTED;
     {
         PPEB Peb = PsGetProcessPeb(Process);
-        if (Peb && Peb->ProcessParameters &&
-            (Peb->ProcessParameters->WindowFlags & STARTF_SCREENSAVER))
+        PRTL_USER_PROCESS_PARAMETERS ProcessParams;
+        ULONG WindowFlags = 0;
+
+        if (Peb)
+        {
+            _SEH2_TRY
+            {
+                ProbeForRead(&Peb->ProcessParameters, sizeof(Peb->ProcessParameters), sizeof(PVOID));
+                ProcessParams = *(PRTL_USER_PROCESS_PARAMETERS volatile *)&Peb->ProcessParameters;
+                if (ProcessParams)
+                {
+                    ProbeForRead(&ProcessParams->WindowFlags, sizeof(ProcessParams->WindowFlags), sizeof(ULONG));
+                    WindowFlags = ProcessParams->WindowFlags;
+                }
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                WindowFlags = 0;
+            }
+            _SEH2_END;
+        }
+        if (WindowFlags & STARTF_SCREENSAVER)
         {
             ppiScrnSaver = ppiCurrent;
             ppiCurrent->W32PF_flags |= W32PF_SCREENSAVER;
