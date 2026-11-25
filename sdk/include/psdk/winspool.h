@@ -2001,13 +2001,6 @@ typedef struct PRINT_EXECUTION_DATA {
 #define ERROR_BIDI_SET_UNKNOWN_FAILURE 0x32D1
 #define ERROR_BIDI_UNSUPPORTED_CLIENT_LANGUAGE 0x32D9
 #define ERROR_BIDI_UNSUPPORTED_RESOURCE_FORMAT 0x32DA
-#if (!(defined(UNICODE)))
-#ifdef UNICODE
-#define InstallPrinterDriverFromPackage InstallPrinterDriverFromPackageW
-#else
-#define InstallPrinterDriverFromPackage InstallPrinterDriverFromPackageA
-#endif
-#endif
 #define IPDFP_COPY_ALL_FILES 0x00000001
 #define MAX_FORM_KEYWORD_LENGTH 0x40
 #define MS_PRINT_JOB_OUTPUT_FILE L"MsPrintJobOutputFile"
