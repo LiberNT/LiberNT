@@ -455,7 +455,7 @@ SmpDbgReporterThread(
         Now = KeQueryInterruptTime();
         Sample++;
 
-        DbgPrint("SMPSTAT sample=%I64u elapsed_ms=%I64u active=0x%Ix idle=0x%Ix reportcpu=%lu thraff=0x%Ix sysaff=0x%Ix\n",
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SMPSTAT sample=%I64u elapsed_ms=%I64u active=0x%Ix idle=0x%Ix reportcpu=%lu thraff=0x%Ix sysaff=0x%Ix\n",
                  Sample,
                  (Now - LastTime) / 10000,
                  (ULONG_PTR)KeActiveProcessors.Bitmap[0],
@@ -516,7 +516,7 @@ SmpDbgReporterThread(
             LastImage.Text[16] = ANSI_NULL;
             SmpDbgSnapshotDispatchState(Prcb, &Dispatch);
 
-            DbgPrint("\nSMPSTAT cpu=%lu dtick=%I64u dqreq=%I64u ddisp=%I64u dqend=%I64u dipi=%I64u drdpc=%I64u dsched=%I64u ddpc=%I64u dtb=%I64u dgen=%I64u dplace=%I64u didle=%I64u dquant=%I64u dperiod=%I64u dstandby=%I64u dcharge=%I64u dcycles=%I64u dreset=%I64u dsrc0=%I64u dsrc1=%I64u dsrc2=%I64u dsrc3=%I64u dbsrc0=%I64u dbsrc1=%I64u dbsrc2=%I64u dbsrc3=%I64u dcsw=%lu ready=0x%lx rdycnt=%lu next=%p nextimg=%.16s nextpid=%Ix nexttid=%Ix nextpri=%lu nextstate=%lu nextaff=0x%Ix nextideal=%lu nextcpu=%lu cur=%p curimg=%.16s curpid=%Ix curtid=%Ix curpri=%lu curbase=%lu curstate=%lu curaff=0x%Ix curideal=%lu curcpu=%lu rdythr=%p rdyimg=%.16s rdypid=%Ix rdytid=%Ix rdypri=%lu rdystate=%lu rdyage=%lu rdyaff=0x%Ix rdyideal=%lu rdycpu=%lu qreset=%lu qleft=%ld qunit=%lu cycle=%I64u qtarget=%I64u startcyc=%I64u qflag=%u dpcq=%lu dpcact=%u dpcpend=%u lastthr=%p lastpid=%Ix lasttid=%Ix lastsrc=%lu lastpri=%lu lastideal=%lu lastcause=%lu lastimg=%.16s\n",
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "\nSMPSTAT cpu=%lu dtick=%I64u dqreq=%I64u ddisp=%I64u dqend=%I64u dipi=%I64u drdpc=%I64u dsched=%I64u ddpc=%I64u dtb=%I64u dgen=%I64u dplace=%I64u didle=%I64u dquant=%I64u dperiod=%I64u dstandby=%I64u dcharge=%I64u dcycles=%I64u dreset=%I64u dsrc0=%I64u dsrc1=%I64u dsrc2=%I64u dsrc3=%I64u dbsrc0=%I64u dbsrc1=%I64u dbsrc2=%I64u dbsrc3=%I64u dcsw=%lu ready=0x%lx rdycnt=%lu next=%p nextimg=%.16s nextpid=%Ix nexttid=%Ix nextpri=%lu nextstate=%lu nextaff=0x%Ix nextideal=%lu nextcpu=%lu cur=%p curimg=%.16s curpid=%Ix curtid=%Ix curpri=%lu curbase=%lu curstate=%lu curaff=0x%Ix curideal=%lu curcpu=%lu rdythr=%p rdyimg=%.16s rdypid=%Ix rdytid=%Ix rdypri=%lu rdystate=%lu rdyage=%lu rdyaff=0x%Ix rdyideal=%lu rdycpu=%lu qreset=%lu qleft=%ld qunit=%lu cycle=%I64u qtarget=%I64u startcyc=%I64u qflag=%u dpcq=%lu dpcact=%u dpcpend=%u lastthr=%p lastpid=%Ix lasttid=%Ix lastsrc=%lu lastpri=%lu lastideal=%lu lastcause=%lu lastimg=%.16s\n",
                      Cpu,
                      Current.RuntimeTicks - Previous->RuntimeTicks,
                      Current.QuantumRequests - Previous->QuantumRequests,
@@ -651,8 +651,8 @@ SmpDbgThreadStateDump(VOID)
     PEPROCESS Process;
     ULONG ProcessCount = 0;
 
-    DbgPrint("SMPWD ===== all-CPU-idle deadlock: thread state dump =====\n");
-    DbgPrint("SMPWD idle=0x%Ix active=0x%Ix\n",
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SMPWD ===== all-CPU-idle deadlock: thread state dump =====\n");
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SMPWD idle=0x%Ix active=0x%Ix\n",
              (ULONG_PTR)KiIdleSummary[0], (ULONG_PTR)KeActiveProcessors.Bitmap[0]);
 
     Process = PsGetNextProcess(NULL);
@@ -661,7 +661,7 @@ SmpDbgThreadStateDump(VOID)
         PETHREAD Thread;
         ULONG ThreadCount = 0;
 
-        DbgPrint("SMPWD proc=%p '%s'\n", Process, (PCSTR)PsGetProcessImageFileName(Process));
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SMPWD proc=%p '%s'\n", Process, (PCSTR)PsGetProcessImageFileName(Process));
 
         Thread = PsGetNextProcessThread(Process, NULL);
         while ((Thread != NULL) && (ThreadCount++ < 256))
@@ -686,7 +686,7 @@ SmpDbgThreadStateDump(VOID)
                     Owner = CONTAINING_RECORD(Object, KGUARDED_MUTEX, Gate)->Owner;
             }
 
-            DbgPrint("SMPWD   thr=%p state=%s reason=%u waitirql=%u prio=%d obj=%p owner=%p start=%p\n",
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SMPWD   thr=%p state=%s reason=%u waitirql=%u prio=%d obj=%p owner=%p start=%p\n",
                      Thread, SmpDbgStateName(Tcb->State), (ULONG)Tcb->WaitReason,
                      (ULONG)Tcb->WaitIrql, (int)Tcb->Priority, Object, Owner,
                      Thread->StartAddress);
@@ -696,7 +696,7 @@ SmpDbgThreadStateDump(VOID)
 
         Process = PsGetNextProcess(Process);
     }
-    DbgPrint("SMPWD ===== end thread state dump =====\n");
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SMPWD ===== end thread state dump =====\n");
 }
 
 static
@@ -744,7 +744,7 @@ SmpDbgWatchdogThread(
         if ((Stalled >= 2) && !Dumped)
         {
             Dumped = TRUE;
-            DbgPrint("SMPWD all CPUs idle ~%lds (idle=0x%Ix active=0x%Ix ctxsw=%I64u): dumping thread state\n",
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SMPWD all CPUs idle ~%lds (idle=0x%Ix active=0x%Ix ctxsw=%I64u): dumping thread state\n",
                      (long)Stalled * 2, (ULONG_PTR)KiIdleSummary[0],
                      (ULONG_PTR)KeActiveProcessors.Bitmap[0], Current);
             SmpDbgThreadStateDump();
@@ -769,7 +769,7 @@ SmpDbgStartWatchdog(VOID)
         if (NT_SUCCESS(Status))
         {
             ZwClose(Handle);
-            DbgPrint("SMPWD watchdog thread started\n");
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SMPWD watchdog thread started\n");
         }
     }
 
@@ -786,11 +786,11 @@ SmpDbgStartWatchdog(VOID)
     if (NT_SUCCESS(Status))
     {
         ZwClose(Handle);
-        DbgPrint("SMPSTAT reporter started kernel=%p\n", (PVOID)PsNtosImageBase);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SMPSTAT reporter started kernel=%p\n", (PVOID)PsNtosImageBase);
     }
     else
     {
-        DbgPrint("SMPSTAT reporter start failed status=0x%08lx\n", Status);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SMPSTAT reporter start failed status=0x%08lx\n", Status);
     }
 }
 

@@ -202,7 +202,7 @@ static VOID KdpDisplayCrashDumpProgress(_In_ ULONG Percent)
 
     Percent = min(Percent, 100);
     RtlStringCbPrintfA(ProgressText, sizeof(ProgressText), "\rDumping memory to storage: %3lu%% complete", Percent);
-    DbgPrint("%s", ProgressText);
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%s", ProgressText);
     InbvDisplayString(ProgressText);
 }
 
@@ -212,7 +212,7 @@ static VOID KdpDisplayCrashDumpFailure(_In_ NTSTATUS Status)
     PCSTR Reason = KdpGetCrashDumpFailureReason(Status);
 
     RtlStringCbPrintfA(FailureText, sizeof(FailureText), "\nMemory dump failed: %s (0x%08lx).\n", Reason, Status);
-    DbgPrint("%s", FailureText);
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%s", FailureText);
     RtlStringCbPrintfA(FailureText, sizeof(FailureText), "\r\nMemory dump failed: %s (0x%08lx).\r\n", Reason, Status);
     InbvDisplayString(FailureText);
 }
@@ -225,7 +225,7 @@ static VOID KdpDisplayCrashDumpInitializationFailure(_In_ NTSTATUS Status)
     if (Stage == NULL)
         Stage = "unknown initialization stage";
     RtlStringCbPrintfA(FailureText, sizeof(FailureText), "\nMemory dump unavailable: %s (0x%08lx).\n", Stage, Status);
-    DbgPrint("%s", FailureText);
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%s", FailureText);
     RtlStringCbPrintfA(FailureText, sizeof(FailureText), "\r\nMemory dump unavailable: %s (0x%08lx).\r\n", Stage, Status);
     InbvDisplayString(FailureText);
 }
@@ -236,7 +236,7 @@ static VOID KdpDisplayCrashLogFailure(_In_ NTSTATUS Status)
     PCSTR Reason = (Status == STATUS_NOT_FOUND) ? "no crash log data was available" : KdpGetCrashDumpFailureReason(Status);
 
     RtlStringCbPrintfA(FailureText, sizeof(FailureText), "\nCrash log failed: %s (0x%08lx); memory dump saved.\n", Reason, Status);
-    DbgPrint("%s", FailureText);
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%s", FailureText);
     RtlStringCbPrintfA(FailureText, sizeof(FailureText), "\r\nCrash log failed: %s (0x%08lx).\r\nMemory dump was saved.\r\n", Reason, Status);
     InbvDisplayString(FailureText);
 }
@@ -1526,13 +1526,13 @@ static VOID KdpCaptureEarlyCrashDiagnostics(VOID)
     if (!KdpCrashDumpState.CoreInitialized || (KdpCrashDumpState.CrashLogBuffer == NULL) || (KdpCrashDumpState.CrashLogBufferSize == 0))
         return;
 
-    DbgPrint("KD: Persistent crash target is unavailable; preserving diagnostics in the preallocated early-crash buffer.\n");
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "KD: Persistent crash target is unavailable; preserving diagnostics in the preallocated early-crash buffer.\n");
     LogLength = KdpCopyPrintBuffer(KdpCrashDumpState.CrashLogBuffer, KdpCrashDumpState.CrashLogBufferSize, &RolloverCount);
     KdpCrashDumpState.EarlyCrashLogLength = LogLength;
     KdpCrashDumpState.EarlyCrashLogRolloverCount = RolloverCount;
     if (LogLength != 0)
     {
-        DbgPrint("KD: Captured %lu bytes of volatile early-crash diagnostics; no persistent storage target was configured.\n", LogLength);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "KD: Captured %lu bytes of volatile early-crash diagnostics; no persistent storage target was configured.\n", LogLength);
         InbvDisplayString("\r\nEarly crash diagnostics captured in memory; persistent storage was not ready.\r\n");
     }
 }
@@ -1569,7 +1569,7 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
         if (NT_SUCCESS(BootLogStatus))
             InbvDisplayString("\r\nCrash log saved to lastboot.log on the boot volume.\r\n");
         else if (BootLogStatus != STATUS_NOT_FOUND)
-            DbgPrint("KD: Boot log tail write failed with status 0x%08lx.\n", BootLogStatus);
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "KD: Boot log tail write failed with status 0x%08lx.\n", BootLogStatus);
         return Status;
     }
 
@@ -1628,7 +1628,7 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
         RequestedPages = TotalPages;
     }
 
-    DbgPrint("KD: Crash dump selected %I64u pages, writing %I64u pages (%I64u bytes) to a %I64u-byte target.\n", RequestedPages, TotalPages, KdpCrashDumpState.Header->RequiredDumpSpace.QuadPart, KdpCrashDumpState.Capacity.QuadPart);
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "KD: Crash dump selected %I64u pages, writing %I64u pages (%I64u bytes) to a %I64u-byte target.\n", RequestedPages, TotalPages, KdpCrashDumpState.Header->RequiredDumpSpace.QuadPart, KdpCrashDumpState.Capacity.QuadPart);
 
     /*
      * Keep the header invalid until every selected physical page has reached
@@ -1643,17 +1643,17 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
 
     BootLogStatus = KdpWriteBootLogAtCrash(&KdpCrashDumpState.Storage, KdpCrashDumpState.FileObject);
     if (!NT_SUCCESS(BootLogStatus) && (BootLogStatus != STATUS_NOT_FOUND))
-        DbgPrint("KD: Boot log tail write failed with status 0x%08lx.\n", BootLogStatus);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "KD: Boot log tail write failed with status 0x%08lx.\n", BootLogStatus);
 
     /* Commit diagnostics first so a later memory-page failure cannot erase the useful crash report. */
     if (KdpCrashDumpState.Dedicated)
     {
-        DbgPrint("\nKD: Saving crash diagnostic log before physical memory data.\n");
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "\nKD: Saving crash diagnostic log before physical memory data.\n");
         LogStatus = KdpWriteCrashLog();
         if (NT_SUCCESS(LogStatus))
             LogSaved = TRUE;
         else
-            DbgPrint("KD: Early crash boot log write failed with status 0x%08lx.\n", LogStatus);
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "KD: Early crash boot log write failed with status 0x%08lx.\n", LogStatus);
     }
 
     FileOffset = 0;
@@ -1743,7 +1743,7 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
         KdpWriteBootLogAtCrash(&KdpCrashDumpState.Storage, KdpCrashDumpState.FileObject);
     if (KdpCrashDumpState.Dedicated)
     {
-        DbgPrint("\nKD: Physical memory data written; refreshing crash boot log.\n");
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "\nKD: Physical memory data written; refreshing crash boot log.\n");
         RefreshStatus = KdpWriteCrashLog();
         if (NT_SUCCESS(RefreshStatus))
         {
@@ -1754,7 +1754,7 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
         {
             if (!LogSaved)
                 LogStatus = RefreshStatus;
-            DbgPrint("KD: Crash boot log refresh failed with status 0x%08lx.\n", RefreshStatus);
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "KD: Crash boot log refresh failed with status 0x%08lx.\n", RefreshStatus);
         }
     }
 
@@ -1771,13 +1771,13 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
         if (!KdpCrashDumpState.Dedicated)
         {
             KdpDisplayCrashDumpProgress(100);
-            DbgPrint("\nKD: Memory dump saved successfully.\n");
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "\nKD: Memory dump saved successfully.\n");
             InbvDisplayString("\r\nCrash dump status: memory dump saved successfully.\r\n");
         }
         else if (LogSaved)
         {
             KdpDisplayCrashDumpProgress(100);
-            DbgPrint("\nKD: Memory dump and crash boot log saved successfully.\n");
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "\nKD: Memory dump and crash boot log saved successfully.\n");
             InbvDisplayString("\r\nCrash dump status: memory dump and boot log saved successfully.\r\n");
         }
         else
@@ -1792,7 +1792,7 @@ Exit:
         KdpDisplayCrashDumpFailure(Status);
         if (LogSaved)
         {
-            DbgPrint("KD: Crash boot log was saved before the memory dump failed.\n");
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "KD: Crash boot log was saved before the memory dump failed.\n");
             InbvDisplayString("\r\nCrash log saved; the memory dump itself failed.\r\n");
         }
     }

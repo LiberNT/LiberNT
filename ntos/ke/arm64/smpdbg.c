@@ -106,7 +106,7 @@ VOID NTAPI SmpDbgDumpTimers(ULONG StrandMask)
         return;
 
     /* "ticks=[...]" kept verbatim so scripts/analyze_cpu_state.py keeps parsing it. */
-    DbgPrint("SMP4DBG timer-state strand=0x%lx ticks=[%lu,%lu,%lu,%lu] "
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SMP4DBG timer-state strand=0x%lx ticks=[%lu,%lu,%lu,%lu] "
              "begin=[%lu,%lu,%lu,%lu] eoi=[%lu,%lu,%lu,%lu] rej=[%lu,%lu,%lu,%lu] "
              "ctl=[0x%lx,0x%lx,0x%lx,0x%lx] pmr=[0x%lx,0x%lx,0x%lx,0x%lx]\n",
              StrandMask,
@@ -116,7 +116,7 @@ VOID NTAPI SmpDbgDumpTimers(ULONG StrandMask)
              SmpDbgCpu[0].Reject, SmpDbgCpu[1].Reject, SmpDbgCpu[2].Reject, SmpDbgCpu[3].Reject,
              SmpDbgCpu[0].Ctl, SmpDbgCpu[1].Ctl, SmpDbgCpu[2].Ctl, SmpDbgCpu[3].Ctl,
              SmpDbgCpu[0].Pmr, SmpDbgCpu[1].Pmr, SmpDbgCpu[2].Pmr, SmpDbgCpu[3].Pmr);
-    DbgPrint("SMP4DBG timer-gic gicprio=[0x%lx,0x%lx,0x%lx,0x%lx] "
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SMP4DBG timer-gic gicprio=[0x%lx,0x%lx,0x%lx,0x%lx] "
              "gicen=[%lu,%lu,%lu,%lu] gicpend=[%lu,%lu,%lu,%lu] gicact=[%lu,%lu,%lu,%lu]\n",
              SmpDbgCpu[0].GicPrio, SmpDbgCpu[1].GicPrio, SmpDbgCpu[2].GicPrio, SmpDbgCpu[3].GicPrio,
              SmpDbgCpu[0].GicEn, SmpDbgCpu[1].GicEn, SmpDbgCpu[2].GicEn, SmpDbgCpu[3].GicEn,

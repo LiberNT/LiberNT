@@ -589,7 +589,7 @@ KiRiscvInterruptDispatch(
             return;
 
         default:
-            DbgPrint("\n*** Unknown supervisor interrupt cause %I64u\n", Code);
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "\n*** Unknown supervisor interrupt cause %I64u\n", Code);
             break;
     }
     KiRiscvTrapStop(TrapFrame);

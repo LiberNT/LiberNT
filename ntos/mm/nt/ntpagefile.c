@@ -275,7 +275,7 @@ MiCommitReportRegions(
 
     for (i = 0; i < Count; i++)
     {
-        DbgPrint("        %I64x-%I64x: %I64d pages, protection %lx, type %u\n",
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "        %I64x-%I64x: %I64d pages, protection %lx, type %u\n",
                  Regions[i].Start, Regions[i].End, Regions[i].Charge, Regions[i].Protection, Regions[i].Type);
     }
 }
@@ -321,11 +321,11 @@ MiCommitReportWorker(
         }
     }
 
-    DbgPrint("Commit limit reached: %I64d of %I64d pages committed, %I64d by the system, %Iu by processes\n",
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "Commit limit reached: %I64d of %I64d pages committed, %I64d by the system, %Iu by processes\n",
              MI_ATOMIC_READ64(&MiSystem.CommittedPages), MI_ATOMIC_READ64(&MiSystem.CommitLimit),
              MI_ATOMIC_READ64(&MiSystem.SystemSpace.CommittedPages), Total);
     for (i = 0; i < Count; i++)
-        DbgPrint("    %s (%Iu): %Iu pages\n", Names[i], (ULONG_PTR)Ids[i], Pages[i]);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "    %s (%Iu): %Iu pages\n", Names[i], (ULONG_PTR)Ids[i], Pages[i]);
     if (Count != 0)
         MiCommitReportRegions(Ids[0]);
 }

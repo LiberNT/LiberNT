@@ -96,7 +96,7 @@ KiRiscvDescribeAddress(
 
         if ((Page >= Md->BasePage) && (Page < Md->BasePage + Md->PageCount))
         {
-            DbgPrint("address %p is %s page %lx: loader type %lu (base %lx, %lx pages)\n",
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "address %p is %s page %lx: loader type %lu (base %lx, %lx pages)\n",
                      Address, Window, Page, Md->MemoryType, Md->BasePage, Md->PageCount);
             return;
         }
@@ -131,7 +131,7 @@ KiRiscvScanStackForCode(
 
             if ((Value > Base) && (Value < Base + Ldr->SizeOfImage))
             {
-                DbgPrint("  [sp+%03lx] %p  %wZ+%lx\n", Index * sizeof(ULONG_PTR), (PVOID)Value, &Ldr->BaseDllName, (ULONG)(Value - Base));
+                DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "  [sp+%03lx] %p  %wZ+%lx\n", Index * sizeof(ULONG_PTR), (PVOID)Value, &Ldr->BaseDllName, (ULONG)(Value - Base));
                 ++Printed;
                 break;
             }
@@ -146,21 +146,21 @@ KiRiscvDumpTrapFrame(
 {
     ULONG Index;
 
-    DbgPrint("\n*** Unexpected supervisor trap: %s\n",
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "\n*** Unexpected supervisor trap: %s\n",
              KiRiscvDecodeScause(TrapFrame->Scause));
-    DbgPrint("scause  %p  sepc    %p\nstval   %p  sstatus %p\n",
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "scause  %p  sepc    %p\nstval   %p  sstatus %p\n",
              (PVOID)(ULONG_PTR)TrapFrame->Scause,
              (PVOID)(ULONG_PTR)TrapFrame->Context.Pc,
              (PVOID)(ULONG_PTR)TrapFrame->Stval,
              (PVOID)(ULONG_PTR)TrapFrame->Sstatus);
     for (Index = 1; Index < 32; Index++)
     {
-        DbgPrint("%-4s %p%s",
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%-4s %p%s",
                  KiRiscvRegisterNames[Index],
                  (PVOID)(ULONG_PTR)TrapFrame->Context.X[Index],
                  ((Index & 3) == 0) || (Index == 31) ? "\n" : "  ");
     }
-    DbgPrint("previous irql %u, trap frame %p\n",
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "previous irql %u, trap frame %p\n",
              TrapFrame->PreviousIrql,
              TrapFrame);
     KiRiscvDescribeAddress((PVOID)(ULONG_PTR)TrapFrame->Stval);
@@ -321,7 +321,7 @@ KiRiscvPageFault(
                     KeFlushCurrentTb();
                     return;
                 }
-                DbgPrint("\n*** Repeated fault on permitted leaf %llx at %p (pc %p)\n",
+                DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "\n*** Repeated fault on permitted leaf %llx at %p (pc %p)\n",
                          Walk.Value.u.Long, Address, (PVOID)(ULONG_PTR)TrapFrame->Context.Pc);
                 KeGetCurrentThread()->TrapFrame = TrapFrame->PreviousTrapFrame;
                 KiRiscvTrapStop(TrapFrame);

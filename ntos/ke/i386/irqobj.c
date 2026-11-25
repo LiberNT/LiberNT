@@ -59,7 +59,7 @@ KiUnexpectedInterruptTailHandler(
 
     Count = InterlockedIncrement(&Reports);
     if (Count <= KI_STRAY_INTERRUPT_REPORTS)
-        DbgPrint("Unexpected interrupt on vector 0x%02lx (%ld so far)\n", TrapFrame->ErrCode, Count);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "Unexpected interrupt on vector 0x%02lx (%ld so far)\n", TrapFrame->ErrCode, Count);
 
     KiExitInterrupt(TrapFrame, OldIrql, FALSE);
 }

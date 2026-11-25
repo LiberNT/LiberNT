@@ -299,7 +299,7 @@ KeIpiGenericCall(
 
             if (SmpDbgEnabled && ((SpinCount & 0x3FFFFFF) == 0))
             {
-                DbgPrint("SMP4DBG KeIpiGenericCall quiesce stuck: cpu=%lu arrived=%ld/%ld targets=0x%Ix\n",
+                DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SMP4DBG KeIpiGenericCall quiesce stuck: cpu=%lu arrived=%ld/%ld targets=0x%Ix\n",
                          KeGetCurrentProcessorNumber(),
                          KiArm64IpiPacket.Arrived, TargetCount, (ULONG_PTR)Targets);
             }
@@ -338,7 +338,7 @@ KeIpiGenericCall(
              */
             if (SmpDbgEnabled && ((SpinCount & 0x3FFFFFF) == 0))
             {
-                DbgPrint("SMP4DBG KeIpiGenericCall stuck: cpu=%lu remaining=%ld targets=0x%Ix\n",
+                DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "SMP4DBG KeIpiGenericCall stuck: cpu=%lu remaining=%ld targets=0x%Ix\n",
                          KeGetCurrentProcessorNumber(),
                          KiArm64IpiPacket.TargetCount,
                          (ULONG_PTR)Targets);

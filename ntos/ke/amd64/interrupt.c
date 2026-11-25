@@ -27,7 +27,7 @@ KiUnexpectedInterruptHandler(
     LONG Count = InterlockedIncrement(&Reports);
 
     if (Count <= KI_STRAY_INTERRUPT_REPORTS)
-        DbgPrint("Unexpected interrupt on vector 0x%02lx, processor %u (%ld so far)\n", Vector, KeGetCurrentPrcb()->Number, Count);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "Unexpected interrupt on vector 0x%02lx, processor %u (%ld so far)\n", Vector, KeGetCurrentPrcb()->Number, Count);
 }
 
 /* The dispatch stub is position independent, so a plain copy is enough */

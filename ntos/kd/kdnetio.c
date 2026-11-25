@@ -344,7 +344,7 @@ KdpNetInit(
             KdpDebugMode.Net = FALSE;
             KdpNetConfigured = FALSE;
             HalDisplayString("   Network debugging unavailable\r\n");
-            DbgPrint("Network debugger: no usable network card, status 0x%08lx\n", Result);
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "Network debugger: no usable network card, status 0x%08lx\n", Result);
             return Result;
         }
 
@@ -358,7 +358,7 @@ KdpNetInit(
         KdpNetPublishKey();
 #endif
         KdQueryTransportStatus(Status, sizeof(Status));
-        DbgPrint("%s\n", Status);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%s\n", Status);
     }
 
     return STATUS_SUCCESS;

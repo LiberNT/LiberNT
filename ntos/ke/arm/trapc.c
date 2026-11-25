@@ -303,7 +303,7 @@ NTAPI
 KiArmUnimplemented(
     _In_ const CHAR *Routine)
 {
-    DbgPrint("ARM: %s is not implemented\n", Routine);
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "ARM: %s is not implemented\n", Routine);
     KeBugCheckEx(UNEXPECTED_KERNEL_MODE_TRAP, 0x41524D00, (ULONG_PTR)Routine, 0, 0);
 }
 

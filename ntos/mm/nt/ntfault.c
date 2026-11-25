@@ -269,7 +269,7 @@ MmAccessFaultEx(
         Status = STATUS_IN_PAGE_ERROR;
 
     if (!NT_SUCCESS(Status) && Process == NULL)
-        DbgPrint("Kernel page fault at %p, access %u, not resolved: %08lx\n", Address, (ULONG)Access, Status);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "Kernel page fault at %p, access %u, not resolved: %08lx\n", Address, (ULONG)Access, Status);
 
     return Status;
 }

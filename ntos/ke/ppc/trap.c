@@ -43,12 +43,12 @@ KiPpcDumpTrapFrame(
     PULONG Gpr = &TrapFrame->Context.Gpr0;
     ULONG Index;
 
-    DbgPrint("\n*** Unexpected trap: %s (vector %04lx)\n", KiPpcVectorName(TrapFrame->Vector), TrapFrame->Vector);
-    DbgPrint("iar %08lx msr %08lx lr %08lx ctr %08lx\n", TrapFrame->Context.Iar, TrapFrame->Context.Msr, TrapFrame->Context.Lr, TrapFrame->Context.Ctr);
-    DbgPrint("dar %08lx dsisr %08lx cr %08lx xer %08lx\n", TrapFrame->Dar, TrapFrame->Dsisr, TrapFrame->Context.Cr, TrapFrame->Context.Xer);
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "\n*** Unexpected trap: %s (vector %04lx)\n", KiPpcVectorName(TrapFrame->Vector), TrapFrame->Vector);
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "iar %08lx msr %08lx lr %08lx ctr %08lx\n", TrapFrame->Context.Iar, TrapFrame->Context.Msr, TrapFrame->Context.Lr, TrapFrame->Context.Ctr);
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "dar %08lx dsisr %08lx cr %08lx xer %08lx\n", TrapFrame->Dar, TrapFrame->Dsisr, TrapFrame->Context.Cr, TrapFrame->Context.Xer);
     for (Index = 0; Index < 32; Index++)
-        DbgPrint("r%-2lu %08lx%s", Index, Gpr[Index], ((Index & 3) == 3) ? "\n" : "  ");
-    DbgPrint("previous irql %u, trap frame %p\n", TrapFrame->PreviousIrql, TrapFrame);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "r%-2lu %08lx%s", Index, Gpr[Index], ((Index & 3) == 3) ? "\n" : "  ");
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "previous irql %u, trap frame %p\n", TrapFrame->PreviousIrql, TrapFrame);
 }
 
 DECLSPEC_NORETURN
