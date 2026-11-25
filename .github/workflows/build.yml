@@ -43,6 +43,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       BUILD_TYPE: ${{ matrix.build || (github.event_name == 'push' && 'release' || 'debug') }}
+      LIVE_CD: ${{ matrix.arch == 'i386' || matrix.arch == 'amd64' }}
       CCACHE_KEY: ccache-${{ (matrix.build || (github.event_name == 'push' && 'release' || 'debug')) == 'release' && 'release-' || '' }}${{matrix.compiler}}-${{matrix.arch}}${{matrix.variant}}-
       CCACHE_SEED: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     steps:
@@ -134,6 +135,8 @@ jobs:
         [ "${{matrix.compiler}}" = "gcc" ] && FLAGS="$FLAGS --gcc"
         [ -n "${{matrix.profile}}" ] && FLAGS="$FLAGS -DROSCONFIG_PROFILE=${{matrix.profile}}"
         [ "${{matrix.compiler}}" = "clang" ] && case "${{matrix.arch}}" in amd64|arm64|riscv64) FLAGS="$FLAGS -DENABLE_MESA_LLVMPIPE=ON" ;; esac
+        [ "$BUILD_TYPE" = "release" ] && case "${{matrix.arch}}" in i386|amd64) FLAGS="$FLAGS -DBOOTLOADER_WIM_RAMDISK=ON" ;; esac
+        [ "$LIVE_CD" = "true" ] || FLAGS="$FLAGS -DPREINSTALL_IMAGE_SIZE_MB=4096"
         ./configure.sh $FLAGS -a ${{matrix.arch}} \
           -DREACTOS_TARGET_NT=0xA00 \
           -DENABLE_CCACHE=1
@@ -148,8 +151,9 @@ jobs:
     - name: Build images
       run: |
         . "$HOME/.local/opt/rosbe/rosbe-env.sh"
-        TARGETS=bootcd
-        [ "$BUILD_TYPE" = "debug" ] && TARGETS="$TARGETS liberntimg liberntvhd"
+        TARGETS=liberntimg
+        [ "$LIVE_CD" = "true" ] && TARGETS=liberntiso
+        [ "$LIVE_CD" = "true" ] && [ "$BUILD_TYPE" = "debug" ] && TARGETS="$TARGETS liberntimg"
         ninja -C ${{steps.configure.outputs.outdir}} $TARGETS -k0
 
     - name: Print ccache statistics
@@ -185,38 +189,24 @@ jobs:
         [ "$BUILD_TYPE" = "release" ] && TYPE=-release || TYPE=
         echo "tag=${{matrix.compiler}}-${{matrix.arch}}${{matrix.variant}}$TYPE-${GITHUB_SHA::11}" >> "$GITHUB_OUTPUT"
 
-    - name: Name bootcd.iso
-      run: |
-        ISO=${{steps.configure.outputs.outdir}}/bootcd.iso
-        if [ -f "$ISO" ]; then ln -f "$ISO" "${{steps.configure.outputs.outdir}}/bootcd-${{steps.images.outputs.tag}}.iso"; fi
+    - name: Name the CD image
+      if: ${{ env.LIVE_CD == 'true' }}
+      run: ln -f ${{steps.configure.outputs.outdir}}/LiberNT.iso ${{steps.configure.outputs.outdir}}/LiberNT-${{steps.images.outputs.tag}}.iso
 
-    - name: Upload bootcd.iso
-      if: ${{ env.CCACHE_SEED != 'true' }}
+    - name: Upload the CD image
+      if: ${{ env.LIVE_CD == 'true' && env.CCACHE_SEED != 'true' }}
       uses: actions/upload-artifact@v7
       with:
-        path: ${{steps.configure.outputs.outdir}}/bootcd-${{steps.images.outputs.tag}}.iso
+        path: ${{steps.configure.outputs.outdir}}/LiberNT-${{steps.images.outputs.tag}}.iso
         archive: false
 
+    # The CI server tests the Debug disk image of every architecture
     - name: Upload LiberNT.img
-      if: ${{ env.BUILD_TYPE == 'debug' && env.CCACHE_SEED != 'true' }}
+      if: ${{ (env.LIVE_CD != 'true' || env.BUILD_TYPE == 'debug') && env.CCACHE_SEED != 'true' }}
       uses: actions/upload-artifact@v7
       with:
         name: LiberNT-img-${{steps.images.outputs.tag}}
         path: ${{steps.configure.outputs.outdir}}/LiberNT.img
-
-    - name: Upload LiberNT.vhd
-      if: ${{ env.BUILD_TYPE == 'debug' && env.CCACHE_SEED != 'true' }}
-      uses: actions/upload-artifact@v7
-      with:
-        name: LiberNT-vhd-${{steps.images.outputs.tag}}
-        path: ${{steps.configure.outputs.outdir}}/LiberNT.vhd
-
-    - name: Upload LiberNT.vhdx
-      if: ${{ env.BUILD_TYPE == 'debug' && env.CCACHE_SEED != 'true' }}
-      uses: actions/upload-artifact@v7
-      with:
-        name: LiberNT-vhdx-${{steps.images.outputs.tag}}
-        path: ${{steps.configure.outputs.outdir}}/LiberNT.vhdx
 
     - name: Check build dependencies
       run: python3 sdk/tools/depcheck.py ${{steps.configure.outputs.outdir}} --mode depfiles --nested --fail-on-gaps
@@ -278,3 +268,20 @@ jobs:
     - name: Build
       shell: cmd
       run: ninja -C ${{steps.configure.outputs.outdir}} -k0
+
+    # The disk image needs ntfsimg, which is not built on a Windows host
+    - name: Name the CD image
+      id: iso
+      if: ${{ matrix.arch == 'i386' || matrix.arch == 'amd64' }}
+      shell: bash
+      run: |
+        ISO=${{steps.configure.outputs.outdir}}/LiberNT-msvc-${{matrix.arch}}-${GITHUB_SHA::11}.iso
+        mv ${{steps.configure.outputs.outdir}}/LiberNT.iso "$ISO"
+        echo "path=$ISO" >> "$GITHUB_OUTPUT"
+
+    - name: Upload the CD image
+      if: ${{ steps.iso.outcome == 'success' }}
+      uses: actions/upload-artifact@v7
+      with:
+        path: ${{steps.iso.outputs.path}}
+        archive: false
