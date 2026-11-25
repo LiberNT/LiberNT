@@ -2853,7 +2853,7 @@ NtUserOpenDesktop(
         return NULL;
     }
 
-    TRACE("Opened desktop %S with handle 0x%p\n", ObjectAttributes->ObjectName->Buffer, Desktop);
+    TRACE("Opened desktop with handle 0x%p\n", Desktop);
 
     IntSetDesktopHandleProtection(Desktop, TRUE);
     return Desktop;
