@@ -578,6 +578,9 @@ MiCreatePebOrTeb(
                                            MI_MEM_RESERVE | MI_MEM_COMMIT, MI_PROT_READWRITE, HighestAddress);
     } while (NT_SUCCESS(MiWaitForMemory(Status, &Attempts)) && Status == STATUS_NO_MEMORY);
 
+    if (NT_SUCCESS(Status))
+        MiSetVadNoChange(MiSpaceOfProcess(Process), Address, TRUE);
+
     *Base = (ULONG_PTR)Address;
     return Status;
 }

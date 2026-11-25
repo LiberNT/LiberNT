@@ -285,6 +285,7 @@ typedef struct _MI_VAD
     BOOLEAN NoExecuteImage;
     BOOLEAN CfgScp;
     BOOLEAN CfgNeutral;
+    BOOLEAN NoChange;
     volatile LONG PteTouched;
     struct _MI_SEGMENT *Segment;
     struct _MI_SEGMENT *CfgPage;
@@ -545,6 +546,7 @@ VOID MiDeletePte(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress, _
 VOID MiDeleteUnclonedPte(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress, _Inout_ PMI_PTE Slot,
                          _In_ ULONG TableFrame, _In_ MI_PTE NewValue);
 PMI_VAD MiVadLocate(_In_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress);
+VOID MiSetVadNoChange(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Base, _In_ BOOLEAN NoChange);
 PMI_VAD MiVadAllocateAndLock(_Inout_ PMI_ADDRESS_SPACE Space);
 PMI_VAD MiVadPopFree(_Inout_ PMI_ADDRESS_SPACE Space);
 BOOLEAN MiVadCacheFree(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PMI_VAD Vad);
