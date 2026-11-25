@@ -111,7 +111,7 @@ AfdStartBufferedSend(PAFD_FCB FCB)
 }
 
 /* The send window owns buffered bytes independently of the caller's IRP. */
-static VOID
+VOID
 AfdFailSendQueue(PAFD_FCB FCB, NTSTATUS Status)
 {
     PLIST_ENTRY Entry;
@@ -119,8 +119,13 @@ AfdFailSendQueue(PAFD_FCB FCB, NTSTATUS Status)
     PIO_STACK_LOCATION IrpSp;
     PAFD_SEND_INFO SendReq;
 
-    FCB->Send.BytesUsed = 0;
-    FCB->SendUrgentEnd = 0;
+    /* The in-flight send's completion owns the window accounting; only
+       reset it once nothing is still in flight into the transport */
+    if (!FCB->SendIrp.InFlightRequest)
+    {
+        FCB->Send.BytesUsed = 0;
+        FCB->SendUrgentEnd = 0;
+    }
     FCB->PollState &= ~AFD_EVENT_SEND;
     FCB->PollState |= AFD_EVENT_ABORT;
     FCB->PollStatus[FD_CLOSE_BIT] = Status;

@@ -270,6 +270,11 @@ typedef struct _AFD_FCB {
     USHORT DisconnectFlags;
     BOOLEAN DisconnectPending;
     LARGE_INTEGER DisconnectTimeout;
+    KTIMER DisconnectTimer;
+    KDPC DisconnectDpc;
+    PIO_WORKITEM DisconnectWorkItem;
+    LONG DisconnectWorkerActive;
+    KEVENT DisconnectWorkerDone;
     PTRANSPORT_ADDRESS LocalAddress, RemoteAddress;
     ULONG ConnectedSourceAddress;
     USHORT ConnectedSource6[8];
@@ -483,6 +488,7 @@ BOOLEAN SignalSocket(PAFD_ACTIVE_POLL Poll OPTIONAL, PIRP _Irp OPTIONAL, PAFD_PO
 
 /* write.c */
 
+VOID AfdFailSendQueue(PAFD_FCB FCB, NTSTATUS Status);
 NTSTATUS NTAPI
 AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
 			    PIO_STACK_LOCATION IrpSp, BOOLEAN Short);
