@@ -562,4 +562,10 @@ BEGIN
     IDS_HOST_LOWSPACE "The LiberNT partition on %s needs %s of free space for the upgrade image."
     IDS_HOST_VOLUMEERRORS "%s has file system errors, so Windows cannot shrink it. Run ""chkdsk %s /f"" as an administrator, restart the computer so that Windows repairs the drive, then start Setup again."
     IDS_HOST_CHECKINGSIZE "Windows is checking how much space %s can give to LiberNT..."
+    IDS_HOST_IMAGENOTE "%s gives part of its space to a new partition, and Setup installs LiberNT there from this image. The computer then restarts into LiberNT.\n\nThis version: %s"
+    IDS_HOST_READY_IMAGE "Setup installs LiberNT from the image (%s) into that partition and adds it to the boot menu, then restarts the computer into LiberNT."
+    IDS_HOST_IMAGEPROCESSTITLE "Installing LiberNT"
+    IDS_HOST_STEP_INSTALLBOOT "Adding LiberNT to the boot menu..."
+    IDS_HOST_INSTALLEDTITLE "LiberNT is installed"
+    IDS_HOST_INSTALLED "Setup installed LiberNT. The computer restarts into LiberNT in a few seconds. Save your work in other apps first, or select Postpone: LiberNT then starts the next time the computer restarts."
 END

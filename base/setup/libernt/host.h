@@ -44,6 +44,12 @@ typedef struct _HOST_PARTITION
 
 typedef BOOL (CALLBACK *PHOST_PROGRESS)(PVOID Context, ULONGLONG Done, ULONGLONG Total);
 
+typedef struct _HOST_BOOT_STORES
+{
+    HKEY Template;
+    HKEY Previous;
+} HOST_BOOT_STORES, *PHOST_BOOT_STORES;
+
 VOID
 HostLog(
     _In_ PCWSTR Format,
@@ -147,6 +153,50 @@ HostInstallSetupBoot(
     _In_ PCWSTR SourceRoot,
     _In_ WORD Machine,
     _In_ PHOST_PARTITION SystemPartition,
+    _In_ PHOST_PARTITION Target);
+
+BOOL
+HostHasInstallImage(
+    _In_ PCWSTR SourceRoot);
+
+DWORD
+HostExtractImageFile(
+    _In_ PCWSTR SourceRoot,
+    _In_z_ PCSTR ImagePath,
+    _In_ PCWSTR OutPath);
+
+DWORD
+HostApplyInstallImage(
+    _In_ PCWSTR SourceRoot,
+    _In_ PHOST_PARTITION Target,
+    _In_opt_ PHOST_PROGRESS Progress,
+    _In_opt_ PVOID Context);
+
+DWORD
+HostApplyInstallSecurity(
+    _In_ PHOST_PARTITION Target);
+
+DWORD
+HostStageBootStores(
+    _In_ PCWSTR SourceRoot,
+    _In_ PHOST_PARTITION SystemPartition,
+    _Out_ PHOST_BOOT_STORES Stores);
+
+VOID
+HostReleaseBootStores(
+    _Inout_ PHOST_BOOT_STORES Stores);
+
+DWORD
+HostInstallImageBoot(
+    _In_ PCWSTR SourceRoot,
+    _In_ WORD Machine,
+    _In_ PHOST_PARTITION SystemPartition,
+    _In_ PHOST_PARTITION Target,
+    _In_ BOOL WindowsFirst,
+    _In_ PHOST_BOOT_STORES Stores);
+
+DWORD
+HostRemoveStageDirectory(
     _In_ PHOST_PARTITION Target);
 
 DWORD

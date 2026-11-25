@@ -57,6 +57,8 @@ typedef struct _HOST_SETUP
     HOST_PARTITION Prepared;
     HOST_PARTITION Store;
     BOOL HavePrepared;
+    BOOL InstallImage;
+    volatile ULONGLONG ProgressTotal;
     volatile LONG SizesReady;
     HWND hwndType;
     UINT Problem;
@@ -228,6 +230,49 @@ GetSourceFileSize(
     return ((ULONGLONG)Data.nFileSizeHigh << 32) | Data.nFileSizeLow;
 }
 
+/* A medium that keeps the system in boot.wim has the file only in its installation image */
+static BOOL
+GetSourceSystemFile(
+    _In_ PCWSTR Relative,
+    _Out_writes_(MAX_PATH) PWSTR Path)
+{
+    CHAR ImagePath[MAX_PATH];
+    WCHAR Name[MAX_PATH];
+    PWCHAR Char;
+    PCHAR Byte;
+
+    if (!Host.InstallImage)
+        return SUCCEEDED(StringCchPrintfW(Path, MAX_PATH, L"%sWindows\\%s", Host.SourceRoot, Relative));
+
+    if (FAILED(StringCchPrintfW(Name, ARRAYSIZE(Name), L"Windows\\%s", Relative)) ||
+        !WideCharToMultiByte(CP_UTF8, 0, Name, -1, ImagePath, sizeof(ImagePath), NULL, NULL) ||
+        !GetTempPathW(MAX_PATH, Path))
+    {
+        return FALSE;
+    }
+    for (Byte = ImagePath; *Byte; Byte++)
+    {
+        if (*Byte == '\\')
+            *Byte = '/';
+    }
+    for (Char = Name; *Char; Char++)
+    {
+        if (*Char == L'\\')
+            *Char = L'-';
+    }
+    return SUCCEEDED(StringCchCatW(Path, MAX_PATH, L"LiberNT-")) &&
+           SUCCEEDED(StringCchCatW(Path, MAX_PATH, Name)) &&
+           HostExtractImageFile(Host.SourceRoot, ImagePath, Path) == ERROR_SUCCESS;
+}
+
+static VOID
+ReleaseSourceSystemFile(
+    _In_ PCWSTR Path)
+{
+    if (Host.InstallImage)
+        DeleteFileW(Path);
+}
+
 static BOOL
 CheckSource(
     _Inout_ PSETUPDATA pSetupData)
@@ -254,27 +299,36 @@ CheckSource(
     }
     Slash[1] = UNICODE_NULL;
 
+    Host.InstallImage = wcslen(Host.SourceRoot) == 3 && GetDriveTypeW(Host.SourceRoot) == DRIVE_CDROM &&
+                        HostHasInstallImage(Host.SourceRoot);
+    Path[0] = UNICODE_NULL;
     if (wcslen(Host.SourceRoot) != 3 || GetDriveTypeW(Host.SourceRoot) != DRIVE_CDROM ||
         HostReadImageSize(Host.SourceRoot, &Host.ImageBytes) != ERROR_SUCCESS ||
-        FAILED(StringCchPrintfW(Path, ARRAYSIZE(Path), L"%sWindows\\System32\\ntoskrnl.exe", Host.SourceRoot)) ||
+        !GetSourceSystemFile(L"System32\\ntoskrnl.exe", Path) ||
         !GetKernelMachine(Path, &KernelMachine) || !IsLiberNtKernel(Path))
     {
+        if (Path[0])
+            ReleaseSourceSystemFile(Path);
         HostLog(L"Setup was not started from a LiberNT image (%s)", Host.SourceRoot);
         HostProblem(NULL, IDS_HOST_NOTMEDIA);
         return FALSE;
     }
+    ReleaseSourceSystemFile(Path);
     if (KernelMachine != Host.Machine || !HostGetRemovableBootName(Host.Machine))
     {
         HostProblem(NULL, IDS_HOST_WRONGARCH);
         return FALSE;
     }
 
-    if (FAILED(StringCchPrintfW(Path, ARRAYSIZE(Path), L"%sWindows\\%s", Host.SourceRoot, UPGRADE_INVENTORY_PATH)) ||
+    Path[0] = UNICODE_NULL;
+    if (!GetSourceSystemFile(UPGRADE_INVENTORY_PATH, Path) ||
         !ReadInventoryVersion(Path, Host.SourceVersion, ARRAYSIZE(Host.SourceVersion)))
     {
         LoadStringW(pSetupData->hInstance, IDS_TYPE_LIBERNT, Host.SourceVersion, ARRAYSIZE(Host.SourceVersion));
     }
-    Host.SourceBuild = ReadInventoryBuild(Path);
+    Host.SourceBuild = Path[0] ? ReadInventoryBuild(Path) : 0;
+    if (Path[0])
+        ReleaseSourceSystemFile(Path);
 
     Host.EspBytes = GetSourceFileSize(L"Windows\\system32\\winload.efi") + HOST_ESP_MARGIN;
     Path[0] = UNICODE_NULL;
@@ -446,7 +500,8 @@ UpdateStartNote(
     if (Upgrade)
         LoadPrintfW(Text, ARRAYSIZE(Text), IDS_HOST_UPGRADENOTE, Host.SourceVersion);
     else
-        LoadPrintfW(Text, ARRAYSIZE(Text), IDS_HOST_INSTALLNOTE, pSetupData->WindowsName, Host.SourceVersion);
+        LoadPrintfW(Text, ARRAYSIZE(Text), Host.InstallImage ? IDS_HOST_IMAGENOTE : IDS_HOST_INSTALLNOTE,
+                    pSetupData->WindowsName, Host.SourceVersion);
     SetDlgItemTextW(hwndDlg, IDC_UPGRADE_NOTE, Text);
     UpdateBootChoice(hwndDlg, pSetupData->WindowsName, Upgrade && Host.BootChoice);
 }
@@ -913,7 +968,7 @@ FillHostSummary(
         FormatDiskSize(Host.Prepared.Length, Size, ARRAYSIZE(Size));
         AppendLine(Text, ARRAYSIZE(Text), IDS_HOST_READY_PREPARED, Size);
         StringCchCatW(Text, ARRAYSIZE(Text), L"\r\n");
-        AppendLine(Text, ARRAYSIZE(Text), IDS_HOST_READY_RESTART, Image);
+        AppendLine(Text, ARRAYSIZE(Text), Host.InstallImage ? IDS_HOST_READY_IMAGE : IDS_HOST_READY_RESTART, Image);
     }
     else
     {
@@ -931,7 +986,7 @@ FillHostSummary(
         AppendLine(Text, ARRAYSIZE(Text), IDS_HOST_READY_CREATE, Size);
         AppendLine(Text, ARRAYSIZE(Text), IDS_READY_DEFAULTOS, Host.WindowsFirst ? pSetupData->WindowsName : LiberNT);
         StringCchCatW(Text, ARRAYSIZE(Text), L"\r\n");
-        AppendLine(Text, ARRAYSIZE(Text), IDS_HOST_READY_RESTART, Image);
+        AppendLine(Text, ARRAYSIZE(Text), Host.InstallImage ? IDS_HOST_READY_IMAGE : IDS_HOST_READY_RESTART, Image);
     }
     SetDlgItemTextW(hwndDlg, IDC_READY_SUMMARY, Text);
 }
@@ -1001,6 +1056,7 @@ ReportProgress(
     _In_ ULONGLONG Total)
 {
     UNREFERENCED_PARAMETER(Context);
+    Host.ProgressTotal = Total;
     if (!Host.hwndProcess)
         return TRUE;
     PostMessageW(Host.hwndProcess, PM_HOST_PROGRESS, Total ? (WPARAM)(Done * 100 / Total) : 0,
@@ -1058,6 +1114,7 @@ static DWORD
 PrepareInstall(
     _In_ PSETUPDATA pSetupData)
 {
+    HOST_BOOT_STORES Stores;
     HOST_PARTITION Target;
     WCHAR Hash[HOST_SHA256_CHARS], Path[MAX_PATH];
     ULONGLONG OriginalEnd, Start, Bytes;
@@ -1099,6 +1156,26 @@ PrepareInstall(
             Error = ERROR_BUFFER_OVERFLOW;
         else
             Error = HostCopyFileVerified(Host.Unattend, Path);
+    }
+    if (Error == ERROR_SUCCESS && Host.InstallImage)
+    {
+        SetStep(IDS_HOST_STEP_COPY);
+        Error = HostStageBootStores(Host.SourceRoot, &Host.System, &Stores);
+        if (Error == ERROR_SUCCESS)
+            Error = HostApplyInstallImage(Host.SourceRoot, &Target, ReportProgress, NULL);
+        if (Error == ERROR_SUCCESS)
+            Error = HostApplyInstallSecurity(&Target);
+        if (Error == ERROR_SUCCESS)
+        {
+            SetStep(IDS_HOST_STEP_INSTALLBOOT);
+            Error = HostInstallImageBoot(Host.SourceRoot, Host.Machine, &Host.System, &Target, Host.WindowsFirst, &Stores);
+        }
+        HostReleaseBootStores(&Stores);
+        if (Error == ERROR_SUCCESS && Host.HavePrepared)
+            HostRemoveSetupBoot(&Host.System);
+        if (Error == ERROR_SUCCESS)
+            HostRemoveStageDirectory(&Target);
+        return Error;
     }
     if (Error == ERROR_SUCCESS)
         Error = CopyAndCheckImage(&Target, Hash);
@@ -1211,6 +1288,8 @@ HostProcessPageProc(
         case SPN_SETACTIVE:
             SetupFrameShowButtons(hwndDlg, FALSE, FALSE, FALSE);
             EnableSetupCancel(GetParent(hwndDlg), FALSE);
+            if (Host.InstallImage && !Host.Upgrade)
+                SetupFrameSetTitle(hwndDlg, IDS_HOST_IMAGEPROCESSTITLE, IDS_HOST_PROCESSSUBTITLE);
             Host.hwndProcess = hwndDlg;
             Host.Error = ERROR_SUCCESS;
             Thread = CreateThread(NULL, 0, HostWorker, pSetupData, 0, NULL);
@@ -1229,7 +1308,7 @@ HostProcessPageProc(
 
         case PM_HOST_PROGRESS:
             SendDlgItemMessageW(hwndDlg, IDC_PROCESSPROGRESS, PBM_SETPOS, wParam, 0);
-            LoadPrintfW(Text, ARRAYSIZE(Text), IDS_HOST_PROGRESS, (ULONGLONG)lParam, Host.ImageBytes / HOST_MEGABYTE);
+            LoadPrintfW(Text, ARRAYSIZE(Text), IDS_HOST_PROGRESS, (ULONGLONG)lParam, Host.ProgressTotal / HOST_MEGABYTE);
             SetDlgItemTextW(hwndDlg, IDC_ITEM, Text);
             return TRUE;
 
@@ -1300,8 +1379,10 @@ HostDonePageProc(
 
             if (Success)
             {
-                SetupFrameSetTitle(hwndDlg, Host.Upgrade ? IDS_HOST_UPGRADEDONETITLE : IDS_HOST_DONETITLE, 0);
-                SetResText(GetDlgItem(hwndDlg, IDC_FINISHTEXT), Host.Upgrade ? IDS_HOST_UPGRADEDONE : IDS_HOST_DONE);
+                SetupFrameSetTitle(hwndDlg, Host.Upgrade ? IDS_HOST_UPGRADEDONETITLE :
+                                   Host.InstallImage ? IDS_HOST_INSTALLEDTITLE : IDS_HOST_DONETITLE, 0);
+                SetResText(GetDlgItem(hwndDlg, IDC_FINISHTEXT), Host.Upgrade ? IDS_HOST_UPGRADEDONE :
+                           Host.InstallImage ? IDS_HOST_INSTALLED : IDS_HOST_DONE);
             }
             else
             {

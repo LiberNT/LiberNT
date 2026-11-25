@@ -18,6 +18,7 @@
 #include "resource.h"
 #include "host.h"
 #include "update.h"
+#include <wimboot.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -37,6 +38,16 @@
 #define HOST_COMPLETE_COMMAND   L"%SystemRoot%\\system32\\lntupdate.exe /complete"
 #define HOST_UPGRADE_LOADER     L"\\" HOST_STAGE_DIRECTORY L"\\" UPDATE_STAGE_LOADER
 #define HOST_UPDATE_STATE       L"\\EFI\\LiberNT\\Boot\\update.state"
+#define HOST_INSTALL_WIM        L"boot.wim"
+#define HOST_INSTALL_INDEX      2
+#define HOST_INSTALL_DIRECTORY  L"Windows"
+#define HOST_INSTALL_TEMPLATE   "Windows/System32/config/BCD-Template"
+#define HOST_INSTALL_STORE_WORK L"LiberNT-Install.bcd"
+#define HOST_LIBERNT_STORE_DIR  L"\\EFI\\LiberNT\\Boot"
+#define HOST_WRITE_CHUNK        (16 * 1024 * 1024)
+#define HOST_PATH_CHARS         1024
+#define HOST_KEPT_ATTRIBUTES    (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM | \
+                                 FILE_ATTRIBUTE_ARCHIVE | FILE_ATTRIBUTE_NOT_CONTENT_INDEXED)
 
 #define EFI_LOAD_OPTION_ACTIVE      0x00000001
 #define EFI_LOAD_OPTION_HEADER_SIZE 6
@@ -2054,4 +2065,541 @@ HostSetCompletionCommand(
         Error = ERROR_INVALID_STATE;
     HostLog(L"Upgrade completion command written to %s: %lu", Target->DeviceName, Error);
     return Error;
+}
+
+typedef struct _HOST_APPLY
+{
+    WCHAR Root[MAX_PATH];
+    PHOST_PROGRESS Progress;
+    PVOID Context;
+    ULONGLONG Done;
+    ULONGLONG Total;
+    ULONG Files;
+    DWORD Error;
+} HOST_APPLY, *PHOST_APPLY;
+
+static void*
+HostWimAllocate(
+    _In_ size_t Size,
+    _In_opt_ void* Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    return HeapAlloc(GetProcessHeap(), 0, Size);
+}
+
+static void
+HostWimFree(
+    _In_ void* Memory,
+    _In_opt_ void* Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    HeapFree(GetProcessHeap(), 0, Memory);
+}
+
+static int
+HostWimRead(
+    _In_ void* Context,
+    _In_ uint64_t Offset,
+    _Out_writes_bytes_(Size) void* Buffer,
+    _In_ size_t Size)
+{
+    return Size <= MAXDWORD && ReadAt((HANDLE)Context, Offset, Buffer, (DWORD)Size) ? 0 : -1;
+}
+
+static VOID
+CloseInstallImage(
+    _In_ HANDLE File,
+    _Inout_ WimCoreCtx* Wim)
+{
+    wimcore_close(Wim);
+    if (File != INVALID_HANDLE_VALUE)
+        CloseHandle(File);
+}
+
+static DWORD
+OpenInstallImage(
+    _In_ PCWSTR SourceRoot,
+    _Out_ PHANDLE File,
+    _Out_ WimCoreCtx* Wim,
+    _Out_ WIMBOOT_IMAGE* Image)
+{
+    static const WimCoreAllocator Allocator = { HostWimAllocate, HostWimFree, NULL };
+    WCHAR Path[MAX_PATH];
+    LARGE_INTEGER Size;
+    DWORD Error = ERROR_SUCCESS;
+
+    wimcore_init(Wim);
+    *File = INVALID_HANDLE_VALUE;
+    if (FAILED(StringCchPrintfW(Path, ARRAYSIZE(Path), L"%s%s", SourceRoot, HOST_INSTALL_WIM)))
+        return ERROR_BUFFER_OVERFLOW;
+
+    *File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_RANDOM_ACCESS, NULL);
+    if (*File == INVALID_HANDLE_VALUE)
+        return GetLastError();
+    if (!GetFileSizeEx(*File, &Size))
+        Error = GetLastError();
+    else if (wimcore_open(Wim, &Allocator, HostWimRead, *File, (uint64_t)Size.QuadPart) != 0 ||
+             WimBootOpenImage(Wim, HOST_INSTALL_INDEX, Image) != WIMBOOT_OK)
+        Error = ERROR_BAD_FORMAT;
+
+    if (Error != ERROR_SUCCESS)
+    {
+        CloseInstallImage(*File, Wim);
+        *File = INVALID_HANDLE_VALUE;
+    }
+    return Error;
+}
+
+BOOL
+HostHasInstallImage(
+    _In_ PCWSTR SourceRoot)
+{
+    WIMBOOT_IMAGE Image;
+    WimCoreCtx Wim;
+    HANDLE File;
+    DWORD Error = OpenInstallImage(SourceRoot, &File, &Wim, &Image);
+
+    if (Error == ERROR_SUCCESS)
+        CloseInstallImage(File, &Wim);
+    HostLog(L"Installation image %u in %s%s: error %lu", HOST_INSTALL_INDEX, SourceRoot, HOST_INSTALL_WIM, Error);
+    return Error == ERROR_SUCCESS;
+}
+
+typedef struct _HOST_FIND
+{
+    PCSTR Path;
+    BOOL Found;
+    uint64_t Size;
+    uint8_t Hash[20];
+} HOST_FIND, *PHOST_FIND;
+
+static int
+FindEntry(
+    _In_ void* Context,
+    _In_ const WIMBOOT_ENTRY* Entry)
+{
+    PHOST_FIND Find = (PHOST_FIND)Context;
+
+    if (Entry->IsDirectory || _stricmp(Entry->Path, Find->Path) != 0)
+        return 0;
+    Find->Found = TRUE;
+    Find->Size = Entry->Size;
+    CopyMemory(Find->Hash, Entry->Hash, sizeof(Find->Hash));
+    return 1;
+}
+
+DWORD
+HostExtractImageFile(
+    _In_ PCWSTR SourceRoot,
+    _In_z_ PCSTR ImagePath,
+    _In_ PCWSTR OutPath)
+{
+    WIMBOOT_IMAGE Image;
+    WimCoreCtx Wim;
+    HOST_FIND Find;
+    PUCHAR Data = NULL;
+    HANDLE File, Out;
+    DWORD Error, Written;
+
+    Error = OpenInstallImage(SourceRoot, &File, &Wim, &Image);
+    if (Error != ERROR_SUCCESS)
+        return Error;
+
+    ZeroMemory(&Find, sizeof(Find));
+    Find.Path = ImagePath;
+    WimBootWalk(&Wim, &Image, FindEntry, &Find);
+    if (!Find.Found)
+        Error = ERROR_FILE_NOT_FOUND;
+    else if (Find.Size > MAXDWORD)
+        Error = ERROR_FILE_TOO_LARGE;
+    else if (Find.Size && !(Data = HeapAlloc(GetProcessHeap(), 0, (SIZE_T)Find.Size)))
+        Error = ERROR_NOT_ENOUGH_MEMORY;
+    else if (Find.Size && wimcore_read_blob_into(&Wim, Find.Hash, Data, (size_t)Find.Size, NULL, NULL, ImagePath) != 0)
+        Error = ERROR_READ_FAULT;
+
+    if (Error == ERROR_SUCCESS)
+    {
+        Out = CreateFileW(OutPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, NULL);
+        if (Out == INVALID_HANDLE_VALUE)
+        {
+            Error = GetLastError();
+        }
+        else
+        {
+            if (Find.Size && (!WriteFile(Out, Data, (DWORD)Find.Size, &Written, NULL) || Written != Find.Size))
+                Error = GetLastError() ? GetLastError() : ERROR_WRITE_FAULT;
+            CloseHandle(Out);
+            if (Error != ERROR_SUCCESS)
+                DeleteFileW(OutPath);
+        }
+    }
+
+    if (Data)
+        HeapFree(GetProcessHeap(), 0, Data);
+    CloseInstallImage(File, &Wim);
+    HostLog(L"%S extracted from the installation image to %s: %lu", ImagePath, OutPath, Error);
+    return Error;
+}
+
+static int
+ApplyEntry(
+    _In_ void* Context,
+    _In_ const WIMBOOT_ENTRY* Entry,
+    _In_reads_bytes_opt_(Entry->Size) const uint8_t* Data)
+{
+    PHOST_APPLY Apply = (PHOST_APPLY)Context;
+    WCHAR Path[HOST_PATH_CHARS];
+    FILETIME Created, Accessed, Written;
+    DWORD Attributes = Entry->Attributes & HOST_KEPT_ATTRIBUTES, Chunk, Count;
+    ULONGLONG Done = 0;
+    SIZE_T Length = wcslen(Apply->Root);
+    HANDLE File;
+    PWCHAR Char;
+
+    ASSERT(Length + 1 < ARRAYSIZE(Path));
+    CopyMemory(Path, Apply->Root, Length * sizeof(WCHAR));
+    Path[Length++] = L'\\';
+    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, Entry->Path, -1, Path + Length, (int)(ARRAYSIZE(Path) - Length)))
+    {
+        Apply->Error = GetLastError();
+        return 1;
+    }
+    for (Char = Path + Length; *Char; Char++)
+    {
+        if (*Char == L'/')
+            *Char = L'\\';
+    }
+
+    if (Entry->IsDirectory)
+    {
+        if ((!CreateDirectoryW(Path, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) ||
+            (Attributes && !SetFileAttributesW(Path, Attributes)))
+        {
+            Apply->Error = GetLastError();
+            HostLog(L"Directory %s cannot be created: %lu", Path, Apply->Error);
+            return 1;
+        }
+        return 0;
+    }
+
+    ASSERT((Entry->Size != 0) == (Data != NULL));
+    File = CreateFileW(Path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                       (Attributes ? Attributes : FILE_ATTRIBUTE_NORMAL) | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+    {
+        Apply->Error = GetLastError();
+        HostLog(L"File %s cannot be created: %lu", Path, Apply->Error);
+        return 1;
+    }
+    while (Done < Entry->Size)
+    {
+        Chunk = (DWORD)min(Entry->Size - Done, (ULONGLONG)HOST_WRITE_CHUNK);
+        if (!WriteFile(File, Data + Done, Chunk, &Count, NULL) || Count != Chunk)
+        {
+            Apply->Error = GetLastError() ? GetLastError() : ERROR_WRITE_FAULT;
+            break;
+        }
+        Done += Chunk;
+    }
+
+    Created.dwLowDateTime = (DWORD)Entry->CreationTime;
+    Created.dwHighDateTime = (DWORD)(Entry->CreationTime >> 32);
+    Accessed.dwLowDateTime = (DWORD)Entry->LastAccessTime;
+    Accessed.dwHighDateTime = (DWORD)(Entry->LastAccessTime >> 32);
+    Written.dwLowDateTime = (DWORD)Entry->LastWriteTime;
+    Written.dwHighDateTime = (DWORD)(Entry->LastWriteTime >> 32);
+    if (Apply->Error == ERROR_SUCCESS && !SetFileTime(File, &Created, &Accessed, &Written))
+        Apply->Error = GetLastError();
+    CloseHandle(File);
+    if (Apply->Error != ERROR_SUCCESS)
+    {
+        HostLog(L"File %s cannot be written: %lu", Path, Apply->Error);
+        return 1;
+    }
+
+    Apply->Done += Entry->Size;
+    Apply->Files++;
+    if (Apply->Progress && !Apply->Progress(Apply->Context, Apply->Done, Apply->Total))
+    {
+        Apply->Error = ERROR_CANCELLED;
+        return 1;
+    }
+    return 0;
+}
+
+DWORD
+HostApplyInstallImage(
+    _In_ PCWSTR SourceRoot,
+    _In_ PHOST_PARTITION Target,
+    _In_opt_ PHOST_PROGRESS Progress,
+    _In_opt_ PVOID Context)
+{
+    WimCoreImageStats Stats;
+    WIMBOOT_IMAGE Image;
+    WimCoreCtx Wim;
+    HOST_APPLY Apply;
+    HANDLE File;
+    DWORD Error;
+    int Result;
+
+    ZeroMemory(&Apply, sizeof(Apply));
+    if (!HostPath(Target->DeviceName, NULL, Apply.Root))
+        return ERROR_BUFFER_OVERFLOW;
+    Error = OpenInstallImage(SourceRoot, &File, &Wim, &Image);
+    if (Error != ERROR_SUCCESS)
+        return Error;
+
+    if (wimcore_query_image_stats(&Wim, HOST_INSTALL_INDEX, &Stats) == 0)
+        Apply.Total = Stats.FileBytes;
+    Apply.Progress = Progress;
+    Apply.Context = Context;
+    Result = WimBootExtract(&Wim, &Image, ApplyEntry, &Apply);
+    switch (Result)
+    {
+        case WIMBOOT_OK:
+            break;
+        case WIMBOOT_STOPPED:
+            Error = Apply.Error;
+            break;
+        case WIMBOOT_NO_MEMORY:
+            Error = ERROR_NOT_ENOUGH_MEMORY;
+            break;
+        case WIMBOOT_IO_ERROR:
+            Error = ERROR_READ_FAULT;
+            break;
+        default:
+            Error = ERROR_BAD_FORMAT;
+            break;
+    }
+    ASSERT(Result == WIMBOOT_OK || Error != ERROR_SUCCESS);
+
+    CloseInstallImage(File, &Wim);
+    HostLog(L"Image %u applied to %s: %lu files, %I64u of %I64u bytes, error %lu",
+            HOST_INSTALL_INDEX, Target->DeviceName, Apply.Files, Apply.Done, Apply.Total, Error);
+    return Error;
+}
+
+DWORD
+HostApplyInstallSecurity(
+    _In_ PHOST_PARTITION Target)
+{
+    WCHAR Root[MAX_PATH];
+    NTSTATUS Status;
+
+    if (FAILED(StringCchPrintfW(Root, ARRAYSIZE(Root), L"%s\\", Target->DeviceName)))
+        return ERROR_BUFFER_OVERFLOW;
+    Status = InstallApplyFileSecurity(Root, HOST_INSTALL_DIRECTORY, TRUE);
+    HostLog(L"File security applied to %s: 0x%08lx", Root, Status);
+    return NT_SUCCESS(Status) ? ERROR_SUCCESS : RtlNtStatusToDosError(Status);
+}
+
+static DWORD
+HostAddBootOption(
+    _In_ PHOST_PARTITION SystemPartition,
+    _In_ PCWSTR FilePath,
+    _In_ PCWSTR Description)
+{
+    UCHAR Option[EFI_LOAD_OPTION_MAX];
+    USHORT Numbers[16], Number = 0, Order[EFI_BOOT_ORDER_MAX / sizeof(USHORT) + 1];
+    WCHAR Name[16];
+    DWORD OptionSize, Length = 0, Error;
+    ULONG Count, Index;
+    BOOLEAN Enabled;
+
+    RtlAdjustPrivilege(SE_SYSTEM_ENVIRONMENT_PRIVILEGE, TRUE, FALSE, &Enabled);
+    Error = BuildLoadOption(SystemPartition, FilePath, Description, Option, &OptionSize);
+    if (Error == ERROR_SUCCESS)
+        Error = FindLoadOptions(SystemPartition, FilePath, Numbers, ARRAYSIZE(Numbers), &Count, &Number);
+    if (Error != ERROR_SUCCESS)
+        return Error;
+
+    if (Count)
+    {
+        Number = Numbers[0];
+    }
+    else
+    {
+        StringCchPrintfW(Name, ARRAYSIZE(Name), L"Boot%04X", Number);
+        if (!SetFirmwareVariable(Name, Option, OptionSize))
+            return GetLastError();
+    }
+
+    if (!GetFirmwareVariable(L"BootOrder", Order + 1, sizeof(Order) - sizeof(USHORT), &Length))
+    {
+        if (GetLastError() != ERROR_ENVVAR_NOT_FOUND)
+            return GetLastError();
+        Length = 0;
+    }
+    for (Index = 0; Index < Length / sizeof(USHORT); Index++)
+    {
+        if (Order[Index + 1] == Number)
+            break;
+    }
+    if (Index == Length / sizeof(USHORT))
+    {
+        Order[0] = Number;
+        if (!SetFirmwareVariable(L"BootOrder", Order, Length + sizeof(USHORT)))
+            return GetLastError();
+    }
+    HostLog(L"Boot%04X (%s) is a boot option, %s", Number, FilePath, Count ? L"existing" : L"new");
+    return ERROR_SUCCESS;
+}
+
+static VOID
+DeleteBcdWork(
+    _In_ PCWSTR Path)
+{
+    static const PCWSTR LogSuffixes[] = { L".LOG", L".LOG1", L".LOG2" };
+    WCHAR Log[MAX_PATH];
+    UINT Index;
+
+    for (Index = 0; Index < ARRAYSIZE(LogSuffixes); Index++)
+    {
+        if (SUCCEEDED(StringCchPrintfW(Log, ARRAYSIZE(Log), L"%s%s", Path, LogSuffixes[Index])))
+            DeleteFileW(Log);
+    }
+    SetFileAttributesW(Path, FILE_ATTRIBUTE_NORMAL);
+    DeleteFileW(Path);
+}
+
+static BOOL
+GetBootStorePaths(
+    _Out_writes_(MAX_PATH) PWSTR Work,
+    _Out_writes_(MAX_PATH) PWSTR Old,
+    _Out_writes_(MAX_PATH) PWSTR Saved)
+{
+    return GetTempPathW(MAX_PATH, Work) &&
+           SUCCEEDED(StringCchCopyW(Old, MAX_PATH, Work)) &&
+           SUCCEEDED(StringCchCopyW(Saved, MAX_PATH, Work)) &&
+           SUCCEEDED(StringCchCatW(Work, MAX_PATH, HOST_INSTALL_STORE_WORK)) &&
+           SUCCEEDED(StringCchCatW(Old, MAX_PATH, L"LiberNT-Previous.bcd")) &&
+           SUCCEEDED(StringCchCatW(Saved, MAX_PATH, L"LiberNT-Install.saved.bcd"));
+}
+
+VOID
+HostReleaseBootStores(
+    _Inout_ PHOST_BOOT_STORES Stores)
+{
+    WCHAR Work[MAX_PATH], Old[MAX_PATH], Saved[MAX_PATH];
+
+    if (Stores->Template)
+        RegCloseKey(Stores->Template);
+    if (Stores->Previous)
+        RegCloseKey(Stores->Previous);
+    ZeroMemory(Stores, sizeof(*Stores));
+    if (GetBootStorePaths(Work, Old, Saved))
+    {
+        DeleteBcdWork(Work);
+        DeleteBcdWork(Old);
+        DeleteFileW(Saved);
+    }
+}
+
+/* A hive file loads only once no scanner holds it open, so the stores load before the system files are written */
+DWORD
+HostStageBootStores(
+    _In_ PCWSTR SourceRoot,
+    _In_ PHOST_PARTITION SystemPartition,
+    _Out_ PHOST_BOOT_STORES Stores)
+{
+    WCHAR Work[MAX_PATH], Old[MAX_PATH], Saved[MAX_PATH], Store[MAX_PATH];
+    DWORD Error;
+
+    ZeroMemory(Stores, sizeof(*Stores));
+    if (!GetBootStorePaths(Work, Old, Saved) || !HostPath(SystemPartition->DeviceName, HOST_LIBERNT_STORE, Store))
+        return ERROR_BUFFER_OVERFLOW;
+    HostReleaseBootStores(Stores);
+
+    Error = HostExtractImageFile(SourceRoot, HOST_INSTALL_TEMPLATE, Work);
+    if (Error == ERROR_SUCCESS)
+    {
+        Error = OpenBcdStoreFile(Work, &Stores->Template);
+        if (Error != ERROR_SUCCESS)
+        {
+            Stores->Template = NULL;
+            HostLog(L"The boot configuration template %s cannot be loaded: %lu", Work, Error);
+        }
+    }
+    if (Error == ERROR_SUCCESS && GetFileAttributesW(Store) != INVALID_FILE_ATTRIBUTES &&
+        (!CopyFileW(Store, Old, FALSE) || !SetFileAttributesW(Old, FILE_ATTRIBUTE_NORMAL) ||
+         OpenBcdStoreFile(Old, &Stores->Previous) != ERROR_SUCCESS))
+    {
+        Stores->Previous = NULL;
+        HostLog(L"The boot configuration %s cannot be read; its entries are not kept", Store);
+    }
+
+    if (Error != ERROR_SUCCESS)
+        HostReleaseBootStores(Stores);
+    return Error;
+}
+
+DWORD
+HostInstallImageBoot(
+    _In_ PCWSTR SourceRoot,
+    _In_ WORD Machine,
+    _In_ PHOST_PARTITION SystemPartition,
+    _In_ PHOST_PARTITION Target,
+    _In_ BOOL WindowsFirst,
+    _In_ PHOST_BOOT_STORES Stores)
+{
+    BYTE SystemDevice[BCD_DEVICE_ELEMENT_MAX], OsDevice[BCD_DEVICE_ELEMENT_MAX];
+    WCHAR Store[MAX_PATH], Source[MAX_PATH], Destination[MAX_PATH];
+    WCHAR Work[MAX_PATH], Old[MAX_PATH], Saved[MAX_PATH];
+    DWORD SystemSize = sizeof(SystemDevice), OsSize = sizeof(OsDevice), Error;
+    PCWSTR BootName = HostGetRemovableBootName(Machine);
+
+    ASSERT(Stores->Template != NULL);
+    if (!BootName)
+        return ERROR_NOT_SUPPORTED;
+    if (FAILED(StringCchPrintfW(Source, ARRAYSIZE(Source), L"%sefi\\boot\\%s", SourceRoot, BootName)) ||
+        !HostPath(SystemPartition->DeviceName, HOST_LIBERNT_MANAGER, Destination) ||
+        !HostPath(SystemPartition->DeviceName, HOST_LIBERNT_STORE, Store) ||
+        !GetBootStorePaths(Work, Old, Saved))
+    {
+        return ERROR_BUFFER_OVERFLOW;
+    }
+
+    Error = EnsureDirectory(SystemPartition->DeviceName, HOST_LIBERNT_STORE_DIR);
+    if (Error == ERROR_SUCCESS)
+        Error = HostCopyFileVerified(Source, Destination);
+    if (Error == ERROR_SUCCESS)
+        Error = BuildBcdPartitionDevice(&SystemPartition->PartitionId, &SystemPartition->DiskId, SystemDevice, &SystemSize);
+    if (Error == ERROR_SUCCESS)
+        Error = BuildBcdPartitionDevice(&Target->PartitionId, &Target->DiskId, OsDevice, &OsSize);
+    if (Error == ERROR_SUCCESS)
+        Error = WriteInstalledBootEntries(Stores->Template, Stores->Previous, SystemDevice, SystemSize, OsDevice, OsSize);
+    if (Error == ERROR_SUCCESS)
+    {
+        DeleteFileW(Saved);
+        Error = RegSaveKeyExW(Stores->Template, Saved, NULL, REG_LATEST_FORMAT);
+        if (Error != ERROR_SUCCESS)
+            HostLog(L"The boot configuration cannot be saved to %s: %lu", Saved, Error);
+    }
+    if (Error == ERROR_SUCCESS)
+        Error = HostCopyFileVerified(Saved, Store);
+    HostLog(L"Boot configuration of the installed system written to %s: %lu", Store, Error);
+
+    if (Error == ERROR_SUCCESS)
+        Error = HostAddBootOption(SystemPartition, HOST_LIBERNT_MANAGER, HOST_LIBERNT_DESCRIPTION);
+    if (Error == ERROR_SUCCESS)
+        Error = HostSetBootManagerFirst(WindowsFirst);
+    if (Error == ERROR_SUCCESS)
+        Error = HostSetBootNext(SystemPartition, HOST_LIBERNT_MANAGER, HOST_LIBERNT_DESCRIPTION);
+    return Error;
+}
+
+DWORD
+HostRemoveStageDirectory(
+    _In_ PHOST_PARTITION Target)
+{
+    WCHAR Path[MAX_PATH];
+
+    DeleteStageFile(Target, HOST_SETUP_FILE);
+    DeleteStageFile(Target, HOST_STAGE_IMAGE);
+    if (!HostPath(Target->DeviceName, L"\\" HOST_STAGE_DIRECTORY, Path))
+        return ERROR_BUFFER_OVERFLOW;
+    SetFileAttributesW(Path, FILE_ATTRIBUTE_NORMAL);
+    if (!RemoveDirectoryW(Path) && GetLastError() != ERROR_FILE_NOT_FOUND)
+        return GetLastError();
+    return ERROR_SUCCESS;
 }
