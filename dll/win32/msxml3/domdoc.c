@@ -93,6 +93,10 @@ struct domdoc
     VARIANT_BOOL async;
     VARIANT_BOOL resolving;
     HRESULT error;
+#ifdef __REACTOS__
+    int error_line;
+    int error_linepos;
+#endif
 
     struct domnode *node;
 
@@ -287,7 +291,12 @@ static HRESULT domdoc_load_from_stream(domdoc *doc, ISequentialStream *stream)
     }
 
     hr = IStream_Seek(hstream, zero, STREAM_SEEK_SET, NULL);
+#ifdef __REACTOS__
+    hr = parse_stream_ex((ISequentialStream *)hstream, false, doc->node->properties, &node,
+            &doc->error_line, &doc->error_linepos);
+#else
     hr = parse_stream((ISequentialStream *)hstream, false, doc->node->properties, &node);
+#endif
     IStream_Release(hstream);
 
     if (!node)
@@ -1389,7 +1398,11 @@ static HRESULT domdoc_onDataAvailable(void *obj, char *ptr, DWORD len)
     HRESULT hr;
 
     stream_wrapper_create(ptr, len, &stream);
+#ifdef __REACTOS__
+    hr = parse_stream_ex(stream, false, doc->node->properties, &node, &doc->error_line, &doc->error_linepos);
+#else
     hr = parse_stream(stream, false, doc->node->properties, &node);
+#endif
     ISequentialStream_Release(stream);
 
     if (hr == S_OK)
@@ -1634,7 +1647,12 @@ static HRESULT WINAPI domdoc_get_parseError(IXMLDOMDocument3 *iface, IXMLDOMPars
     if (doc->error)
         error_string = SysAllocString(L"error");
 
+#ifdef __REACTOS__
+    *obj = create_parseError(doc->error, NULL, error_string, NULL,
+            doc->error ? doc->error_line : 0, doc->error ? doc->error_linepos : 0, 0);
+#else
     *obj = create_parseError(doc->error, NULL, error_string, NULL, 0, 0, 0);
+#endif
     if (!*obj) return E_OUTOFMEMORY;
     return S_OK;
 }
@@ -1708,7 +1726,11 @@ static HRESULT WINAPI domdoc_loadXML(IXMLDOMDocument3 *iface, BSTR data, VARIANT
 
         if (SUCCEEDED(hr = stream_wrapper_create(ptr, lstrlenW(ptr) * sizeof(WCHAR), &stream)))
         {
+#ifdef __REACTOS__
+            hr = parse_stream_ex(stream, true, doc->node->properties, &node, &doc->error_line, &doc->error_linepos);
+#else
             hr = parse_stream(stream, true, doc->node->properties, &node);
+#endif
             ISequentialStream_Release(stream);
         }
 
@@ -1729,6 +1751,8 @@ static HRESULT WINAPI domdoc_loadXML(IXMLDOMDocument3 *iface, BSTR data, VARIANT
         attach_doc_node(doc, node);
 #ifdef __REACTOS__
         doc->error = E_SAX_MISSINGROOT;
+        doc->error_line = 0;
+        doc->error_linepos = 0;
 #endif
 
         hr = S_FALSE;

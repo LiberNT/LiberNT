@@ -479,6 +479,8 @@ struct saxreader
     int line;
     int column;
     bool no_dispatch;
+    int error_line;
+    int error_column;
 #endif
 };
 
@@ -916,6 +918,11 @@ struct saxlocator
 
     ISequentialStream *stream;
     bool eos;
+#ifdef __REACTOS__
+    bool duplicate_attribute;
+    bool error_position_set;
+    struct text_position error_position;
+#endif
 
     struct
     {
@@ -3912,7 +3919,14 @@ static void saxreader_add_attribute(struct saxlocator *locator, const struct par
         return;
 
     if (saxreader_has_attribute(locator, name->qname))
+#ifdef __REACTOS__
+    {
+        locator->duplicate_attribute = true;
+        return;
+    }
+#else
         return saxreader_set_error(locator, E_SAX_DUPLICATEATTRIBUTE);
+#endif
 
     if (!saxreader_array_reserve(locator, (void **)&locator->attributes.entries, &locator->attributes.capacity,
             locator->attributes.count + 1, sizeof(*locator->attributes.entries)))
@@ -4435,6 +4449,14 @@ static void saxreader_parse_starttag(struct saxlocator *locator)
         saxreader_parse_attribute(locator, element);
     }
 
+#ifdef __REACTOS__
+    if (locator->duplicate_attribute)
+    {
+        locator->duplicate_attribute = false;
+        saxreader_set_error(locator, E_SAX_DUPLICATEATTRIBUTE);
+    }
+
+#endif
     /* Append default attributes from DTD. */
     saxreader_add_default_attributes(locator, element);
 
@@ -4489,7 +4511,15 @@ static void saxreader_parse_endtag(struct saxlocator *locator)
             saxlocator_end_element(locator, &position, element);
 #endif
         else
+#ifdef __REACTOS__
+        {
             hr = E_SAX_ENDTAGMISMATCH;
+            locator->error_position = position;
+            locator->error_position_set = true;
+        }
+#else
+            hr = E_SAX_ENDTAGMISMATCH;
+#endif
 
         list_remove(&element->entry);
         saxreader_free_element(element);
@@ -6139,6 +6169,16 @@ static void saxreader_detect_encoding(struct saxlocator *locator, bool force_utf
     }
 }
 
+#ifdef __REACTOS__
+void saxreader_get_error_position(ISAXXMLReader *iface, int *line, int *column)
+{
+    struct saxreader *reader = impl_from_ISAXXMLReader(iface);
+
+    *line = reader->error_line;
+    *column = reader->error_column;
+}
+
+#endif
 static HRESULT saxreader_parse_stream(struct saxreader *reader, ISequentialStream *stream,
         bool force_utf16, bool vbInterface)
 {
@@ -6150,12 +6190,18 @@ static HRESULT saxreader_parse_stream(struct saxreader *reader, ISequentialStrea
 
 #ifdef __REACTOS__
     reader->locator = locator;
+    reader->error_line = 0;
+    reader->error_column = 0;
 #endif
 
     while (locator->state != SAX_PARSER_EOF)
     {
         if (locator->status != S_OK)
         {
+#ifdef __REACTOS__
+            reader->error_line = locator->error_position_set ? locator->error_position.line : locator->buffer.position.line;
+            reader->error_column = locator->error_position_set ? locator->error_position.column : locator->buffer.position.column;
+#endif
             saxreader_fatal_error(locator);
             break;
         }

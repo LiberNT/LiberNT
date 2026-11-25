@@ -300,6 +300,11 @@ extern HRESULT node_clone_domnode(struct domnode *, bool, struct domnode **);
 extern HRESULT parse_stream(ISequentialStream *stream, bool utf16, const struct domdoc_properties *properties,
         struct domnode **tree);
 #ifdef __REACTOS__
+extern HRESULT parse_stream_ex(ISequentialStream *stream, bool utf16, const struct domdoc_properties *properties,
+        struct domnode **tree, int *line, int *column);
+extern void saxreader_get_error_position(ISAXXMLReader *reader, int *line, int *column);
+#endif
+#ifdef __REACTOS__
 extern bool domnode_is_sax_building(const struct domnode *node);
 #endif
 extern void dump_doc_refcounts(struct domnode *node);

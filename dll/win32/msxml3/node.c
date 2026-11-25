@@ -4923,13 +4923,28 @@ static void parse_context_cleanup(struct parse_context *c)
         ISAXXMLReaderExtension_Release(c->reader_extension);
 }
 
+#ifdef __REACTOS__
 HRESULT parse_stream(ISequentialStream *stream, bool utf16, const struct domdoc_properties *properties, struct domnode **tree)
+{
+    int line, column;
+
+    return parse_stream_ex(stream, utf16, properties, tree, &line, &column);
+}
+
+HRESULT parse_stream_ex(ISequentialStream *stream, bool utf16, const struct domdoc_properties *properties,
+        struct domnode **tree, int *line, int *column)
+#else
+HRESULT parse_stream(ISequentialStream *stream, bool utf16, const struct domdoc_properties *properties, struct domnode **tree)
+#endif
 {
     struct parse_context context;
     HRESULT hr;
     VARIANT v;
 
     *tree = NULL;
+#ifdef __REACTOS__
+    *line = *column = 0;
+#endif
 
     if (FAILED(hr = parse_context_init(&context, properties)))
         return hr;
@@ -4950,6 +4965,12 @@ HRESULT parse_stream(ISequentialStream *stream, bool utf16, const struct domdoc_
         *tree = context.root;
         context.root = NULL;
     }
+#ifdef __REACTOS__
+    else
+    {
+        saxreader_get_error_position(context.reader, line, column);
+    }
+#endif
 
     parse_context_cleanup(&context);
 
