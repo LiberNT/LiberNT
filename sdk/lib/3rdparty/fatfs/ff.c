@@ -3718,7 +3718,11 @@ static FRESULT mount_volume (	/* FR_OK(0): successful, !=0: an error occurred */
 
 		if (ld_16(fs->win + BPB_FSVerEx) != 0x100) return FR_NO_FILESYSTEM;	/* Check exFAT version (must be version 1.0) */
 
+#ifdef __REACTOS__
+		if (fs->win[BPB_BytsPerSecEx] > 12 || 1 << fs->win[BPB_BytsPerSecEx] != SS(fs)) {
+#else
 		if (1 << fs->win[BPB_BytsPerSecEx] != SS(fs)) {	/* (BPB_BytsPerSecEx must be equal to the physical sector size) */
+#endif
 			return FR_NO_FILESYSTEM;
 		}
 
@@ -3730,6 +3734,9 @@ static FRESULT mount_volume (	/* FR_OK(0): successful, !=0: an error occurred */
 		fs->n_fats = fs->win[BPB_NumFATsEx];			/* Number of FATs */
 		if (fs->n_fats != 1) return FR_NO_FILESYSTEM;	/* (Supports only 1 FAT) */
 
+#ifdef __REACTOS__
+		if (fs->win[BPB_SecPerClusEx] > 15) return FR_NO_FILESYSTEM;
+#endif
 		fs->csize = 1 << fs->win[BPB_SecPerClusEx];		/* Cluster size */
 		if (fs->csize == 0)	return FR_NO_FILESYSTEM;	/* (Must be 1..32768 sectors) */
 
