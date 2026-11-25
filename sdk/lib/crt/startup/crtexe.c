@@ -220,6 +220,11 @@ __tmainCRTStartup (void)
 #endif
 #endif
 
+#ifdef __REACTOS__
+  if (!__libernt_host_check ())
+    ExitProcess (ERROR_NOT_SUPPORTED);
+#endif
+
   if (mingw_app_type)
     GetStartupInfo (&StartupInfo);
   {

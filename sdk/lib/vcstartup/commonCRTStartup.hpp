@@ -18,6 +18,8 @@
 // Defined in winnt.h
 #define FAST_FAIL_FATAL_APP_EXIT 7
 
+extern "C" int __cdecl __libernt_host_check(void);
+
 int __cdecl main(int, char**, char**);
 extern "C" int __cdecl wmain(int, wchar_t**, wchar_t**);
 
@@ -69,6 +71,11 @@ template<typename Tmain>
 static __declspec(noinline) int __cdecl __commonCRTStartup()
 {
     int exitCode = 0;
+
+    if (!__libernt_host_check())
+    {
+        ExitProcess(ERROR_NOT_SUPPORTED);
+    }
 
     if (!__scrt_initialize())
     {

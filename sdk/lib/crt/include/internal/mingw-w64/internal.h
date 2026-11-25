@@ -175,4 +175,8 @@ _CRTIMP extern  char * _wcmdln;
 #endif
 
 #pragma pack(pop)
+#ifdef __REACTOS__
+int __cdecl __libernt_host_check(void);
+#endif
+
 #endif

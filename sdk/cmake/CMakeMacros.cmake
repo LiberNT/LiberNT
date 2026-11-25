@@ -566,7 +566,7 @@ if(ENABLE_KERNEL_UBSAN)
 endif()
 
 function(set_module_type MODULE TYPE)
-    cmake_parse_arguments(__module "UNICODE" "IMAGEBASE;KMDF_VERSION;KMDF_MINIMUM_VERSION" "ENTRYPOINT" ${ARGN})
+    cmake_parse_arguments(__module "UNICODE;ANYHOST;HOSTBOUND" "IMAGEBASE;KMDF_VERSION;KMDF_MINIMUM_VERSION" "ENTRYPOINT" ${ARGN})
 
     if(__module_UNPARSED_ARGUMENTS)
         message(STATUS "set_module_type : unparsed arguments ${__module_UNPARSED_ARGUMENTS}, module : ${MODULE}")
@@ -606,6 +606,11 @@ function(set_module_type MODULE TYPE)
         if(ENABLE_KERNEL_UBSAN AND NOT MODULE MATCHES "^(kd|bootvid)")
             cmake_language(EVAL CODE "cmake_language(DEFER CALL add_kernel_module_ubsan [[${MODULE}]] [[${TYPE}]])")
         endif()
+    endif()
+
+    if(TYPE MATCHES "^(win32cui|win32gui|win32dll|win32ocx|cpl)$" AND NOT __module_HOSTBOUND AND
+       (__module_ANYHOST OR CMAKE_CURRENT_SOURCE_DIR MATCHES "/modules/rostests(/|$)"))
+        target_sources(${MODULE} PRIVATE $<TARGET_OBJECTS:libernt_anyhost>)
     endif()
 
     # Set entry point

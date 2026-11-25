@@ -54,6 +54,7 @@ list(APPEND VCSTARTUP_SOURCES
     WinMainCRTStartup.cpp
     wmainCRTStartup.cpp
     wWinMainCRTStartup.cpp
+    ${REACTOS_SOURCE_DIR}/sdk/lib/crt/startup/hostcheck.c
 )
 
 # Startup library (linked into executables, linking to ucrtbase)

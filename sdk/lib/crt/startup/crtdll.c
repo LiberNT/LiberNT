@@ -153,9 +153,19 @@ static WINBOOL __DllMainCRTStartup (HANDLE, DWORD, LPVOID);
 WINBOOL WINAPI DllMainCRTStartup (HANDLE, DWORD, LPVOID);
 int __mingw_init_ehandler (void);
 
+#ifdef __REACTOS__
+static WINBOOL __libernt_host_refused;
+#endif
+
 WINBOOL WINAPI
 DllMainCRTStartup (HANDLE hDllHandle, DWORD dwReason, LPVOID lpreserved)
 {
+#ifdef __REACTOS__
+    if (dwReason == DLL_PROCESS_ATTACH && !__libernt_host_check ())
+        __libernt_host_refused = TRUE;
+    if (__libernt_host_refused)
+        return FALSE;
+#endif
     mingw_app_type = 0;
     if (dwReason == DLL_PROCESS_ATTACH)
     {

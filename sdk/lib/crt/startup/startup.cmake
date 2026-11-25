@@ -26,6 +26,7 @@ list(APPEND CRT_STARTUP_SOURCE
     startup/crt0_w.c
     startup/dllentry.c
     startup/reactos.c
+    startup/hostcheck.c
 )
 
 if(MSVC)
