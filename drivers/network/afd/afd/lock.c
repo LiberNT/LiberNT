@@ -758,6 +758,23 @@ NTSTATUS NTAPI UnlockAndMaybeComplete
 }
 
 
+NTSTATUS AfdCopyToUserBuffer(PIRP Irp, PVOID Source, ULONG Length)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    _SEH2_TRY
+    {
+        RtlCopyMemory(Irp->UserBuffer, Source, Length);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
 NTSTATUS LostSocket( PIRP Irp ) {
     NTSTATUS Status = STATUS_FILE_CLOSED;
     AFD_DbgPrint(MIN_TRACE,("Called.\n"));

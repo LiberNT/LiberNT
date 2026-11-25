@@ -21,6 +21,7 @@ AfdGetConnectOptions(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     PFILE_OBJECT FileObject = IrpSp->FileObject;
     PAFD_FCB FCB = FileObject->FsContext;
     UINT BufferSize = IrpSp->Parameters.DeviceIoControl.OutputBufferLength;
+    NTSTATUS Status;
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
@@ -36,11 +37,9 @@ AfdGetConnectOptions(PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
     if (FCB->FilledConnectOptions < BufferSize) BufferSize = FCB->FilledConnectOptions;
 
-    RtlCopyMemory(Irp->UserBuffer,
-                  FCB->ConnectOptions,
-                  BufferSize);
+    Status = AfdCopyToUserBuffer(Irp, FCB->ConnectOptions, BufferSize);
 
-    return UnlockAndMaybeComplete(FCB, STATUS_SUCCESS, Irp, BufferSize);
+    return UnlockAndMaybeComplete(FCB, Status, Irp, NT_SUCCESS(Status) ? BufferSize : 0);
 }
 
 NTSTATUS
@@ -133,6 +132,7 @@ AfdGetConnectData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     PFILE_OBJECT FileObject = IrpSp->FileObject;
     PAFD_FCB FCB = FileObject->FsContext;
     UINT BufferSize = IrpSp->Parameters.DeviceIoControl.OutputBufferLength;
+    NTSTATUS Status;
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
@@ -148,11 +148,9 @@ AfdGetConnectData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
     if (FCB->FilledConnectData < BufferSize) BufferSize = FCB->FilledConnectData;
 
-    RtlCopyMemory(Irp->UserBuffer,
-                  FCB->ConnectData,
-                  BufferSize);
+    Status = AfdCopyToUserBuffer(Irp, FCB->ConnectData, BufferSize);
 
-    return UnlockAndMaybeComplete(FCB, STATUS_SUCCESS, Irp, BufferSize);
+    return UnlockAndMaybeComplete(FCB, Status, Irp, NT_SUCCESS(Status) ? BufferSize : 0);
 }
 
 NTSTATUS
@@ -854,7 +852,24 @@ AfdStreamSocketSuperConnect(
          if (!FCB->OnConnectSendBuffer)
              return UnlockAndMaybeComplete(FCB, STATUS_NO_MEMORY, Irp, 0);
 
-         RtlCopyMemory(FCB->OnConnectSendBuffer, Irp->UserBuffer, BufferSize);
+         Status = STATUS_SUCCESS;
+         _SEH2_TRY
+         {
+             RtlCopyMemory(FCB->OnConnectSendBuffer, Irp->UserBuffer, BufferSize);
+         }
+         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+         {
+             Status = _SEH2_GetExceptionCode();
+         }
+         _SEH2_END;
+
+         if (!NT_SUCCESS(Status))
+         {
+             ExFreePoolWithTag(FCB->OnConnectSendBuffer, TAG_AFD_SUPER_CONNECT_BUFFER);
+             FCB->OnConnectSendBuffer = NULL;
+             FCB->OnConnectSendBufferSize = 0;
+             return UnlockAndMaybeComplete(FCB, Status, Irp, 0);
+         }
     }
 
     if (FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS)
