@@ -187,6 +187,12 @@ WddmBridgeRequireReady(VOID)
     return STATUS_NOT_SUPPORTED;
 }
 
+BOOLEAN
+WddmBridgeIsProviderBound(VOID)
+{
+    return FALSE;
+}
+
 VOID
 WddmBridgeInitCallbacks(
     _Out_ PREACTOS_WIN32K_DXGKRNL_INTERFACE Interface)

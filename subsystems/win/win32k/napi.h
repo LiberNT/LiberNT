@@ -27,6 +27,17 @@ enum
 };
 #undef SVC_
 
+#define SVC_(name, argcount) "Nt" #name,
+PCSTR Win32kServiceNames[] = {
+#ifdef _WIN64
+#include "w32ksvc64.h"
+#else
+#include "w32ksvc32.h"
+#endif
+};
+#undef SVC_
+C_ASSERT(ARRAYSIZE(Win32kServiceNames) == Win32kServiceCount);
+
 #define SVC_(name, argcount) argcount * sizeof(void *),
 #define SVC_FAILURE_(name, failure) [Win32kServiceCount + Win32kService##name] = failure,
 UCHAR Win32kSSPT[2 * Win32kServiceCount] = {

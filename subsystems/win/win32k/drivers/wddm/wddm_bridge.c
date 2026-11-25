@@ -30,6 +30,8 @@
 #include <ntifs.h>
 #include <windef.h>
 #include <d3dkmthk.h>
+#include <ntimage.h>
+#include <ndk/rtlfuncs.h>
 #include <libernt/rddm/rxgkinterface.h>
 #include <libernt/rddm/rxgkioctl.h>
 #include "wddm_bridge.h"
@@ -79,6 +81,13 @@ static NTSTATUS g_WddmBridgeStatus = STATUS_DEVICE_NOT_CONNECTED;
 static REACTOS_WIN32K_DXGKRNL_INTERFACE g_DxgkrnlInterface;
 static BOOLEAN g_DxgkrnlInterfaceValid = FALSE;
 static ULONG g_DxgkrnlInterfaceVersion = 0;
+
+static PFILE_OBJECT g_DxgkrnlProviderFileObject = NULL;
+
+extern ULONG_PTR Win32kSSDT[];
+extern UCHAR Win32kSSPT[];
+extern PCSTR Win32kServiceNames[];
+extern ULONG Win32kNumberOfSysCalls;
 
 static FAST_MUTEX g_WddmBridgeLock;
 static volatile LONG g_WddmBridgeLockState = 0;
@@ -244,6 +253,228 @@ WddmBridgeDropReference(VOID)
                FileObject);
         ObDereferenceObject(FileObject);
     }
+}
+
+/* TODO: a D3DKMT service the provider does not export answers STATUS_NOT_SUPPORTED, not the status Windows gives */
+static NTSTATUS NTAPI WddmBridgeUnboundService0(VOID)
+{
+    return STATUS_NOT_SUPPORTED;
+}
+
+static NTSTATUS NTAPI WddmBridgeUnboundService1(_In_ ULONG_PTR A0)
+{
+    UNREFERENCED_PARAMETER(A0);
+    return STATUS_NOT_SUPPORTED;
+}
+
+static NTSTATUS NTAPI WddmBridgeUnboundService2(_In_ ULONG_PTR A0, _In_ ULONG_PTR A1)
+{
+    UNREFERENCED_PARAMETER(A0);
+    UNREFERENCED_PARAMETER(A1);
+    return STATUS_NOT_SUPPORTED;
+}
+
+static NTSTATUS NTAPI WddmBridgeUnboundService3(_In_ ULONG_PTR A0, _In_ ULONG_PTR A1, _In_ ULONG_PTR A2)
+{
+    UNREFERENCED_PARAMETER(A0);
+    UNREFERENCED_PARAMETER(A1);
+    UNREFERENCED_PARAMETER(A2);
+    return STATUS_NOT_SUPPORTED;
+}
+
+static NTSTATUS NTAPI WddmBridgeUnboundService4(_In_ ULONG_PTR A0, _In_ ULONG_PTR A1, _In_ ULONG_PTR A2, _In_ ULONG_PTR A3)
+{
+    UNREFERENCED_PARAMETER(A0);
+    UNREFERENCED_PARAMETER(A1);
+    UNREFERENCED_PARAMETER(A2);
+    UNREFERENCED_PARAMETER(A3);
+    return STATUS_NOT_SUPPORTED;
+}
+
+static NTSTATUS NTAPI WddmBridgeUnboundService5(_In_ ULONG_PTR A0, _In_ ULONG_PTR A1, _In_ ULONG_PTR A2, _In_ ULONG_PTR A3,
+                                                _In_ ULONG_PTR A4)
+{
+    UNREFERENCED_PARAMETER(A0);
+    UNREFERENCED_PARAMETER(A1);
+    UNREFERENCED_PARAMETER(A2);
+    UNREFERENCED_PARAMETER(A3);
+    UNREFERENCED_PARAMETER(A4);
+    return STATUS_NOT_SUPPORTED;
+}
+
+static NTSTATUS NTAPI WddmBridgeUnboundService6(_In_ ULONG_PTR A0, _In_ ULONG_PTR A1, _In_ ULONG_PTR A2, _In_ ULONG_PTR A3,
+                                                _In_ ULONG_PTR A4, _In_ ULONG_PTR A5)
+{
+    UNREFERENCED_PARAMETER(A0);
+    UNREFERENCED_PARAMETER(A1);
+    UNREFERENCED_PARAMETER(A2);
+    UNREFERENCED_PARAMETER(A3);
+    UNREFERENCED_PARAMETER(A4);
+    UNREFERENCED_PARAMETER(A5);
+    return STATUS_NOT_SUPPORTED;
+}
+
+static PVOID
+WddmBridgeUnboundService(
+    _In_ ULONG ArgumentCount)
+{
+    static const PVOID Services[] =
+    {
+        (PVOID)WddmBridgeUnboundService0, (PVOID)WddmBridgeUnboundService1, (PVOID)WddmBridgeUnboundService2,
+        (PVOID)WddmBridgeUnboundService3, (PVOID)WddmBridgeUnboundService4, (PVOID)WddmBridgeUnboundService5,
+        (PVOID)WddmBridgeUnboundService6,
+    };
+
+    if (ArgumentCount >= ARRAYSIZE(Services))
+        return NULL;
+    return Services[ArgumentCount];
+}
+
+static BOOLEAN
+WddmBridgeIsProviderService(
+    _In_z_ PCSTR Name)
+{
+    /* The memory DC services are GDI's own on Windows as well */
+    if (strcmp(Name, "NtGdiDdDDICreateDCFromMemory") == 0 || strcmp(Name, "NtGdiDdDDIDestroyDCFromMemory") == 0)
+        return FALSE;
+    return strncmp(Name, "NtGdiDdDDI", 10) == 0 || strncmp(Name, "NtDxgk", 6) == 0;
+}
+
+static BOOLEAN
+WddmBridgeRangeInImage(
+    _In_ ULONG ImageSize,
+    _In_ ULONG Rva,
+    _In_ ULONG Count,
+    _In_ ULONG ElementSize)
+{
+    return Rva < ImageSize && Count <= (ImageSize - Rva) / ElementSize;
+}
+
+static PVOID
+WddmBridgeFindProviderExport(
+    _In_ PDRIVER_OBJECT Provider,
+    _In_ PIMAGE_EXPORT_DIRECTORY Exports,
+    _In_ ULONG ExportsSize,
+    _In_z_ PCSTR Name)
+{
+    PUCHAR Base = (PUCHAR)Provider->DriverStart;
+    ULONG ExportsRva = (ULONG)((PUCHAR)Exports - Base);
+    PULONG Names = (PULONG)(Base + Exports->AddressOfNames);
+    PUSHORT Ordinals = (PUSHORT)(Base + Exports->AddressOfNameOrdinals);
+    PULONG Functions = (PULONG)(Base + Exports->AddressOfFunctions);
+    LONG Low = 0;
+    LONG High = (LONG)Exports->NumberOfNames - 1;
+
+    while (Low <= High)
+    {
+        LONG Middle = Low + (High - Low) / 2;
+        int Order;
+
+        if (Names[Middle] >= Provider->DriverSize)
+            return NULL;
+        Order = strcmp(Name, (PCSTR)(Base + Names[Middle]));
+        if (Order == 0)
+        {
+            USHORT Ordinal = Ordinals[Middle];
+            ULONG Rva;
+
+            if (Ordinal >= Exports->NumberOfFunctions)
+                return NULL;
+            Rva = Functions[Ordinal];
+            /* A forwarder names another image's routine, which is not this provider's service */
+            if (Rva == 0 || Rva >= Provider->DriverSize || (Rva >= ExportsRva && Rva - ExportsRva < ExportsSize))
+                return NULL;
+            return Base + Rva;
+        }
+        if (Order < 0)
+            High = Middle - 1;
+        else
+            Low = Middle + 1;
+    }
+    return NULL;
+}
+
+/* A dxgkrnl without the bridge (Microsoft's) exports the D3DKMT services itself, as Windows' win32k expects */
+static VOID
+WddmBridgeBindProviderServices(
+    _In_ PFILE_OBJECT FileObject,
+    _In_ PDEVICE_OBJECT DeviceObject)
+{
+    PDRIVER_OBJECT Provider = DeviceObject->DriverObject;
+    PIMAGE_EXPORT_DIRECTORY Exports;
+    ULONG ExportsSize = 0;
+    ULONG Index;
+    ULONG Bound = 0;
+    ULONG Unbound = 0;
+
+    PAGED_CODE();
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(g_DxgkrnlFileObject == NULL);
+
+    if (g_DxgkrnlProviderFileObject != NULL)
+        return;
+
+    if (Provider == NULL || Provider->DriverStart == NULL || Provider->DriverSize == 0)
+    {
+        DPRINT1("WddmBridge: the dxgkrnl device has no driver image\n");
+        return;
+    }
+
+    Exports = RtlImageDirectoryEntryToData(Provider->DriverStart, TRUE, IMAGE_DIRECTORY_ENTRY_EXPORT, &ExportsSize);
+    if (Exports == NULL || ExportsSize < sizeof(*Exports) ||
+        !WddmBridgeRangeInImage(Provider->DriverSize, (ULONG)((PUCHAR)Exports - (PUCHAR)Provider->DriverStart),
+                                ExportsSize, 1) ||
+        !WddmBridgeRangeInImage(Provider->DriverSize, Exports->AddressOfNames, Exports->NumberOfNames, sizeof(ULONG)) ||
+        !WddmBridgeRangeInImage(Provider->DriverSize, Exports->AddressOfNameOrdinals, Exports->NumberOfNames,
+                                sizeof(USHORT)) ||
+        !WddmBridgeRangeInImage(Provider->DriverSize, Exports->AddressOfFunctions, Exports->NumberOfFunctions,
+                                sizeof(ULONG)))
+    {
+        DPRINT1("WddmBridge: %wZ has no usable export directory\n", &Provider->DriverName);
+        return;
+    }
+
+    for (Index = 0; Index < Win32kNumberOfSysCalls; Index++)
+    {
+        PCSTR Name = Win32kServiceNames[Index];
+        PVOID Target;
+
+        ASSERT(Name != NULL);
+        ASSERT(Win32kSSPT[Index] % sizeof(PVOID) == 0);
+        if (!WddmBridgeIsProviderService(Name))
+            continue;
+
+        Target = WddmBridgeFindProviderExport(Provider, Exports, ExportsSize, Name);
+        if (Target != NULL)
+        {
+            Bound++;
+        }
+        else
+        {
+            Target = WddmBridgeUnboundService(Win32kSSPT[Index] / sizeof(PVOID));
+            ASSERT(Target != NULL);
+            if (Target == NULL)
+                continue;
+            Unbound++;
+        }
+        InterlockedExchangePointer((PVOID volatile *)&Win32kSSDT[Index], Target);
+    }
+
+    ObReferenceObject(FileObject);
+    g_DxgkrnlProviderFileObject = FileObject;
+    DPRINT1("WddmBridge: %wZ has no win32k bridge; %lu D3DKMT services bound to its exports, %lu unbound\n",
+            &Provider->DriverName, Bound, Unbound);
+}
+
+BOOLEAN
+WddmBridgeIsProviderBound(VOID)
+{
+    BOOLEAN Bound;
+
+    WddmBridgeAcquireLock();
+    Bound = (BOOLEAN)(g_DxgkrnlProviderFileObject != NULL);
+    WddmBridgeReleaseLock();
+    return Bound;
 }
 
 NTSTATUS
@@ -554,6 +785,8 @@ WddmBridgeInit(VOID)
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("WddmBridgeInit: interface exchange failed with 0x%08lX\n", Status);
+        if (Status == STATUS_INVALID_DEVICE_REQUEST)
+            WddmBridgeBindProviderServices(FileObject, DeviceObject);
         ObDereferenceObject(FileObject);
         g_WddmBridgeStatus = Status;
         WddmBridgeReleaseLock();
@@ -962,5 +1195,10 @@ WddmBridgeCleanup(VOID)
     if (g_WddmBridgeRundownInitialized)
         ExWaitForRundownProtectionRelease(&g_WddmBridgeRundown);
     WddmBridgeDropReference();
+    if (g_DxgkrnlProviderFileObject != NULL)
+    {
+        ObDereferenceObject(g_DxgkrnlProviderFileObject);
+        g_DxgkrnlProviderFileObject = NULL;
+    }
     WddmBridgeReleaseLock();
 }

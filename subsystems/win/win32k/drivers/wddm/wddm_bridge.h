@@ -15,6 +15,7 @@ VOID     WddmBridgeCleanup(VOID);
 NTSTATUS WddmBridgeGetStatus(VOID);
 NTSTATUS WddmBridgeRequireReady(VOID);
 BOOLEAN  WddmBridgeIsReady(VOID);
+BOOLEAN  WddmBridgeIsProviderBound(VOID);
 ULONG    WddmBridgeGetInterfaceVersion(VOID);
 NTSTATUS WddmBridgeGetInterface(_Out_ PREACTOS_WIN32K_DXGKRNL_INTERFACE Interface);
 
