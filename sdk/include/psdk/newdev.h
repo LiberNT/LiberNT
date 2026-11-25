@@ -199,8 +199,6 @@ DiUninstallDriverA(
 #define DiUninstallDriver DiUninstallDriverA
 #endif
 #endif
-#define DIURFLAG_NO_REMOVE_INF (0x00000001)
-#define DIURFLAG_VALID 3
 
 #ifdef __cplusplus
 extern "C" {
