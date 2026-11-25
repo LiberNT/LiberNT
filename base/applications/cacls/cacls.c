@@ -459,128 +459,489 @@ PrintDaclsOfFiles(LPCTSTR pszFiles)
     return TRUE;
 }
 
-static BOOL
-GrantUserAccessRights(LPCTSTR FilePath, LPCTSTR File, LPCTSTR User, TCHAR Perm)
+/*
+ * In-memory representation of one DACL entry being edited. For the
+ * standard ACCESS_ALLOWED/ACCESS_DENIED types, Mask and Sid describe the
+ * entry. Any other ACE type found in the source DACL is preserved through
+ * RawAce.
+ */
+typedef struct _DACL_ACE
 {
-    /* TODO & FIXME */
-    switch(Perm)
+    BYTE Type;
+    BYTE Flags;
+    DWORD Mask;
+    PSID Sid;
+    PVOID RawAce;
+    WORD RawSize;
+} DACL_ACE, *PDACL_ACE;
+
+typedef struct _DACL_EDIT
+{
+    PDACL_ACE Aces;
+    DWORD Count;
+    DWORD Capacity;
+    PSECURITY_DESCRIPTOR Sd;
+    PSID LookupSids[4];
+    DWORD LookupSidCount;
+} DACL_EDIT, *PDACL_EDIT;
+
+static VOID
+EditInit(PDACL_EDIT Edit)
+{
+    ZeroMemory(Edit, sizeof(*Edit));
+}
+
+static VOID
+EditFree(PDACL_EDIT Edit)
+{
+    DWORD i;
+
+    HeapFree(GetProcessHeap(), 0, Edit->Aces);
+    if (Edit->Sd != NULL)
+        HeapFree(GetProcessHeap(), 0, Edit->Sd);
+    for (i = 0; i < Edit->LookupSidCount; i++)
+        HeapFree(GetProcessHeap(), 0, Edit->LookupSids[i]);
+}
+
+static BOOL
+LookupUserSid(LPCTSTR User, PDACL_EDIT Edit, PSID *SidOut)
+{
+    SID_NAME_USE Use;
+    LPTSTR Domain = NULL;
+    DWORD DomainSize = 0;
+    DWORD SidSize = 0;
+    PSID Sid;
+
+    *SidOut = NULL;
+    SetLastError(ERROR_SUCCESS);
+    LookupAccountName(NULL, User, NULL, &SidSize, NULL, &DomainSize, &Use);
+    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+        return FALSE;
+
+    Sid = (PSID)HeapAlloc(GetProcessHeap(), 0, SidSize);
+    if (Sid == NULL)
     {
-        case _T('R'): // Read
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+
+    if (DomainSize != 0)
+    {
+        Domain = (LPTSTR)HeapAlloc(GetProcessHeap(), 0,
+                                   DomainSize * sizeof(TCHAR));
+        if (Domain == NULL)
+        {
+            HeapFree(GetProcessHeap(), 0, Sid);
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            return FALSE;
+        }
+    }
+
+    if (!LookupAccountName(NULL, User, Sid, &SidSize, Domain, &DomainSize, &Use))
+    {
+        HeapFree(GetProcessHeap(), 0, Domain);
+        HeapFree(GetProcessHeap(), 0, Sid);
+        return FALSE;
+    }
+
+    HeapFree(GetProcessHeap(), 0, Domain);
+    if (Edit->LookupSidCount < ARRAYSIZE(Edit->LookupSids))
+        Edit->LookupSids[Edit->LookupSidCount++] = Sid;
+    else
+        HeapFree(GetProcessHeap(), 0, Sid);
+    *SidOut = Sid;
+    return TRUE;
+}
+
+/* Load the file's DACL into the edit list. With /E the existing entries are
+   kept; without it the list starts empty so the options replace the ACL. */
+static BOOL
+EditLoadDacl(LPCTSTR FullPath, PDACL_EDIT Edit)
+{
+    PACL Dacl;
+    BOOL DaclPresent, DaclDefaulted;
+    DWORD SDSize = 0;
+    DWORD i;
+
+    if (!OptionE)
+        return TRUE;
+
+    SetLastError(ERROR_SUCCESS);
+    if (!GetFileSecurity(FullPath, DACL_SECURITY_INFORMATION,
+                         NULL, 0, &SDSize) &&
+        GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+    {
+        return FALSE;
+    }
+
+    Edit->Sd = (PSECURITY_DESCRIPTOR)HeapAlloc(GetProcessHeap(), 0, SDSize);
+    if (Edit->Sd == NULL)
+    {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+
+    if (!GetFileSecurity(FullPath, DACL_SECURITY_INFORMATION,
+                         Edit->Sd, SDSize, &SDSize))
+    {
+        return FALSE;
+    }
+
+    if (!GetSecurityDescriptorDacl(Edit->Sd, &DaclPresent, &Dacl, &DaclDefaulted) ||
+        !DaclPresent || Dacl == NULL)
+    {
+        /* no DACL or an empty one: nothing to preserve */
+        return TRUE;
+    }
+
+    for (i = 0; ; i++)
+    {
+        PACE_HEADER Ace;
+        PDACL_ACE Entry;
+
+        if (!GetAce(Dacl, i, (PVOID *)&Ace))
             break;
-        case _T('W'): // Write
-            break;
-        case _T('C'): // Change (write)
-            break;
-        case _T('F'): // Full control
-            break;
+
+        if (Edit->Count == Edit->Capacity)
+        {
+            DWORD Cap = Edit->Capacity ? Edit->Capacity * 2 : 8;
+            PDACL_ACE NewAces = (PDACL_ACE)(Edit->Aces
+                                                        ? HeapReAlloc(GetProcessHeap(), 0,
+                                                               Edit->Aces,
+                                                               Cap * sizeof(DACL_ACE))
+                                                        : HeapAlloc(GetProcessHeap(), 0, Cap * sizeof(DACL_ACE)));
+            if (NewAces == NULL)
+            {
+                SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+                return FALSE;
+            }
+            Edit->Aces = NewAces;
+            Edit->Capacity = Cap;
+        }
+
+        Entry = &Edit->Aces[Edit->Count++];
+        Entry->Type = Ace->AceType;
+        Entry->Flags = Ace->AceFlags;
+        Entry->RawAce = NULL;
+        Entry->RawSize = 0;
+        Entry->Mask = 0;
+        Entry->Sid = NULL;
+
+        if (Ace->AceType == ACCESS_ALLOWED_ACE_TYPE ||
+            Ace->AceType == ACCESS_DENIED_ACE_TYPE)
+        {
+            Entry->Mask = ((PACCESS_ALLOWED_ACE)Ace)->Mask;
+            Entry->Sid = (PSID)&((PACCESS_ALLOWED_ACE)Ace)->SidStart;
+        }
+        else
+        {
+            Entry->RawAce = Ace;
+            Entry->RawSize = Ace->AceSize;
+        }
+    }
+
+    return TRUE;
+}
+
+/* Append a new allow or deny ACE for Sid to the edit list. */
+static BOOL
+EditAppendAce(PDACL_EDIT Edit, BYTE Type, DWORD Mask, PSID Sid)
+{
+    PDACL_ACE Entry;
+
+    if (Edit->Count == Edit->Capacity)
+    {
+        DWORD Cap = Edit->Capacity ? Edit->Capacity * 2 : 8;
+        PDACL_ACE NewAces = (PDACL_ACE)(Edit->Aces
+                                                    ? HeapReAlloc(GetProcessHeap(), 0,
+                                                           Edit->Aces,
+                                                           Cap * sizeof(DACL_ACE))
+                                                    : HeapAlloc(GetProcessHeap(), 0, Cap * sizeof(DACL_ACE)));
+        if (NewAces == NULL)
+        {
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            return FALSE;
+        }
+        Edit->Aces = NewAces;
+        Edit->Capacity = Cap;
+    }
+
+    Entry = &Edit->Aces[Edit->Count++];
+    Entry->Type = Type;
+    Entry->Flags = 0;
+    Entry->Mask = Mask;
+    Entry->Sid = Sid;
+    Entry->RawAce = NULL;
+    Entry->RawSize = 0;
+    return TRUE;
+}
+
+/* Drop every ACE whose SID matches. When AllowOnly is set, deny entries for
+   the account survive. Returns the number of entries removed. */
+static DWORD
+EditRemoveUserAces(PDACL_EDIT Edit, PSID Sid, BOOL AllowOnly)
+{
+    DWORD i = 0, Removed = 0;
+
+    while (i < Edit->Count)
+    {
+        PDACL_ACE Entry = &Edit->Aces[i];
+
+        if (Entry->Sid != NULL &&
+            EqualSid(Entry->Sid, Sid) &&
+            (!AllowOnly || Entry->Type == ACCESS_ALLOWED_ACE_TYPE))
+        {
+            MoveMemory(Entry, Entry + 1,
+                       (Edit->Count - i - 1) * sizeof(DACL_ACE));
+            Edit->Count--;
+            Removed++;
+        }
+        else
+        {
+            i++;
+        }
+    }
+
+    return Removed;
+}
+
+/* Map a cacls permission letter to an access mask. N means "no access" and
+   produces a deny entry. */
+static BOOL
+PermToMask(TCHAR Perm, DWORD *Mask, BYTE *Type)
+{
+    *Type = ACCESS_ALLOWED_ACE_TYPE;
+    switch (Perm)
+    {
+        case _T('R'): /* Read */
+            *Mask = FILE_GENERIC_READ | FILE_EXECUTE;
+            return TRUE;
+        case _T('W'): /* Write */
+            *Mask = FILE_GENERIC_WRITE;
+            return TRUE;
+        case _T('C'): /* Change */
+            *Mask = FILE_GENERIC_READ | FILE_GENERIC_WRITE |
+                    FILE_EXECUTE | DELETE;
+            return TRUE;
+        case _T('F'): /* Full control */
+            *Mask = FILE_ALL_ACCESS;
+            return TRUE;
+        case _T('N'): /* None */
+            *Mask = FILE_ALL_ACCESS;
+            *Type = ACCESS_DENIED_ACE_TYPE;
+            return TRUE;
         default:
             break;
     }
+    SetLastError(ERROR_INVALID_PARAMETER);
     return FALSE;
 }
 
 static BOOL
-ReplaceUserAccessRights(
-    LPCTSTR FilePath,
-    LPCTSTR File,
-    LPCTSTR User,
-    TCHAR Perm)
+EditGrantUserAccessRights(PDACL_EDIT Edit, LPCTSTR User, TCHAR Perm)
 {
-    /* TODO & FIXME */
-    switch(Perm)
+    DWORD Mask;
+    BYTE Type;
+    PSID Sid;
+
+    if (!PermToMask(Perm, &Mask, &Type) || Type != ACCESS_ALLOWED_ACE_TYPE ||
+        !LookupUserSid(User, Edit, &Sid))
     {
-        case _T('N'): // None
-            break;
-        case _T('R'): // Read
-            break;
-        case _T('W'): // Write
-            break;
-        case _T('C'): // Change (write)
-            break;
-        case _T('F'): // Full control
-            break;
-        default:
-            break;
+        PrintError(GetLastError());
+        return FALSE;
     }
-    return FALSE;
+
+    /* the grant states the account's final rights: replace its allow entries */
+    EditRemoveUserAces(Edit, Sid, TRUE);
+    return EditAppendAce(Edit, ACCESS_ALLOWED_ACE_TYPE, Mask, Sid);
 }
 
 static BOOL
-EditUserAccessRights(
-    LPCTSTR FilePath,
-    LPCTSTR File,
-    LPCTSTR User,
-    TCHAR Perm)
+EditReplaceUserAccessRights(PDACL_EDIT Edit, LPCTSTR User, TCHAR Perm)
 {
-    /* TODO & FIXME */
-    switch(Perm)
+    DWORD Mask;
+    BYTE Type;
+    PSID Sid;
+
+    if (!PermToMask(Perm, &Mask, &Type) ||
+        !LookupUserSid(User, Edit, &Sid))
     {
-        case _T('N'): // None
-            break;
-        case _T('R'): // Read
-            break;
-        case _T('W'): // Write
-            break;
-        case _T('C'): // Change (write)
-            break;
-        case _T('F'): // Full control
-            break;
-        default:
-            break;
+        PrintError(GetLastError());
+        return FALSE;
     }
-    return FALSE;
+
+    EditRemoveUserAces(Edit, Sid, FALSE);
+    return EditAppendAce(Edit, Type, Mask, Sid);
 }
 
 static BOOL
-DenyUserAccess(LPCTSTR FilePath, LPCTSTR File, LPCTSTR User)
+EditDenyUserAccess(PDACL_EDIT Edit, LPCTSTR User)
 {
-    /* TODO & FIXME */
-    return FALSE;
+    PSID Sid;
+
+    if (!LookupUserSid(User, Edit, &Sid))
+    {
+        PrintError(GetLastError());
+        return FALSE;
+    }
+
+    return EditAppendAce(Edit, ACCESS_DENIED_ACE_TYPE, FILE_ALL_ACCESS, Sid);
 }
 
 static BOOL
-RevokeUserAccessRights(LPCTSTR FilePath, LPCTSTR File, LPCTSTR User)
+EditRevokeUserAccessRights(PDACL_EDIT Edit, LPCTSTR User)
 {
-    /* TODO & FIXME */
-    return FALSE;
+    PSID Sid;
+
+    if (!LookupUserSid(User, Edit, &Sid))
+    {
+        PrintError(GetLastError());
+        return FALSE;
+    }
+
+    EditRemoveUserAces(Edit, Sid, FALSE);
+    return TRUE;
+}
+
+/* Write the edited DACL back, deny entries first so the ACL stays canonical. */
+static BOOL
+EditStoreDacl(LPCTSTR FullPath, PDACL_EDIT Edit)
+{
+    SECURITY_DESCRIPTOR Sd;
+    DWORD AclSize = sizeof(ACL);
+    PACL Acl;
+    DWORD i;
+    BOOL Ret = FALSE;
+
+    for (i = 0; i < Edit->Count; i++)
+    {
+        PDACL_ACE Entry = &Edit->Aces[i];
+        if (Entry->RawAce != NULL)
+            AclSize += Entry->RawSize;
+        else
+            AclSize += FIELD_OFFSET(ACCESS_ALLOWED_ACE, SidStart) +
+                       GetLengthSid(Entry->Sid);
+    }
+
+    Acl = (PACL)HeapAlloc(GetProcessHeap(), 0, AclSize);
+    if (Acl == NULL)
+    {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+
+    if (InitializeAcl(Acl, AclSize, ACL_REVISION))
+    {
+        DWORD Pass;
+
+        Ret = TRUE;
+        for (Pass = 0; Ret && Pass < 2; Pass++)
+        {
+            for (i = 0; i < Edit->Count; i++)
+            {
+                PDACL_ACE Entry = &Edit->Aces[i];
+
+                if (Entry->RawAce != NULL)
+                {
+                    if (Pass == 1 &&
+                        !AddAce(Acl, ACL_REVISION, MAXDWORD,
+                                Entry->RawAce, Entry->RawSize))
+                    {
+                        Ret = FALSE;
+                    }
+                    continue;
+                }
+
+                if ((Pass == 0) != (Entry->Type == ACCESS_DENIED_ACE_TYPE))
+                    continue;
+
+                {
+                    union
+                    {
+                        ACCESS_ALLOWED_ACE Ace;
+                        BYTE Fill[sizeof(ACCESS_ALLOWED_ACE) + 255];
+                    } AceBuf;
+                    DWORD SidLen = GetLengthSid(Entry->Sid);
+
+                    AceBuf.Ace.Header.AceType = Entry->Type;
+                    AceBuf.Ace.Header.AceFlags = Entry->Flags;
+                    AceBuf.Ace.Header.AceSize =
+                        (WORD)(FIELD_OFFSET(ACCESS_ALLOWED_ACE, SidStart) + SidLen);
+                    AceBuf.Ace.Mask = Entry->Mask;
+                    CopyMemory(&AceBuf.Ace.SidStart, Entry->Sid, SidLen);
+
+                    if (!AddAce(Acl, ACL_REVISION, MAXDWORD,
+                                &AceBuf, AceBuf.Ace.Header.AceSize))
+                    {
+                        Ret = FALSE;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (Ret &&
+            InitializeSecurityDescriptor(&Sd, SECURITY_DESCRIPTOR_REVISION) &&
+            SetSecurityDescriptorDacl(&Sd, TRUE, Acl, FALSE))
+        {
+            Ret = SetFileSecurity(FullPath, DACL_SECURITY_INFORMATION, &Sd);
+        }
+        else
+        {
+            Ret = FALSE;
+        }
+    }
+
+    HeapFree(GetProcessHeap(), 0, Acl);
+    return Ret;
 }
 
 static BOOL
 ChangeFileACL(LPCTSTR FilePath, LPCTSTR File)
 {
-    if (OptionG)
+    TCHAR FullPath[MAX_PATH + 1];
+    DACL_EDIT Edit;
+    BOOL Ok = TRUE;
+
+    _tcscpy(FullPath, FilePath);
+    _tcscat(FullPath, File);
+
+    EditInit(&Edit);
+
+    if (OptionG || OptionP || OptionD || OptionR)
+    {
+        Ok = EditLoadDacl(FullPath, &Edit);
+    }
+
+    if (Ok && OptionG)
     {
         /* Grant specified user access rights. */
-        GrantUserAccessRights(FilePath, File, GUser, *GPerm);
+        Ok = EditGrantUserAccessRights(&Edit, GUser, *GPerm);
     }
 
-    if (OptionP)
+    if (Ok && OptionP)
     {
-        if (!OptionE)
-        {
-            /* Replace specified user's access rights. */
-            ReplaceUserAccessRights(FilePath, File, PUser, *PPerm);
-        }
-        else
-        {
-            /* Edit ACL instead of replacing it. */
-            EditUserAccessRights(FilePath, File, PUser, *PPerm);
-        }
+        /* Replace specified user's access rights. */
+        Ok = EditReplaceUserAccessRights(&Edit, PUser, *PPerm);
     }
 
-    if (OptionD)
+    if (Ok && OptionD)
     {
         /* Deny specified user access. */
-        DenyUserAccess(FilePath, File, DUser);
+        Ok = EditDenyUserAccess(&Edit, DUser);
     }
 
-    if (OptionR)
+    if (Ok && OptionR)
     {
         /* Revoke specified user's access rights. */
-        RevokeUserAccessRights(FilePath, File, RUser);
+        Ok = EditRevokeUserAccessRights(&Edit, RUser);
     }
 
-    return TRUE;
+    if (Ok && (OptionG || OptionP || OptionD || OptionR))
+        Ok = EditStoreDacl(FullPath, &Edit);
+
+    EditFree(&Edit);
+    return Ok;
 }
 
 static BOOL
