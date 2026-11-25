@@ -129,6 +129,9 @@ LoadD3DKMTProc(const char *Name)
     Proc = hGdi32 ? GetProcAddress(hGdi32, Name) : NULL;
     if (Proc || strncmp(Name, "D3DKMT", 6) != 0)
         return Proc;
+    /* The Windows 11 service takes the version 2 structure; the version 1 entry point converts in user mode */
+    if (strcmp(Name, "D3DKMTCreateSynchronizationObject") == 0)
+        return NULL;
 
     /* Windows PE forwards the gdi32 entry points to an API set it does not ship: reach the win32u services */
     hWin32u = LoadLibraryW(L"win32u.dll");
@@ -139,6 +142,12 @@ LoadD3DKMTProc(const char *Name)
         lstrcpynA(Service, ServicePrefixes[Index], sizeof(Service));
         lstrcpynA(Service + strlen(Service), Name + 6, (int)(sizeof(Service) - strlen(Service)));
         Proc = GetProcAddress(hWin32u, Service);
+        /* Windows 11 serves the versioned "...2" entry points of these objects through the unversioned service */
+        if (!Proc && Service[strlen(Service) - 1] == '2')
+        {
+            Service[strlen(Service) - 1] = '\0';
+            Proc = GetProcAddress(hWin32u, Service);
+        }
     }
     return Proc;
 }
