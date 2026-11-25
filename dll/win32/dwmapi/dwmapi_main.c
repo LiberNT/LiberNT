@@ -321,6 +321,7 @@ static void dwm_inset_resize_borders(HWND hwnd, RECT *rect)
     info.cbSize = sizeof(info);
     if (!GetWindowInfo(hwnd, &info) || (info.dwStyle & (WS_CHILD | WS_MINIMIZE)) ||
         info.rcClient.top != info.rcWindow.top ||
+        ((ULONG_PTR)GetPropW(hwnd, DWM_PROP_CAPTION_STATE) & DWM_CAPTION_STATE_VALID) ||
         (!(info.dwStyle & WS_THICKFRAME) && (info.dwStyle & WS_CAPTION) != WS_CAPTION))
         return;
     rect->left += max(0, min((LONG)info.cxWindowBorders, info.rcClient.left - info.rcWindow.left) - GetSystemMetrics(SM_CXBORDER));

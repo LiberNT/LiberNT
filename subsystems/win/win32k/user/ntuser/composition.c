@@ -3558,6 +3558,7 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
         g_DwmFrameWindows[count].SourceX = 0;
         g_DwmFrameWindows[count].SourceY = 0;
         if (!(w->style & (WS_CHILD | WS_MINIMIZE)) && g_DwmFrameWindows[count].ClientY == 0 &&
+            !(IntCompositionFrameProperty(w, AtomDwmCaptionState) & DWM_CAPTION_STATE_VALID) &&
             ((w->style & WS_THICKFRAME) || (w->style & WS_CAPTION) == WS_CAPTION))
         {
             PDWM_WIN Frame = &g_DwmFrameWindows[count];
