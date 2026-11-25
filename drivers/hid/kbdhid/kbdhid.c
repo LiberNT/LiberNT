@@ -187,6 +187,26 @@ KbdHid_UpdateRepeat(
     }
 }
 
+static
+BOOLEAN
+KbdHid_IsPhantomReport(
+    IN PUSAGE_AND_PAGE UsageList,
+    IN ULONG Length)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Length && UsageList[Index].Usage; Index++)
+    {
+        if (UsageList[Index].UsagePage == HID_USAGE_PAGE_KEYBOARD &&
+            UsageList[Index].Usage >= HID_USAGE_KEYBOARD_ROLLOVER &&
+            UsageList[Index].Usage <= HID_USAGE_KEYBOARD_UNDEFINED)
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 NTSTATUS
 NTAPI
 KbdHid_ReadCompletion(
@@ -250,6 +270,14 @@ KbdHid_ReadCompletion(
     if (Status != HIDP_STATUS_SUCCESS)
     {
         DPRINT1("[KBDHID] HidP_GetUsagesEx failed with %x\n", Status);
+        KbdHid_InitiateRead(DeviceExtension);
+        return STATUS_MORE_PROCESSING_REQUIRED;
+    }
+    ASSERT(ButtonLength <= DeviceExtension->UsageListLength);
+
+    /* ErrorRollOver, POSTFail and ErrorUndefined mark a phantom state: the report holds no key state, keep the last one */
+    if (KbdHid_IsPhantomReport(DeviceExtension->CurrentUsageList, ButtonLength))
+    {
         KbdHid_InitiateRead(DeviceExtension);
         return STATUS_MORE_PROCESSING_REQUIRED;
     }
