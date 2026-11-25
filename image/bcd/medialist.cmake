@@ -47,8 +47,29 @@ if(WIM)
         set(_threads 1)
     endif()
 
+    set(_install_image)
+    if(INSTALL_LIST)
+        file(REMOVE_RECURSE "${INSTALL_STAGE}")
+        file(MAKE_DIRECTORY "${INSTALL_STAGE}")
+        file(STRINGS "${INSTALL_LIST}" _install_entries)
+        foreach(_entry IN LISTS _install_entries)
+            if(NOT _entry MATCHES "^/?([^=]+)=(.*)$")
+                continue()
+            endif()
+            set(_destination "${INSTALL_STAGE}/${CMAKE_MATCH_1}")
+            set(_source "${CMAKE_MATCH_2}")
+            if(IS_DIRECTORY "${_source}")
+                file(MAKE_DIRECTORY "${_destination}")
+            elseif(EXISTS "${_source}")
+                get_filename_component(_parent "${_destination}" DIRECTORY)
+                file(MAKE_DIRECTORY "${_parent}")
+                file(CREATE_LINK "${_source}" "${_destination}" COPY_ON_ERROR)
+            endif()
+        endforeach()
+        set(_install_image "--add-image=LiberNT Installation=${INSTALL_STAGE}")
+    endif()
     execute_process(
-        COMMAND "${WIMAGE}" capture "${STAGE}" "${WIM}" "LiberNT" --compress=xpress --boot --threads=${_threads}
+        COMMAND "${WIMAGE}" capture "${STAGE}" "${WIM}" "LiberNT" --compress=xpress --boot --threads=${_threads} ${_install_image}
         RESULT_VARIABLE _result
         OUTPUT_VARIABLE _log
         ERROR_VARIABLE _log)
@@ -57,6 +78,9 @@ if(WIM)
     endif()
 
     file(REMOVE_RECURSE "${STAGE}")
+    if(INSTALL_LIST)
+        file(REMOVE_RECURSE "${INSTALL_STAGE}")
+    endif()
     string(APPEND _output "boot.wim=${WIM}\n")
 endif()
 
