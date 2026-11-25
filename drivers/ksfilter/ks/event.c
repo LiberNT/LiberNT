@@ -99,6 +99,8 @@ KspEnableEvent(
     KSEVENT Event;
     PKSEVENT_ITEM EventItem, FoundEventItem;
     PKSEVENTDATA EventData;
+    KSEVENTDATA CapturedData;
+    PKSEVENTDATA Data;
     const KSEVENT_SET *FoundEventSet;
     PKSEVENT_ENTRY EventEntry;
     ULONG Index, SubIndex, Size, ItemSize, RequestType;
@@ -290,11 +292,13 @@ KspEnableEvent(
     if (!EventData)
         return STATUS_INVALID_PARAMETER;
 
+    Data = EventData;
     if (Irp->RequestorMode == UserMode)
     {
         _SEH2_TRY
         {
             ProbeForRead(EventData, FoundEventItem->DataInput, sizeof(UCHAR));
+            CapturedData = *EventData;
             Status = STATUS_SUCCESS;
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -306,10 +310,12 @@ KspEnableEvent(
         if (!NT_SUCCESS(Status))
             return Status;
 
-        if (EventData->NotificationType == KSEVENTF_SEMAPHORE_HANDLE)
+        Data = &CapturedData;
+
+        if (Data->NotificationType == KSEVENTF_SEMAPHORE_HANDLE)
         {
             /* get semaphore object handle */
-            Status = ObReferenceObjectByHandle(EventData->SemaphoreHandle.Semaphore, SEMAPHORE_MODIFY_STATE, *ExSemaphoreObjectType, Irp->RequestorMode, &Object, NULL);
+            Status = ObReferenceObjectByHandle(Data->SemaphoreHandle.Semaphore, SEMAPHORE_MODIFY_STATE, *ExSemaphoreObjectType, Irp->RequestorMode, &Object, NULL);
 
             if (!NT_SUCCESS(Status))
             {
@@ -317,10 +323,10 @@ KspEnableEvent(
                 return STATUS_INVALID_PARAMETER;
             }
         }
-        else if (EventData->NotificationType == KSEVENTF_EVENT_HANDLE)
+        else if (Data->NotificationType == KSEVENTF_EVENT_HANDLE)
         {
             /* get event object handle */
-            Status = ObReferenceObjectByHandle(EventData->EventHandle.Event, EVENT_MODIFY_STATE, *ExEventObjectType, Irp->RequestorMode, &Object, NULL);
+            Status = ObReferenceObjectByHandle(Data->EventHandle.Event, EVENT_MODIFY_STATE, *ExEventObjectType, Irp->RequestorMode, &Object, NULL);
 
             if (!NT_SUCCESS(Status))
             {
@@ -334,9 +340,9 @@ KspEnableEvent(
             return STATUS_INVALID_PARAMETER;
         }
     }
-    else if (EventData->NotificationType == KSEVENTF_SEMAPHORE_HANDLE)
+    else if (Data->NotificationType == KSEVENTF_SEMAPHORE_HANDLE)
     {
-        Status = ObReferenceObjectByHandle(EventData->SemaphoreHandle.Semaphore,
+        Status = ObReferenceObjectByHandle(Data->SemaphoreHandle.Semaphore,
                                            SEMAPHORE_MODIFY_STATE,
                                            *ExSemaphoreObjectType,
                                            KernelMode,
@@ -345,9 +351,9 @@ KspEnableEvent(
         if (!NT_SUCCESS(Status))
             return STATUS_INVALID_PARAMETER;
     }
-    else if (EventData->NotificationType == KSEVENTF_EVENT_HANDLE)
+    else if (Data->NotificationType == KSEVENTF_EVENT_HANDLE)
     {
-        Status = ObReferenceObjectByHandle(EventData->EventHandle.Event,
+        Status = ObReferenceObjectByHandle(Data->EventHandle.Event,
                                            EVENT_MODIFY_STATE,
                                            *ExEventObjectType,
                                            KernelMode,
@@ -358,11 +364,11 @@ KspEnableEvent(
     }
     else
     {
-        if (EventData->NotificationType != KSEVENTF_EVENT_OBJECT &&
-            EventData->NotificationType != KSEVENTF_SEMAPHORE_OBJECT &&
-            EventData->NotificationType != KSEVENTF_DPC &&
-            EventData->NotificationType != KSEVENTF_WORKITEM &&
-            EventData->NotificationType != KSEVENTF_KSWORKITEM)
+        if (Data->NotificationType != KSEVENTF_EVENT_OBJECT &&
+            Data->NotificationType != KSEVENTF_SEMAPHORE_OBJECT &&
+            Data->NotificationType != KSEVENTF_DPC &&
+            Data->NotificationType != KSEVENTF_WORKITEM &&
+            Data->NotificationType != KSEVENTF_KSWORKITEM)
         {
             /* invalid type requested */
             return STATUS_INVALID_PARAMETER;
@@ -417,7 +423,7 @@ KspEnableEvent(
 
     /* initialize event entry */
     EventEntry->EventData = EventData;
-    EventEntry->NotificationType = EventData->NotificationType;
+    EventEntry->NotificationType = Data->NotificationType;
     EventEntry->EventItem = FoundEventItem;
     EventEntry->EventSet = FoundEventSet;
     EventEntry->FileObject = IoStack->FileObject;
@@ -432,29 +438,29 @@ KspEnableEvent(
             break;
         case KSEVENTF_SEMAPHORE_HANDLE:
             EventEntry->Object = Object;
-            EventEntry->SemaphoreAdjustment = EventData->SemaphoreHandle.Adjustment;
+            EventEntry->SemaphoreAdjustment = Data->SemaphoreHandle.Adjustment;
             EventEntry->Reserved = 0;
             break;
         case KSEVENTF_EVENT_OBJECT:
-            EventEntry->Object = EventData->EventObject.Event;
-            EventEntry->Reserved = EventData->EventObject.Increment;
+            EventEntry->Object = Data->EventObject.Event;
+            EventEntry->Reserved = Data->EventObject.Increment;
             break;
         case KSEVENTF_SEMAPHORE_OBJECT:
-            EventEntry->Object = EventData->SemaphoreObject.Semaphore;
-            EventEntry->SemaphoreAdjustment = EventData->SemaphoreObject.Adjustment;
-            EventEntry->Reserved = EventData->SemaphoreObject.Increment;
+            EventEntry->Object = Data->SemaphoreObject.Semaphore;
+            EventEntry->SemaphoreAdjustment = Data->SemaphoreObject.Adjustment;
+            EventEntry->Reserved = Data->SemaphoreObject.Increment;
             break;
         case KSEVENTF_DPC:
-            EventEntry->Object = EventData->Dpc.Dpc;
-            EventData->Dpc.ReferenceCount = 0;
+            EventEntry->Object = Data->Dpc.Dpc;
+            Data->Dpc.ReferenceCount = 0;
             break;
         case KSEVENTF_WORKITEM:
-            EventEntry->Object = EventData->WorkItem.WorkQueueItem;
-            EventEntry->BufferItem = (PKSBUFFER_ITEM)UlongToPtr(EventData->WorkItem.WorkQueueType);
+            EventEntry->Object = Data->WorkItem.WorkQueueItem;
+            EventEntry->BufferItem = (PKSBUFFER_ITEM)UlongToPtr(Data->WorkItem.WorkQueueType);
             break;
         case KSEVENTF_KSWORKITEM:
-            EventEntry->Object = EventData->KsWorkItem.KsWorkerObject;
-            EventEntry->DpcItem = (PKSDPC_ITEM)EventData->KsWorkItem.WorkQueueItem;
+            EventEntry->Object = Data->KsWorkItem.KsWorkerObject;
+            EventEntry->DpcItem = (PKSDPC_ITEM)Data->KsWorkItem.WorkQueueItem;
             break;
         default:
             /* should not happen */
