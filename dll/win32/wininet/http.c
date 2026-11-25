@@ -1091,6 +1091,22 @@ void free_authorization_cache(void)
     LeaveCriticalSection(&authcache_cs);
 }
 
+#ifdef __REACTOS__
+static BOOL is_intranet_host(const WCHAR *host)
+{
+    const WCHAR *p;
+
+    if (!host[0] || host[0] == '[')
+        return FALSE;
+    for (p = host; *p && *p != ':'; p++)
+    {
+        if (*p == '.')
+            return FALSE;
+    }
+    return TRUE;
+}
+
+#endif
 static BOOL HTTP_DoAuthorization( http_request_t *request, LPCWSTR pszAuthValue,
                                   struct HttpAuthInfo **ppAuthInfo,
                                   LPWSTR domain_and_username, LPWSTR password,
@@ -1169,6 +1185,13 @@ static BOOL HTTP_DoAuthorization( http_request_t *request, LPCWSTR pszAuthValue,
             }
             else if(retrieve_cached_authorization(host, pAuthInfo->scheme, &nt_auth_identity))
                 pAuthData = &nt_auth_identity;
+#ifdef __REACTOS__
+            else if (host && !is_intranet_host(host))
+            {
+                destroy_authinfo(pAuthInfo);
+                return FALSE;
+            }
+#endif
             else
                 /* use default credentials */
                 pAuthData = NULL;
