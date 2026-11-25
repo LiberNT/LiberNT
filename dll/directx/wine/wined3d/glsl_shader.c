@@ -7369,10 +7369,18 @@ static GLuint shader_glsl_generate_vs3_rasterizer_input_setup(struct shader_glsl
 
     if (per_vertex_point_size)
     {
+#ifdef __REACTOS__
+        shader_addline(buffer, "struct ffp_point_rasterizer_t\n{\n");
+#else
         shader_addline(buffer, "uniform struct\n{\n");
+#endif
         shader_addline(buffer, "    float size_min;\n");
         shader_addline(buffer, "    float size_max;\n");
+#ifdef __REACTOS__
+        shader_addline(buffer, "};\nuniform ffp_point_rasterizer_t ffp_point;\n");
+#else
         shader_addline(buffer, "} ffp_point;\n");
+#endif
     }
 
     if (ps_major < 3)
@@ -7924,12 +7932,20 @@ static GLuint shader_glsl_generate_fragment_shader(const struct wined3d_context_
 
     if (version->major < 3 || args->vp_mode != WINED3D_VP_MODE_SHADER)
     {
+#ifdef __REACTOS__
+        shader_addline(buffer, "struct ffp_fog_t\n{\n");
+#else
         shader_addline(buffer, "uniform struct\n{\n");
+#endif
         shader_addline(buffer, "    vec4 color;\n");
         shader_addline(buffer, "    float density;\n");
         shader_addline(buffer, "    float end;\n");
         shader_addline(buffer, "    float scale;\n");
+#ifdef __REACTOS__
+        shader_addline(buffer, "};\nuniform ffp_fog_t ffp_fog;\n");
+#else
         shader_addline(buffer, "} ffp_fog;\n");
+#endif
 
         if (legacy_syntax)
         {
@@ -8249,11 +8265,19 @@ static GLuint shader_glsl_generate_vertex_shader(const struct wined3d_context_gl
 
     if (args->point_size && !shader->reg_maps.point_size && reg_maps->shader_version.major < 4)
     {
+#ifdef __REACTOS__
+        shader_addline(buffer, "struct ffp_point_vs_t\n{\n");
+#else
         shader_addline(buffer, "uniform struct\n{\n");
+#endif
         shader_addline(buffer, "    float size;\n");
         shader_addline(buffer, "    float size_min;\n");
         shader_addline(buffer, "    float size_max;\n");
+#ifdef __REACTOS__
+        shader_addline(buffer, "};\nuniform ffp_point_vs_t ffp_point;\n");
+#else
         shader_addline(buffer, "} ffp_point;\n");
+#endif
     }
 
     if (!needs_legacy_glsl_syntax(gl_info))
@@ -9275,16 +9299,28 @@ static GLuint shader_glsl_generate_ffp_vertex_shader(struct shader_glsl_priv *pr
     shader_addline(buffer, "uniform mat4 ffp_normal_matrix;\n");
     shader_addline(buffer, "uniform mat4 ffp_texture_matrix[%u];\n", WINED3D_MAX_FFP_TEXTURES);
 
+#ifdef __REACTOS__
+    shader_addline(buffer, "struct ffp_material_t\n{\n");
+#else
     shader_addline(buffer, "uniform struct\n{\n");
+#endif
     shader_addline(buffer, "    vec4 emissive;\n");
     shader_addline(buffer, "    vec4 ambient;\n");
     shader_addline(buffer, "    vec4 diffuse;\n");
     shader_addline(buffer, "    vec4 specular;\n");
     shader_addline(buffer, "    float shininess;\n");
+#ifdef __REACTOS__
+    shader_addline(buffer, "};\nuniform ffp_material_t ffp_material;\n");
+#else
     shader_addline(buffer, "} ffp_material;\n");
+#endif
 
     shader_addline(buffer, "uniform vec3 ffp_light_ambient;\n");
+#ifdef __REACTOS__
+    shader_addline(buffer, "struct ffp_light_t\n{\n");
+#else
     shader_addline(buffer, "uniform struct\n{\n");
+#endif
     shader_addline(buffer, "    vec4 diffuse;\n");
     shader_addline(buffer, "    vec4 specular;\n");
     shader_addline(buffer, "    vec4 ambient;\n");
@@ -9297,18 +9333,30 @@ static GLuint shader_glsl_generate_ffp_vertex_shader(struct shader_glsl_priv *pr
     shader_addline(buffer, "    float q_att;\n");
     shader_addline(buffer, "    float cos_htheta;\n");
     shader_addline(buffer, "    float cos_hphi;\n");
+#ifdef __REACTOS__
+    shader_addline(buffer, "};\nuniform ffp_light_t ffp_light[%u];\n", WINED3D_MAX_ACTIVE_LIGHTS);
+#else
     shader_addline(buffer, "} ffp_light[%u];\n", WINED3D_MAX_ACTIVE_LIGHTS);
+#endif
 
     if (settings->point_size)
     {
+#ifdef __REACTOS__
+        shader_addline(buffer, "struct ffp_point_ffp_t\n{\n");
+#else
         shader_addline(buffer, "uniform struct\n{\n");
+#endif
         shader_addline(buffer, "    float size;\n");
         shader_addline(buffer, "    float size_min;\n");
         shader_addline(buffer, "    float size_max;\n");
         shader_addline(buffer, "    float c_att;\n");
         shader_addline(buffer, "    float l_att;\n");
         shader_addline(buffer, "    float q_att;\n");
+#ifdef __REACTOS__
+        shader_addline(buffer, "};\nuniform ffp_point_ffp_t ffp_point;\n");
+#else
         shader_addline(buffer, "} ffp_point;\n");
+#endif
     }
 
     if (legacy_syntax)
@@ -9957,12 +10005,20 @@ static GLuint shader_glsl_generate_ffp_fragment_shader(struct shader_glsl_priv *
         shader_addline(buffer, ";\n");
     }
 
+#ifdef __REACTOS__
+    shader_addline(buffer, "struct ffp_fog_t\n{\n");
+#else
     shader_addline(buffer, "uniform struct\n{\n");
+#endif
     shader_addline(buffer, "    vec4 color;\n");
     shader_addline(buffer, "    float density;\n");
     shader_addline(buffer, "    float end;\n");
     shader_addline(buffer, "    float scale;\n");
+#ifdef __REACTOS__
+    shader_addline(buffer, "};\nuniform ffp_fog_t ffp_fog;\n");
+#else
     shader_addline(buffer, "} ffp_fog;\n");
+#endif
 
     if (alpha_test_func != WINED3D_CMP_ALWAYS)
         shader_addline(buffer, "uniform float alpha_test_ref;\n");
@@ -12837,9 +12893,17 @@ static GLuint glsl_blitter_generate_program(struct wined3d_glsl_blitter *blitter
     shader_addline(buffer, "uniform sampler%s sampler;\n", tex_type);
     if (args->use_colour_key)
     {
+#ifdef __REACTOS__
+        shader_addline(buffer, "struct colour_key_t\n{\n");
+#else
         shader_addline(buffer, "uniform struct\n{\n");
+#endif
         shader_addline(buffer, "    vec4 low, high;\n");
+#ifdef __REACTOS__
+        shader_addline(buffer, "};\nuniform colour_key_t colour_key;\n");
+#else
         shader_addline(buffer, "} colour_key;\n");
+#endif
     }
     declare_in_varying(gl_info, buffer, FALSE, "vec3 out_texcoord;\n");
     /* TODO: Declare the out variable with the correct type (and put it in the
