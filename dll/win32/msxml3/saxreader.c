@@ -819,6 +819,7 @@ struct input_buffer
 #ifdef __REACTOS__
     bool bom;
     bool attvalue;
+    bool after_high;
 #endif
     p_converter converter;
     UINT code_page;
@@ -2393,6 +2394,25 @@ static void saxreader_string_append(struct saxlocator *locator, struct string_bu
     buffer->count += len;
 }
 
+#ifdef __REACTOS__
+static bool saxreader_valid_input_char(struct input_buffer *input, WCHAR ch)
+{
+    bool after_high = input->after_high;
+
+    input->after_high = false;
+    if (ch >= 0xdc00 && ch <= 0xdfff)
+        return after_high;
+    if (after_high)
+        return false;
+    if (ch >= 0xd800 && ch <= 0xdbff)
+    {
+        input->after_high = true;
+        return true;
+    }
+    return ch == 0x9 || ch == 0xa || ch == 0xd || (ch >= 0x20 && ch <= 0xfffd);
+}
+
+#endif
 static void saxreader_skip(struct saxlocator *locator, int n)
 {
     struct encoded_buffer *buffer = &locator->buffer.utf16;
@@ -2401,6 +2421,16 @@ static void saxreader_skip(struct saxlocator *locator, int n)
 
     while (locator->status == S_OK && (ch = *saxreader_get_ptr(locator)) && n--)
     {
+#ifdef __REACTOS__
+        if (!saxreader_valid_input_char(input, ch))
+        {
+            saxreader_set_error(locator, E_SAX_BADCHARDATA);
+            locator->eos = true;
+            buffer->written = buffer->cur * sizeof(WCHAR);
+            *(WCHAR *)(buffer->data + buffer->written) = 0;
+            break;
+        }
+#endif
         if (locator->collect)
             saxreader_string_append(locator, &locator->scratch, &ch, 1);
 
