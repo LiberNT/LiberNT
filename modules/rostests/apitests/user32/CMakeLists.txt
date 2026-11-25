@@ -104,6 +104,7 @@ list(APPEND SOURCE
     NonClientUpdate.c
     OwnedZOrder.c
     OwnerDestroy.c
+    OwnerDrawButtonCues.c
     PersianLayout.c
     PhysicalPoint.c
     PhysicalToLogicalPoint.c

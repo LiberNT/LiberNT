@@ -10,6 +10,7 @@ extern void func_ListViewGroups(void);
 extern void func_ListViewSnapToGrid(void);
 extern void func_ListViewWorkAreas(void);
 extern void func_LoadIconWithScaleDown(void);
+extern void func_OwnerDrawButtonCues(void);
 extern void func_propsheetv6(void);
 extern void func_PropSheetRecalc(void);
 extern void func_TabControlKeys(void);
@@ -32,6 +33,7 @@ const struct test winetest_testlist[] =
     { "ListViewSnapToGrid", func_ListViewSnapToGrid },
     { "ListViewWorkAreas", func_ListViewWorkAreas },
     { "LoadIconWithScaleDown", func_LoadIconWithScaleDown },
+    { "OwnerDrawButtonCues", func_OwnerDrawButtonCues },
     { "propsheetv6", func_propsheetv6 },
     { "PropSheetRecalc", func_PropSheetRecalc },
     { "TabControlKeys", func_TabControlKeys },

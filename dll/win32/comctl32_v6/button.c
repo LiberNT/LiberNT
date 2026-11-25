@@ -2427,6 +2427,13 @@ static void OB_Paint( const BUTTON_INFO *infoPtr, HDC hDC, UINT action )
     dis.itemState  = ((state & BST_FOCUS) ? ODS_FOCUS : 0) |
                      ((state & BST_PUSHED) ? ODS_SELECTED : 0) |
                      (IsWindowEnabled(infoPtr->hwnd) ? 0: ODS_DISABLED);
+#ifdef __REACTOS__
+    {
+        LRESULT ui = SendMessageW( infoPtr->hwnd, WM_QUERYUISTATE, 0, 0 );
+        if (ui & UISF_HIDEFOCUS) dis.itemState |= ODS_NOFOCUSRECT;
+        if (ui & UISF_HIDEACCEL) dis.itemState |= ODS_NOACCEL;
+    }
+#endif
     dis.hwndItem   = infoPtr->hwnd;
     dis.hDC        = hDC;
     dis.itemData   = 0;

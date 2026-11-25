@@ -1370,6 +1370,10 @@ static void OB_Paint( HWND hwnd, HDC hDC, UINT action )
     dis.itemState  = ((state & BST_FOCUS) ? ODS_FOCUS : 0) |
                      ((state & BST_PUSHED) ? ODS_SELECTED : 0) |
                      (IsWindowEnabled(hwnd) ? 0: ODS_DISABLED);
+#ifdef __REACTOS__
+    if (get_ui_state( hwnd ) & UISF_HIDEFOCUS) dis.itemState |= ODS_NOFOCUSRECT;
+    if (get_ui_state( hwnd ) & UISF_HIDEACCEL) dis.itemState |= ODS_NOACCEL;
+#endif
     dis.hwndItem   = hwnd;
     dis.hDC        = hDC;
     dis.itemData   = 0;

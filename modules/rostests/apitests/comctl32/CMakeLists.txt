@@ -10,6 +10,7 @@ list(APPEND SOURCE
     ListViewSnapToGrid.c
     ListViewWorkAreas.c
     LoadIconWithScaleDown.c
+    OwnerDrawButtonCues.c
     propsheet.c
     PropSheetRecalc.c
     TabControlKeys.c
