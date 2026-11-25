@@ -387,7 +387,6 @@ extern BOOL FillPolygon(PDC dc,
 
 #endif
 
-static
 BOOL
 IntIsMappedUserRange(const VOID *Address, SIZE_T Size)
 {

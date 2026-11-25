@@ -21,6 +21,9 @@ extern HSEMAPHORE hsemDriverMgmt;
 MIX FASTCALL
 IntGdiLineMix(DC *dc);
 
+BOOL
+IntIsMappedUserRange(const VOID *Address, SIZE_T Size);
+
 BOOL FASTCALL
 IntGdiLineTo(DC  *dc,
              int XEnd,
