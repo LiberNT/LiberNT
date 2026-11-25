@@ -792,9 +792,9 @@ NtGdiOpenDCW(
                 Size = dmSize + dmDriverExtra;
                 ProbeForRead(pdmInit, Size, 1);
 
-                pdmAllocated = ExAllocatePoolWithTag(PagedPool | POOL_RAISE_IF_ALLOCATION_FAILURE,
-                                                     Size,
-                                                     TAG_DC);
+                pdmAllocated = ExAllocatePoolZero(PagedPool | POOL_RAISE_IF_ALLOCATION_FAILURE,
+                                                  max(Size, sizeof(DEVMODEW)),
+                                                  TAG_DC);
                 RtlCopyMemory(pdmAllocated, pdmInit, Size);
                 pdmAllocated->dmSize = dmSize;
                 pdmAllocated->dmDriverExtra = dmDriverExtra;
