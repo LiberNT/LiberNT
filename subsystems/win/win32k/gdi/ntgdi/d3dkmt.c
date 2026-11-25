@@ -620,22 +620,74 @@ NtGdiDdDDISetProcessSchedulingPriorityClass(_In_ HANDLE unnamedParam1,
     return D3DKMTSetProcessSchedulingPriorityClass(unnamedParam1, unnamedParam2);
 }
 
+static KSPIN_LOCK D3dkmtSharedPrimaryLocksLock;
+
+static BOOLEAN
+D3dkmtFindSharedPrimaryLock(
+    _In_ PPROCESSINFO Process,
+    _In_ LUID AdapterLuid,
+    _In_ UINT VidPnSourceId,
+    _In_ BOOLEAN Record)
+{
+    BOOLEAN Found = FALSE;
+    KIRQL OldIrql;
+    UINT Index;
+
+    KeAcquireSpinLock(&D3dkmtSharedPrimaryLocksLock, &OldIrql);
+    ASSERT(Process->cSharedPrimaryLocks <= RTL_NUMBER_OF(Process->SharedPrimaryLocks));
+    for (Index = 0; Index < Process->cSharedPrimaryLocks && !Found; ++Index)
+    {
+        Found = Process->SharedPrimaryLocks[Index].AdapterLuid.LowPart == AdapterLuid.LowPart &&
+                Process->SharedPrimaryLocks[Index].AdapterLuid.HighPart == AdapterLuid.HighPart &&
+                Process->SharedPrimaryLocks[Index].VidPnSourceId == VidPnSourceId;
+    }
+    if (!Found && Record && Process->cSharedPrimaryLocks < RTL_NUMBER_OF(Process->SharedPrimaryLocks))
+    {
+        Process->SharedPrimaryLocks[Process->cSharedPrimaryLocks].AdapterLuid = AdapterLuid;
+        Process->SharedPrimaryLocks[Process->cSharedPrimaryLocks].VidPnSourceId = VidPnSourceId;
+        Process->cSharedPrimaryLocks++;
+        Found = TRUE;
+    }
+    /* FIXME: past 8 sources a process keeps no record, so the unlocks Windows 11 would accept are refused */
+    KeReleaseSpinLock(&D3dkmtSharedPrimaryLocksLock, OldIrql);
+    return Found;
+}
+
 NTSTATUS
 APIENTRY
 NtGdiDdDDISharedPrimaryLockNotification(_In_ const D3DKMT_SHAREDPRIMARYLOCKNOTIFICATION* unnamedParam1)
 {
     D3DKMT_SHAREDPRIMARYLOCKNOTIFICATION Captured;
+    PPROCESSINFO Process;
+    NTSTATUS Status;
 
     RETURN_STATUS_IF_NULL(unnamedParam1);
     /* Windows 11 accepts the notification for any adapter LUID, source and rectangle. */
-    return D3dkmtCaptureUserStructure((PVOID)unnamedParam1, sizeof(Captured), &Captured);
+    Status = D3dkmtCaptureUserStructure((PVOID)unnamedParam1, sizeof(Captured), &Captured);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Process = PsGetCurrentProcessWin32Process();
+    if (Process != NULL)
+        D3dkmtFindSharedPrimaryLock(Process, Captured.AdapterLuid, Captured.VidPnSourceId, TRUE);
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS
 APIENTRY
 NtGdiDdDDISharedPrimaryUnLockNotification(_In_ const D3DKMT_SHAREDPRIMARYUNLOCKNOTIFICATION* unnamedParam1)
 {
+    D3DKMT_SHAREDPRIMARYUNLOCKNOTIFICATION Captured;
+    PPROCESSINFO Process;
+    NTSTATUS Status;
+
     RETURN_STATUS_IF_NULL(unnamedParam1);
+    Status = D3dkmtCaptureUserStructure((PVOID)unnamedParam1, sizeof(Captured), &Captured);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    /* Once a process has notified a lock of a source, Windows 11 accepts every later unlock of that source from it */
+    Process = PsGetCurrentProcessWin32Process();
+    if (Process != NULL && D3dkmtFindSharedPrimaryLock(Process, Captured.AdapterLuid, Captured.VidPnSourceId, FALSE))
+        return STATUS_SUCCESS;
     return D3DKMTSharedPrimaryUnLockNotification(unnamedParam1);
 }
 

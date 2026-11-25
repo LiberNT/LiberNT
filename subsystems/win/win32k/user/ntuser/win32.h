@@ -338,6 +338,14 @@ typedef struct _PROCESSINFO
 
     struct _DCOMP_PROCESS *CompositionData;
 
+    /* D3DKMT shared primary sources this process has sent a lock notification for */
+    struct
+    {
+        LUID AdapterLuid;
+        UINT VidPnSourceId;
+    } SharedPrimaryLocks[8];
+    UINT cSharedPrimaryLocks;
+
     FAST_MUTEX DriverObjListLock;
     LIST_ENTRY DriverObjListHead;
     W32HEAP_USER_MAPPING HeapMappings;
