@@ -809,6 +809,41 @@ PowerVrDdiUnload(VOID)
     pvr_glue_driver_exit();
 }
 
+static NTSTATUS
+APIENTRY
+PowerVrDdiDispatchIoRequest(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ ULONG VidPnSourceId,
+    _In_ PVIDEO_REQUEST_PACKET VideoRequestPacket)
+{
+    PAGED_CODE();
+    UNREFERENCED_PARAMETER(MiniportDeviceContext);
+    UNREFERENCED_PARAMETER(VidPnSourceId);
+
+    ASSERT(VideoRequestPacket != NULL);
+    if (VideoRequestPacket->StatusBlock != NULL)
+    {
+        VideoRequestPacket->StatusBlock->Status = STATUS_NOT_SUPPORTED;
+        VideoRequestPacket->StatusBlock->Information = 0;
+    }
+    return STATUS_NOT_SUPPORTED;
+}
+
+static NTSTATUS
+APIENTRY
+PowerVrDdiQueryDeviceDescriptor(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ ULONG ChildUid,
+    _Inout_ PDXGK_DEVICE_DESCRIPTOR DeviceDescriptor)
+{
+    PAGED_CODE();
+    UNREFERENCED_PARAMETER(MiniportDeviceContext);
+    UNREFERENCED_PARAMETER(ChildUid);
+    UNREFERENCED_PARAMETER(DeviceDescriptor);
+
+    return STATUS_GRAPHICS_CHILD_DESCRIPTOR_NOT_SUPPORTED;
+}
+
 NTSTATUS
 NTAPI
 DriverEntry(
@@ -828,6 +863,8 @@ DriverEntry(
     InitData.DxgkDdiStopDevice = PowerVrDdiStopDevice;
     InitData.DxgkDdiRemoveDevice = PowerVrDdiRemoveDevice;
     InitData.DxgkDdiResetDevice = PowerVrDdiResetDevice;
+    InitData.DxgkDdiDispatchIoRequest = PowerVrDdiDispatchIoRequest;
+    InitData.DxgkDdiQueryDeviceDescriptor = PowerVrDdiQueryDeviceDescriptor;
     InitData.DxgkDdiSetPowerState = PowerVrDdiSetPowerState;
     InitData.DxgkDdiQueryAdapterInfo = PowerVrDdiQueryAdapterInfo;
     InitData.DxgkDdiQueryChildRelations = PowerVrDdiQueryChildRelations;

@@ -366,6 +366,33 @@ HdgfxDdiResetDevice(
     UNREFERENCED_PARAMETER(MiniportDeviceContext);
 }
 
+static NTSTATUS
+APIENTRY
+HdgfxDdiDispatchIoRequest(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ ULONG VidPnSourceId,
+    _In_ PVIDEO_REQUEST_PACKET VideoRequestPacket)
+{
+    PAGED_CODE();
+    UNREFERENCED_PARAMETER(MiniportDeviceContext);
+    UNREFERENCED_PARAMETER(VidPnSourceId);
+
+    ASSERT(VideoRequestPacket != NULL);
+    if (VideoRequestPacket->StatusBlock != NULL)
+    {
+        VideoRequestPacket->StatusBlock->Status = STATUS_NOT_SUPPORTED;
+        VideoRequestPacket->StatusBlock->Information = 0;
+    }
+    return STATUS_NOT_SUPPORTED;
+}
+
+static VOID
+APIENTRY
+HdgfxDdiUnload(VOID)
+{
+    PAGED_CODE();
+}
+
 NTSTATUS
 NTAPI
 HdgfxDriverEntry(
@@ -383,6 +410,8 @@ HdgfxDriverEntry(
     InitData.DxgkDdiStopDevice = HdgfxDdiStopDevice;
     InitData.DxgkDdiRemoveDevice = HdgfxDdiRemoveDevice;
     InitData.DxgkDdiResetDevice = HdgfxDdiResetDevice;
+    InitData.DxgkDdiDispatchIoRequest = HdgfxDdiDispatchIoRequest;
+    InitData.DxgkDdiUnload = HdgfxDdiUnload;
     InitData.DxgkDdiSetPowerState = HdgfxDdiSetPowerState;
     InitData.DxgkDdiNotifyAcpiEvent = HdgfxDdiNotifyAcpiEvent;
     InitData.DxgkDdiQueryInterface = HdgfxDdiQueryInterface;

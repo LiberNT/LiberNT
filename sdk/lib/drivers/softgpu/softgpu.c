@@ -402,6 +402,8 @@ DriverEntry(
     InitData.DxgkDdiStopDevice                      = SoftGpuDdiStopDevice;
     InitData.DxgkDdiRemoveDevice                    = SoftGpuDdiRemoveDevice;
     InitData.DxgkDdiResetDevice                     = SoftGpuDdiResetDevice;
+    InitData.DxgkDdiDispatchIoRequest               = SoftGpuDdiDispatchIoRequest;
+    InitData.DxgkDdiUnload                          = SoftGpuDdiUnload;
     InitData.DxgkDdiSetPowerState                   = SoftGpuDdiSetPowerState;
     InitData.DxgkDdiQueryInterface                  =
         SoftGpuDdiQueryInterface;
@@ -416,8 +418,10 @@ DriverEntry(
 #endif
 
     /* --- Interrupt / DPC ------------------------------------------------- */
-#if defined(SOFTGPU_PLATFORM_HARDWARE_3D)
+#if defined(SOFTGPU_PLATFORM_HARDWARE_3D) || !defined(SOFTGPU_PLATFORM_DRIVER_ENTRY)
     InitData.DxgkDdiInterruptRoutine                = SoftGpuDdiInterruptRoutine;
+#else
+    /* FIXME: the platform connects the device interrupt itself, so the DxgkDdiInterruptRoutine Windows requires is left out */
 #endif
     InitData.DxgkDdiDpcRoutine                      = SoftGpuDdiDpcRoutine;
 
@@ -3242,6 +3246,33 @@ SoftGpuDdiResetDevice(
     _In_ PVOID MiniportDeviceContext)
 {
     UNREFERENCED_PARAMETER(MiniportDeviceContext);
+}
+
+NTSTATUS
+APIENTRY
+SoftGpuDdiDispatchIoRequest(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ ULONG VidPnSourceId,
+    _In_ PVIDEO_REQUEST_PACKET VideoRequestPacket)
+{
+    PAGED_CODE();
+    UNREFERENCED_PARAMETER(MiniportDeviceContext);
+    UNREFERENCED_PARAMETER(VidPnSourceId);
+
+    ASSERT(VideoRequestPacket != NULL);
+    if (VideoRequestPacket->StatusBlock != NULL)
+    {
+        VideoRequestPacket->StatusBlock->Status = STATUS_NOT_SUPPORTED;
+        VideoRequestPacket->StatusBlock->Information = 0;
+    }
+    return STATUS_NOT_SUPPORTED;
+}
+
+VOID
+APIENTRY
+SoftGpuDdiUnload(VOID)
+{
+    PAGED_CODE();
 }
 
 

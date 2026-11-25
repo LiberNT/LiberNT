@@ -944,6 +944,17 @@ APIENTRY
 SoftGpuDdiRestartFromTimeout(
     _In_ PVOID MiniportDeviceContext);
 
+NTSTATUS
+APIENTRY
+SoftGpuDdiDispatchIoRequest(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ ULONG VidPnSourceId,
+    _In_ PVIDEO_REQUEST_PACKET VideoRequestPacket);
+
+VOID
+APIENTRY
+SoftGpuDdiUnload(VOID);
+
 VOID
 APIENTRY
 SoftGpuDdiResetDevice(

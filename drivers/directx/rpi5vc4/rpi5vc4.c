@@ -297,6 +297,26 @@ Rpi5Vc4FreeCursor(
  * DriverEntry
  * ====================================================================== */
 
+static NTSTATUS
+APIENTRY
+Rpi5Vc4DdiDispatchIoRequest(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ ULONG VidPnSourceId,
+    _In_ PVIDEO_REQUEST_PACKET VideoRequestPacket)
+{
+    PAGED_CODE();
+    UNREFERENCED_PARAMETER(MiniportDeviceContext);
+    UNREFERENCED_PARAMETER(VidPnSourceId);
+
+    ASSERT(VideoRequestPacket != NULL);
+    if (VideoRequestPacket->StatusBlock != NULL)
+    {
+        VideoRequestPacket->StatusBlock->Status = STATUS_NOT_SUPPORTED;
+        VideoRequestPacket->StatusBlock->Information = 0;
+    }
+    return STATUS_NOT_SUPPORTED;
+}
+
 NTSTATUS
 NTAPI
 DriverEntry(
@@ -338,6 +358,7 @@ DriverEntry(
     InitData.DxgkDdiQueryInterface        = Rpi5Vc4DdiQueryInterface;
     InitData.DxgkDdiSetPowerState         = Rpi5Vc4DdiSetPowerState;
     InitData.DxgkDdiResetDevice           = Rpi5Vc4DdiResetDevice;
+    InitData.DxgkDdiDispatchIoRequest = Rpi5Vc4DdiDispatchIoRequest;
     InitData.DxgkDdiUnload                = Rpi5Vc4DdiUnload;
     InitData.DxgkDdiQueryAdapterInfo      = Rpi5Vc4DdiQueryAdapterInfo;
 
