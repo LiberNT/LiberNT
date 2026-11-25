@@ -312,6 +312,11 @@ static VOID USER32_RedirectToMunFile(LPWSTR lpszPath, DWORD cchPath)
  *  failure:0;
  *  success: number of icons in file (nIcons = 0) or nr of icons retrieved
  */
+#ifdef __REACTOS__
+static UINT ICO_ExtractIconsFromView(LPBYTE peimage, DWORD fsizel, HICON *RetPtr, INT nIconIndex, UINT nIcons,
+    UINT cxDesired, UINT cyDesired, UINT *pIconId, UINT flags, BOOL fIconEx, UINT **ppIconIdAlloc);
+
+#endif
 static UINT ICO_ExtractIconExW(
 	LPCWSTR lpszExeFileName,
 	HICON * RetPtr,
@@ -335,12 +340,18 @@ static UINT ICO_ExtractIconExW(
 #endif
 {
 	UINT		ret = 0;
+#ifndef __REACTOS__
 	UINT		cx1, cx2, cy1, cy2;
+#endif
 	UINT		*pIconIdAlloc = NULL;
+#ifndef __REACTOS__
 	LPBYTE		pData;
 	DWORD		sig;
+#endif
 	HANDLE		hFile;
+#ifndef __REACTOS__
 	UINT16		iconDirCount = 0,iconCount = 0;
+#endif
 	LPBYTE		peimage;
 	HANDLE		fmapping;
 	DWORD		fsizeh,fsizel;
@@ -413,6 +424,35 @@ static UINT ICO_ExtractIconExW(
 	CloseHandle(fmapping);
 
 #ifdef __REACTOS__
+    _SEH2_TRY
+    {
+        ret = ICO_ExtractIconsFromView(peimage, fsizel, RetPtr, nIconIndex, nIcons, cxDesired, cyDesired,
+                                       pIconId, flags, fIconEx, &pIconIdAlloc);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        ret = 0;
+    }
+    _SEH2_END;
+
+    UnmapViewOfFile(peimage);
+    if (pIconIdAlloc)
+        HeapFree(GetProcessHeap(), 0, pIconIdAlloc);
+    return ret;
+}
+
+static UINT ICO_ExtractIconsFromView(LPBYTE peimage, DWORD fsizel, HICON *RetPtr, INT nIconIndex, UINT nIcons,
+    UINT cxDesired, UINT cyDesired, UINT *pIconId, UINT flags, BOOL fIconEx, UINT **ppIconIdAlloc)
+{
+    UINT ret = 0;
+    UINT cx1, cx2, cy1, cy2;
+    UINT *pIconIdAlloc = NULL;
+    LPBYTE pData;
+    DWORD sig;
+    UINT16 iconDirCount = 0, iconCount = 0;
+#endif
+
+#ifdef __REACTOS__
     /* Check if we have a min size of 2 headers RIFF & 'icon'
      * at 8 chars each plus an anih header of 36 byptes.
      * Also, is this resource an animjated icon/cursor (RIFF) */
@@ -468,6 +508,9 @@ static UINT ICO_ExtractIconExW(
 	  pIconIdAlloc = HeapAlloc(GetProcessHeap(), 0, (nIcons + 2) * sizeof(UINT));
 	  if (!pIconIdAlloc)
 	    goto end;
+#ifdef __REACTOS__
+	  *ppIconIdAlloc = pIconIdAlloc;
+#endif
 	  pIconId = pIconIdAlloc;
 	}
 
@@ -888,10 +931,14 @@ static UINT ICO_ExtractIconExW(
 	}			/* if(sig == IMAGE_NT_SIGNATURE) */
 
 end:
+#ifdef __REACTOS__
+	return ret;
+#else
 	UnmapViewOfFile(peimage);	/* success */
 	if (pIconIdAlloc)
 	  HeapFree(GetProcessHeap(), 0, pIconIdAlloc);
 	return ret;
+#endif
 }
 
 /***********************************************************************
@@ -995,7 +1042,11 @@ UINT WINAPI PrivateExtractIconExW (
 
 	if (nIcons == 1 && phIconSmall && phIconLarge)
 	{
+#ifdef __REACTOS__
+	  HICON hIcon[2] = { NULL, NULL };
+#else
 	  HICON hIcon[2];
+#endif
 	  cxicon = GetSystemMetrics(SM_CXICON);
 	  cyicon = GetSystemMetrics(SM_CYICON);
 	  cxsmicon = GetSystemMetrics(SM_CXSMICON);
