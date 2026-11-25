@@ -70,7 +70,7 @@ Modifications: portable C build and bounded bitstream reads, see README.md
 
 Title: Libxslt
 Path: dll/3rdparty/libxslt
-Used Version: 1.1.37
+Used Version: 1.1.45
 License: MIT (https://spdx.org/licenses/MIT.html)
 URL: http://xmlsoft.org
 
