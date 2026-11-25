@@ -768,7 +768,7 @@ NtUserEnumDisplaySettings(
     WCHAR awcDevice[CCHDEVICENAME];
     NTSTATUS Status;
     ULONG cbSize = 0, cbExtra = 0;
-    DEVMODEW dmReg, dmDetached, *pdm;
+    DEVMODEW dmReg, *pdm;
     POINTL ptlPosition;
     BOOL bCurrent = FALSE;
 
@@ -838,18 +838,6 @@ NtUserEnumDisplaySettings(
     {
         /* Get the current settings */
         Status = UserEnumCurrentDisplaySettings(pustrDevice, &pdm, &ptlPosition);
-        if (Status == STATUS_INVALID_PARAMETER_1 && pustrDevice && EngpFindGraphicsDevice(pustrDevice, 0))
-        {
-            /* A display device that is not attached to the desktop is current in the detached mode, at its registry position */
-            RtlZeroMemory(&dmDetached, sizeof(dmDetached));
-            dmDetached.dmSize = sizeof(dmDetached);
-            ptlPosition.x = ptlPosition.y = 0;
-            if (NT_SUCCESS(UserEnumRegistryDisplaySettings(pustrDevice, &dmReg)))
-                ptlPosition = dmReg.dmPosition;
-            dmDetached.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
-            pdm = &dmDetached;
-            Status = STATUS_SUCCESS;
-        }
         bCurrent = TRUE;
     }
     else
