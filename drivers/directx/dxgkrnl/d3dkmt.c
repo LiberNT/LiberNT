@@ -3628,14 +3628,21 @@ DxgkpQueryRegistryInfo(
                 Overflow = TRUE;
                 RequiredBytes = DataBytes + sizeof(WCHAR);
             }
-            else if ((Repository = wcsstr(PathBuffer, L"FileRepository")) == NULL)
+            else if ((Repository = wcsstr(PathBuffer, L"FileRepository")) != NULL)
+            {
+                DxgkpTrimDriverStorePath(PathBuffer, Repository, &DataBytes);
+            }
+            else if ((Separator = wcsrchr(PathBuffer, L'\\')) == NULL)
             {
                 Status = STATUS_INVALID_PARAMETER;
             }
             else
             {
-                DxgkpTrimDriverStorePath(PathBuffer, Repository, &DataBytes);
+                /* FIXME: Windows 11 answer for a driver image outside the driver store is unmeasured; the image directory is returned */
+                *Separator = UNICODE_NULL;
+                DataBytes = (ULONG)((Separator - PathBuffer) * sizeof(WCHAR));
             }
+            ASSERT(!NT_SUCCESS(Status) || Overflow || DataBytes + sizeof(WCHAR) < Capacity);
         }
         Data = PathBuffer;
     }
