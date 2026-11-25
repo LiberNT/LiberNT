@@ -142,6 +142,48 @@ AfdFailSendQueue(PAFD_FCB FCB, NTSTATUS Status)
     PollReeval(FCB->DeviceExt, FCB->FileObject);
 }
 
+/* IRPs whose user buffers are released and cancel routine cleared, queued
+ * to be completed once the socket state lock is dropped. Completing an IRP
+ * runs MmUnlockPages and IoCompleteRequest, work that does not need the
+ * FCB mutex but used to hold it for every satisfied send. The queue is
+ * split by buffer layout at enqueue time, as on the receive side, so the
+ * drain never has to read the FCB: a racing close may free it between
+ * SocketStateUnlock and the drain. CheckUnlockExtraBuffers is evaluated
+ * under the lock instead; send IRPs have no address extras today and all
+ * land on Normal. */
+typedef struct _AFD_DEFERRED_SEND {
+    LIST_ENTRY Normal;
+    LIST_ENTRY Address;
+} AFD_DEFERRED_SEND, *PAFD_DEFERRED_SEND;
+
+static VOID CompleteDeferredSend( PLIST_ENTRY List, BOOLEAN Address )
+{
+    while( !IsListEmpty( List ) )
+    {
+        PLIST_ENTRY Entry = RemoveHeadList( List );
+        PIRP NextIrp = CONTAINING_RECORD( Entry, IRP, Tail.Overlay.ListEntry );
+        PIO_STACK_LOCATION NextIrpSp = IoGetCurrentIrpStackLocation( NextIrp );
+        PAFD_SEND_INFO SendReq = GetLockedData( NextIrp, NextIrpSp );
+
+        UnlockBuffers( SendReq->BufferArray, SendReq->BufferCount, Address );
+        if( NextIrp->MdlAddress )
+            UnlockRequest( NextIrp, NextIrpSp );
+        IoCompleteRequest( NextIrp, IO_NETWORK_INCREMENT );
+    }
+}
+
+static VOID DrainDeferredSend( PAFD_DEFERRED_SEND Deferred )
+{
+    CompleteDeferredSend( &Deferred->Normal, FALSE );
+    CompleteDeferredSend( &Deferred->Address, TRUE );
+}
+
+static VOID InitDeferredSend( PAFD_DEFERRED_SEND Deferred )
+{
+    InitializeListHead( &Deferred->Normal );
+    InitializeListHead( &Deferred->Address );
+}
+
 static NTSTATUS NTAPI SendComplete
 ( PDEVICE_OBJECT DeviceObject,
   PIRP Irp,
@@ -156,6 +198,7 @@ static NTSTATUS NTAPI SendComplete
     SIZE_T BytesAlreadyCopied, CompletionOffset, RequestLength;
     SIZE_T TotalBytesCopied = 0, SpaceAvail, i;
     UINT BufferOffset, SendLength, BytesCopied;
+    AFD_DEFERRED_SEND Deferred;
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
@@ -217,6 +260,8 @@ static NTSTATUS NTAPI SendComplete
     FCB->SendUrgentEnd = (FCB->SendUrgentEnd > SendLength) ? FCB->SendUrgentEnd - SendLength : 0;
     RtlMoveMemory(FCB->Send.Window, FCB->Send.Window + SendLength, FCB->Send.BytesUsed);
 
+    InitDeferredSend( &Deferred );
+
     /* DriverContext[3] is the end of this IRP's data relative to the start
      * of the send window, or zero if it has not been buffered yet. Update
      * every buffered IRP by the same consumed byte count. Nonblocking sends
@@ -258,13 +303,9 @@ static NTSTATUS NTAPI SendComplete
 
         (void)IoSetCancelRoutine(NextIrp, NULL);
 
-        UnlockBuffers( SendReq->BufferArray,
-                       SendReq->BufferCount,
-                       FALSE );
-
-        if (NextIrp->MdlAddress) UnlockRequest(NextIrp, NextIrpSp);
-
-        IoCompleteRequest(NextIrp, IO_NETWORK_INCREMENT);
+        InsertTailList( CheckUnlockExtraBuffers( FCB, NextIrpSp )
+                        ? &Deferred.Address : &Deferred.Normal,
+                      &NextIrp->Tail.Overlay.ListEntry );
     }
 
    if (!IsListEmpty(&FCB->PendingIrpList[FUNCTION_SEND])) {
@@ -385,6 +426,7 @@ static NTSTATUS NTAPI SendComplete
 
     if (FCB->TdiRundownEvent) AfdSignalTdiRundown(FCB);
     SocketStateUnlock( FCB );
+    DrainDeferredSend( &Deferred );
 
     return STATUS_SUCCESS;
 }
