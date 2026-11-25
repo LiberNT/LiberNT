@@ -219,7 +219,8 @@ VOID TCPReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
                            IPPacket->TotalSize,
                            IPPacket->HeaderSize));
 
-    LibIPInsertPacket(Interface->TCPContext, IPPacket->Header, IPPacket->TotalSize);
+    LibIPInsertPacket(Interface->TCPContext, IPPacket->Header, IPPacket->TotalSize,
+                      PC(IPPacket->NdisPacket)->ChecksumHw);
 }
 
 NTSTATUS TCPStartup(VOID)

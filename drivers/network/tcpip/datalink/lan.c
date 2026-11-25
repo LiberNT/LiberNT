@@ -547,6 +547,17 @@ VOID NTAPI ProtocolReceive(
 
             PC(NdisPacket)->PacketType = PacketType;
 
+            {
+                NDIS_TCP_IP_CHECKSUM_NET_BUFFER_LIST_INFO Csum;
+
+                Csum.Value = NET_BUFFER_LIST_INFO(Nbl, TcpIpChecksumNetBufferListInfo);
+                /* Loopback frames may carry checksums the hardware never filled */
+                PC(NdisPacket)->ChecksumHw = Csum.Receive.Loopback ? 0 :
+                    (Csum.Receive.IpChecksumSucceeded  ? PC_CSUM_HW_IP  : 0) |
+                    (Csum.Receive.TcpChecksumSucceeded ? PC_CSUM_HW_TCP : 0) |
+                    (Csum.Receive.UdpChecksumSucceeded ? PC_CSUM_HW_UDP : 0);
+            }
+
             GetDataPtr(NdisPacket, 0, &BufferData, &PacketSize);
 
             if (LanCopyNetBuffer(NetBuffer, Adapter->HeaderSize, (PUCHAR)BufferData, PacketSize) != PacketSize ||

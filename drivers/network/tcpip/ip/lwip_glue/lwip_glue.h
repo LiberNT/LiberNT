@@ -159,7 +159,7 @@ struct _IP6_NEIGHBOR_SET;
 struct _IP6_BEST_ROUTE;
 
 /* IP functions */
-void LibIPInsertPacket(void *ifarg, const void *const data, const u32_t size);
+void LibIPInsertPacket(void *ifarg, const void *const data, const u32_t size, const u32_t hw_csum);
 void LibIP6NoteMulticastDestination(struct netif *netif, const ip6_addr_t *Address);
 void LibIP6ForgetNetif(struct netif *netif);
 void LibIPAddressToLwip(const IP_ADDRESS *Address, ip_addr_t *IpAddr);

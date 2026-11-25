@@ -530,7 +530,8 @@ ip4_input(struct pbuf *p, struct netif *inp)
 
   /* verify checksum */
 #if CHECKSUM_CHECK_IP
-  IF__NETIF_CHECKSUM_ENABLED(inp, NETIF_CHECKSUM_CHECK_IP) {
+  if (NETIF_CHECKSUM_ENABLED(inp, NETIF_CHECKSUM_CHECK_IP) &&
+      !(p->flags & PBUF_FLAG_RX_CSUM_IP)) {
     if (inet_chksum(iphdr, iphdr_hlen) != 0) {
 
       LWIP_DEBUGF(IP_DEBUG | LWIP_DBG_LEVEL_SERIOUS,

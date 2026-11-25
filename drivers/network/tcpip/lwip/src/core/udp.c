@@ -333,7 +333,8 @@ udp_input(struct pbuf *p, struct netif *inp)
   if (for_us) {
     LWIP_DEBUGF(UDP_DEBUG | LWIP_DBG_TRACE, ("udp_input: calculating checksum\n"));
 #if CHECKSUM_CHECK_UDP
-    IF__NETIF_CHECKSUM_ENABLED(inp, NETIF_CHECKSUM_CHECK_UDP) {
+    if (NETIF_CHECKSUM_ENABLED(inp, NETIF_CHECKSUM_CHECK_UDP) &&
+        !(p->flags & PBUF_FLAG_RX_CSUM_L4)) {
 #if LWIP_UDPLITE
       if (ip_current_header_proto() == IP_PROTO_UDPLITE) {
         /* Do the UDP Lite checksum */

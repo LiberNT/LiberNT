@@ -349,6 +349,7 @@ NDIS_STATUS AllocatePacketWithBuffer( PNDIS_PACKET *NdisPacket,
     }
 
     RtlZeroMemory(&PC(Packet)->WfpTag, sizeof(PC(Packet)->WfpTag));
+    PC(Packet)->ChecksumHw = 0;
     NdisChainBufferAtFront( Packet, Buffer );
     *NdisPacket = Packet;
 

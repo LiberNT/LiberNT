@@ -810,8 +810,9 @@ VOID IPv4Receive(PIP_INTERFACE IF, PIP_PACKET IPPacket)
         return;
     }
 
-    /* Checksum IPv4 header */
-    if (!IPv4CorrectChecksum(IPPacket->Header, IPPacket->HeaderSize)) {
+    /* Checksum IPv4 header unless the NIC already verified this packet */
+    if (!(PC(IPPacket->NdisPacket)->ChecksumHw & PC_CSUM_HW_IP) &&
+        !IPv4CorrectChecksum(IPPacket->Header, IPPacket->HeaderSize)) {
         /* Discard packet */
         return;
     }
@@ -895,7 +896,8 @@ static VOID IPv6Receive(PIP_INTERFACE IF, PIP_PACKET IPPacket)
         return;
 
     if (CopyPacketToBuffer(Data, IPPacket->NdisPacket, IPPacket->Position, AvailableSize) == AvailableSize)
-        LibIPInsertPacket(IF->TCPContext, Data, AvailableSize);
+        LibIPInsertPacket(IF->TCPContext, Data, AvailableSize,
+                          PC(IPPacket->NdisPacket)->ChecksumHw);
 
     ExFreePoolWithTag(Data, PACKET_BUFFER_TAG);
 }

@@ -23,6 +23,9 @@
 
 #define LWIP_NETIF_LOOPBACK             1
 
+#define LWIP_CHECKSUM_CTRL_PER_NETIF    1
+
+
 #define LWIP_HAVE_LOOPIF                0
 
 #define IPV6_FRAG_COPYHEADER            1

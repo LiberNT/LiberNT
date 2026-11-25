@@ -29,7 +29,8 @@ sys_shutdown(void);
 void
 LibIPInsertPacket(void *ifarg,
                   const void *const data,
-                  const u32_t size)
+                  const u32_t size,
+                  const u32_t hw_csum)
 {
     struct pbuf *p;
 
@@ -44,6 +45,12 @@ LibIPInsertPacket(void *ifarg,
         ASSERT(p->len == size);
 
         RtlCopyMemory(p->payload, data, p->len);
+
+        /* Checksums the NIC already verified on this frame */
+        if (hw_csum & PC_CSUM_HW_IP)
+            p->flags |= PBUF_FLAG_RX_CSUM_IP;
+        if (hw_csum & (PC_CSUM_HW_TCP | PC_CSUM_HW_UDP))
+            p->flags |= PBUF_FLAG_RX_CSUM_L4;
 
         ((PNETIF)ifarg)->input(p, (PNETIF)ifarg);
     }

@@ -160,7 +160,8 @@ tcp_input(struct pbuf *p, struct netif *inp)
   }
 
 #if CHECKSUM_CHECK_TCP
-  IF__NETIF_CHECKSUM_ENABLED(inp, NETIF_CHECKSUM_CHECK_TCP) {
+  if (NETIF_CHECKSUM_ENABLED(inp, NETIF_CHECKSUM_CHECK_TCP) &&
+      !(p->flags & PBUF_FLAG_RX_CSUM_L4)) {
     /* Verify TCP checksum. */
     u16_t chksum = ip_chksum_pseudo(p, IP_PROTO_TCP, p->tot_len,
                                     ip_current_src_addr(), ip_current_dest_addr());

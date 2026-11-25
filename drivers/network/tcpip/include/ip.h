@@ -104,6 +104,7 @@ typedef struct _PACKET_CONTEXT {
     PVOID Context;                        /* Context information for handler */
     UINT  PacketType;                     /* Type of packet */
     WFP_SHIM_TAG WfpTag;
+    ULONG ChecksumHw;                     /* PC_CSUM_HW_* bits verified by the NIC */
 } PACKET_CONTEXT, *PPACKET_CONTEXT;
 
 /* The ProtocolReserved field is structured as a PACKET_CONTEXT */
@@ -125,6 +126,11 @@ typedef VOID (*LL_TRANSMIT_ROUTINE)(
     UINT Offset,
     PVOID LinkAddress,
     USHORT Type);
+
+/* PACKET_CONTEXT.ChecksumHw bits: checksums the NIC verified on this packet */
+#define PC_CSUM_HW_IP   0x01
+#define PC_CSUM_HW_TCP  0x02
+#define PC_CSUM_HW_UDP  0x04
 
 /* Link layer to IP binding information */
 typedef struct _LLIP_BIND_INFO {
