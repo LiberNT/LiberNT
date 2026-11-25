@@ -151,6 +151,7 @@ KspPropertyHandler(
     NTSTATUS Status;
     PFNKSHANDLER PropertyHandler = NULL;
     ULONG Index, InputBufferLength, OutputBufferLength, TotalSize;
+    ULONG PropertyFlags;
     LPGUID Guid;
     //UNICODE_STRING GuidBuffer;
 
@@ -169,7 +170,7 @@ KspPropertyHandler(
     }
 
     /* check for integer overflow */
-    if (InputBufferLength + OutputBufferLength < IoStack->Parameters.DeviceIoControl.OutputBufferLength)
+    if (InputBufferLength > MAXULONG - OutputBufferLength)
     {
         /* overflow */
         return STATUS_INVALID_BUFFER_SIZE;
@@ -191,18 +192,28 @@ KspPropertyHandler(
     /* have the parameters been checked yet */
     if (!Irp->AssociatedIrp.SystemBuffer)
     {
-        /* is it from user mode */
-        if (Irp->RequestorMode == UserMode)
+        _SEH2_TRY
         {
-            /* probe user buffer */
-            ProbeForRead(IoStack->Parameters.DeviceIoControl.Type3InputBuffer, InputBufferLength, 1);
+            /* is it from user mode */
+            if (Irp->RequestorMode == UserMode)
+            {
+                /* probe user buffer */
+                ProbeForRead(IoStack->Parameters.DeviceIoControl.Type3InputBuffer, InputBufferLength, 1);
+            }
+
+            PropertyFlags = Property->Flags;
         }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
 
         /* do we have an allocator */
-        if ((Allocator) && (Property->Flags & (KSPROPERTY_TYPE_GET | KSPROPERTY_TYPE_SET)))
+        if ((Allocator) && (PropertyFlags & (KSPROPERTY_TYPE_GET | KSPROPERTY_TYPE_SET)))
         {
             /* call allocator */
-            Status = Allocator(Irp, TotalSize, (Property->Flags & KSPROPERTY_TYPE_GET));
+            Status = Allocator(Irp, TotalSize, (PropertyFlags & KSPROPERTY_TYPE_GET));
 
             /* check for success */
             if (!NT_SUCCESS(Status))
@@ -212,50 +223,57 @@ KspPropertyHandler(
         {
             /* allocate buffer */
             Irp->AssociatedIrp.SystemBuffer = AllocateItem(NonPagedPool, TotalSize);
-
-            /* sanity check */
-            ASSERT(Irp->AssociatedIrp.SystemBuffer != NULL);
+            if (!Irp->AssociatedIrp.SystemBuffer)
+                return STATUS_INSUFFICIENT_RESOURCES;
 
             /* mark irp as buffered so that changes the stream headers are propagated back */
             Irp->Flags |= IRP_DEALLOCATE_BUFFER | IRP_BUFFERED_IO;
         }
 
-        /* now copy the buffer */
-        RtlCopyMemory((PVOID)((ULONG_PTR)Irp->AssociatedIrp.SystemBuffer + OutputBufferLength), IoStack->Parameters.DeviceIoControl.Type3InputBuffer, InputBufferLength);
-
-        /* use new property buffer */
-        Property = (PKSPROPERTY)((ULONG_PTR)Irp->AssociatedIrp.SystemBuffer + OutputBufferLength);
-
-        /* is it a set operation */
-        if (Property->Flags & KSPROPERTY_TYPE_SET)
+        _SEH2_TRY
         {
-            /* for set operations, the output parameters need to be copied */
-            if (Irp->RequestorMode == UserMode)
+            /* now copy the buffer */
+            RtlCopyMemory((PVOID)((ULONG_PTR)Irp->AssociatedIrp.SystemBuffer + OutputBufferLength), IoStack->Parameters.DeviceIoControl.Type3InputBuffer, InputBufferLength);
+
+            /* use new property buffer */
+            Property = (PKSPROPERTY)((ULONG_PTR)Irp->AssociatedIrp.SystemBuffer + OutputBufferLength);
+
+            /* is it a set operation */
+            if (Property->Flags & KSPROPERTY_TYPE_SET)
             {
-                /* probe user parameter */
-                ProbeForRead(Irp->UserBuffer, IoStack->Parameters.DeviceIoControl.OutputBufferLength, 1);
+                /* for set operations, the output parameters need to be copied */
+                if (Irp->RequestorMode == UserMode)
+                {
+                    /* probe user parameter */
+                    ProbeForRead(Irp->UserBuffer, IoStack->Parameters.DeviceIoControl.OutputBufferLength, 1);
+                }
+
+                /* copy parameters, needs un-aligned parameter length */
+                RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, Irp->UserBuffer, IoStack->Parameters.DeviceIoControl.OutputBufferLength);
             }
 
-            /* copy parameters, needs un-aligned parameter length */
-            RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, Irp->UserBuffer, IoStack->Parameters.DeviceIoControl.OutputBufferLength);
-        }
+            /* is there an output buffer */
+            if (IoStack->Parameters.DeviceIoControl.OutputBufferLength)
+            {
+                /* is it from user mode */
+                if (Irp->RequestorMode == UserMode)
+                {
+                    /* probe buffer for writing */
+                    ProbeForWrite(Irp->UserBuffer, IoStack->Parameters.DeviceIoControl.OutputBufferLength, 1);
+                }
 
-        /* is there an output buffer */
-        if (IoStack->Parameters.DeviceIoControl.OutputBufferLength)
+                if (!Allocator || !(Property->Flags & KSPROPERTY_TYPE_GET))
+                {
+                    /* it is an input operation */
+                    Irp->Flags |= IRP_INPUT_OPERATION;
+                }
+            }
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
-            /* is it from user mode */
-            if (Irp->RequestorMode == UserMode)
-            {
-                /* probe buffer for writing */
-                ProbeForWrite(Irp->UserBuffer, IoStack->Parameters.DeviceIoControl.OutputBufferLength, 1);
-            }
-
-            if (!Allocator || !(Property->Flags & KSPROPERTY_TYPE_GET))
-            {
-                /* it is an input operation */
-                Irp->Flags |= IRP_INPUT_OPERATION;
-            }
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
         }
+        _SEH2_END;
     }
     else
     {
