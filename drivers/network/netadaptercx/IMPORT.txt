@@ -48,6 +48,7 @@ LiberNT changes:
   netcx/adapter/nxadapter.cpp: device bus address read inside the TraceLoggingWrite arguments
   netcx/adapter/nxadapter.cpp: DMA address mask for a 64-bit address width is all ones instead of a shift by 64
   netcx/adapter/verifier.hpp, nxadapter.cpp: unsupported-flag checks complement the flags as integers, not as enumerations
+  netcx/adapter/nxadapter.cpp: the peer-address demux lookup reads the WiFiCx demux type from the field's storage, not through NET_ADAPTER_TX_DEMUX_TYPE
 LiberNT files:
   inc/, lib/: private headers and libraries the public sources do not include; layouts and
     values follow the NetAdapterCx and ndis 10.0.22621 x64 public symbols, so their size checks apply to 64-bit targets

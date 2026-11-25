@@ -1210,9 +1210,14 @@ NxAdapter::GetTxPeerAddressDemux(
     void
 ) const
 {
+    static_assert(sizeof(NET_ADAPTER_TX_DEMUX::Type) == sizeof(ULONG), "demux type storage");
+
     for (auto const & demux : m_txDemux)
     {
-        if (demux.Type == 2U) // PeerAddress
+        ULONG type;
+
+        RtlCopyMemory(&type, &demux.Type, sizeof(type));
+        if (type == 2U) // PeerAddress
         {
             return &demux;
         }
