@@ -152,8 +152,12 @@ int E4SetLabel(E4_VOLUME *Volume, const char *Label, uint32_t Length);
 int E4GetAttr(E4_VOLUME *Volume, uint32_t Inode, E4_ATTR *Attr);
 int E4SetAttr(E4_VOLUME *Volume, uint32_t Inode, uint32_t Mask, const E4_ATTR *Attr);
 
-/* Turns an empty regular file into a symbolic link, a device node, a fifo or a socket, in the inode and in the name that leads to it */
+/* Turns an empty regular file into a device node, a fifo or a socket, in the inode and in the name that leads to it */
 int E4SetType(E4_VOLUME *Volume, uint32_t Directory, const char *Name, uint32_t NameLength, uint32_t Inode, uint32_t Mode);
+
+/* Turns an empty regular file into a symbolic link and stores its target in one journal transaction */
+int E4SetSymlink(E4_VOLUME *Volume, uint32_t Directory, const char *Name, uint32_t NameLength, uint32_t Inode,
+                 uint32_t Mode, const char *Target, uint32_t TargetLength);
 
 int E4Lookup(E4_VOLUME *Volume, uint32_t Directory, const char *Name, uint32_t NameLength, uint32_t *Inode, uint8_t *Type);
 int E4ReadDir(E4_VOLUME *Volume, uint32_t Directory, uint64_t *Offset, E4_DIR_CALLBACK Callback, void *Context);

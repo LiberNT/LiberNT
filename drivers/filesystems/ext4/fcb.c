@@ -402,6 +402,8 @@ Ext4RefreshFcb(
         Attr.Modify = Fcb->Attr.Modify;
         Attr.Change = Fcb->Attr.Change;
     }
+    if (Fcb->PendingSymlink)
+        Attr.Mode = Fcb->PendingSymlinkMode;
     Ext4ApplyAttr(Fcb, &Attr);
     return STATUS_SUCCESS;
 }

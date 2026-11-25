@@ -103,6 +103,8 @@ typedef struct _EXT4_FCB
     BOOLEAN Directory;
     BOOLEAN Volume;
     BOOLEAN Symlink;
+    BOOLEAN PendingSymlink;
+    ULONG PendingSymlinkMode;
     BOOLEAN DeletePending;
     /* The last name of the inode is gone; the inode is released when the FCB goes away */
     BOOLEAN Orphaned;

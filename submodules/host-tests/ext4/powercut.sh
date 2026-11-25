@@ -28,11 +28,9 @@ while [ $CUT -lt 4800 ]; do
     cp --sparse=always cut replayed
     # e2fsck replays the journal and releases the orphans. The free counts of the superblock are not journalled,
     # and a hint about the shape of an extent tree is not damage; anything else it reports is.
-    # FIXME: a link is created as an empty one and gets its target in a second transaction; a cut between the two
-    # leaves a link e2fsck calls invalid
     e2fsck -fy cut > fsck.out 2>&1
     if grep -v '^e2fsck\|^Pass\|recovering journal\|^Free blocks count wrong\|^Free inodes count wrong\|^Fix\|^$' fsck.out |
-       grep -v 'FILE SYSTEM WAS MODIFIED\|files (\|^Clearing orphaned\|could be shorter\|could be narrower\|^Symlink .* is invalid\|^Clear' |
+       grep -v 'FILE SYSTEM WAS MODIFIED\|files (\|^Clearing orphaned\|could be shorter\|could be narrower' |
        grep -q .; then
         echo "cut at write $CUT: e2fsck had to repair the volume"; cat fsck.out; BAD=1
     fi
