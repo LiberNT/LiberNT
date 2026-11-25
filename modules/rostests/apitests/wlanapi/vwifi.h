@@ -9,4 +9,4 @@
 
 BOOL InstallVwifi(HDEVINFO *Devices, SP_DEVINFO_DATA *Device);
 VOID RemoveVwifi(HDEVINFO Devices, SP_DEVINFO_DATA *Device);
-BOOL WaitInterface(HANDLE Client, GUID *Interface);
+BOOL WaitInterface(HANDLE Client, HDEVINFO Devices, SP_DEVINFO_DATA *Device, GUID *Interface);

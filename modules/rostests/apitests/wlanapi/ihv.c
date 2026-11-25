@@ -100,7 +100,7 @@ START_TEST(WlanIhvControl)
 
     if (InstallVwifi(&Devices, &Device))
     {
-        if (WaitInterface(Client, &Interface))
+        if (WaitInterface(Client, Devices, &Device, &Interface))
             TestDriver(Client, &Interface);
         else
             ok(FALSE, "No wireless interface appeared for the vwifi adapter\n");
