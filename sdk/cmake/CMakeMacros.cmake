@@ -185,7 +185,7 @@ function(add_cd_file)
         endforeach()
         # manage dependency
         if(_CD_TARGET AND NOT _CD_OPTIONAL)
-            add_dependencies(bootcd ${_CD_TARGET} registry_inf)
+            add_dependencies(liberntiso ${_CD_TARGET} registry_inf)
         endif()
     endif() #end bootcd
 
@@ -194,7 +194,7 @@ function(add_cd_file)
     if(NOT __cd EQUAL -1)
         # manage dependency
         if(_CD_TARGET AND NOT _CD_OPTIONAL)
-            add_dependencies(bootcd ${_CD_TARGET} registry_inf)
+            add_dependencies(liberntiso ${_CD_TARGET} registry_inf)
             add_dependencies(livecd_files ${_CD_TARGET} registry_inf)
         endif()
         foreach(item ${_CD_FILE})

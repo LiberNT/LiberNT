@@ -119,10 +119,8 @@ LiberNT は最新のハードウェアとプラットフォームを NT アー�
 
 | ファイル | 内容 |
 | --- | --- |
-| `bootcd-iso-…-<arch>-…zip` | `bootcd.iso`。LiberNT を実行するか、LiberNT セットアップを起動する CD イメージ |
+| `LiberNT-…-<arch>-….iso` | `LiberNT.iso`。LiberNT を実行するか、LiberNT セットアップを起動する CD イメージ |
 | `LiberNT-img-…-<arch>-…zip` | `LiberNT.img`。LiberNT がインストール済みのディスク |
-| `LiberNT-vhd-…-<arch>-…zip` | `LiberNT.vhd`。VHD ベースの仮想マシン向けの、同じプリインストール済みディスク |
-| `LiberNT-vhdx-…-<arch>-…zip` | `LiberNT.vhdx`。Hyper-V 第 2 世代向けの、同じプリインストール済みディスク |
 
 > [!NOTE]
 > これらは、GitHub Actions が `master` ブランチから作成した Clang の Debug ビルドです。
@@ -140,7 +138,7 @@ LiberNT を最も手早く試せるのは、プリインストール済みディ
 
 ### ステップ 3: LiberNT をインストールする
 
-仮想マシンまたは PC で `bootcd.iso` を起動し、**LiberNT セットアップ**の指示に従います。
+仮想マシンまたは PC で `LiberNT.iso` を起動し、**LiberNT セットアップ**の指示に従います。
 
 プリインストール済みディスクにも LiberNT セットアップが入っています。実行中のシステムから別のディスクに LiberNT をインストールするには、`C:\<アーキテクチャ>\libernt.exe`（たとえば `C:\arm64\libernt.exe`）を実行します。
 
@@ -222,7 +220,7 @@ ninja liberntimg
 
 | コマンド | 作成されるもの | 用途 |
 | --- | --- | --- |
-| `ninja bootcd` | `bootcd.iso` | 仮想マシンまたは PC で、CD イメージから LiberNT をインストールする。 |
+| `ninja liberntiso` | `LiberNT.iso` | 仮想マシンまたは PC で、CD イメージから LiberNT をインストールする。 |
 | `ninja liberntimg` | `LiberNT.img` | LiberNT がインストール済みのディスクを起動する。QEMU などの仮想マシンで起動するか、USB ドライブや SD カードに書き込みます。UEFI と BIOS のどちらでも起動します。 |
 | `ninja liberntvhd` | `LiberNT.vhd`、`LiberNT.vhdx` | 同じプリインストール済みディスクを仮想マシンで使う。VHD は VirtualBox と Hyper-V 第 1 世代で、VHDX は VHD ディスクを受け付けない Hyper-V 第 2 世代で使います。 |
 

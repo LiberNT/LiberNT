@@ -115,14 +115,12 @@ Release builds also include PowerPC images.
 
 ### Step 1: Download a Build
 
-Every build on the [Releases](https://github.com/LiberNT/LiberNT/releases) page comes as one ZIP file per image and architecture:
+Every build on the [Releases](https://github.com/LiberNT/LiberNT/releases) page comes as one file per architecture:
 
 | File | What it is |
 | --- | --- |
-| `bootcd-iso-…-<arch>-…zip` | `bootcd.iso`, a CD image that runs LiberNT or starts LiberNT Setup |
-| `LiberNT-img-…-<arch>-…zip` | `LiberNT.img`, a disk with LiberNT already installed |
-| `LiberNT-vhd-…-<arch>-…zip` | `LiberNT.vhd`, the same preinstalled disk for VHD-based virtual machines |
-| `LiberNT-vhdx-…-<arch>-…zip` | `LiberNT.vhdx`, the same preinstalled disk for Hyper-V Generation 2 |
+| `LiberNT-…-<arch>-….iso` | For x86 and x64: a CD image that runs LiberNT or starts LiberNT Setup |
+| `LiberNT-img-…-<arch>-…zip` | For the other architectures: a ZIP file that holds `LiberNT.img`, a disk with LiberNT already installed |
 
 > [!NOTE]
 > These are Clang Debug builds, made by GitHub Actions from the `master` branch.
@@ -140,7 +138,7 @@ The quickest way to try LiberNT is the preinstalled disk:
 
 ### Step 3: Install LiberNT
 
-Boot `bootcd.iso` in a virtual machine or on a PC, and follow the instructions of **LiberNT Setup**.
+Boot `LiberNT.iso` in a virtual machine or on a PC, and follow the instructions of **LiberNT Setup**.
 
 The preinstalled disk also carries LiberNT Setup. Run `C:\<architecture>\libernt.exe`, for example `C:\arm64\libernt.exe`, to install LiberNT on another disk from the running system.
 
@@ -222,7 +220,7 @@ ninja liberntimg
 
 | Command | Creates | Use it to |
 | --- | --- | --- |
-| `ninja bootcd` | `bootcd.iso` | Install LiberNT from a CD image, in a virtual machine or on a PC. |
+| `ninja liberntiso` | `LiberNT.iso` | Install LiberNT from a CD image, in a virtual machine or on a PC. |
 | `ninja liberntimg` | `LiberNT.img` | Boot a disk with LiberNT already installed. Start it in a virtual machine such as QEMU, or write it to a USB drive or SD card. It boots with UEFI or BIOS. |
 | `ninja liberntvhd` | `LiberNT.vhd`, `LiberNT.vhdx` | Use the same preinstalled disk in virtual machines: the VHD in VirtualBox and Hyper-V Generation 1, the VHDX in Hyper-V Generation 2, which does not take VHD disks. |
 

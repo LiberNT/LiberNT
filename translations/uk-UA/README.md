@@ -119,10 +119,8 @@ LiberNT привносить підтримку сучасного обладн�
 
 | Файл | Що це таке |
 | --- | --- |
-| `bootcd-iso-…-<arch>-…zip` | `bootcd.iso`, образ CD, що запускає LiberNT або інсталятор LiberNT Setup |
+| `LiberNT-…-<arch>-….iso` | `LiberNT.iso`, образ CD, що запускає LiberNT або інсталятор LiberNT Setup |
 | `LiberNT-img-…-<arch>-…zip` | `LiberNT.img`, диск із уже встановленою LiberNT |
-| `LiberNT-vhd-…-<arch>-…zip` | `LiberNT.vhd`, той самий попередньо встановлений диск для віртуальних машин на основі VHD |
-| `LiberNT-vhdx-…-<arch>-…zip` | `LiberNT.vhdx`, той самий диск для Hyper-V Generation 2 |
 
 > [!NOTE]
 > Це Debug-збірки, скомпільовані Clang автоматично через GitHub Actions із гілки `master`.
@@ -140,7 +138,7 @@ LiberNT привносить підтримку сучасного обладн�
 
 ### Крок 3: Встановіть LiberNT
 
-Завантажте `bootcd.iso` у віртуальній машині або на комп'ютері та дотримуйтесь інструкцій **LiberNT Setup**.
+Завантажте `LiberNT.iso` у віртуальній машині або на комп'ютері та дотримуйтесь інструкцій **LiberNT Setup**.
 
 Попередньо встановлений диск також містить інсталятор LiberNT Setup. Запустіть `C:\<architecture>\libernt.exe`, наприклад `C:\arm64\libernt.exe`, щоб встановити LiberNT на інший диск із запущеної системи.
 
@@ -222,7 +220,7 @@ ninja liberntimg
 
 | Команда | Створює | Призначення |
 | --- | --- | --- |
-| `ninja bootcd` | `bootcd.iso` | Встановлення LiberNT з образу CD у віртуальній машині або на комп'ютері. |
+| `ninja liberntiso` | `LiberNT.iso` | Встановлення LiberNT з образу CD у віртуальній машині або на комп'ютері. |
 | `ninja liberntimg` | `LiberNT.img` | Завантаження диска з уже встановленою LiberNT. Запустіть його у віртуальній машині (наприклад, QEMU) або запишіть на USB-накопичувач чи карту SD. Завантажується через UEFI або BIOS. |
 | `ninja liberntvhd` | `LiberNT.vhd`, `LiberNT.vhdx` | Використання того самого диска у віртуальних машинах: VHD у VirtualBox та Hyper-V Generation 1, VHDX у Hyper-V Generation 2, який не підтримує диски VHD. |
 

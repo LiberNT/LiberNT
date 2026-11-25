@@ -119,10 +119,8 @@ Cada compilación de la página [Releases](https://github.com/LiberNT/LiberNT/re
 
 | Archivo | Qué es |
 | --- | --- |
-| `bootcd-iso-…-<arch>-…zip` | `bootcd.iso`, una imagen de CD que ejecuta LiberNT o inicia la instalación de LiberNT |
+| `LiberNT-…-<arch>-….iso` | `LiberNT.iso`, una imagen de CD que ejecuta LiberNT o inicia la instalación de LiberNT |
 | `LiberNT-img-…-<arch>-…zip` | `LiberNT.img`, un disco con LiberNT ya instalado |
-| `LiberNT-vhd-…-<arch>-…zip` | `LiberNT.vhd`, el mismo disco preinstalado para máquinas virtuales basadas en VHD |
-| `LiberNT-vhdx-…-<arch>-…zip` | `LiberNT.vhdx`, el mismo disco preinstalado para Hyper-V de generación 2 |
 
 > [!NOTE]
 > Son compilaciones Debug con Clang, generadas por GitHub Actions a partir de la rama `master`.
@@ -140,7 +138,7 @@ La forma más rápida de probar LiberNT es el disco preinstalado:
 
 ### Paso 3: instalar LiberNT
 
-Arranca `bootcd.iso` en una máquina virtual o en un PC y sigue las instrucciones de la **instalación de LiberNT**.
+Arranca `LiberNT.iso` en una máquina virtual o en un PC y sigue las instrucciones de la **instalación de LiberNT**.
 
 El disco preinstalado también incluye la instalación de LiberNT. Ejecuta `C:\<arquitectura>\libernt.exe`, por ejemplo `C:\arm64\libernt.exe`, para instalar LiberNT en otro disco desde el sistema en ejecución.
 
@@ -222,7 +220,7 @@ ninja liberntimg
 
 | Comando | Crea | Sirve para |
 | --- | --- | --- |
-| `ninja bootcd` | `bootcd.iso` | Instalar LiberNT desde una imagen de CD, en una máquina virtual o en un PC. |
+| `ninja liberntiso` | `LiberNT.iso` | Instalar LiberNT desde una imagen de CD, en una máquina virtual o en un PC. |
 | `ninja liberntimg` | `LiberNT.img` | Arrancar un disco con LiberNT ya instalado. Inícialo en una máquina virtual como QEMU, o escríbelo en una unidad USB o una tarjeta SD. Arranca con UEFI o BIOS. |
 | `ninja liberntvhd` | `LiberNT.vhd`, `LiberNT.vhdx` | Usar el mismo disco preinstalado en máquinas virtuales: el VHD en VirtualBox y en Hyper-V de generación 1, el VHDX en Hyper-V de generación 2, que no acepta discos VHD. |
 
