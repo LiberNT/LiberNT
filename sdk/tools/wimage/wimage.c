@@ -63,6 +63,10 @@ static char g_dest_dir[4096];
 static char* g_extract_paths[MAX_EXTRACT_PATHS];
 static int   g_extract_path_count;
 
+#define MAX_ADDED_IMAGES 16
+static char* g_added_images[MAX_ADDED_IMAGES];
+static int   g_added_image_count;
+
 /* ---- Helpers ---- */
 
 static int starts_with(const char* s, const char* prefix)
@@ -263,6 +267,7 @@ static void print_usage(void)
     printf("native-wimage v%s\n", WIMAGE_VERSION_STRING);
     printf("Usage:\n");
     printf("    native-wimage capture SOURCE WIMFILE [NAME [DESC]] [--compress=TYPE] [--threads=N] [--boot] [--check]\n");
+    printf("                          [--add-image=NAME=DIR]...\n");
     printf("    native-wimage apply WIMFILE [IMAGE] TARGET [--check]\n");
     printf("    native-wimage append SOURCE WIMFILE [NAME [DESC]] [--compress=TYPE] [--threads=N] [--boot] [--check]\n");
     printf("    native-wimage delete WIMFILE IMAGE\n");
@@ -279,7 +284,7 @@ static void print_usage(void)
 static void print_command_help(const char* cmd)
 {
     if (strcmp(cmd, "capture") == 0)
-        printf("Usage: native-wimage capture SOURCE WIMFILE [NAME [DESC]] [--compress=TYPE] [--threads=N] [--boot] [--check]\n");
+        printf("Usage: native-wimage capture SOURCE WIMFILE [NAME [DESC]] [--compress=TYPE] [--threads=N] [--boot] [--check] [--add-image=NAME=DIR]...\n");
     else if (strcmp(cmd, "apply") == 0)
         printf("Usage: native-wimage apply WIMFILE [IMAGE] TARGET [--check]\n");
     else if (strcmp(cmd, "append") == 0)
@@ -354,6 +359,12 @@ static int parse_args(int argc, char* argv[])
             snprintf(g_path_filter, sizeof(g_path_filter), "%s", arg + 7);
         } else if (starts_with(arg, "--dest-dir=")) {
             snprintf(g_dest_dir, sizeof(g_dest_dir), "%s", arg + 11);
+        } else if (starts_with(arg, "--add-image=")) {
+            if (g_added_image_count >= MAX_ADDED_IMAGES || !strchr(arg + 12, '=') || arg[12] == '=') {
+                fprintf(stderr, "Error: --add-image takes NAME=DIR, at most %d times\n", MAX_ADDED_IMAGES);
+                return 0;
+            }
+            g_added_images[g_added_image_count++] = (char*)arg + 12;
         } else {
             if (pos_count < 64)
                 positional[pos_count++] = arg;
@@ -520,6 +531,24 @@ static int do_capture(void)
 
     if (g_boot)
         ctx.header.boot_index = (uint32_t)ctx.image_count;
+
+    for (int i = 0; i < g_added_image_count; i++) {
+        char added_name[256];
+        const char* dir = strchr(g_added_images[i], '=') + 1;
+        size_t length = (size_t)(dir - 1 - g_added_images[i]);
+
+        if (length >= sizeof(added_name))
+            length = sizeof(added_name) - 1;
+        memcpy(added_name, g_added_images[i], length);
+        added_name[length] = '\0';
+        printf("Scanning \"%s\"\n", dir);
+        ret = wim_capture_tree(&ctx, dir, added_name, "");
+        if (ret != 0) {
+            fprintf(stderr, "Error: capture of \"%s\" failed\n", dir);
+            wim_ctx_free(&ctx);
+            return ret;
+        }
+    }
 
     ret = wim_finalize(&ctx, g_check);
     if (ret != 0) {
@@ -863,6 +892,7 @@ int main(int argc, char* argv[])
     memset(g_path_filter, 0, sizeof(g_path_filter));
     memset(g_dest_dir, 0, sizeof(g_dest_dir));
     g_extract_path_count = 0;
+    g_added_image_count = 0;
 
     if (!parse_args(argc, argv))
         return 1;
