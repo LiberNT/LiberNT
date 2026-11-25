@@ -1374,6 +1374,38 @@ LogonUserExW(
     _Out_opt_ LPDWORD pdwProfileLength,
     _Out_opt_ PQUOTA_LIMITS pQuotaLimits)
 {
+    return LogonUserExExW((LPWSTR)lpszUsername,
+                          (LPWSTR)lpszDomain,
+                          (LPWSTR)lpszPassword,
+                          dwLogonType,
+                          dwLogonProvider,
+                          NULL,
+                          phToken,
+                          ppLogonSid,
+                          ppProfileBuffer,
+                          pdwProfileLength,
+                          pQuotaLimits);
+}
+
+
+/*
+ * @implemented
+ */
+BOOL
+WINAPI
+LogonUserExExW(
+    _In_ LPWSTR lpszUsername,
+    _In_opt_ LPWSTR lpszDomain,
+    _In_opt_ LPWSTR lpszPassword,
+    _In_ DWORD dwLogonType,
+    _In_ DWORD dwLogonProvider,
+    _In_opt_ PTOKEN_GROUPS pTokenGroups,
+    _Out_opt_ PHANDLE phToken,
+    _Out_opt_ PSID *ppLogonSid,
+    _Out_opt_ PVOID *ppProfileBuffer,
+    _Out_opt_ LPDWORD pdwProfileLength,
+    _Out_opt_ PQUOTA_LIMITS pQuotaLimits)
+{
     SID_IDENTIFIER_AUTHORITY LocalAuthority = {SECURITY_LOCAL_SID_AUTHORITY};
     SID_IDENTIFIER_AUTHORITY SystemAuthority = {SECURITY_NT_AUTHORITY};
     PSID LogonSid = NULL;
@@ -1539,7 +1571,7 @@ LogonUserExW(
     /* Allocate and set the token groups */
     TokenGroups = RtlAllocateHeap(RtlGetProcessHeap(),
                                   HEAP_ZERO_MEMORY,
-                                  sizeof(TOKEN_GROUPS) + ((2 - ANYSIZE_ARRAY) * sizeof(SID_AND_ATTRIBUTES)));
+                                  sizeof(TOKEN_GROUPS) + ((2 + ((pTokenGroups != NULL) ? pTokenGroups->GroupCount : 0) - ANYSIZE_ARRAY) * sizeof(SID_AND_ATTRIBUTES)));
     if (TokenGroups == NULL)
     {
         Status = STATUS_INSUFFICIENT_RESOURCES;
@@ -1554,6 +1586,19 @@ LogonUserExW(
     Groups[1].Sid = LocalSid;
     Groups[1].Attributes = SE_GROUP_MANDATORY | SE_GROUP_ENABLED |
                            SE_GROUP_ENABLED_BY_DEFAULT;
+
+    /* Append the caller-supplied groups, if any */
+    if (pTokenGroups != NULL)
+    {
+        ULONG GroupIndex;
+
+        for (GroupIndex = 0; GroupIndex < pTokenGroups->GroupCount; GroupIndex++)
+        {
+            Groups[2 + GroupIndex].Sid = pTokenGroups->Groups[GroupIndex].Sid;
+            Groups[2 + GroupIndex].Attributes = pTokenGroups->Groups[GroupIndex].Attributes;
+        }
+        TokenGroups->GroupCount += pTokenGroups->GroupCount;
+    }
 
     /* Set the token source */
     RtlCopyMemory(TokenSource.SourceName,

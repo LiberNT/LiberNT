@@ -354,6 +354,7 @@
 @ stdcall LockServiceDatabase(ptr)
 @ stdcall LogonUserA(str str str long long ptr)
 @ stdcall LogonUserExA(str str str long long ptr ptr ptr ptr ptr)
+@ stdcall LogonUserExExW(wstr wstr wstr long long ptr ptr ptr ptr ptr ptr)
 @ stdcall LogonUserExW(wstr wstr wstr long long ptr ptr ptr ptr ptr)
 @ stdcall LogonUserW(wstr wstr wstr long long ptr)
 @ stdcall LookupAccountNameA(str str ptr ptr ptr ptr ptr)
