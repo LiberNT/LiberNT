@@ -185,11 +185,14 @@ Ndis6IoInitDmaAdapter(
     desc.Master           = TRUE;
     desc.ScatterGather    = TRUE;
     desc.Dma32BitAddresses = TRUE;
-    desc.Dma64BitAddresses = TRUE;
+    desc.Dma64BitAddresses = Ext->SgDescriptionValid &&
+                             (Ext->SgDescription.Flags & NDIS_SG_DMA_64_BIT_ADDRESS) != 0;
     desc.InterfaceType    = PCIBus;
     desc.DmaWidth         = Width32Bits;
     desc.DmaSpeed         = Compatible;
     desc.MaximumLength    = MAXULONG;
+    if (Ext->SgDescriptionValid && Ext->SgDescription.MaximumPhysicalMapping != 0)
+        desc.MaximumLength = Ext->SgDescription.MaximumPhysicalMapping;
 
     dmaAdapter = IoGetDmaAdapter(Pdo, &desc, &numMapRegs);
     if (dmaAdapter == NULL)
@@ -200,6 +203,7 @@ Ndis6IoInitDmaAdapter(
 
     Ext->DmaAdapter           = dmaAdapter;
     Ext->NumberOfMapRegisters = numMapRegs;
+    Ext->DmaAdapter64Bit      = desc.Dma64BitAddresses;
     return NDIS_STATUS_SUCCESS;
 }
 
@@ -230,6 +234,7 @@ Ndis6IoFreeDmaAdapter(
     Ext->DmaAdapter->DmaOperations->PutDmaAdapter(Ext->DmaAdapter);
     Ext->DmaAdapter = NULL;
     Ext->NumberOfMapRegisters = 0;
+    Ext->DmaAdapter64Bit = FALSE;
 }
 
 NDIS_STATUS
@@ -241,6 +246,9 @@ NdisMRegisterScatterGatherDma(
 {
     PNDIS6_ADAPTER_EXT Ext;
     NDIS_STATUS Status;
+    BOOLEAN Dma64BitAddresses;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
 
     if (NdisMiniportDmaHandle == NULL || DmaDescription == NULL)
         return NDIS_STATUS_INVALID_PARAMETER;
@@ -248,10 +256,6 @@ NdisMRegisterScatterGatherDma(
     Ext = Ndis6IoExtFromHandle(NdisMiniportHandle);
     if (Ext == NULL)
         return NDIS_STATUS_INVALID_PARAMETER;
-
-    Status = Ndis6IoInitDmaAdapter(Ext, Ext->PhysicalDeviceObject);
-    if (Status != NDIS_STATUS_SUCCESS)
-        return Status;
 
     DmaDescription->ScatterGatherListSize = FIELD_OFFSET(SCATTER_GATHER_LIST, Elements) +
         (ULONG)(BYTES_TO_PAGES(DmaDescription->MaximumPhysicalMapping) + 1) * sizeof(SCATTER_GATHER_ELEMENT);
@@ -273,6 +277,21 @@ NdisMRegisterScatterGatherDma(
         RtlCopyMemory(&Ext->SgDescription, DmaDescription, NDIS_SIZEOF_SG_DMA_DESCRIPTION_REVISION_1);
     }
     Ext->SgDescriptionValid = TRUE;
+
+    Dma64BitAddresses = (DmaDescription->Flags & NDIS_SG_DMA_64_BIT_ADDRESS) != 0;
+    if (Ext->DmaAdapter != NULL && Ext->DmaAdapter64Bit != Dma64BitAddresses)
+    {
+        /* FIXME: while shared memory from an earlier adapter is outstanding, that adapter's address width stays */
+        if (InterlockedCompareExchange(&Ext->SharedMemoryBuffers, 0, 0) == 0)
+            Ndis6IoFreeDmaAdapter(Ext);
+    }
+    Status = Ndis6IoInitDmaAdapter(Ext, Ext->PhysicalDeviceObject);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        Ext->SgDescriptionValid = FALSE;
+        return Status;
+    }
+    ASSERT(Ext->DmaAdapter != NULL);
     ExInitializeRundownProtection(&Ext->SharedMemoryRundown);
 
     /* The DMA handle the driver gets back is just the adapter extension. */
@@ -806,6 +825,7 @@ Ndis6MAllocateSharedMemory(
     PNDIS6_ADAPTER_EXT Ext;
     PVOID              va;
     PHYSICAL_ADDRESS   pa;
+    LONG               Count;
 
     if (VirtualAddress == NULL || PhysicalAddress == NULL)
         return;
@@ -836,6 +856,8 @@ Ndis6MAllocateSharedMemory(
         return;
     }
 
+    Count = InterlockedIncrement(&Ext->SharedMemoryBuffers);
+    ASSERT(Count > 0);
     *VirtualAddress = va;
     *PhysicalAddress = pa;
 }
@@ -850,6 +872,7 @@ Ndis6MFreeSharedMemory(
     _In_ NDIS_PHYSICAL_ADDRESS      PhysicalAddress)
 {
     PNDIS6_ADAPTER_EXT Ext;
+    LONG Count;
 
     UNREFERENCED_PARAMETER(Cached);
 
@@ -859,6 +882,8 @@ Ndis6MFreeSharedMemory(
 
     Ext->DmaAdapter->DmaOperations->FreeCommonBuffer(
         Ext->DmaAdapter, Length, PhysicalAddress, VirtualAddress, FALSE);
+    Count = InterlockedDecrement(&Ext->SharedMemoryBuffers);
+    ASSERT(Count >= 0);
 }
 
 /* ============================================================================

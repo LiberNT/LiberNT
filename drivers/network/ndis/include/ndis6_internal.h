@@ -271,6 +271,8 @@ typedef struct _NDIS6_ADAPTER_EXT
     /* DMA adapter for AllocateCommonBuffer / scatter-gather. */
     struct _DMA_ADAPTER*            DmaAdapter;
     ULONG                           NumberOfMapRegisters;
+    BOOLEAN                         DmaAdapter64Bit;
+    LONG                            SharedMemoryBuffers;
 
     /* A3: SG DMA description the driver passed via
      * NdisMRegisterScatterGatherDma. We need ProcessSGListHandler +

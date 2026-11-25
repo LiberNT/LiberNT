@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Checks the scatter/gather list size NdisMRegisterScatterGatherDma reports to a miniport
+ * PURPOSE:     Checks NdisMRegisterScatterGatherDma and the scatter/gather lists NDIS builds for a miniport
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arifing193@gmail.com>
  */
 
@@ -100,6 +100,41 @@ START_TEST(NdisSgDma)
         ok(Size != NDISSG_UNSET, "Mapping %lu: ScatterGatherListSize was not set\n", NdisSgMappings[i]);
         ok(Size >= Required, "Mapping %lu: ScatterGatherListSize %lu, a list needs %lu\n", NdisSgMappings[i], Size, Required);
         trace("Mapping %lu: ScatterGatherListSize %lu, list needs %lu\n", NdisSgMappings[i], Size, Required);
+    }
+
+    Value = 0;
+    if (!skip(!NdisSgRead(Key, L"NoHighMemory", &Value) || !Value, "No memory above 4 GB to map\n"))
+    {
+        for (i = 0; i < NDISSG_WIDTH_COUNT; ++i)
+        {
+            ULONG Status = NDISSG_UNSET, SharedHigh = NDISSG_UNSET, ListStatus = NDISSG_UNSET, Elements = 0;
+            ULONG ListLength = 0, Reachable = NDISSG_UNSET, Matches = NDISSG_UNSET, Direct = NDISSG_UNSET;
+            ULONG Bits = NdisSgWidthFlags[i] ? 64 : 32;
+
+            NdisSgRead(Key, NdisSgWidthNames[i][0], &Status);
+            NdisSgRead(Key, NdisSgWidthNames[i][1], &SharedHigh);
+            NdisSgRead(Key, NdisSgWidthNames[i][2], &ListStatus);
+            NdisSgRead(Key, NdisSgWidthNames[i][3], &Elements);
+            NdisSgRead(Key, NdisSgWidthNames[i][4], &ListLength);
+            NdisSgRead(Key, NdisSgWidthNames[i][5], &Reachable);
+            NdisSgRead(Key, NdisSgWidthNames[i][6], &Matches);
+            NdisSgRead(Key, NdisSgWidthNames[i][7], &Direct);
+            ok(Status == STATUS_SUCCESS, "%lu-bit: NdisMRegisterScatterGatherDma returned %#lx\n", Bits, Status);
+            ok(ListStatus == STATUS_SUCCESS, "%lu-bit: NdisMAllocateNetBufferSGList returned %#lx\n", Bits, ListStatus);
+            ok(Elements >= 1, "%lu-bit: %lu list elements\n", Bits, Elements);
+            ok(ListLength == NDISSG_HIGH_LENGTH, "%lu-bit: the list covers %lu bytes\n", Bits, ListLength);
+            ok(Matches == 1, "%lu-bit: the list does not hold the buffer's bytes (%#lx)\n", Bits, Matches);
+            if (NdisSgWidthFlags[i])
+            {
+                ok(Direct == 1, "64-bit: the list does not point at the buffer (%#lx)\n", Direct);
+            }
+            else
+            {
+                ok(SharedHigh == 0, "32-bit: shared memory above 4 GB (%#lx)\n", SharedHigh);
+                ok(Reachable == 1, "32-bit: the list reaches above 4 GB (%#lx)\n", Reachable);
+                ok(Direct == 0, "32-bit: the list points at the buffer above 4 GB (%#lx)\n", Direct);
+            }
+        }
     }
     RegCloseKey(Key);
 }
