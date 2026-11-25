@@ -7,6 +7,7 @@
  */
 
 #include <win32k.h>
+#include "drivers/wddm/wddm_bridge.h"
 DBG_DEFAULT_CHANNEL(UserDisplay);
 
 BOOL gbBaseVideo = FALSE;
@@ -161,6 +162,16 @@ InitVideo(VOID)
     gbBaseVideo = NT_SUCCESS(Status);
     if (gbBaseVideo)
         ERR("VGA mode requested.\n");
+
+    if (WddmBridgeIsProviderBound())
+    {
+        UNICODE_STRING FirmwareDisplay = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\uefifb");
+
+        /* FIXME: the firmware framebuffer keeps being drawn to after the provider commits a VidPn of its own */
+        /* FIXME: only the session that opens the firmware display draws; session 0 has no dummy display as on Windows */
+        Status = ZwLoadDriver(&FirmwareDisplay);
+        ERR("dxgkrnl has no win32k bridge, firmware framebuffer display: 0x%lx\n", Status);
+    }
 
     /*
      * Initialize all display devices.

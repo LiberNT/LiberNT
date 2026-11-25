@@ -10,6 +10,8 @@ add_subdirectory(uefifb)
 if(REACTOS_USE_XPDM)
     add_driver_inf(uefifb uefifb/uefifb.inf)
     add_registry_inf(uefifb/uefifb_reg.inf)
+else()
+    add_registry_inf(uefifb/uefifb_demand_reg.inf)
 endif()
 
 if(REACTOS_USE_XPDM)
