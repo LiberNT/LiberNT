@@ -52,6 +52,13 @@ EngpBuildDetachedModeList(
     _Inout_ PGRAPHICS_DEVICE pGraphicsDevice,
     _In_ BOOL bRefresh);
 
+NTSTATUS
+NTAPI
+EngpCaptureListedMode(
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice,
+    _In_ ULONG iModeNum,
+    _Outptr_ PDEVMODEW *ppdm);
+
 /* Read configuration of a graphics card from registry:
  * - pGraphicsDevice: instance of the graphics card
  * - pdm: on output, contains the values read in registry

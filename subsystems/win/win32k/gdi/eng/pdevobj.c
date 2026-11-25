@@ -488,27 +488,14 @@ PDEVOBJ_vRefreshModeList(
     PPDEVOBJ ppdev)
 {
     PGRAPHICS_DEVICE pGraphicsDevice;
-    PDEVMODEINFO pdminfo, pdmiNext;
 
     /* Lock the PDEV */
     EngAcquireSemaphore(ppdev->hsemDevLock);
 
     pGraphicsDevice = ppdev->pGraphicsDevice;
 
-    /* Clear out the modes */
-    for (pdminfo = pGraphicsDevice->pdevmodeInfo;
-         pdminfo;
-         pdminfo = pdmiNext)
-    {
-        pdmiNext = pdminfo->pdmiNext;
-        ExFreePoolWithTag(pdminfo, GDITAG_DEVMODE);
-    }
-    pGraphicsDevice->pdevmodeInfo = NULL;
-    ExFreePoolWithTag(pGraphicsDevice->pDevModeList, GDITAG_GDEVICE);
-    pGraphicsDevice->pDevModeList = NULL;
-
     /* Update available display mode list */
-    LDEVOBJ_bBuildDevmodeList(pGraphicsDevice);
+    EngpBuildDetachedModeList(pGraphicsDevice, TRUE);
 
     /* Unlock PDEV */
     EngReleaseSemaphore(ppdev->hsemDevLock);

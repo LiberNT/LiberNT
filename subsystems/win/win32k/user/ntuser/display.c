@@ -463,6 +463,7 @@ NtUserEnumDisplayDevices(
     UNICODE_STRING ustrCaptured;
     WCHAR awcDevice[CCHDEVICENAME];
     DISPLAY_DEVICEW dispdev;
+    DWORD cbOut;
     NTSTATUS Status;
 
     TRACE("Enter NtUserEnumDisplayDevices(%wZ, %lu)\n",
@@ -516,14 +517,14 @@ NtUserEnumDisplayDevices(
             ProbeForWrite(&pDisplayDevice->cb, sizeof(DWORD), 1);
 
             /* Check the buffer size */
-            if (pDisplayDevice->cb)
+            cbOut = min(pDisplayDevice->cb, sizeof(dispdev));
+            if (cbOut)
             {
                 /* Probe the output buffer */
-                pDisplayDevice->cb = min(pDisplayDevice->cb, sizeof(dispdev));
-                ProbeForWrite(pDisplayDevice, pDisplayDevice->cb, 1);
+                ProbeForWrite(pDisplayDevice, cbOut, 1);
 
                 /* Copy as much as the given buffer allows */
-                RtlCopyMemory(pDisplayDevice, &dispdev, pDisplayDevice->cb);
+                RtlCopyMemory(pDisplayDevice, &dispdev, cbOut);
             }
             else
             {
@@ -550,6 +551,8 @@ UserEnumCurrentDisplaySettings(
 {
     PPDEVOBJ ppdev;
     PMONITOR pMonitor;
+    PDEVMODEW pdmCurrent;
+    SIZE_T cjMode;
 
     /* Get the PDEV for the device */
     ppdev = EngpGetPDEV(pustrDevice);
@@ -560,7 +563,23 @@ UserEnumCurrentDisplaySettings(
         return STATUS_INVALID_PARAMETER_1;
     }
 
-    *ppdm = ppdev->pdmwDev;
+    *ppdm = NULL;
+    EngAcquireSemaphore(ppdev->hsemDevLock);
+    pdmCurrent = ppdev->pdmwDev;
+    if (pdmCurrent)
+    {
+        cjMode = (SIZE_T)pdmCurrent->dmSize + pdmCurrent->dmDriverExtra;
+        *ppdm = ExAllocatePoolWithTag(PagedPool, cjMode, GDITAG_DEVMODE);
+        if (*ppdm)
+            RtlCopyMemory(*ppdm, pdmCurrent, cjMode);
+    }
+    EngReleaseSemaphore(ppdev->hsemDevLock);
+    if (!*ppdm)
+    {
+        PDEVOBJ_vRelease(ppdev);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
     pptlPosition->x = pptlPosition->y = 0;
     pMonitor = UserGetMonitorFromHDev((HDEV)ppdev);
     if (pMonitor)
@@ -582,8 +601,6 @@ UserEnumDisplaySettings(
    DWORD dwFlags)
 {
     PGRAPHICS_DEVICE pGraphicsDevice;
-    PDEVMODEENTRY pdmentry;
-    ULONG i, iFoundMode;
     PPDEVOBJ ppdev;
 
     TRACE("Enter UserEnumDisplaySettings('%wZ', %lu)\n",
@@ -614,31 +631,9 @@ UserEnumDisplaySettings(
         return STATUS_INVALID_PARAMETER_2;
     }
 
-    iFoundMode = 0;
-    for (i = 0; i < pGraphicsDevice->cDevModes; i++)
-    {
-        pdmentry = &pGraphicsDevice->pDevModeList[i];
-
-        /* FIXME: Consider EDS_RAWMODE */
-#if 0
-        if ((!(dwFlags & EDS_RAWMODE) && (pdmentry->dwFlags & 1)) ||!
-            (dwFlags & EDS_RAWMODE))
-#endif
-        {
-            /* Is this the one we want? */
-            if (iFoundMode == iModeNum)
-            {
-                *ppdm = pdmentry->pdm;
-                return STATUS_SUCCESS;
-            }
-
-            /* Increment number of found modes */
-            iFoundMode++;
-        }
-    }
-
-    /* Nothing was found */
-    return STATUS_INVALID_PARAMETER_2;
+    /* FIXME: Consider EDS_RAWMODE */
+    UNREFERENCED_PARAMETER(dwFlags);
+    return EngpCaptureListedMode(pGraphicsDevice, iModeNum, ppdm);
 }
 
 NTSTATUS
@@ -726,6 +721,7 @@ NtUserEnumDisplaySettings(
     NTSTATUS Status;
     ULONG cbSize = 0, cbExtra = 0;
     DEVMODEW dmReg, dmDetached, *pdm;
+    PDEVMODEW pdmCaptured = NULL;
     POINTL ptlPosition;
     BOOL bCurrent = FALSE;
 
@@ -794,7 +790,8 @@ NtUserEnumDisplaySettings(
     else if (iModeNum == ENUM_CURRENT_SETTINGS || iModeNum == (DWORD)-3)
     {
         /* Get the current settings */
-        Status = UserEnumCurrentDisplaySettings(pustrDevice, &pdm, &ptlPosition);
+        Status = UserEnumCurrentDisplaySettings(pustrDevice, &pdmCaptured, &ptlPosition);
+        pdm = pdmCaptured;
         if (Status == STATUS_INVALID_PARAMETER_1 && pustrDevice && EngpFindGraphicsDevice(pustrDevice, 0))
         {
             /* A display device that is not attached to the desktop is current in the detached mode, at its registry position */
@@ -812,7 +809,8 @@ NtUserEnumDisplaySettings(
     else
     {
         /* Get specified settings */
-        Status = UserEnumDisplaySettings(pustrDevice, iModeNum, &pdm, dwFlags);
+        Status = UserEnumDisplaySettings(pustrDevice, iModeNum, &pdmCaptured, dwFlags);
+        pdm = pdmCaptured;
     }
 
     /* Release lock */
@@ -852,6 +850,9 @@ NtUserEnumDisplaySettings(
         }
         _SEH2_END;
     }
+
+    if (pdmCaptured)
+        ExFreePoolWithTag(pdmCaptured, GDITAG_DEVMODE);
 
     return Status;
 }

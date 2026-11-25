@@ -776,6 +776,40 @@ EngpBuildDetachedModeList(
     return bResult;
 }
 
+NTSTATUS
+NTAPI
+EngpCaptureListedMode(
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice,
+    _In_ ULONG iModeNum,
+    _Outptr_ PDEVMODEW *ppdm)
+{
+    PDEVMODEW pdmListed;
+    SIZE_T cjMode;
+    NTSTATUS Status = STATUS_INVALID_PARAMETER_2;
+
+    *ppdm = NULL;
+    EngAcquireSemaphoreShared(ghsemGraphicsDeviceList);
+    ASSERT(pGraphicsDevice->cDevModes == 0 || pGraphicsDevice->pDevModeList != NULL);
+    if (iModeNum < pGraphicsDevice->cDevModes)
+    {
+        pdmListed = pGraphicsDevice->pDevModeList[iModeNum].pdm;
+        ASSERT(pdmListed != NULL);
+        cjMode = (SIZE_T)pdmListed->dmSize + pdmListed->dmDriverExtra;
+        *ppdm = ExAllocatePoolWithTag(PagedPool, cjMode, GDITAG_DEVMODE);
+        if (*ppdm)
+        {
+            RtlCopyMemory(*ppdm, pdmListed, cjMode);
+            Status = STATUS_SUCCESS;
+        }
+        else
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+        }
+    }
+    EngReleaseSemaphore(ghsemGraphicsDeviceList);
+    return Status;
+}
+
 BOOLEAN
 NTAPI
 EngpReferenceMonitorDevice(
