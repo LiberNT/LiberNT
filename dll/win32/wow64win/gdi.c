@@ -868,7 +868,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDICreateSynchronizationObject( UINT *args )
     if (desc->Info.Type == D3DDDI_CPU_NOTIFICATION)
     {
         ULONG event = HandleToUlong( desc->Info.CPUNotification.Event );
-        desc->Info.CPUNotification.Event = Handle32ToHandle( event );
+        desc->Info.CPUNotification.Event = LongToHandle( (LONG)event );
     }
     return NtGdiDdDDICreateSynchronizationObject( (D3DKMT_CREATESYNCHRONIZATIONOBJECT *)desc );
 #else

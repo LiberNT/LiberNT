@@ -7,7 +7,7 @@
 
 #include "dxgkrnl_private.h"
 #include <ndk/obfuncs.h>
-#include <reactos/rddm/rxgkioctl.h>
+#include <libernt/rddm/rxgkioctl.h>
 
 C_ASSERT(sizeof(RXGK_SWAPCHAIN_PACKET) == RXGK_SWAPCHAIN_PACKET_V1_SIZE);
 
