@@ -377,6 +377,12 @@ NtfsMapDirectIo(
     {
         return STATUS_SUCCESS;
     }
+    if (FileCB->RequestedType == TypeData &&
+        !FileCB->RequestedStream &&
+        NtfsFileRecordIsWofBacked(FileCB->FileRec))
+    {
+        return STATUS_SUCCESS;
+    }
     ValidDataLength = Attribute->NonResident.InitalizedDataSize;
     DataSize = Attribute->NonResident.DataSize;
     /* The valid data length cannot pass the recorded size, so data written past it would later be zeroed over */

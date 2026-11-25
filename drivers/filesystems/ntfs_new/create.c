@@ -3243,6 +3243,24 @@ LookupName:
         if (Privileges)
             SeFreePrivileges(Privileges);
     }
+    /* The WIM that backs pointer files of this volume stays unchanged while the volume is mounted */
+    if (FileExisted &&
+        !OpenTargetDirectory &&
+        NtfsVolumeIsWimDataSource(DiskVolume, NtfsFileRecordGetNumber(CurrentFile)) &&
+        ((FileCB->DesiredAccess & DELETE) ||
+         (IrpSp->Parameters.Create.Options & FILE_DELETE_ON_CLOSE) ||
+         Disposition == FILE_SUPERSEDE ||
+         (!NamedDataStream &&
+          ((FileCB->DesiredAccess & (FILE_WRITE_DATA | FILE_APPEND_DATA)) ||
+           Disposition == FILE_OVERWRITE ||
+           Disposition == FILE_OVERWRITE_IF))))
+    {
+        NtfsReleaseMetadata(VolCB);
+        KeLeaveCriticalRegion();
+        return NtfsCompleteFailedCreate(VolumeDeviceObject, Irp, FileCB, CurrentFile, CachedRecord,
+                                        STATUS_SHARING_VIOLATION);
+    }
+
     /* A read-only file may still be opened to change its attributes, but it
      * cannot be opened for data writes or an overwriting disposition. */
     if (FileExisted &&
