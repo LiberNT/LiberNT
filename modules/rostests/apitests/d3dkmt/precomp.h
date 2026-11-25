@@ -117,13 +117,74 @@ typedef NTSTATUS (APIENTRY *PFN_D3DKMTGetPresentHistory)(D3DKMT_GETPRESENTHISTOR
 static inline FARPROC
 LoadD3DKMTProc(const char *Name)
 {
+    static const char *const ServicePrefixes[] = { "NtGdiDdDDI", "NtDxgk" };
     HMODULE hGdi32 = GetModuleHandleW(L"gdi32.dll");
+    HMODULE hWin32u;
+    FARPROC Proc;
+    char Service[96];
+    size_t Index;
+
     if (!hGdi32)
         hGdi32 = LoadLibraryW(L"gdi32.dll");
-    if (!hGdi32)
+    Proc = hGdi32 ? GetProcAddress(hGdi32, Name) : NULL;
+    if (Proc || strncmp(Name, "D3DKMT", 6) != 0)
+        return Proc;
+
+    /* Windows PE forwards the gdi32 entry points to an API set it does not ship: reach the win32u services */
+    hWin32u = LoadLibraryW(L"win32u.dll");
+    if (!hWin32u)
         return NULL;
-    return GetProcAddress(hGdi32, Name);
+    for (Index = 0; Index < ARRAYSIZE(ServicePrefixes) && !Proc; ++Index)
+    {
+        lstrcpynA(Service, ServicePrefixes[Index], sizeof(Service));
+        lstrcpynA(Service + strlen(Service), Name + 6, (int)(sizeof(Service) - strlen(Service)));
+        Proc = GetProcAddress(hWin32u, Service);
+    }
+    return Proc;
 }
+
+static NTSTATUS APIENTRY
+D3dkmtUnresolved(PVOID Argument)
+{
+    UNREFERENCED_PARAMETER(Argument);
+    return STATUS_PROCEDURE_NOT_FOUND;
+}
+
+static __inline FARPROC
+D3dkmtResolve(const char *Name)
+{
+    FARPROC Proc = LoadD3DKMTProc(Name);
+
+    return Proc ? Proc : (FARPROC)D3dkmtUnresolved;
+}
+
+/* Called through the loader rather than imported, so the binary also loads where gdi32 cannot resolve them */
+#define D3DKMT_DYNAMIC(Type, Name) ((Type)D3dkmtResolve(#Name))
+#define D3DKMTCloseAdapter D3DKMT_DYNAMIC(PFND3DKMT_CLOSEADAPTER, D3DKMTCloseAdapter)
+#define D3DKMTCreateAllocation D3DKMT_DYNAMIC(PFND3DKMT_CREATEALLOCATION, D3DKMTCreateAllocation)
+#define D3DKMTCreateContext D3DKMT_DYNAMIC(PFND3DKMT_CREATECONTEXT, D3DKMTCreateContext)
+#define D3DKMTCreateDevice D3DKMT_DYNAMIC(PFND3DKMT_CREATEDEVICE, D3DKMTCreateDevice)
+#define D3DKMTCreatePagingQueue D3DKMT_DYNAMIC(PFND3DKMT_CREATEPAGINGQUEUE, D3DKMTCreatePagingQueue)
+#define D3DKMTCreateSynchronizationObject2 D3DKMT_DYNAMIC(PFND3DKMT_CREATESYNCHRONIZATIONOBJECT2, D3DKMTCreateSynchronizationObject2)
+#define D3DKMTDestroyAllocation D3DKMT_DYNAMIC(PFND3DKMT_DESTROYALLOCATION, D3DKMTDestroyAllocation)
+#define D3DKMTDestroyContext D3DKMT_DYNAMIC(PFND3DKMT_DESTROYCONTEXT, D3DKMTDestroyContext)
+#define D3DKMTDestroyDevice D3DKMT_DYNAMIC(PFND3DKMT_DESTROYDEVICE, D3DKMTDestroyDevice)
+#define D3DKMTDestroyPagingQueue D3DKMT_DYNAMIC(PFND3DKMT_DESTROYPAGINGQUEUE, D3DKMTDestroyPagingQueue)
+#define D3DKMTDestroySynchronizationObject D3DKMT_DYNAMIC(PFND3DKMT_DESTROYSYNCHRONIZATIONOBJECT, D3DKMTDestroySynchronizationObject)
+#define D3DKMTEscape D3DKMT_DYNAMIC(PFND3DKMT_ESCAPE, D3DKMTEscape)
+#define D3DKMTFreeGpuVirtualAddress D3DKMT_DYNAMIC(PFND3DKMT_FREEGPUVIRTUALADDRESS, D3DKMTFreeGpuVirtualAddress)
+#define D3DKMTGetSharedPrimaryHandle D3DKMT_DYNAMIC(PFND3DKMT_GETSHAREDPRIMARYHANDLE, D3DKMTGetSharedPrimaryHandle)
+#define D3DKMTInvalidateCache D3DKMT_DYNAMIC(PFND3DKMT_INVALIDATECACHE, D3DKMTInvalidateCache)
+#define D3DKMTLock D3DKMT_DYNAMIC(PFND3DKMT_LOCK, D3DKMTLock)
+#define D3DKMTMapGpuVirtualAddress D3DKMT_DYNAMIC(PFND3DKMT_MAPGPUVIRTUALADDRESS, D3DKMTMapGpuVirtualAddress)
+#define D3DKMTOpenAdapterFromGdiDisplayName D3DKMT_DYNAMIC(PFND3DKMT_OPENADAPTERFROMGDIDISPLAYNAME, D3DKMTOpenAdapterFromGdiDisplayName)
+#define D3DKMTOpenResource D3DKMT_DYNAMIC(PFND3DKMT_OPENRESOURCE, D3DKMTOpenResource)
+#define D3DKMTPresent D3DKMT_DYNAMIC(PFND3DKMT_PRESENT, D3DKMTPresent)
+#define D3DKMTQueryAdapterInfo D3DKMT_DYNAMIC(PFND3DKMT_QUERYADAPTERINFO, D3DKMTQueryAdapterInfo)
+#define D3DKMTQueryResourceInfo D3DKMT_DYNAMIC(PFND3DKMT_QUERYRESOURCEINFO, D3DKMTQueryResourceInfo)
+#define D3DKMTUnlock D3DKMT_DYNAMIC(PFND3DKMT_UNLOCK, D3DKMTUnlock)
+#define D3DKMTWaitForSynchronizationObjectFromCpu D3DKMT_DYNAMIC(PFND3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMCPU, D3DKMTWaitForSynchronizationObjectFromCpu)
+#define D3DKMTWaitForSynchronizationObjectFromGpu D3DKMT_DYNAMIC(PFND3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMGPU, D3DKMTWaitForSynchronizationObjectFromGpu)
 
 #define LOAD_D3DKMT(Name) \
     PFN_##Name pfn##Name = (PFN_##Name)LoadD3DKMTProc(#Name); \
