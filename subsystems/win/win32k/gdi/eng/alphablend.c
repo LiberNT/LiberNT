@@ -268,24 +268,16 @@ NtGdiEngAlphaBlend(IN SURFOBJ *psoDest,
                    IN PRECTL upSourceRect,
                    IN BLENDOBJ *BlendObj)
 {
-    RECTL DestRect;
-    RECTL SourceRect;
+    UNREFERENCED_PARAMETER(psoDest);
+    UNREFERENCED_PARAMETER(psoSource);
+    UNREFERENCED_PARAMETER(ClipRegion);
+    UNREFERENCED_PARAMETER(ColorTranslation);
+    UNREFERENCED_PARAMETER(upDestRect);
+    UNREFERENCED_PARAMETER(upSourceRect);
+    UNREFERENCED_PARAMETER(BlendObj);
 
-    _SEH2_TRY
-    {
-        ProbeForRead(upDestRect, sizeof(RECTL), 1);
-        RtlCopyMemory(&DestRect,upDestRect, sizeof(RECTL));
-
-        ProbeForRead(upSourceRect, sizeof(RECTL), 1);
-        RtlCopyMemory(&SourceRect, upSourceRect, sizeof(RECTL));
-
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        _SEH2_YIELD(return FALSE);
-    }
-    _SEH2_END;
-
-    return EngAlphaBlend(psoDest, psoSource, ClipRegion, ColorTranslation, &DestRect, &SourceRect, BlendObj);
+    /* TODO: convert the objects of a user-mode printer driver to the kernel's own */
+    UNIMPLEMENTED;
+    return FALSE;
 }
 

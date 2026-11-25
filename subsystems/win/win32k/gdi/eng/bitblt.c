@@ -342,33 +342,21 @@ NtGdiEngBitBlt(
                 IN POINTL  *pptlBrush,
                 IN ROP4 Rop4)
 {
-    RECTL  rclTrg;
-    POINTL ptlSrc;
-    POINTL ptlMask;
-    POINTL ptlBrush;
+    UNREFERENCED_PARAMETER(psoTrg);
+    UNREFERENCED_PARAMETER(psoSrc);
+    UNREFERENCED_PARAMETER(psoMask);
+    UNREFERENCED_PARAMETER(pco);
+    UNREFERENCED_PARAMETER(pxlo);
+    UNREFERENCED_PARAMETER(prclTrg);
+    UNREFERENCED_PARAMETER(pptlSrc);
+    UNREFERENCED_PARAMETER(pptlMask);
+    UNREFERENCED_PARAMETER(pbo);
+    UNREFERENCED_PARAMETER(pptlBrush);
+    UNREFERENCED_PARAMETER(Rop4);
 
-    _SEH2_TRY
-    {
-        ProbeForRead(prclTrg, sizeof(RECTL), 1);
-        RtlCopyMemory(&rclTrg,prclTrg, sizeof(RECTL));
-
-        ProbeForRead(pptlSrc, sizeof(POINTL), 1);
-        RtlCopyMemory(&ptlSrc, pptlSrc, sizeof(POINTL));
-
-        ProbeForRead(pptlMask, sizeof(POINTL), 1);
-        RtlCopyMemory(&ptlMask, pptlMask, sizeof(POINTL));
-
-        ProbeForRead(pptlBrush, sizeof(POINTL), 1);
-        RtlCopyMemory(&ptlBrush, pptlBrush, sizeof(POINTL));
-
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        _SEH2_YIELD(return FALSE);
-    }
-    _SEH2_END;
-
-    return  EngBitBlt(psoTrg, psoSrc, psoMask, pco, pxlo, &rclTrg, &ptlSrc, &ptlMask, pbo, &ptlBrush, Rop4);
+    /* TODO: convert the objects of a user-mode printer driver to the kernel's own */
+    UNIMPLEMENTED;
+    return FALSE;
 }
 
 /*

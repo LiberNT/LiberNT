@@ -1071,41 +1071,21 @@ NtGdiEngStretchBlt(
     IN POINTL  *MaskOrigin,
     IN ULONG  Mode)
 {
-    COLORADJUSTMENT  ca;
-    POINTL  lBrushOrigin;
-    RECTL rclDest;
-    RECTL rclSrc;
-    POINTL lMaskOrigin;
+    UNREFERENCED_PARAMETER(psoDest);
+    UNREFERENCED_PARAMETER(psoSource);
+    UNREFERENCED_PARAMETER(Mask);
+    UNREFERENCED_PARAMETER(ClipRegion);
+    UNREFERENCED_PARAMETER(ColorTranslation);
+    UNREFERENCED_PARAMETER(pca);
+    UNREFERENCED_PARAMETER(BrushOrigin);
+    UNREFERENCED_PARAMETER(prclDest);
+    UNREFERENCED_PARAMETER(prclSrc);
+    UNREFERENCED_PARAMETER(MaskOrigin);
+    UNREFERENCED_PARAMETER(Mode);
 
-    _SEH2_TRY
-    {
-        if (pca)
-        {
-            ProbeForRead(pca, sizeof(COLORADJUSTMENT), 1);
-            RtlCopyMemory(&ca,pca, sizeof(COLORADJUSTMENT));
-            pca = &ca;
-        }
-
-        ProbeForRead(BrushOrigin, sizeof(POINTL), 1);
-        RtlCopyMemory(&lBrushOrigin, BrushOrigin, sizeof(POINTL));
-
-        ProbeForRead(prclDest, sizeof(RECTL), 1);
-        RtlCopyMemory(&rclDest, prclDest, sizeof(RECTL));
-
-        ProbeForRead(prclSrc, sizeof(RECTL), 1);
-        RtlCopyMemory(&rclSrc, prclSrc, sizeof(RECTL));
-
-        ProbeForRead(MaskOrigin, sizeof(POINTL), 1);
-        RtlCopyMemory(&lMaskOrigin, MaskOrigin, sizeof(POINTL));
-
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        _SEH2_YIELD(return FALSE);
-    }
-    _SEH2_END;
-
-    return EngStretchBlt(psoDest, psoSource, Mask, ClipRegion, ColorTranslation, pca, &lBrushOrigin, &rclDest, &rclSrc, &lMaskOrigin, Mode);
+    /* TODO: convert the objects of a user-mode printer driver to the kernel's own */
+    UNIMPLEMENTED;
+    return FALSE;
 }
 
 /* EOF */

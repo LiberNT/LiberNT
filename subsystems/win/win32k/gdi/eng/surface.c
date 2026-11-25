@@ -665,7 +665,11 @@ EngEraseSurface(
 SURFOBJ * APIENTRY
 NtGdiEngLockSurface(IN HSURF hsurf)
 {
-    return EngLockSurface(hsurf);
+    UNREFERENCED_PARAMETER(hsurf);
+
+    /* TODO: hand a user-mode printer driver its own view of the surface */
+    UNIMPLEMENTED;
+    return NULL;
 }
 
 
@@ -686,7 +690,6 @@ NtGdiEngUnlockSurface(
     _In_ SURFOBJ *pso)
 {
     UNIMPLEMENTED;
-    ASSERT(FALSE);
     return STATUS_NOT_IMPLEMENTED;
 }
 
