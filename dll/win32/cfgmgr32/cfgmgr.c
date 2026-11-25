@@ -1112,9 +1112,10 @@ CMP_RegisterNotification(
     {
         TRACE("Register a window\n");
 
-        nLength = GetWindowTextW((HWND)hRecipient,
-                                 szNameBuffer,
-                                 ARRAYSIZE(szNameBuffer));
+        /* GetWindowTextW would wait on the window's thread, which may be the one waiting for this registration */
+        nLength = InternalGetWindowText((HWND)hRecipient,
+                                        szNameBuffer,
+                                        ARRAYSIZE(szNameBuffer));
         if (nLength == 0)
         {
             szNameBuffer[0] = UNICODE_NULL;
