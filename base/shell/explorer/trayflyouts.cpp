@@ -7135,6 +7135,7 @@ typedef DWORD (WINAPI *PFN_WLANCONNECT)(HANDLE, const GUID *, const PWLAN_CONNEC
 typedef DWORD (WINAPI *PFN_WLANDISCONNECT)(HANDLE, const GUID *, PVOID);
 typedef DWORD (WINAPI *PFN_WLANSCAN)(HANDLE, const GUID *, const PDOT11_SSID, const PWLAN_RAW_DATA, PVOID);
 typedef DWORD (WINAPI *PFN_WLANSETPROFILE)(HANDLE, const GUID *, DWORD, LPCWSTR, LPCWSTR, BOOL, PVOID, DWORD *);
+typedef DWORD (WINAPI *PFN_WLANDELETEPROFILE)(HANDLE, const GUID *, LPCWSTR, PVOID);
 typedef DWORD (WINAPI *PFN_WLANREGISTERNOTIFICATION)(HANDLE, DWORD, BOOL, WLAN_NOTIFICATION_CALLBACK, PVOID, PVOID, PDWORD);
 typedef DWORD (WINAPI *PFN_WLANQUERYINTERFACE)(HANDLE, const GUID *, WLAN_INTF_OPCODE, PVOID, PDWORD, PVOID *, WLAN_OPCODE_VALUE_TYPE *);
 typedef DWORD (WINAPI *PFN_WLANSETINTERFACE)(HANDLE, const GUID *, WLAN_INTF_OPCODE, DWORD, const VOID *, PVOID);
@@ -7183,6 +7184,7 @@ struct TFYNETROW
     RECT rcEdit;
     RECT rcReveal;
     RECT rcInfo;
+    RECT rcForget;
 };
 
 struct TFYNETCACHE
@@ -7597,6 +7599,7 @@ public:
     PFN_WLANDISCONNECT m_pfnDisconnect;
     PFN_WLANSCAN m_pfnScan;
     PFN_WLANSETPROFILE m_pfnSetProfile;
+    PFN_WLANDELETEPROFILE m_pfnDeleteProfile;
     PFN_WLANREGISTERNOTIFICATION m_pfnRegister;
     PFN_WLANQUERYINTERFACE m_pfnQuery;
     PFN_WLANSETINTERFACE m_pfnSet;
@@ -7647,7 +7650,7 @@ public:
                         m_hWlanApi(NULL), m_hWlan(NULL),
                         m_pfnOpen(NULL), m_pfnEnum(NULL), m_pfnList(NULL),
                         m_pfnConnect(NULL), m_pfnDisconnect(NULL), m_pfnScan(NULL),
-                        m_pfnSetProfile(NULL), m_pfnRegister(NULL), m_pfnQuery(NULL), m_pfnSet(NULL),
+                        m_pfnSetProfile(NULL), m_pfnDeleteProfile(NULL), m_pfnRegister(NULL), m_pfnQuery(NULL), m_pfnSet(NULL),
                         m_pfnClose(NULL), m_pfnFree(NULL),
                         m_hwndEdit(NULL), m_hbrEdit(NULL),
                         m_iHot(TFY_NETHIT_NONE), m_iSel(-1), m_iHotBtn(0),
@@ -7709,6 +7712,7 @@ public:
         m_pfnDisconnect = (PFN_WLANDISCONNECT)GetProcAddress(m_hWlanApi, "WlanDisconnect");
         m_pfnScan = (PFN_WLANSCAN)GetProcAddress(m_hWlanApi, "WlanScan");
         m_pfnSetProfile = (PFN_WLANSETPROFILE)GetProcAddress(m_hWlanApi, "WlanSetProfile");
+        m_pfnDeleteProfile = (PFN_WLANDELETEPROFILE)GetProcAddress(m_hWlanApi, "WlanDeleteProfile");
         m_pfnRegister = (PFN_WLANREGISTERNOTIFICATION)GetProcAddress(m_hWlanApi, "WlanRegisterNotification");
         m_pfnQuery = (PFN_WLANQUERYINTERFACE)GetProcAddress(m_hWlanApi, "WlanQueryInterface");
         m_pfnSet = (PFN_WLANSETINTERFACE)GetProcAddress(m_hWlanApi, "WlanSetInterface");
@@ -8001,6 +8005,7 @@ public:
             SetRectEmpty(&row.rcEdit);
             SetRectEmpty(&row.rcReveal);
             SetRectEmpty(&row.rcInfo);
+            SetRectEmpty(&row.rcForget);
             if (row.nType != 2)
                 continue;
             if ((int)i >= m_iWlanFirst)
@@ -8037,6 +8042,8 @@ public:
                         yb += Sc(30);
                     }
                     SetRect(&row.rcButton, cx - Sc(24) - Sc(136), yb, cx - Sc(24), yb + Sc(32));
+                    if (row.bHasProfile)
+                        SetRect(&row.rcForget, Sc(48), yb, Sc(48) + Sc(32), yb + Sc(32));
                     yb += Sc(32) + Sc(12);
                 }
             }
@@ -8140,6 +8147,7 @@ public:
                     SetRect(&row.rcCheck, 0, 0, 0, 0);
                     SetRect(&row.rcEdit, 0, 0, 0, 0);
                     SetRect(&row.rcReveal, 0, 0, 0, 0);
+                    SetRectEmpty(&row.rcForget);
                     continue;
                 }
             }
@@ -8148,6 +8156,7 @@ public:
             SetRect(&row.rcCheck, 0, 0, 0, 0);
             SetRect(&row.rcEdit, 0, 0, 0, 0);
             SetRect(&row.rcReveal, 0, 0, 0, 0);
+            SetRectEmpty(&row.rcForget);
             if (bExpanded)
             {
                 int yb = y + nRowH;
@@ -8307,6 +8316,19 @@ public:
         if (::GetCapture() == m_hWnd)
             ReleaseCapture();
         InvalidateRect(NULL, FALSE);
+    }
+
+    VOID DrawGlyph(HDC hdc, const RECT *prc, LPCWSTR pszName, int cx, COLORREF crInk)
+    {
+        HICON hGlyph;
+
+        if (!m_bFrameStarted)
+            m_bFrameStarted = ShellFrame::Startup();
+        hGlyph = m_bFrameStarted ? ShellFrame::CreateGlyphIcon(pszName, cx, crInk) : NULL;
+        if (!hGlyph)
+            return;
+        DrawIconEx(hdc, (prc->left + prc->right - cx) / 2, (prc->top + prc->bottom - cx) / 2, hGlyph, cx, cx, 0, NULL, DI_NORMAL);
+        DestroyIcon(hGlyph);
     }
 
     VOID DrawRevealButton(HDC hdc, const RECT *prc, COLORREF crBack)
@@ -8546,6 +8568,29 @@ public:
             ConnectRow(i, NULL);
     }
 
+    VOID ForgetRow(int i)
+    {
+        if (i < 0 || i >= (int)m_Rows.GetCount())
+            return;
+        TFYNETROW &row = m_Rows[i];
+        if (row.nType != 2 || !row.bHasProfile || !LoadWlan() || !m_pfnDeleteProfile)
+            return;
+        if (row.bConnected && m_pfnDisconnect)
+            m_pfnDisconnect(m_hWlan, &row.ifGuid, NULL);
+        if (m_pfnDeleteProfile(m_hWlan, &row.ifGuid, row.szProfile[0] ? row.szProfile : row.szName, NULL) != ERROR_SUCCESS)
+        {
+            StringCchCopyW(row.szStatus, _countof(row.szStatus), L"Can't forget this network");
+            Relayout();
+            return;
+        }
+        row.bHasProfile = FALSE;
+        row.bConnected = FALSE;
+        row.szProfile[0] = 0;
+        row.szStatus[0] = 0;
+        TfyQueueNetworkRefresh(m_hWnd, FALSE);
+        Relayout();
+    }
+
     VOID DisconnectRow(int i)
     {
         if (i < 0 || i >= (int)m_Rows.GetCount())
@@ -8758,6 +8803,13 @@ public:
 
             SetRect(&rcName, row.rc.left + Sc(44), row.rc.top, row.bConnected ? row.rcInfo.left - Sc(8) : row.rc.right - Sc(12),
                     row.rc.top + nHeadH);
+            if (row.bHasProfile)
+            {
+                RECT rcSaved = { rcName.right - Sc(16), cyMid - Sc(8), rcName.right, cyMid + Sc(8) };
+
+                DrawGlyph(hdc, &rcSaved, L"save_20_regular", Sc(16), m_Pal.DimText);
+                rcName.right = rcSaved.left - Sc(6);
+            }
             SelectObject(hdc, m_hFontRow);
             SetTextColor(hdc, m_Pal.PanelText);
             if (bTwoLines)
@@ -8810,6 +8862,12 @@ public:
                     DrawCheck(hdc, &row.rcCheck, m_bAutoConnect, L"Connect automatically", m_iHotBtn == 3);
                 DrawButton(hdc, &row.rcButton, RowButtonText(row),
                            m_iHotBtn == 1, !row.bConnected && !IsConnectingRow(row));
+                if (!IsRectEmpty(&row.rcForget))
+                {
+                    if (bHot && m_iHotBtn == 7)
+                        TfyFillRound(hdc, &row.rcForget, Sc(4), TfyMix(crRow, m_Pal.PanelText, 30), crRow);
+                    DrawGlyph(hdc, &row.rcForget, L"delete_20_regular", Sc(20), m_Pal.PanelText);
+                }
             }
         }
 
@@ -9329,6 +9387,7 @@ public:
                 else if (PtInRect(&row.rcButton2, pt)) *pnBtn = 2;
                 else if (PtInRect(&row.rcCheck, pt)) *pnBtn = 3;
                 else if (PtInRect(&row.rcReveal, pt)) *pnBtn = 6;
+                else if (PtInRect(&row.rcForget, pt)) *pnBtn = 7;
                 else if (PtInRect(&row.rcEdit, pt)) *pnBtn = 4;
             }
             return (int)i;
@@ -9509,6 +9568,11 @@ public:
             {
                 if (m_hwndEdit)
                     ::SetFocus(m_hwndEdit);
+                return 0;
+            }
+            if (nBtn == 7)
+            {
+                ForgetRow(i);
                 return 0;
             }
         }

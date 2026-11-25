@@ -104,6 +104,7 @@ Files used, copied unmodified and drawn from their path data at run time:
 - assets/Rename/SVG/ic_fluent_rename_20_regular.svg
 - assets/Rocket/SVG/ic_fluent_rocket_20_regular.svg
 - assets/Router/SVG/ic_fluent_router_20_regular.svg
+- assets/Save/SVG/ic_fluent_save_20_regular.svg
 - assets/Search/SVG/ic_fluent_search_16_regular.svg
 - assets/Settings/SVG/ic_fluent_settings_20_regular.svg
 - assets/Settings/SVG/ic_fluent_settings_24_regular.svg
