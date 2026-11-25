@@ -1065,6 +1065,10 @@ BuildUserModeWindowStationName(
     LUID CallerLuid;
     PTEB Teb;
     USHORT StrSize;
+    PWCHAR NameBuffer;
+    PWCHAR Destination;
+    USHORT MaximumLength;
+    USHORT NameLength;
 
     *WindowStationName = NULL;
     *TebStaticUnicodeString = NULL;
@@ -1090,6 +1094,26 @@ BuildUserModeWindowStationName(
     }
     StrSize = (USHORT)MemSize;
 
+    NameBuffer = ExAllocatePoolWithTag(PagedPool, StrSize, TAG_STRING);
+    if (!NameBuffer)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    /* Build a valid window station name from the LUID */
+    Status = RtlStringCbPrintfW(NameBuffer,
+                                StrSize,
+                                L"%wZ\\Service-0x%x-%x$",
+                                UserGetWinStaDirName(PsGetCurrentProcess()),
+                                CallerLuid.HighPart,
+                                CallerLuid.LowPart);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("Impossible to build a valid window station name, Status 0x%08lx\n", Status);
+        ExFreePoolWithTag(NameBuffer, TAG_STRING);
+        return Status;
+    }
+    NameLength = (USHORT)(wcslen(NameBuffer) * sizeof(WCHAR));
+    ASSERT(NameLength < StrSize);
+
     /*
      * Check whether it's short enough so that we can use the static buffer
      * in the TEB. Otherwise continue with virtual memory allocation.
@@ -1098,14 +1122,13 @@ BuildUserModeWindowStationName(
     if (Teb && (StrSize <= sizeof(Teb->StaticUnicodeBuffer)))
     {
         /* We can use the TEB's static unicode string */
-        ASSERT(Teb->StaticUnicodeString.Buffer == Teb->StaticUnicodeBuffer);
-        ASSERT(Teb->StaticUnicodeString.MaximumLength == sizeof(Teb->StaticUnicodeBuffer));
 
         /* Remember the TEB's static unicode string address for later */
         *TebStaticUnicodeString = &Teb->StaticUnicodeString;
 
         *WindowStationName = *TebStaticUnicodeString;
-        (*WindowStationName)->Length = 0;
+        Destination = Teb->StaticUnicodeBuffer;
+        MaximumLength = sizeof(Teb->StaticUnicodeBuffer);
     }
     else
     {
@@ -1122,28 +1145,32 @@ BuildUserModeWindowStationName(
         if (!NT_SUCCESS(Status))
         {
             ERR("ZwAllocateVirtualMemory() failed, Status 0x%08lx\n", Status);
+            ExFreePoolWithTag(NameBuffer, TAG_STRING);
             return Status;
         }
 
-        RtlInitEmptyUnicodeString(*WindowStationName,
-                                  (PWCHAR)((ULONG_PTR)*WindowStationName +
-                                      ALIGN_UP(sizeof(UNICODE_STRING), sizeof(PVOID))),
-                                  StrSize);
+        Destination = (PWCHAR)((ULONG_PTR)*WindowStationName +
+                               ALIGN_UP(sizeof(UNICODE_STRING), sizeof(PVOID)));
+        MaximumLength = StrSize;
     }
 
-    /* Build a valid window station name from the LUID */
-    Status = RtlStringCbPrintfW((*WindowStationName)->Buffer,
-                                (*WindowStationName)->MaximumLength,
-                                L"%wZ\\Service-0x%x-%x$",
-                                UserGetWinStaDirName(PsGetCurrentProcess()),
-                                CallerLuid.HighPart,
-                                CallerLuid.LowPart);
-    if (!NT_SUCCESS(Status))
+    _SEH2_TRY
     {
-        ERR("Impossible to build a valid window station name, Status 0x%08lx\n", Status);
-        goto Quit;
+        ProbeForWrite(*WindowStationName, sizeof(UNICODE_STRING), sizeof(ULONG));
+        ProbeForWrite(Destination, MaximumLength, sizeof(WCHAR));
+        RtlCopyMemory(Destination, NameBuffer, NameLength + sizeof(UNICODE_NULL));
+        (*WindowStationName)->Buffer = Destination;
+        (*WindowStationName)->MaximumLength = MaximumLength;
+        (*WindowStationName)->Length = NameLength;
     }
-    (*WindowStationName)->Length = (USHORT)(wcslen((*WindowStationName)->Buffer) * sizeof(WCHAR));
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    ExFreePoolWithTag(NameBuffer, TAG_STRING);
+    if (!NT_SUCCESS(Status))
+        goto Quit;
 
     /* Try to update the user's UserModeObjectAttributes */
     _SEH2_TRY
@@ -1188,6 +1215,7 @@ NtUserCreateWindowStation(
     NTSTATUS Status = STATUS_SUCCESS;
     HWINSTA hWinSta = NULL;
     OBJECT_ATTRIBUTES LocalObjectAttributes;
+    UNICODE_STRING CapturedName = { 0 };
     PUNICODE_STRING WindowStationName = NULL;
     PUNICODE_STRING TebStaticUnicodeString = NULL;
     KPROCESSOR_MODE OwnerMode = UserMode;
@@ -1206,6 +1234,13 @@ NtUserCreateWindowStation(
             _SEH2_LEAVE;
         }
 
+        if (LocalObjectAttributes.ObjectName)
+        {
+            CapturedName = ProbeForReadUnicodeString(LocalObjectAttributes.ObjectName);
+            if (CapturedName.Buffer && CapturedName.Length)
+                ProbeForRead(CapturedName.Buffer, CapturedName.Length, 1);
+        }
+
         /*
          * Check whether the caller provided a window station name together
          * with a RootDirectory handle.
@@ -1217,9 +1252,9 @@ NtUserCreateWindowStation(
          * can be done adequately.
          */
         if ((LocalObjectAttributes.ObjectName == NULL ||
-             LocalObjectAttributes.ObjectName->Buffer == NULL ||
-             LocalObjectAttributes.ObjectName->Length == 0 ||
-             LocalObjectAttributes.ObjectName->Buffer[0] == UNICODE_NULL)
+             CapturedName.Buffer == NULL ||
+             CapturedName.Length == 0 ||
+             CapturedName.Buffer[0] == UNICODE_NULL)
             /* &&
             LocalObjectAttributes.RootDirectory == NULL */)
         {
@@ -1324,6 +1359,7 @@ NtUserOpenWindowStation(
     NTSTATUS Status = STATUS_SUCCESS;
     HWINSTA hWinSta = NULL;
     OBJECT_ATTRIBUTES LocalObjectAttributes;
+    UNICODE_STRING CapturedName = { 0 };
     PUNICODE_STRING WindowStationName = NULL;
     PUNICODE_STRING TebStaticUnicodeString = NULL;
     KPROCESSOR_MODE OwnerMode = UserMode;
@@ -1342,6 +1378,13 @@ NtUserOpenWindowStation(
             _SEH2_LEAVE;
         }
 
+        if (LocalObjectAttributes.ObjectName)
+        {
+            CapturedName = ProbeForReadUnicodeString(LocalObjectAttributes.ObjectName);
+            if (CapturedName.Buffer && CapturedName.Length)
+                ProbeForRead(CapturedName.Buffer, CapturedName.Length, 1);
+        }
+
         /*
          * Check whether the caller did not provide a window station name,
          * or provided the special "Service-0x00000000-00000000$" name.
@@ -1351,9 +1394,9 @@ NtUserOpenWindowStation(
          * OpenWindowStation() called with an empty window station name).
          */
         if ((LocalObjectAttributes.ObjectName == NULL ||
-             LocalObjectAttributes.ObjectName->Buffer == NULL ||
-             LocalObjectAttributes.ObjectName->Length == 0 ||
-             LocalObjectAttributes.ObjectName->Buffer[0] == UNICODE_NULL)
+             CapturedName.Buffer == NULL ||
+             CapturedName.Length == 0 ||
+             CapturedName.Buffer[0] == UNICODE_NULL)
             /* &&
             LocalObjectAttributes.RootDirectory == NULL */)
         {
@@ -1361,11 +1404,11 @@ NtUserOpenWindowStation(
             LocalObjectAttributes.ObjectName = NULL;
         }
         if (LocalObjectAttributes.ObjectName &&
-            LocalObjectAttributes.ObjectName->Length ==
+            CapturedName.Length ==
                 sizeof(L"Service-0x00000000-00000000$") - sizeof(UNICODE_NULL) &&
-            _wcsnicmp(LocalObjectAttributes.ObjectName->Buffer,
+            _wcsnicmp(CapturedName.Buffer,
                       L"Service-0x00000000-00000000$",
-                      LocalObjectAttributes.ObjectName->Length / sizeof(WCHAR)) == 0)
+                      CapturedName.Length / sizeof(WCHAR)) == 0)
         {
             /* No, remember that for later */
             LocalObjectAttributes.ObjectName = NULL;
