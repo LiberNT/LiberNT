@@ -177,8 +177,17 @@ QregDriverPaths(D3DKMT_HANDLE hAdapter, LUID Luid)
     Repository = wcsstr(Image.Info.OutputString, L"\\FileRepository\\");
     if (Repository == NULL)
     {
-        QregRefused(hAdapter, Luid, "store path of a driver outside the store", D3DDDI_QUERYREGISTRY_DRIVERSTOREPATH, 0,
-                    NULL, 0, 0, sizeof(Buffer), STATUS_INVALID_PARAMETER);
+        /* TODO: INFO_NEEDED: the Windows 11 answer for an image outside the driver store is unmeasured (every PE driver is in the store) */
+        Status = QregQuery(hAdapter, &Buffer, D3DDDI_QUERYREGISTRY_DRIVERSTOREPATH, 0, NULL, 0, 0, sizeof(Buffer));
+        StoreChars = Buffer.Info.OutputValueSize / sizeof(WCHAR);
+        ok(Status == STATUS_SUCCESS && Buffer.Info.Status == D3DDDI_QUERYREGISTRY_STATUS_SUCCESS &&
+           StoreChars != 0 && StoreChars < ImageBytes / sizeof(WCHAR) &&
+           (UINT)lstrlenW(Buffer.Info.OutputString) == StoreChars &&
+           !_wcsnicmp(Buffer.Info.OutputString, Image.Info.OutputString, StoreChars) &&
+           Image.Info.OutputString[StoreChars] == L'\\',
+           "Adapter %08lx:%08lx: store path of a driver outside the store returned 0x%08lx status %u '%.*ls', "
+           "not a directory of '%ls'\n", (ULONG)Luid.HighPart, Luid.LowPart, (ULONG)Status, (UINT)Buffer.Info.Status,
+           (int)StoreChars, Buffer.Info.OutputString, Image.Info.OutputString);
         return;
     }
     Tail = wcschr(Repository + lstrlenW(L"\\FileRepository\\"), L'\\');
