@@ -9,17 +9,17 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 
 set(_wow64win_wrappers)
 foreach(_source d3dkmt.c gdi.c user.c)
-    file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/${_source} _lines REGEX "^NTSTATUS WINAPI wow64_Nt(User|Gdi)")
+    file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/${_source} _lines REGEX "^NTSTATUS WINAPI wow64_Nt(User|Gdi|Dxgk)")
     foreach(_line ${_lines})
-        string(REGEX MATCH "wow64_(Nt(User|Gdi)[A-Za-z0-9_]+)" _match "${_line}")
+        string(REGEX MATCH "wow64_(Nt(User|Gdi|Dxgk)[A-Za-z0-9_]+)" _match "${_line}")
         list(APPEND _wow64win_wrappers ${CMAKE_MATCH_1})
     endforeach()
 endforeach()
 
 set(_wow64win_exports)
-file(STRINGS ${REACTOS_SOURCE_DIR}/subsystems/win/win32k/win32u/win32u.spec _lines REGEX "^@ .*Nt(User|Gdi)")
+file(STRINGS ${REACTOS_SOURCE_DIR}/subsystems/win/win32k/win32u/win32u.spec _lines REGEX "^@ .*Nt(User|Gdi|Dxgk)")
 foreach(_line ${_lines})
-    string(REGEX MATCH " (Nt(User|Gdi)[A-Za-z0-9_]+)\\(" _match "${_line}")
+    string(REGEX MATCH " (Nt(User|Gdi|Dxgk)[A-Za-z0-9_]+)\\(" _match "${_line}")
     list(APPEND _wow64win_exports ${CMAKE_MATCH_1})
 endforeach()
 
