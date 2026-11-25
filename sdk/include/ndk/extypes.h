@@ -1660,6 +1660,25 @@ typedef struct _SYSTEM_BOOT_ENVIRONMENT_INFORMATION
     ULONGLONG BootFlags;
 } SYSTEM_BOOT_ENVIRONMENT_INFORMATION, *PSYSTEM_BOOT_ENVIRONMENT_INFORMATION;
 
+// Class 126
+typedef enum _SYSTEM_PIXEL_FORMAT
+{
+    SystemPixelFormatUnknown = 0,
+    /* TODO: INFO_NEEDED: values 1 to 3 */
+    SystemPixelFormatB8G8R8X8 = 4
+} SYSTEM_PIXEL_FORMAT;
+
+typedef struct _SYSTEM_BOOT_GRAPHICS_INFORMATION
+{
+    LARGE_INTEGER FrameBuffer;
+    ULONG Width;
+    ULONG Height;
+    ULONG PixelStride;
+    ULONG Flags;
+    SYSTEM_PIXEL_FORMAT Format;
+    ULONG DisplayRotation;
+} SYSTEM_BOOT_GRAPHICS_INFORMATION, *PSYSTEM_BOOT_GRAPHICS_INFORMATION;
+
 typedef struct _SYSTEM_BOOT_ENVIRONMENT_V1
 {
     GUID BootIdentifier;

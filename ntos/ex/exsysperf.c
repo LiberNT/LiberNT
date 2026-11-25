@@ -752,6 +752,60 @@ ExpQueryBootEnvironmentInformation(
     return STATUS_SUCCESS;
 }
 
+C_ASSERT(sizeof(SYSTEM_BOOT_GRAPHICS_INFORMATION) == 0x20);
+
+static
+SYSTEM_PIXEL_FORMAT
+ExpBootGraphicsPixelFormat(
+    _In_ PLOADER_PARAMETER_FRAMEBUFFER FrameBuffer)
+{
+    if ((FrameBuffer->PixelFormat == 32) &&
+        (FrameBuffer->RedMask == 0x00FF0000) &&
+        (FrameBuffer->GreenMask == 0x0000FF00) &&
+        (FrameBuffer->BlueMask == 0x000000FF))
+    {
+        return SystemPixelFormatB8G8R8X8;
+    }
+
+    /* TODO: INFO_NEEDED: the formats Windows reports for the other framebuffer layouts */
+    return SystemPixelFormatUnknown;
+}
+
+NTSTATUS
+NTAPI
+ExpQueryBootGraphicsInformation(
+    _Out_ PSYSTEM_BOOT_GRAPHICS_INFORMATION Info,
+    _In_ ULONG Length,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    LOADER_PARAMETER_FRAMEBUFFER FrameBuffer;
+
+    if (Length != sizeof(SYSTEM_BOOT_GRAPHICS_INFORMATION))
+    {
+        return STATUS_INFO_LENGTH_MISMATCH;
+    }
+
+    /* TODO: INFO_NEEDED: what Windows reports when the firmware left no framebuffer */
+    if (!InbvGetGopFrameBufferInfo(&FrameBuffer))
+    {
+        return STATUS_UNSUCCESSFUL;
+    }
+    ASSERT(FrameBuffer.FrameBufferBase.QuadPart != 0);
+
+    RtlZeroMemory(Info, sizeof(*Info));
+    if (PreviousMode == KernelMode)
+    {
+        Info->FrameBuffer = FrameBuffer.FrameBufferBase;
+    }
+    Info->Width = FrameBuffer.HorizontalResolution;
+    Info->Height = FrameBuffer.VerticalResolution;
+    Info->PixelStride = FrameBuffer.PixelsPerScanLine;
+    Info->Format = ExpBootGraphicsPixelFormat(&FrameBuffer);
+    /* FIXME: a rotated firmware framebuffer is reported unrotated */
+    Info->DisplayRotation = 0;
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 ExpQueryRegistryQuota(

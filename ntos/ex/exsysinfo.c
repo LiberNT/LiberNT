@@ -532,6 +532,8 @@ NTSTATUS NTAPI ExpQueryLogicalProcessorInformation(_Out_opt_ PVOID,
     _In_ ULONG, _Out_ PULONG);
 NTSTATUS NTAPI ExpQueryBootEnvironmentInformation(
     _Out_ PSYSTEM_BOOT_ENVIRONMENT_INFORMATION, _In_ ULONG);
+NTSTATUS NTAPI ExpQueryBootGraphicsInformation(
+    _Out_ PSYSTEM_BOOT_GRAPHICS_INFORMATION, _In_ ULONG, _In_ KPROCESSOR_MODE);
 NTSTATUS NTAPI ExpQueryRegistryQuota(
     _Out_ PSYSTEM_REGISTRY_QUOTA_INFORMATION, _In_ ULONG);
 NTSTATUS NTAPI ExpQueryCpuSetInformation(_In_opt_ PVOID, _In_ ULONG,
@@ -1310,6 +1312,15 @@ NtQuerySystemInformation(
                 ResultLength = sizeof(SYSTEM_BOOT_ENVIRONMENT_INFORMATION);
                 Status = ExpQueryBootEnvironmentInformation(SystemInformation,
                                                             Length);
+                break;
+            }
+
+            case SystemBootGraphicsInformation:
+            {
+                ResultLength = sizeof(SYSTEM_BOOT_GRAPHICS_INFORMATION);
+                Status = ExpQueryBootGraphicsInformation(SystemInformation,
+                                                         Length,
+                                                         PreviousMode);
                 break;
             }
 

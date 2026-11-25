@@ -950,6 +950,53 @@ TestKsrPersistMemoryWithMetadata(VOID)
     ok_eq_ulonglong(PersistedLength, 0xA5A5A5A5A5A5A5A5ULL);
 }
 
+NTKERNELAPI
+FIRMWARE_TYPE
+NTAPI
+ExGetFirmwareType(VOID);
+
+static
+VOID
+CheckBootGraphicsSize(
+    _In_ ULONG Size)
+{
+    UCHAR Buffer[sizeof(SYSTEM_BOOT_GRAPHICS_INFORMATION) + 8];
+    ULONG Length = 0;
+    NTSTATUS Status;
+
+    RtlFillMemory(Buffer, sizeof(Buffer), 0xA5);
+    Status = ZwQuerySystemInformation(SystemBootGraphicsInformation, Buffer, Size, &Length);
+    ok_eq_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+    ok_eq_ulong(Length, (ULONG)sizeof(SYSTEM_BOOT_GRAPHICS_INFORMATION));
+    ok_eq_hex(Buffer[0], 0xA5);
+}
+
+static
+VOID
+TestBootGraphicsInformation(VOID)
+{
+    SYSTEM_BOOT_GRAPHICS_INFORMATION Graphics;
+    ULONG Length = 0;
+    NTSTATUS Status;
+
+    if (skip(ExGetFirmwareType() == FirmwareTypeUefi, "boot graphics information is measured on UEFI firmware only\n"))
+        return;
+
+    RtlFillMemory(&Graphics, sizeof(Graphics), 0xA5);
+    Status = ZwQuerySystemInformation(SystemBootGraphicsInformation, &Graphics, sizeof(Graphics), &Length);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Length, (ULONG)sizeof(Graphics));
+    ok(Graphics.FrameBuffer.QuadPart != 0, "no boot framebuffer address\n");
+    ok(Graphics.Width != 0 && Graphics.Height != 0, "no boot framebuffer size\n");
+    ok(Graphics.PixelStride >= Graphics.Width, "pixel stride %lu below the width %lu\n", Graphics.PixelStride, Graphics.Width);
+    ok_eq_ulong(Graphics.Flags, 0UL);
+    ok_eq_ulong(Graphics.DisplayRotation, 0UL);
+
+    CheckBootGraphicsSize(sizeof(Graphics) - sizeof(ULONG));
+    CheckBootGraphicsSize(sizeof(Graphics) + sizeof(ULONGLONG));
+    CheckBootGraphicsSize(0);
+}
+
 static
 VOID
 TestKsrFirmwareInformation(VOID)
@@ -1024,6 +1071,7 @@ TestKsrApiSetContract(VOID)
     TestKsrQueryMetadata();
     TestKsrPersistMemoryWithMetadata();
     TestKsrFirmwareInformation();
+    TestBootGraphicsInformation();
     TestKsrEnumeratePersistedMemory();
     TestKsrMdlToMemoryRuns();
     TestKsrFreePersistedMemory();
