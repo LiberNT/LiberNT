@@ -63,6 +63,15 @@ BuildBcdRamdiskDevice(
     _Inout_ PDWORD Size);
 
 DWORD
+WriteInstalledBootEntries(
+    _In_ HKEY Store,
+    _In_opt_ HKEY Previous,
+    _In_reads_bytes_(SystemSize) const BYTE* SystemDevice,
+    _In_ DWORD SystemSize,
+    _In_reads_bytes_(OsSize) const BYTE* OsDevice,
+    _In_ DWORD OsSize);
+
+DWORD
 WriteSetupBootEntry(
     _In_ HKEY Store,
     _In_ PCWSTR ManagerPath,

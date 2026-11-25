@@ -18,6 +18,7 @@
 #include <debug.h>
 
 #define BCD_BOOTMGR             L"{9dea862c-5cdd-4e70-acc1-f32b344d4795}"
+#define BCD_OSLOADER            L"{354fa6e5-5e45-49af-91bf-1fd2754e470a}"
 #define BCD_APPLICATION_DEVICE  0x11000001
 #define BCD_APPLICATION_PATH    0x12000002
 #define BCD_DESCRIPTION         0x12000004
@@ -693,6 +694,142 @@ OpenBcdStoreFile(
         Sleep(BCD_LOAD_RETRY_MS);
     }
     DPRINT1("Boot configuration store %S loaded: %ld (attempt %lu)\n", Path, Error, Attempt);
+    return Error;
+}
+
+static BOOL
+EntryExists(
+    _In_ HKEY Store,
+    _In_ PCWSTR EntryId)
+{
+    WCHAR Path[64];
+    HKEY Key;
+
+    if (FAILED(StringCchPrintfW(Path, ARRAYSIZE(Path), L"Objects\\%s", EntryId)) ||
+        RegOpenKeyExW(Store, Path, REG_OPTION_BACKUP_RESTORE, KEY_READ, &Key) != ERROR_SUCCESS)
+    {
+        return FALSE;
+    }
+    RegCloseKey(Key);
+    return TRUE;
+}
+
+static DWORD
+CopyEntryFrom(
+    _In_ HKEY Source,
+    _In_ PCWSTR SourceId,
+    _In_ HKEY Target,
+    _In_ PCWSTR TargetId)
+{
+    WCHAR Path[64];
+    HKEY From, To;
+    LONG Error;
+
+    StringCchPrintfW(Path, ARRAYSIZE(Path), L"Objects\\%s", SourceId);
+    Error = RegOpenKeyExW(Source, Path, REG_OPTION_BACKUP_RESTORE, KEY_READ, &From);
+    if (Error != ERROR_SUCCESS)
+        return Error;
+
+    StringCchPrintfW(Path, ARRAYSIZE(Path), L"Objects\\%s", TargetId);
+    Error = RegCreateKeyExW(Target, Path, 0, NULL, REG_OPTION_BACKUP_RESTORE, KEY_ALL_ACCESS, NULL, &To, NULL);
+    if (Error == ERROR_SUCCESS)
+    {
+        Error = CopyKeyTree(From, To);
+        RegCloseKey(To);
+    }
+    RegCloseKey(From);
+    return Error;
+}
+
+/* The entries of another installation in the previous store follow the new one in the boot menu */
+static DWORD
+KeepOtherEntries(
+    _In_ HKEY Store,
+    _In_ HKEY Previous,
+    _In_reads_bytes_(OsSize) const BYTE* OsDevice,
+    _In_ DWORD OsSize)
+{
+    WCHAR EntryId[UPDATE_ID_CHARS];
+    PWSTR Order, Kept, Item, Out;
+    BYTE Device[BCD_ELEMENT_MAX];
+    DWORD Size = BCD_ORDER_MAX * sizeof(WCHAR), DeviceSize, Error;
+    SIZE_T Length;
+
+    Order = HeapAlloc(ProcessHeap, HEAP_ZERO_MEMORY, 2 * (BCD_ORDER_MAX + 1) * sizeof(WCHAR));
+    if (!Order)
+        return ERROR_NOT_ENOUGH_MEMORY;
+    Kept = Order + BCD_ORDER_MAX + 1;
+
+    Error = ReadElement(Store, BCD_BOOTMGR, BCD_DISPLAY_ORDER, REG_MULTI_SZ, Kept, &Size);
+    Out = Kept;
+    if (Error == ERROR_SUCCESS)
+    {
+        while (*Out && Out < Kept + BCD_ORDER_MAX)
+            Out += wcslen(Out) + 1;
+    }
+    else if (Error == ERROR_FILE_NOT_FOUND)
+    {
+        Error = ERROR_SUCCESS;
+    }
+
+    Size = BCD_ORDER_MAX * sizeof(WCHAR);
+    if (Error == ERROR_SUCCESS && ReadElement(Previous, BCD_BOOTMGR, BCD_DISPLAY_ORDER, REG_MULTI_SZ, Order, &Size) == ERROR_SUCCESS)
+    {
+        for (Item = Order; Error == ERROR_SUCCESS && *Item && Item < Order + BCD_ORDER_MAX; Item += Length + 1)
+        {
+            Length = wcslen(Item);
+            DeviceSize = sizeof(Device);
+            if (Length != UPDATE_ID_CHARS - 1 ||
+                (ReadElement(Previous, Item, BCD_OS_DEVICE, REG_BINARY, Device, &DeviceSize) == ERROR_SUCCESS &&
+                 DeviceSize == OsSize && memcmp(Device, OsDevice, OsSize) == 0))
+            {
+                continue;
+            }
+            if (Out + UPDATE_ID_CHARS + 1 > Kept + BCD_ORDER_MAX)
+                break;
+
+            StringCchCopyW(EntryId, ARRAYSIZE(EntryId), Item);
+            if (EntryExists(Store, EntryId))
+                Error = CreateEntryId(EntryId);
+            if (Error == ERROR_SUCCESS)
+                Error = CopyEntryFrom(Previous, Item, Store, EntryId);
+            if (Error == ERROR_SUCCESS)
+            {
+                StringCchCopyW(Out, UPDATE_ID_CHARS, EntryId);
+                Out += wcslen(Out) + 1;
+                DPRINT1("Boot entry %S of another installation kept as %S\n", Item, EntryId);
+            }
+        }
+        *Out++ = UNICODE_NULL;
+        if (Error == ERROR_SUCCESS)
+            Error = WriteElement(Store, BCD_BOOTMGR, BCD_DISPLAY_ORDER, REG_MULTI_SZ, Kept, (DWORD)((Out - Kept) * sizeof(WCHAR)));
+    }
+
+    HeapFree(ProcessHeap, 0, Order);
+    return Error;
+}
+
+DWORD
+WriteInstalledBootEntries(
+    _In_ HKEY Store,
+    _In_opt_ HKEY Previous,
+    _In_reads_bytes_(SystemSize) const BYTE* SystemDevice,
+    _In_ DWORD SystemSize,
+    _In_reads_bytes_(OsSize) const BYTE* OsDevice,
+    _In_ DWORD OsSize)
+{
+    DWORD Error;
+
+    Error = WriteElement(Store, BCD_BOOTMGR, BCD_APPLICATION_DEVICE, REG_BINARY, SystemDevice, SystemSize);
+    if (Error == ERROR_SUCCESS)
+        Error = WriteElement(Store, BCD_OSLOADER, BCD_APPLICATION_DEVICE, REG_BINARY, OsDevice, OsSize);
+    if (Error == ERROR_SUCCESS)
+        Error = WriteElement(Store, BCD_OSLOADER, BCD_OS_DEVICE, REG_BINARY, OsDevice, OsSize);
+    if (Error == ERROR_SUCCESS && Previous)
+        Error = KeepOtherEntries(Store, Previous, OsDevice, OsSize);
+    if (Error == ERROR_SUCCESS)
+        Error = RegFlushKey(Store);
+    DPRINT1("Boot entries of the installed system written: %lu\n", Error);
     return Error;
 }
 

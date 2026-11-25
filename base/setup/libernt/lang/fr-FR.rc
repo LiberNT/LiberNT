@@ -553,4 +553,10 @@ BEGIN
     IDS_HOST_LOWSPACE "La partition de LiberNT sur %s a besoin de %s d'espace libre pour l'image de mise à niveau."
     IDS_HOST_VOLUMEERRORS "%s contient des erreurs de système de fichiers : Windows ne peut donc pas le réduire. Exécutez ""chkdsk %s /f"" en tant qu'administrateur, redémarrez l'ordinateur pour que Windows répare le lecteur, puis relancez l'installation."
     IDS_HOST_CHECKINGSIZE "Windows calcule l'espace que %s peut céder à LiberNT..."
+    IDS_HOST_IMAGENOTE "%s cède une partie de son espace à une nouvelle partition, et l'installation y installe LiberNT à partir de cette image. L'ordinateur redémarre ensuite sur LiberNT.\n\nCette version : %s"
+    IDS_HOST_READY_IMAGE "L'installation installe LiberNT à partir de l'image (%s) dans cette partition et l'ajoute au menu de démarrage, puis redémarre l'ordinateur sur LiberNT."
+    IDS_HOST_IMAGEPROCESSTITLE "Installation de LiberNT"
+    IDS_HOST_STEP_INSTALLBOOT "Ajout de LiberNT au menu de démarrage..."
+    IDS_HOST_INSTALLEDTITLE "LiberNT est installé"
+    IDS_HOST_INSTALLED "LiberNT est installé. L'ordinateur redémarre sur LiberNT dans quelques secondes. Enregistrez d'abord votre travail dans les autres applications, ou sélectionnez Différer : LiberNT démarrera alors au prochain redémarrage de l'ordinateur."
 END
