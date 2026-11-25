@@ -2321,6 +2321,7 @@ typedef struct _DXGKRNL_SYNC_OBJECT
     LIST_ENTRY                  GlobalShareListEntry;
     LIST_ENTRY                  ViewListHead;
     LIST_ENTRY                  ViewListEntry;
+    LIST_ENTRY                  NtShareListHead;
     volatile LONG               ViewCount;
     volatile LONG               MonitoredPageQuarantined;
 

@@ -1322,6 +1322,7 @@ DxgkpDereferenceSyncObject(
 #if (REACTOS_WDDM_TARGET_LEVEL >= 2200)
         DxgkpSyncUnregisterMonitoredFence(SyncObj);
 #endif
+        ASSERT(IsListEmpty(&SyncObj->NtShareListHead));
         DxgkpSyncUnlinkView(SyncObj);
         DxgkpSyncUnpublishShare(SyncObj);
         DxgkpSyncDestroyPeriodicNotification(SyncObj);
@@ -1842,6 +1843,7 @@ DxgkpCreateSynchronizationObjectInternal(
     InitializeListHead(&SyncObj->DeviceSyncObjListEntry);
     InitializeListHead(&SyncObj->GlobalShareListEntry);
     InitializeListHead(&SyncObj->ViewListHead);
+    InitializeListHead(&SyncObj->NtShareListHead);
     InitializeListHead(&SyncObj->ViewListEntry);
     InitializeListHead(&SyncObj->PeriodicListEntry);
     DxgkPeriodicNotificationCoreInitialize(
@@ -2163,6 +2165,7 @@ DxgkpSyncCreateView(
     InitializeListHead(&Alias->DeviceSyncObjListEntry);
     InitializeListHead(&Alias->GlobalShareListEntry);
     InitializeListHead(&Alias->ViewListHead);
+    InitializeListHead(&Alias->NtShareListHead);
     InitializeListHead(&Alias->ViewListEntry);
     InitializeListHead(&Alias->PeriodicListEntry);
 #if (REACTOS_WDDM_TARGET_LEVEL >= 3000)
@@ -2332,6 +2335,7 @@ DxgkOpenSynchronizationObject(
 typedef struct _DXGKRNL_SHARED_SYNC_OBJECT
 {
     PDXGKRNL_SYNC_OBJECT SyncObject;
+    LIST_ENTRY SyncObjectEntry;
 } DXGKRNL_SHARED_SYNC_OBJECT, *PDXGKRNL_SHARED_SYNC_OBJECT;
 
 static VOID
@@ -2340,12 +2344,48 @@ DxgkpDeleteSharedSyncObject(
     _In_ PVOID Object)
 {
     PDXGKRNL_SHARED_SYNC_OBJECT SharedObject = Object;
+    PDXGKRNL_SYNC_OBJECT SyncObj;
 
-    if (SharedObject->SyncObject != NULL)
+    DxgkpSyncShareInitialize();
+    ExAcquireFastMutex(&DxgkSyncShareLock);
+    SyncObj = SharedObject->SyncObject;
+    if (SyncObj != NULL)
     {
-        DxgkpDereferenceSyncObject(SharedObject->SyncObject);
+        RemoveEntryList(&SharedObject->SyncObjectEntry);
         SharedObject->SyncObject = NULL;
     }
+    ExReleaseFastMutex(&DxgkSyncShareLock);
+    if (SyncObj != NULL)
+        DxgkpDereferenceSyncObject(SyncObj);
+}
+
+/*
+ * The creator's destroy cuts the NT objects loose, so a handle the creating
+ * process still holds at exit cannot keep the device its teardown waits on.
+ */
+static VOID
+DxgkpSyncSeverNtShares(
+    _In_ PDXGKRNL_SYNC_OBJECT SyncObj)
+{
+    PDXGKRNL_SHARED_SYNC_OBJECT SharedObject;
+    PLIST_ENTRY Entry;
+    ULONG Severed = 0;
+
+    PAGED_CODE();
+    ASSERT(InterlockedCompareExchange(&SyncObj->Destroying, 0, 0) != 0);
+    DxgkpSyncShareInitialize();
+    ExAcquireFastMutex(&DxgkSyncShareLock);
+    while (!IsListEmpty(&SyncObj->NtShareListHead))
+    {
+        Entry = RemoveHeadList(&SyncObj->NtShareListHead);
+        SharedObject = CONTAINING_RECORD(Entry, DXGKRNL_SHARED_SYNC_OBJECT, SyncObjectEntry);
+        ASSERT(SharedObject->SyncObject == SyncObj);
+        SharedObject->SyncObject = NULL;
+        ++Severed;
+    }
+    ExReleaseFastMutex(&DxgkSyncShareLock);
+    while (Severed-- > 0)
+        DxgkpDereferenceSyncObject(SyncObj);
 }
 
 POBJECT_TYPE
@@ -2416,7 +2456,19 @@ DxgkSyncShareNtObject(
         DxgkpDereferenceSyncObject(SyncObj);
         return Status;
     }
+    SharedObject->SyncObject = NULL;
+    DxgkpSyncShareInitialize();
+    ExAcquireFastMutex(&DxgkSyncShareLock);
+    if (InterlockedCompareExchange(&SyncObj->Destroying, 0, 0) != 0)
+    {
+        ExReleaseFastMutex(&DxgkSyncShareLock);
+        ObDereferenceObject(SharedObject);
+        DxgkpDereferenceSyncObject(SyncObj);
+        return STATUS_DELETE_PENDING;
+    }
     SharedObject->SyncObject = SyncObj;
+    InsertTailList(&SyncObj->NtShareListHead, &SharedObject->SyncObjectEntry);
+    ExReleaseFastMutex(&DxgkSyncShareLock);
     return ObInsertObject(SharedObject, NULL, DesiredAccess, 0, NULL, NtHandle);
 }
 
@@ -2438,12 +2490,17 @@ DxgkpSyncReferenceNtShared(
     if (!NT_SUCCESS(Status))
         return Status;
     /* FIXME: the NT object keeps the sync object only until its creator destroys it; Windows keeps it alive for every holder. */
-    if (SharedObject->SyncObject == NULL || !DxgkpReferenceSyncObject(SharedObject->SyncObject))
+    DxgkpSyncShareInitialize();
+    ExAcquireFastMutex(&DxgkSyncShareLock);
+    *SyncObj = SharedObject->SyncObject;
+    if (*SyncObj != NULL && !DxgkpReferenceSyncObject(*SyncObj))
+        *SyncObj = NULL;
+    ExReleaseFastMutex(&DxgkSyncShareLock);
+    if (*SyncObj == NULL)
     {
         ObDereferenceObject(SharedObject);
         return STATUS_DELETE_PENDING;
     }
-    *SyncObj = SharedObject->SyncObject;
     if (GrantedAccess != NULL)
         *GrantedAccess = HandleInformation.GrantedAccess;
     ObDereferenceObject(SharedObject);
@@ -2674,6 +2731,7 @@ DxgkDestroySynchronizationObject(
     DxgkSyncWaitCoreCancelObject(&SyncObj->Device->SyncWaitRegistry, SyncObj, STATUS_DELETE_PENDING);
     DxgkpSyncCancelViewWaits(SyncObj, STATUS_DELETE_PENDING);
     DxgkpSyncDestroyPeriodicNotification(SyncObj);
+    DxgkpSyncSeverNtShares(SyncObj);
     KeSetEvent(&SyncObj->CpuEvent, IO_NO_INCREMENT, FALSE);
 
     DXGKRNL_TRACE("DxgkDestroySynchronizationObject: handle=0x%X\n", pDestroySyncObject->hSyncObject);
@@ -3443,6 +3501,7 @@ DxgkCleanupDeviceSynchronizationObjects(
 #endif
         DxgkpSyncDestroyPeriodicNotification(SyncObj);
         DxgkRemoveOwnedHandleObject(DxgkHandleTypeSynchronizationObject, SyncObj);
+        DxgkpSyncSeverNtShares(SyncObj);
         KeSetEvent(&SyncObj->CpuEvent, IO_NO_INCREMENT, FALSE);
         DxgkpDereferenceSyncObject(SyncObj);
         ++Cleaned;

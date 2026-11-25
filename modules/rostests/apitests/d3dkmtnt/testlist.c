@@ -12,6 +12,8 @@ extern void func_sharedaccess(void);
 extern void func_syncabi(void);
 extern void func_legacysync(void);
 extern void func_swapchain(void);
+extern void func_exitshared(void);
+extern void func_exitshared_child(void);
 
 const struct test winetest_testlist[] =
 {
@@ -19,5 +21,7 @@ const struct test winetest_testlist[] =
     { "syncabi",      func_syncabi },
     { "legacysync",   func_legacysync },
     { "swapchain",    func_swapchain },
+    { "exitshared",   func_exitshared },
+    { "exitshared_child", func_exitshared_child },
     { 0, 0 }
 };
