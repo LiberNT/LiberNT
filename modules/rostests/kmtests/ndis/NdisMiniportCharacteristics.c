@@ -124,6 +124,37 @@ NdisTestHeaderAndVersion(VOID)
     Characteristics.Header.Size = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2;
     NdisTestRegister("an NDIS 6.80 miniport with a revision 2 size", &Characteristics, NDIS_STATUS_BAD_CHARACTERISTICS);
 
+    NdisTestInitializeCharacteristics(&Characteristics, 80);
+    Characteristics.Header.Revision = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2;
+    NdisTestRegister("an NDIS 6.80 miniport with a revision 2 header", &Characteristics, NDIS_STATUS_BAD_CHARACTERISTICS);
+
+    NdisTestInitializeCharacteristics(&Characteristics, 88);
+    Characteristics.Header.Revision = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2;
+    Characteristics.Header.Size = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2;
+    NdisTestRegister("an NDIS 6.88 miniport with a revision 2 header", &Characteristics, NDIS_STATUS_BAD_CHARACTERISTICS);
+
+    NdisTestInitializeCharacteristics(&Characteristics, 89);
+    NdisTestRegister("an NDIS 6.89 miniport with a revision 3 header", &Characteristics, NDIS_STATUS_SUCCESS);
+
+    NdisTestInitializeCharacteristics(&Characteristics, 89);
+    Characteristics.Header.Revision = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2;
+    Characteristics.Header.Size = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2;
+    NdisTestRegister("an NDIS 6.89 miniport with a revision 2 header", &Characteristics, NDIS_STATUS_SUCCESS);
+    Characteristics.Flags = NDIS_WDM_DRIVER;
+    NdisTestRegister("an NDIS 6.89 WDM miniport with a revision 2 header", &Characteristics, NDIS_STATUS_SUCCESS);
+    Characteristics.Flags = 0;
+    Characteristics.Header.Revision = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3;
+    NdisTestRegister("an NDIS 6.89 miniport with a revision 3 header of revision 2 size", &Characteristics, NDIS_STATUS_SUCCESS);
+    Characteristics.Header.Revision = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2;
+    Characteristics.Header.Size = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2 - sizeof(PVOID);
+    NdisTestRegister("an NDIS 6.89 miniport with a short revision 2 header", &Characteristics, NDIS_STATUS_BAD_CHARACTERISTICS);
+    Characteristics.Header.Revision = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_1;
+    Characteristics.Header.Size = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_1;
+    NdisTestRegister("an NDIS 6.89 miniport with a revision 1 header", &Characteristics, NDIS_STATUS_BAD_CHARACTERISTICS);
+
+    NdisTestInitializeCharacteristics(&Characteristics, 90);
+    NdisTestRegister("an NDIS 6.90 miniport", &Characteristics, NDIS_STATUS_BAD_VERSION);
+
     NdisTestInitializeCharacteristics(&Characteristics, 20);
     Characteristics.MajorNdisVersion = 5;
     NdisTestRegister("an NDIS 5.20 miniport", &Characteristics, NDIS_STATUS_BAD_VERSION);
