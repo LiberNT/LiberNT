@@ -52,6 +52,7 @@
 #include <ntfs_linux.h>
 extern "C" {
 #include <expandcore.h>
+#include <wimboot.h>
 }
 
 struct NtfsDirectoryName
@@ -3018,6 +3019,12 @@ Done:
     return Status;
 }
 
+#ifndef FILE_ATTRIBUTE_READONLY
+#define FILE_ATTRIBUTE_READONLY 0x00000001
+#endif
+#ifndef FILE_ATTRIBUTE_HIDDEN
+#define FILE_ATTRIBUTE_HIDDEN 0x00000002
+#endif
 #ifndef FILE_ATTRIBUTE_SYSTEM
 #define FILE_ATTRIBUTE_SYSTEM 0x00000004
 #endif
@@ -3340,6 +3347,195 @@ AddLinuxTreeFromList(NtfsFuseState* State,
     fclose(List);
     fprintf(stderr, "%s: %lu entries, %lu failures\n", ListPath, LineNumber, Failures);
     return Failures ? 1 : 0;
+}
+
+struct WimPointerState
+{
+    NtfsFuseState* State;
+    const WIMBOOT_IMAGE* Image;
+    NTSTATUS Status;
+    std::string FailedPath;
+};
+
+static void*
+WimAllocate(size_t Size, void* Context)
+{
+    (void)Context;
+    return malloc(Size);
+}
+
+static void
+WimFree(void* Pointer, void* Context)
+{
+    (void)Context;
+    free(Pointer);
+}
+
+static int
+AddWimEntry(void* Context, const WIMBOOT_ENTRY* Entry)
+{
+    WimPointerState* Pointers = static_cast<WimPointerState*>(Context);
+    UCHAR Reparse[WIMBOOT_POINTER_SIZE];
+    std::vector<WCHAR> NtfsPath;
+
+    if (Entry->IsDirectory)
+    {
+        Pointers->Status = EnsureImageDirectory(Pointers->State, Entry->Path, FALSE);
+    }
+    else if (!Utf8ToNtfsPath(Entry->Path, NtfsPath) || NtfsPath.size() < 2)
+    {
+        Pointers->Status = STATUS_OBJECT_NAME_INVALID;
+    }
+    else if (Entry->Size == 0)
+    {
+        PNtfsFileRecord File = NULL;
+
+        Pointers->Status = NtfsMasterFileTableCreateFile(
+            NtfsVolumeGetMft(Pointers->State->Volume),
+            NtfsPath.data(),
+            (ULONG)(NtfsPath.size() - 1),
+            FALSE,
+            Entry->Attributes & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM),
+            &File);
+        NtfsFileRecordDestroy(File);
+    }
+    else
+    {
+        WimBootPointer(Reparse, Pointers->Image, Entry);
+        Pointers->Status = NtfsMasterFileTableCreateWofFile(
+            NtfsVolumeGetMft(Pointers->State->Volume),
+            NtfsPath.data(),
+            (ULONG)(NtfsPath.size() - 1),
+            Entry->Attributes & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM),
+            Entry->Size,
+            Reparse,
+            sizeof(Reparse));
+    }
+
+    if (!NT_SUCCESS(Pointers->Status))
+    {
+        Pointers->FailedPath = Entry->Path;
+        return 1;
+    }
+    return 0;
+}
+
+static int
+AddWimImage(NtfsFuseState* State,
+            const char* WimPath,
+            const char* ImagePath,
+            uint64_t PartitionOffset,
+            uint32_t DiskSignature)
+{
+    static const char OverlayDirectory[] = "System Volume Information";
+    static const char OverlayPath[] = "System Volume Information/WimOverlay.dat";
+    WimCoreAllocator Allocator = { WimAllocate, WimFree, NULL };
+    std::vector<UCHAR> CopyBuffer(1024 * 1024);
+    std::string WimImagePath = NormalizeImagePath(ImagePath);
+    std::string Overlay(4096, '\0');
+    std::vector<WCHAR> OverlayName;
+    std::vector<char> Data;
+    WimPointerState Pointers;
+    PNtfsFileRecord File = NULL;
+    WIMBOOT_IMAGE Image = {};
+    WimCoreCtx Wim;
+    uint32_t OverlayLength = 0;
+    size_t Separator;
+    NTSTATUS Status;
+    FILE* Host;
+    long Size;
+    int Result;
+
+    Status = Lookup(State->Volume, OverlayPath, &File);
+    NtfsFileRecordDestroy(File);
+    if (Status != STATUS_NOT_FOUND)
+    {
+        /* TODO: add a WIM to a volume that already has one registered */
+        fprintf(stderr, "%s: the volume already has a WIM overlay\n", OverlayPath);
+        return 1;
+    }
+
+    Host = fopen(WimPath, "rb");
+    if (!Host || fseek(Host, 0, SEEK_END) != 0 || (Size = ftell(Host)) <= 0 || fseek(Host, 0, SEEK_SET) != 0)
+    {
+        fprintf(stderr, "%s: %s\n", WimPath, strerror(errno));
+        if (Host)
+            fclose(Host);
+        return 1;
+    }
+    Data.resize((size_t)Size);
+    Result = fread(Data.data(), 1, Data.size(), Host) == Data.size() ? WIMBOOT_OK : WIMBOOT_IO_ERROR;
+    fclose(Host);
+
+    wimcore_init(&Wim);
+    if (Result == WIMBOOT_OK)
+        Result = wimcore_open_memory(&Wim, &Allocator, Data.data(), Data.size()) == 0 ? WIMBOOT_OK : WIMBOOT_BAD_WIM;
+    if (Result == WIMBOOT_OK)
+        Result = WimBootOpen(&Wim, &Image);
+    if (Result == WIMBOOT_OK && !WimImagePath.empty() &&
+        Utf8ToNtfsString(("\\" + WimImagePath).c_str(), false, false, OverlayName))
+    {
+        for (WCHAR& Character : OverlayName)
+        {
+            if (Character == L'/')
+                Character = L'\\';
+        }
+        OverlayLength = WimBootOverlay(reinterpret_cast<uint8_t*>(&Overlay[0]),
+                                       (uint32_t)Overlay.size(),
+                                       &Image,
+                                       reinterpret_cast<const uint16_t*>(OverlayName.data()),
+                                       PartitionOffset,
+                                       DiskSignature);
+    }
+    if (Result != WIMBOOT_OK || OverlayLength == 0)
+    {
+        fprintf(stderr, "%s: the WIM image cannot be used (%d)\n", WimPath, Result);
+        wimcore_close(&Wim);
+        return 1;
+    }
+    Overlay.resize(OverlayLength);
+
+    Separator = WimImagePath.rfind('/');
+    Status = Separator == std::string::npos
+        ? STATUS_SUCCESS
+        : EnsureImageDirectory(State, WimImagePath.substr(0, Separator), FALSE);
+    if (NT_SUCCESS(Status))
+        Status = PrepareImageFile(State, WimImagePath);
+    if (NT_SUCCESS(Status))
+        Status = CopyHostFileToImage(State, WimImagePath, WimPath, CopyBuffer);
+    if (NT_SUCCESS(Status))
+        Status = EnsureImageDirectory(State, OverlayDirectory, FALSE);
+    if (NT_SUCCESS(Status))
+        Status = PrepareImageFile(State, OverlayPath);
+    if (NT_SUCCESS(Status))
+        Status = WriteImageBytes(State, OverlayPath, Overlay);
+    if (!NT_SUCCESS(Status))
+    {
+        fprintf(stderr, "%s: ntfslib status 0x%08" PRIx32 " (%s)\n",
+                WimImagePath.c_str(), (uint32_t)Status, strerror(NtStatusToErrno(Status)));
+        wimcore_close(&Wim);
+        return 1;
+    }
+
+    Pointers.State = State;
+    Pointers.Image = &Image;
+    Pointers.Status = STATUS_SUCCESS;
+    Result = WimBootWalk(&Wim, &Image, AddWimEntry, &Pointers);
+    wimcore_close(&Wim);
+    if (Result != WIMBOOT_OK)
+    {
+        if (!NT_SUCCESS(Pointers.Status))
+        {
+            fprintf(stderr, "%s: ntfslib status 0x%08" PRIx32 " (%s)\n",
+                    Pointers.FailedPath.c_str(), (uint32_t)Pointers.Status, strerror(NtStatusToErrno(Pointers.Status)));
+        }
+        else
+        {
+            fprintf(stderr, "%s: the WIM image cannot be used (%d)\n", WimPath, Result);
+        }
+        return 1;
+    }
+    return 0;
 }
 
 static int
@@ -7891,6 +8087,7 @@ PrintUsage(const char* Program)
             "  %s --link IMAGE EXISTING NEW\n"
             "  %s --write IMAGE PATH OFFSET SOURCE\n"
             "  %s --addfiles IMAGE LIST\n"
+            "  %s --addwim IMAGE WIM IMAGE_PATH PARTITION_OFFSET DISK_SIGNATURE\n"
             "  %s --add-lx IMAGE LIST\n"
             "  %s --truncate IMAGE PATH SIZE\n"
             "  %s --allocate IMAGE PATH SIZE\n"
@@ -7908,6 +8105,7 @@ PrintUsage(const char* Program)
             "  %s [--show-metadata] --streams IMAGE PATH\n"
             "  %s [--show-metadata] [--writable [--direct-io] [--writeback-cache|--write-through]]"
             " IMAGE MOUNTPOINT [FUSE options]\n",
+            Program,
             Program,
             Program,
             Program,
@@ -8718,6 +8916,39 @@ main(int Argc, char** Argv)
             return 1;
         }
         Result = AddFilesFromList(&State, Argv[First + 2]);
+        CloseImage(&State);
+        return Result;
+    }
+
+    if (strcmp(Argv[First], "--addwim") == 0)
+    {
+        ULONGLONG PartitionOffset = 0;
+        ULONGLONG DiskSignature = 0;
+
+        if (First + 6 != Argc ||
+            ShowMetadata ||
+            !ParseUnsigned(Argv[First + 4], ~(ULONGLONG)0, &PartitionOffset) ||
+            !ParseUnsigned(Argv[First + 5], MAXULONG, &DiskSignature))
+        {
+            PrintUsage(Argv[0]);
+            return 2;
+        }
+
+        Status = OpenImageWritable(Argv[First + 1], &State);
+        if (!NT_SUCCESS(Status))
+        {
+            fprintf(stderr,
+                    "%s: ntfslib status 0x%08" PRIx32 " (%s)\n",
+                    Argv[First + 1],
+                    (uint32_t)Status,
+                    strerror(NtStatusToErrno(Status)));
+            return 1;
+        }
+        Result = AddWimImage(&State,
+                             Argv[First + 2],
+                             Argv[First + 3],
+                             PartitionOffset,
+                             (uint32_t)DiskSignature);
         CloseImage(&State);
         return Result;
     }

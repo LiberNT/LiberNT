@@ -5,8 +5,19 @@ endif()
 
 set(NTFSLIB_EXPAND_DIR "${NTFSLIB_ROOT}/../../../../base/applications/cmdutils/lntexpandstorage")
 
-add_executable(ntfslib_fuse ntfslib_fuse.cpp "${NTFSLIB_EXPAND_DIR}/expandcore.c")
-target_include_directories(ntfslib_fuse PRIVATE "${NTFSLIB_EXPAND_DIR}")
+set(NTFSLIB_WIM_DIR "${NTFSLIB_ROOT}/../../libwim")
+
+add_executable(ntfslib_fuse
+    ntfslib_fuse.cpp
+    "${NTFSLIB_WIM_DIR}/lzx.c"
+    "${NTFSLIB_WIM_DIR}/sha1.c"
+    "${NTFSLIB_WIM_DIR}/wimboot.c"
+    "${NTFSLIB_WIM_DIR}/wimcore.c"
+    "${NTFSLIB_WIM_DIR}/xpress_huff.c"
+    "${NTFSLIB_EXPAND_DIR}/expandcore.c")
+target_include_directories(ntfslib_fuse PRIVATE
+    "${NTFSLIB_EXPAND_DIR}"
+    "${NTFSLIB_ROOT}/../../../include/libernt/libs/libwim")
 # The full resize core: disk-level expansion and offline system-file moves.
 target_compile_definitions(ntfslib_fuse PRIVATE NTFSLIB_EXPAND_OFFLINE=1)
 target_link_libraries(ntfslib_fuse PRIVATE ntfslib_linux ntfslib_format_host)
