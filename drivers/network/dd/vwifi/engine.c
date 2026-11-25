@@ -608,7 +608,13 @@ VWifiEngineWorker(
 
             if (BssIndex < 0)
             {
-                DPRINT1("VWIFI: connect: no matching BSS -> failure\n");
+                DPRINT1("VWIFI: connect: no matching BSS -> failure "
+                        "(ssid len=%u '%.*s' wantBssid=%d)\n",
+                        Adapter->Dot11.DesiredSsid.uSSIDLength,
+                        Adapter->Dot11.DesiredSsid.uSSIDLength <= 32 ?
+                            (int)Adapter->Dot11.DesiredSsid.uSSIDLength : 32,
+                        Adapter->Dot11.DesiredSsid.ucSSID,
+                        Adapter->Dot11.HaveDesiredBssid);
                 NdisAcquireSpinLock(&Adapter->Lock);
                 Adapter->ConnState = VWifiDisconnected;
                 NdisReleaseSpinLock(&Adapter->Lock);
