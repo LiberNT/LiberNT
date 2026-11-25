@@ -326,8 +326,12 @@ PspExitThread(
     Teb = Thread->Tcb.Teb;
     if (Teb != NULL)
     {
-        PspReleaseUserStack(Teb);
-        MmDeleteTeb(Process, Teb);
+        /* The last thread's stack and TEB went with the address space PspExitProcess cleaned */
+        if (!LastThread)
+        {
+            PspReleaseUserStack(Teb);
+            MmDeleteTeb(Process, Teb);
+        }
         Thread->Tcb.Teb = NULL;
     }
 
