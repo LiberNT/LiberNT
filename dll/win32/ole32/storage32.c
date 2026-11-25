@@ -3078,7 +3078,19 @@ static HRESULT StorageImpl_LoadFileHeader(
 	hr = STG_E_INVALIDHEADER;
     }
     else
+#ifdef __REACTOS__
+    {
+	STATSTG stat;
+
 	hr = S_OK;
+	if (SUCCEEDED(ILockBytes_Stat(This->lockBytes, &stat, STATFLAG_NONAME)) &&
+	    (This->bigBlockDepotCount > stat.cbSize.QuadPart / This->bigBlockSize ||
+	     This->extBigBlockDepotCount > stat.cbSize.QuadPart / This->bigBlockSize))
+	    hr = STG_E_DOCFILECORRUPT;
+    }
+#else
+	hr = S_OK;
+#endif
   }
 
   return hr;
@@ -3607,8 +3619,28 @@ static HRESULT StorageImpl_WriteDirEntry(
 
 static ULONGLONG StorageImpl_GetBigBlockOffset(StorageImpl* This, ULONG index)
 {
+#ifdef __REACTOS__
+    return ((ULONGLONG)index + 1) * This->bigBlockSize;
+#else
     return (ULONGLONG)(index+1) * This->bigBlockSize;
+#endif
 }
+
+#ifdef __REACTOS__
+static ULONG StorageImpl_GetMaxChainLength(StorageImpl* This)
+{
+    ULONGLONG count = (ULONGLONG)This->bigBlockDepotCount * (This->bigBlockSize / sizeof(ULONG));
+
+    return count > ULONG_MAX ? ULONG_MAX : (ULONG)count;
+}
+
+static ULONG SmallBlockChainStream_GetMaxChainLength(StorageImpl* This)
+{
+    ULONGLONG count = BlockChainStream_GetSize(This->smallBlockDepotChain).QuadPart / sizeof(ULONG);
+
+    return count > ULONG_MAX ? ULONG_MAX : (ULONG)count;
+}
+#endif
 
 static HRESULT StorageImpl_ReadBigBlock(
   StorageImpl* This,
@@ -7294,6 +7326,10 @@ static HRESULT BlockChainStream_UpdateIndexCache(BlockChainStream* This)
 
   while (next_sector != BLOCK_END_OF_CHAIN)
   {
+#ifdef __REACTOS__
+    if (next_offset >= StorageImpl_GetMaxChainLength(This->parentStorage))
+      return STG_E_DOCFILECORRUPT;
+#endif
     if (!last_run || next_sector != last_run->firstSector + next_offset - last_run->firstOffset)
     {
       /* Add the current block to the cache. */
@@ -7643,6 +7679,10 @@ static BOOL BlockChainStream_Enlarge(BlockChainStream* This,
 
     while (blockIndex != BLOCK_END_OF_CHAIN)
     {
+#ifdef __REACTOS__
+      if (This->numBlocks >= StorageImpl_GetMaxChainLength(This->parentStorage))
+        return FALSE;
+#endif
       This->numBlocks++;
       currentBlock = blockIndex;
 
@@ -8531,6 +8571,10 @@ static BOOL SmallBlockChainStream_Enlarge(
    */
   while (blockIndex != BLOCK_END_OF_CHAIN)
   {
+#ifdef __REACTOS__
+    if (oldNumBlocks >= SmallBlockChainStream_GetMaxChainLength(This->parentStorage))
+      return FALSE;
+#endif
     oldNumBlocks++;
     currentBlock = blockIndex;
     if(FAILED(SmallBlockChainStream_GetNextBlockInChain(This, currentBlock, &blockIndex)))
@@ -8604,6 +8648,10 @@ static ULONG SmallBlockChainStream_GetCount(SmallBlockChainStream* This)
 
     while(blockIndex != BLOCK_END_OF_CHAIN)
     {
+#ifdef __REACTOS__
+        if (count >= SmallBlockChainStream_GetMaxChainLength(This->parentStorage))
+            return 0;
+#endif
         count++;
 
         if(FAILED(SmallBlockChainStream_GetNextBlockInChain(This,
