@@ -3,6 +3,7 @@ set(LIBWIM_PUBLIC_INCLUDE ${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/libwim)
 set(LIBWIM_CORE_SOURCE
     lzx.c
     sha1.c
+    wimboot.c
     wimcore.c
     xpress_huff.c)
 
