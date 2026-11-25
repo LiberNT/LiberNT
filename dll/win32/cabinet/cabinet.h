@@ -127,6 +127,9 @@ struct ZIPstate {
     cab_ULONG v[ZIPN_MAX];      /* values in order of bit length */
     cab_ULONG x[ZIPBMAX+1];     /* bit offsets, then code stack */
     cab_UBYTE *inpos;
+#ifdef __REACTOS__
+    cab_UBYTE *inend;
+#endif
 };
   
 /* Quantum stuff */

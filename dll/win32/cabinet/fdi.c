@@ -163,8 +163,15 @@ typedef struct fdi_cds_fwd {
   struct fdi_cds_fwd *next;
 } fdi_decomp_state;
 
+#ifdef __REACTOS__
+#define ZIPNEEDBITS(n) {while(k<(n)){cab_LONG c=0;\
+    if(ZIP(inpos)>=ZIP(inend)){if(ZIP(inpos)>=ZIP(inend)+4)return 1;ZIP(inpos)++;}\
+    else c=*(ZIP(inpos)++);\
+    b|=((cab_ULONG)c)<<k;k+=8;}}
+#else
 #define ZIPNEEDBITS(n) {while(k<(n)){cab_LONG c=*(ZIP(inpos)++);\
     b|=((cab_ULONG)c)<<k;k+=8;}}
+#endif
 #define ZIPDUMPBITS(n) {b>>=(n);k-=(n);}
 
 /* endian-neutral reading of little-endian data */
@@ -952,6 +959,9 @@ struct Ziphuft **t, cab_LONG *m, fdi_decomp_state *decomp_state)
     if ((j = *p++) != 0)
       ZIP(v)[ZIP(x)[j]++] = i;
   } while (++i < n);
+#ifdef __REACTOS__
+  n = ZIP(x)[g];
+#endif
 
 
   /* Generate the Huffman codes and for each, make the table entries */
@@ -1092,7 +1102,15 @@ static cab_LONG fdi_Zipinflate_codes(const struct Ziphuft *tl, const struct Ziph
       } while ((e = (t = t->v.t + (b & Zipmask[e]))->e) > 16);
     ZIPDUMPBITS(t->b)
     if (e == 16)                /* then it's a literal */
+#ifdef __REACTOS__
+    {
+      if (w < ZIPWSIZE)
+        CAB(outbuf)[w] = (cab_UBYTE)t->v.n;
+      w++;
+    }
+#else
       CAB(outbuf)[w++] = (cab_UBYTE)t->v.n;
+#endif
     else                        /* it's an EOB or a length */
     {
       /* exit if end of block */
@@ -1105,6 +1123,10 @@ static cab_LONG fdi_Zipinflate_codes(const struct Ziphuft *tl, const struct Ziph
       ZIPDUMPBITS(e);
 
       /* decode distance of block to copy */
+#ifdef __REACTOS__
+      if (!td)
+        return 1;
+#endif
       ZIPNEEDBITS((cab_ULONG)bd)
       if ((e = (t = td + (b & md))->e) > 16)
         do {
@@ -1118,6 +1140,16 @@ static cab_LONG fdi_Zipinflate_codes(const struct Ziphuft *tl, const struct Ziph
       ZIPNEEDBITS(e)
       d = w - t->v.n - (b & Zipmask[e]);
       ZIPDUMPBITS(e)
+#ifdef __REACTOS__
+      while (n--)
+      {
+        d &= ZIPWSIZE - 1;
+        if (w < ZIPWSIZE)
+          CAB(outbuf)[w] = CAB(outbuf)[d];
+        w++;
+        d++;
+      }
+#else
       do
       {
         d &= ZIPWSIZE - 1;
@@ -1129,6 +1161,7 @@ static cab_LONG fdi_Zipinflate_codes(const struct Ziphuft *tl, const struct Ziph
           CAB(outbuf)[w++] = CAB(outbuf)[d++];
         } while (--e);
       } while (n);
+#endif
     }
   }
 
@@ -1174,7 +1207,13 @@ static cab_LONG fdi_Zipinflate_stored(fdi_decomp_state *decomp_state)
   while(n--)
   {
     ZIPNEEDBITS(8)
+#ifdef __REACTOS__
+    if (w < ZIPWSIZE)
+      CAB(outbuf)[w] = (cab_UBYTE)b;
+    w++;
+#else
     CAB(outbuf)[w++] = (cab_UBYTE)b;
+#endif
     ZIPDUMPBITS(8)
   }
 
@@ -1350,11 +1389,30 @@ static cab_LONG fdi_Zipinflate_dynamic(fdi_decomp_state *decomp_state)
     return i;                   /* incomplete code set */
   }
   bd = ZIPDBITS;
+#ifdef __REACTOS__
+  td = NULL;
+  if((i = fdi_Ziphuft_build(ll + nl, nd, 0, Zipcpdist, Zipcpdext, &td, &bd, decomp_state)) != 0)
+  {
+    if(i == 1)
+      fdi_Ziphuft_free(CAB(fdi), td);
+    fdi_Ziphuft_free(CAB(fdi), tl);
+    return i;
+  }
+
+  /* decompress until an end-of-block code */
+  if(fdi_Zipinflate_codes(tl, td, bl, bd, decomp_state))
+  {
+    fdi_Ziphuft_free(CAB(fdi), tl);
+    fdi_Ziphuft_free(CAB(fdi), td);
+    return 1;
+  }
+#else
   fdi_Ziphuft_build(ll + nl, nd, 0, Zipcpdist, Zipcpdext, &td, &bd, decomp_state);
 
   /* decompress until an end-of-block code */
   if(fdi_Zipinflate_codes(tl, td, bl, bd, decomp_state))
     return 1;
+#endif
 
   /* free the decoding tables, return */
   fdi_Ziphuft_free(CAB(fdi), tl);
@@ -1410,6 +1468,9 @@ static int ZIPfdi_decomp(int inlen, int outlen, fdi_decomp_state *decomp_state)
   TRACE("(inlen == %d, outlen == %d)\n", inlen, outlen);
 
   ZIP(inpos) = CAB(inbuf);
+#ifdef __REACTOS__
+  ZIP(inend) = CAB(inbuf) + inlen;
+#endif
   ZIP(bb) = ZIP(bk) = ZIP(window_posn) = 0;
   if(outlen > ZIPWSIZE)
     return DECR_DATAFORMAT;
@@ -1989,6 +2050,9 @@ static int fdi_decomp(const struct fdi_file *fi, int savemode, fdi_decomp_state 
         return DECR_CHECKSUM; /* checksum is wrong */
 
       outlen = EndGetI16(buf+cfdata_UncompressedSize);
+#ifdef __REACTOS__
+      if (outlen > CAB_BLOCKMAX) return DECR_DATAFORMAT;
+#endif
 
       /* outlen=0 means this block was the last contiguous part
          of a split block, continued in the next cabinet */
@@ -2632,7 +2696,11 @@ BOOL __cdecl FDICopy(
       /* I don't think we are supposed to decompress partial files.  This prevents it. */
       file->oppressed = TRUE;
     }
+#ifdef __REACTOS__
+    if (file->oppressed || !CAB(firstfol)) {
+#else
     if (file->oppressed) {
+#endif
       filehf = 0;
     } else {
       ZeroMemory(&fdin, sizeof(FDINOTIFICATION));
@@ -2748,6 +2816,12 @@ BOOL __cdecl FDICopy(
           case DECR_NOMEMORY:
             set_error( fdi, FDIERROR_ALLOC_FAIL, ERROR_NOT_ENOUGH_MEMORY );
             goto bail_and_fail;
+#ifdef __REACTOS__
+          case DECR_DATAFORMAT:
+          case DECR_ILLEGALDATA:
+            set_error( fdi, FDIERROR_MDI_FAIL, 0 );
+            goto bail_and_fail;
+#endif
           default:
             set_error( fdi, FDIERROR_CORRUPT_CABINET, 0 );
             goto bail_and_fail;
@@ -2759,6 +2833,9 @@ BOOL __cdecl FDICopy(
       err = fdi_decomp(file, 1, decomp_state, pszCabPath, pfnfdin, pvUser);
       if (err) CAB(current) = NULL; else CAB(offset) += file->length;
 
+#ifdef __REACTOS__
+      if (!err) {
+#endif
       /* fdintCLOSE_FILE_INFO notification */
       ZeroMemory(&fdin, sizeof(FDINOTIFICATION));
       fdin.pv = pvUser;
@@ -2771,6 +2848,9 @@ BOOL __cdecl FDICopy(
       fdin.iFolder = file->index;
       ((*pfnfdin)(fdintCLOSE_FILE_INFO, &fdin));
       filehf = 0;
+#ifdef __REACTOS__
+      }
+#endif
 
       switch (err) {
         case DECR_OK:
@@ -2781,6 +2861,12 @@ BOOL __cdecl FDICopy(
         case DECR_NOMEMORY:
           set_error( fdi, FDIERROR_ALLOC_FAIL, ERROR_NOT_ENOUGH_MEMORY );
           goto bail_and_fail;
+#ifdef __REACTOS__
+        case DECR_DATAFORMAT:
+        case DECR_ILLEGALDATA:
+          set_error( fdi, FDIERROR_MDI_FAIL, 0 );
+          goto bail_and_fail;
+#endif
         default:
           set_error( fdi, FDIERROR_CORRUPT_CABINET, 0 );
           goto bail_and_fail;
