@@ -465,7 +465,8 @@ int jbd_get_fs(struct ext4_fs *fs,
 	if (rc != EOK)
 		goto Error;
 
-	if (!jbd_verify_sb(&jbd_fs->sb)) {
+	if (!jbd_verify_sb(&jbd_fs->sb) ||
+	    jbd_get32(&jbd_fs->sb, blocksize) != ext4_sb_get_block_size(&fs->sb)) {
 		rc = EIO;
 		goto Error;
 	}

@@ -54,3 +54,5 @@ Fixes
 - `jbd_journal_stop()` cleared the recovery flag of the file system before it marked the journal empty.
 - `jbd_journal_prepare()` passed the revoke record it found where a `bool` is expected; it now passes whether a
   record was found, because MSVC 14.52 rejects the pointer.
+- The superblock, the journal superblock, extent headers, the extra inode size, in-inode attribute headers and the
+  directory entries an insertion walks are checked against the limits of the on-disk format before they are used.

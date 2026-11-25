@@ -599,9 +599,16 @@ int ext4_dir_try_insert_entry(struct ext4_sblock *sb,
 	 * or entries with free space for new entry
 	 */
 	while (start < stop) {
+		if ((uint8_t *)stop - (uint8_t *)start < (ptrdiff_t)sizeof(struct ext4_fake_dir_entry))
+			return EIO;
+
 		uint32_t inode = ext4_dir_en_get_inode(start);
 		uint16_t rec_len = ext4_dir_en_get_entry_len(start);
 		uint8_t itype = ext4_dir_en_get_inode_type(sb, start);
+
+		if (rec_len < sizeof(struct ext4_fake_dir_entry) || (rec_len % 4) ||
+		    rec_len > (uint8_t *)stop - (uint8_t *)start)
+			return EIO;
 
 		/* If invalid and large enough entry, use it */
 		if ((inode == 0) && (itype != EXT4_DIRENTRY_DIR_CSUM) &&
@@ -624,6 +631,9 @@ int ext4_dir_try_insert_entry(struct ext4_sblock *sb,
 
 			if ((used_len % 4) != 0)
 				sz += 4 - (used_len % 4);
+
+			if (sz > rec_len)
+				return EIO;
 
 			uint16_t free_space = rec_len - sz;
 

@@ -279,10 +279,16 @@ uint16_t ext4_inode_get_extra_isize(struct ext4_sblock *sb,
 				    struct ext4_inode *inode)
 {
 	uint16_t inode_size = ext4_get16(sb, inode_size);
-	if (inode_size > EXT4_GOOD_OLD_INODE_SIZE)
-		return to_le16(inode->extra_isize);
-	else
+	uint16_t size;
+
+	if (inode_size <= EXT4_GOOD_OLD_INODE_SIZE)
 		return 0;
+
+	size = to_le16(inode->extra_isize);
+	if ((size & 3) || size > inode_size - EXT4_GOOD_OLD_INODE_SIZE)
+		return 0;
+
+	return size;
 }
 
 void ext4_inode_set_extra_isize(struct ext4_sblock *sb,

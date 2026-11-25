@@ -739,9 +739,11 @@ static void ext4_ext_drop_refs(struct ext4_inode_ref *inode_ref,
  * Check that whether the basic information inside the extent header
  * is correct or not.
  */
+#define EXT4_EXTENT_MAX_DEPTH 5
+
 static int ext4_ext_check(struct ext4_inode_ref *inode_ref,
 			  struct ext4_extent_header *eh, uint16_t depth,
-			  ext4_fsblk_t pblk __unused)
+			  ext4_fsblk_t pblk)
 {
 	struct ext4_extent_tail *tail;
 	struct ext4_sblock *sb = &inode_ref->fs->sb;
@@ -756,7 +758,8 @@ static int ext4_ext_check(struct ext4_inode_ref *inode_ref,
 		error_msg = "unexpected eh_depth";
 		goto corrupted;
 	}
-	if (eh->max_entries_count == 0) {
+	if (eh->max_entries_count == 0 ||
+	    to_le16(eh->max_entries_count) > ext4_ext_max_entries(inode_ref, depth)) {
 		error_msg = "invalid eh_max";
 		goto corrupted;
 	}
@@ -766,7 +769,7 @@ static int ext4_ext_check(struct ext4_inode_ref *inode_ref,
 	}
 
 	tail = find_ext4_extent_tail(eh);
-	if (ext4_sb_feature_ro_com(sb, EXT4_FRO_COM_METADATA_CSUM)) {
+	if (pblk && ext4_sb_feature_ro_com(sb, EXT4_FRO_COM_METADATA_CSUM)) {
 		if (tail->et_checksum !=
 		    to_le32(ext4_ext_block_csum(inode_ref, eh))) {
 			ext4_dbg(DEBUG_EXTENT,
@@ -877,6 +880,10 @@ static int ext4_find_extent(struct ext4_inode_ref *inode_ref, ext4_lblk_t block,
 
 	eh = ext_inode_hdr(inode_ref->inode);
 	depth = ext_depth(inode_ref->inode);
+
+	if (depth > EXT4_EXTENT_MAX_DEPTH ||
+	    ext4_ext_check(inode_ref, eh, depth, 0) != EOK)
+		return EIO;
 
 	if (path) {
 		ext4_ext_drop_refs(inode_ref, path, 0);

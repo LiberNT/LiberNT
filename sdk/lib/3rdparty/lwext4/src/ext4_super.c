@@ -150,7 +150,22 @@ bool ext4_sb_check(struct ext4_sblock *s)
 	if (ext4_get32(s, inodes_per_group) == 0)
 		return false;
 
+	if (ext4_get32(s, log_block_size) > 6)
+		return false;
+
 	if (ext4_get16(s, inode_size) < 128)
+		return false;
+
+	if (ext4_get16(s, inode_size) & (ext4_get16(s, inode_size) - 1))
+		return false;
+
+	if (ext4_get16(s, inode_size) > ext4_sb_get_block_size(s))
+		return false;
+
+	if (ext4_get32(s, blocks_per_group) > ext4_sb_get_block_size(s) * 8)
+		return false;
+
+	if (ext4_get32(s, inodes_per_group) > ext4_sb_get_block_size(s) * 8)
 		return false;
 
 	if (ext4_get32(s, first_inode) < 11)

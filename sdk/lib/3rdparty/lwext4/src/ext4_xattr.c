@@ -585,6 +585,9 @@ static bool ext4_xattr_is_ibody_valid(struct ext4_inode_ref *inode_ref)
 	/* Value offsets in the inode body count from the first entry */
 	base = entry;
 	end = (char *)inode_ref->inode + inode_size;
+	if ((char *)base + sizeof(uint32_t) > (char *)end)
+		return false;
+
 	min_offs = (char *)end - (char *)base;
 
 	/*
@@ -659,7 +662,9 @@ static void ext4_xattr_ibody_initialize(struct ext4_inode_ref *inode_ref)
 	size_t extra_isize =
 	    ext4_inode_get_extra_isize(&fs->sb, inode_ref->inode);
 	size_t inode_size = ext4_get16(&fs->sb, inode_size);
-	if (!extra_isize)
+	if (!extra_isize ||
+	    inode_size - EXT4_GOOD_OLD_INODE_SIZE - extra_isize <
+		sizeof(struct ext4_xattr_ibody_header) + sizeof(uint32_t))
 		return;
 
 	header = EXT4_XATTR_IHDR(&fs->sb, inode_ref->inode);
