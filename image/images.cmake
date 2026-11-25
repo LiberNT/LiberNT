@@ -345,13 +345,27 @@ endforeach()
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/bootcd.cmake.lst "${CMAKE_CURRENT_BINARY_DIR}/empty\n")
 
 image_list_command(bootcd _bootcd_list_command)
+set(_bootcd_wim_command)
+set(_bootcd_wim_depends)
+if(BOOTLOADER_UEFI AND BOOTLOADER_WIM_RAMDISK)
+    set(_bootcd_wim_command
+        COMMAND ${CMAKE_COMMAND}
+            -DLIST=${CMAKE_CURRENT_BINARY_DIR}/bootcd.effective.lst
+            "-DKEEP=^/?(loader/|efi/|boot/|bootmgr=|setup[.]exe=)"
+            -DWIM=${CMAKE_CURRENT_BINARY_DIR}/bootcd.wim
+            -DSTAGE=${CMAKE_CURRENT_BINARY_DIR}/bootcd.stage
+            -DWIMAGE=$<TARGET_FILE:native-wimage>
+            -P ${REACTOS_SOURCE_DIR}/image/bcd/medialist.cmake)
+    set(_bootcd_wim_depends native-wimage)
+endif()
 add_custom_target(bootcd
     COMMAND ${_bootcd_list_command}
+    ${_bootcd_wim_command}
     COMMAND native-mkisofs -quiet -o ${REACTOS_BINARY_DIR}/bootcd.iso
         ${ISO_COMMON_OPTIONS} ${ISO_BOOT_OPTIONS} ${ISO_BOOT_FILES_OPTIONS} ${ISO_LAYOUT_OPTIONS}
         -path-list ${CMAKE_CURRENT_BINARY_DIR}/bootcd.effective.lst
     ${BOOTCD_HYBRID_COMMAND}
-    DEPENDS ${BOOTCD_HYBRID_DEPENDS} native-mkisofs ${_livecd_overlay_deps}
+    DEPENDS ${BOOTCD_HYBRID_DEPENDS} native-mkisofs ${_bootcd_wim_depends} ${_livecd_overlay_deps}
     VERBATIM)
 
 
