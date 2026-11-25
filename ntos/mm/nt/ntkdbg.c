@@ -248,8 +248,9 @@ ExpKdbgExtVm(
 
     if (MiSystem.SystemPtes != NULL)
     {
-        KdbpPrint("system PTEs: base %I64x pages %I64u free %I64d\n", MiSystem.SystemPtes->Base,
-                  MiSystem.SystemPtes->PageCount, MiSystem.SystemPtes->FreePages);
+        KdbpPrint("system PTEs: base %I64x pages %I64u limit %I64u ranges %lu free %I64d\n",
+                  MiSystem.SystemPtes->Chunk[0].Base, MiSystem.SystemPtes->PageCount,
+                  MiSystem.SystemPtes->PageLimit, MiSystem.SystemPtes->ChunkCount, MiSystem.SystemPtes->FreePages);
     }
 
     {

@@ -16,6 +16,7 @@
 #define MI_SYSPTE_CACHE_DEPTH     16
 #define MI_SYSPTE_CPU_CACHES      64
 #define MI_SYSPTE_SPARE_TABLES    32
+#define MI_SYSPTE_CHUNKS          64
 
 #define MI_KSTACK_CACHE_DEPTH     4
 
@@ -24,6 +25,8 @@
  * There is no arena-sized bitmap or full-arena table allocation.
  * This is an NVS layout choice, not a Windows implementation constant. */
 #define MI_SYSPTE_64BIT_PAGES     (1ULL << (40 - PAGE_SHIFT))
+#define MI_SYSPTE_32BIT_INITIAL_BYTES (64ULL * 1024 * 1024)
+#define MI_SYSPTE_32BIT_GROW_BYTES    (16ULL * 1024 * 1024)
 
 typedef enum _MI_CACHE_TYPE
 {
@@ -43,14 +46,24 @@ typedef struct MI_CACHE_ALIGNED _MI_SYSPTE_CPU_CACHE
     ULONG64 CacheHits;
 } MI_SYSPTE_CPU_CACHE, *PMI_SYSPTE_CPU_CACHE;
 
-typedef struct _MI_SYSTEM_PTES
+typedef struct _MI_SYSPTE_CHUNK
 {
-    PMI_SYSTEM System;
     PMI_VAD Vad;
     ULONG64 Base;
     ULONG64 PageCount;
-    MI_SPINLOCK Lock;
     MI_VAD_ROOT Allocations;
+} MI_SYSPTE_CHUNK, *PMI_SYSPTE_CHUNK;
+
+typedef struct _MI_SYSTEM_PTES
+{
+    PMI_SYSTEM System;
+    ULONG64 PageCount;
+    ULONG64 PageLimit;
+    ULONG64 GrowPages;
+    MI_SPINLOCK Lock;
+    MI_MUTEX GrowLock;
+    ULONG ChunkCount;
+    MI_SYSPTE_CHUNK Chunk[MI_SYSPTE_CHUNKS];
     MI_SPINLOCK PopulateLock;
     ULONG SpareTableCount;
     ULONG SpareTable[MI_SYSPTE_SPARE_TABLES];
@@ -93,6 +106,8 @@ NTSTATUS MiSystemProtect(_Inout_ PMI_SYSTEM System, _In_ ULONG64 VirtualAddress,
                          _In_ ULONG Protection);
 
 NTSTATUS MiSystemPtesInitialize(_Inout_ PMI_SYSTEM System, _In_ ULONG64 PageCount, _In_ ULONG CpuCount);
+VOID MiSystemPtesAllowGrowth(_Inout_ PMI_SYSTEM System, _In_ ULONG64 PageLimit, _In_ ULONG64 GrowPages);
+BOOLEAN MiSystemPtesContain(_In_ PMI_SYSTEM System, _In_ ULONG64 VirtualAddress, _In_ ULONG64 PageCount);
 VOID MiSystemPtesUninitialize(_Inout_ PMI_SYSTEM System);
 ULONG MiSystemPtesRefillTables(_Inout_ PMI_SYSTEM System);
 ULONG64 MiReserveSystemPtes(_Inout_ PMI_SYSTEM System, _In_ ULONG PageCount);

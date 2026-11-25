@@ -424,7 +424,7 @@ MiInitializePhase0(
     PMEMORY_ALLOCATION_DESCRIPTOR Largest;
     ULONG64 LargestEnd;
     ULONG64 PhysicalBytes;
-    ULONG64 NonPagedBytes, PagedBytes, SystemPteBytes;
+    ULONG64 NonPagedBytes, PagedBytes, SystemPteBytes, InitialPteBytes;
     ULONG64 SharedPhysical;
     PEPROCESS Process = PsGetCurrentProcess();
     ULONG FirstFrame, FrameCount, PfnPages, PfnFirst, ExecPages;
@@ -516,6 +516,7 @@ MiInitializePhase0(
         SystemPteBytes = MI_SYSPTE_64BIT_PAGES << PAGE_SHIFT;
         if (SystemPteBytes > SystemBytes / 8)
             SystemPteBytes = SystemBytes / 8;
+        InitialPteBytes = SystemPteBytes;
         NonPagedBytes = MiClampBytes(PhysicalBytes / 2, 64 * _1MB, 4ULL * _1GB);
         PagedBytes = MiClampBytes(PhysicalBytes, 128 * _1MB, 4ULL * _1GB);
     }
@@ -524,16 +525,19 @@ MiInitializePhase0(
         /* System PTE demand (kernel stacks, device and display mappings,
          * driver images) does not shrink with physical memory. */
         SystemPteBytes = 512 * _1MB;
+        InitialPteBytes = MI_SYSPTE_32BIT_INITIAL_BYTES;
         NonPagedBytes = MiClampBytes(PhysicalBytes / 8, 64 * _1MB, 128 * _1MB);
         PagedBytes = MiClampBytes(PhysicalBytes / 8, 64 * _1MB, 128 * _1MB);
     }
 
     if (MiSystem.Arch->SystemPteBytes != 0)
-        SystemPteBytes = MiSystem.Arch->SystemPteBytes;
+        SystemPteBytes = InitialPteBytes = MiSystem.Arch->SystemPteBytes;
 
-    Status = MiSystemPtesInitialize(&MiSystem, SystemPteBytes >> PAGE_SHIFT, MI_SYSPTE_CPU_CACHES);
+    Status = MiSystemPtesInitialize(&MiSystem, InitialPteBytes >> PAGE_SHIFT, MI_SYSPTE_CPU_CACHES);
     if (!NT_SUCCESS(Status))
         KeBugCheckEx(MEMORY_MANAGEMENT, 0x53505445, (ULONG_PTR)Status, 0, 0);
+    if (SystemPteBytes > InitialPteBytes)
+        MiSystemPtesAllowGrowth(&MiSystem, SystemPteBytes >> PAGE_SHIFT, MI_SYSPTE_32BIT_GROW_BYTES >> PAGE_SHIFT);
 
     Status = MiPrepareDirectMap();
     if (!NT_SUCCESS(Status))
@@ -579,7 +583,7 @@ MiInitializePhase0(
     MiPoolLayout.PagedBytes = (SIZE_T)PagedBytes;
 
     DbgPrint("Kernel address space: system mappings at %p, nonpaged pool at %p (%I64u MB), "
-             "paged pool at %p (%I64u MB)\n", (PVOID)(ULONG_PTR)MiSystem.SystemPtes->Base, MmNonPagedPoolStart,
+             "paged pool at %p (%I64u MB)\n", (PVOID)(ULONG_PTR)MiSystem.SystemPtes->Chunk[0].Base, MmNonPagedPoolStart,
              NonPagedBytes / _1MB, MmPagedPoolStart, PagedBytes / _1MB);
     ASSERT(!MiPoolReady);
     InitializePool(NonPagedPool, 0);

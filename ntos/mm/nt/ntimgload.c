@@ -57,10 +57,7 @@ BOOLEAN
 MiIsLoadedSystemImage(
     _In_ PVOID ImageBase)
 {
-    PMI_SYSTEM_PTES Ptes = MiSystem.SystemPtes;
-
-    return (BOOLEAN)(Ptes != NULL && (ULONG64)(ULONG_PTR)ImageBase >= Ptes->Base &&
-                     (ULONG64)(ULONG_PTR)ImageBase < Ptes->Base + (Ptes->PageCount << PAGE_SHIFT));
+    return MiSystemPtesContain(&MiSystem, (ULONG64)(ULONG_PTR)ImageBase, 1);
 }
 
 static

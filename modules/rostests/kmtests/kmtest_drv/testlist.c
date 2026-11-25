@@ -375,6 +375,7 @@ KMT_TESTFUNC Test_MmMdlDispatch;
 KMT_TESTFUNC Test_MmLargePages;
 KMT_TESTFUNC Test_MmSection;
 KMT_TESTFUNC Test_MmSystemViewCache;
+KMT_TESTFUNC Test_MmSystemViewSpace;
 KMT_TESTFUNC Test_MmWddmRanges;
 KMT_TESTFUNC Test_MmPhysicalAddressRace;
 KMT_TESTFUNC Test_MmWddmRotate;
@@ -840,6 +841,7 @@ const KMT_TEST TestList[] =
     { "MmSecureKM",                         Test_MmSecureKM },
     { "MmSection",                          Test_MmSection },
     { "MmSystemViewCache",                  Test_MmSystemViewCache },
+    { "MmSystemViewSpace",                  Test_MmSystemViewSpace },
     { "MmWddmRanges",                       Test_MmWddmRanges },
     { "MmPhysicalAddressRace",              Test_MmPhysicalAddressRace },
     { "MmWddmRotate",                       Test_MmWddmRotate },

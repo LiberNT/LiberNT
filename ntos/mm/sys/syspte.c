@@ -22,6 +22,29 @@ MiSysPteClass(
     return Class;
 }
 
+static
+PMI_SYSPTE_CHUNK
+MiSysPteChunkOf(
+    _In_ PMI_SYSTEM_PTES Ptes,
+    _In_ ULONG64 VirtualAddress,
+    _In_ ULONG64 Count)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Ptes->ChunkCount; Index++)
+    {
+        PMI_SYSPTE_CHUNK Chunk = &Ptes->Chunk[Index];
+
+        if (VirtualAddress >= Chunk->Base && Count <= Chunk->PageCount &&
+            ((VirtualAddress - Chunk->Base) >> PAGE_SHIFT) <= Chunk->PageCount - Count)
+        {
+            return Chunk;
+        }
+    }
+
+    return NULL;
+}
+
 /* Track allocated extents instead of allocating one bit for every possible
  * kernel VA page. Small runs retain the existing per-CPU caches. */
 static
@@ -30,58 +53,150 @@ MiSysPteRangeReserve(
     _Inout_ PMI_SYSTEM_PTES Ptes,
     _In_ ULONG64 Count,
     _In_ ULONG64 Alignment,
+    _Out_ PULONG SeenChunks,
     _Out_ NTSTATUS *FailureStatus)
 {
     PMI_VAD_NODE Node = MI_ALLOCATE(sizeof(*Node));
-    ULONG64 Index = ~0ULL;
+    ULONG64 Va = 0;
+    ULONG64 Index;
+    ULONG ChunkIndex;
     KIRQL OldIrql;
 
+    *SeenChunks = 0;
     *FailureStatus = STATUS_INSUFFICIENT_RESOURCES;
     if (Node == NULL)
     {
         *FailureStatus = STATUS_NO_MEMORY;
-        return Index;
+        return 0;
     }
     RtlZeroMemory(Node, sizeof(*Node));
 
     MI_SPIN_ACQUIRE(&Ptes->Lock, &OldIrql);
-    if (MiVadFindEmptyRange(&Ptes->Allocations, Count, Alignment, &Index))
+    *SeenChunks = Ptes->ChunkCount;
+    for (ChunkIndex = 0; ChunkIndex < Ptes->ChunkCount; ChunkIndex++)
     {
-        MI_ASSERT(Count != 0 && Count <= Ptes->PageCount);
-        MI_ASSERT(Index <= Ptes->PageCount - Count);
+        PMI_SYSPTE_CHUNK Chunk = &Ptes->Chunk[ChunkIndex];
+
+        if (Count > Chunk->PageCount || !MiVadFindEmptyRange(&Chunk->Allocations, Count, Alignment, &Index))
+            continue;
+
+        MI_ASSERT(Index <= Chunk->PageCount - Count);
         MI_ASSERT(Alignment != 0 && Index % Alignment == 0);
         Node->StartingVpn = Index;
         Node->EndingVpn = Index + Count - 1;
-        if (!MiVadInsert(&Ptes->Allocations, Node))
-            Index = ~0ULL;
-    }
-    else
-    {
-        Index = ~0ULL;
+        if (MiVadInsert(&Chunk->Allocations, Node))
+            Va = Chunk->Base + (Index << PAGE_SHIFT);
+        break;
     }
     MI_SPIN_RELEASE(&Ptes->Lock, OldIrql);
 
-    if (Index == ~0ULL)
+    if (Va == 0)
         MI_FREE(Node);
-    return Index;
+    return Va;
 }
 
 static
 VOID
 MiSysPteRangeRelease(
     _Inout_ PMI_SYSTEM_PTES Ptes,
-    _In_ ULONG64 Start,
+    _In_ ULONG64 VirtualAddress,
     _In_ ULONG64 Count)
 {
+    PMI_SYSPTE_CHUNK Chunk;
     PMI_VAD_NODE Node;
+    ULONG64 Start;
     KIRQL OldIrql;
 
     MI_SPIN_ACQUIRE(&Ptes->Lock, &OldIrql);
-    Node = MiVadFind(&Ptes->Allocations, Start);
+    Chunk = MiSysPteChunkOf(Ptes, VirtualAddress, Count);
+    MI_ASSERT(Chunk != NULL);
+    Start = (VirtualAddress - Chunk->Base) >> PAGE_SHIFT;
+    Node = MiVadFind(&Chunk->Allocations, Start);
     MI_ASSERT(Node != NULL && Node->StartingVpn == Start && Node->EndingVpn == Start + Count - 1);
-    MiVadRemove(&Ptes->Allocations, Node);
+    MiVadRemove(&Chunk->Allocations, Node);
     MI_SPIN_RELEASE(&Ptes->Lock, OldIrql);
     MI_FREE(Node);
+}
+
+static
+NTSTATUS
+MiSysPteAddChunk(
+    _Inout_ PMI_SYSTEM_PTES Ptes,
+    _In_ ULONG64 PageCount)
+{
+    PMI_SYSTEM System = Ptes->System;
+    ULONG64 Span = 1ULL << System->Arch->Level[System->Arch->PagingLevels - 1].Shift;
+    PMI_SYSPTE_CHUNK Chunk;
+    ULONG64 Base, End, Va;
+    KIRQL OldIrql;
+    NTSTATUS Status;
+    PMI_VAD Vad;
+
+    MI_ASSERT(PageCount != 0);
+    if (Ptes->ChunkCount == MI_SYSPTE_CHUNKS)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = MiSystemRegionCreate(System, PageCount, FALSE, &Vad, &Base);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    /* Process roots copy the kernel's top-level entries on AMD64. Seed one
+     * leaf path per top-level span before processes can be created, so later
+     * table population remains visible through those shared entries. This
+     * needs only a few table pages, not tables for every page of the arena. */
+    End = Base + (PageCount << PAGE_SHIFT);
+    for (Va = Base; Va < End; Va = (Va & ~(Span - 1)) + Span)
+    {
+        Status = MiPtPinSystemRange(&System->SystemSpace, Va, PAGE_SIZE, NULL, NULL);
+        if (!NT_SUCCESS(Status))
+        {
+            MiSystemRegionDelete(System, Vad, TRUE);
+            return Status;
+        }
+    }
+
+    MI_SPIN_ACQUIRE(&Ptes->Lock, &OldIrql);
+    MI_ASSERT(Ptes->ChunkCount < MI_SYSPTE_CHUNKS);
+    Chunk = &Ptes->Chunk[Ptes->ChunkCount];
+    Chunk->Vad = Vad;
+    Chunk->Base = Base;
+    Chunk->PageCount = PageCount;
+    MiVadRootInitialize(&Chunk->Allocations, 0, PageCount - 1);
+    Ptes->ChunkCount++;
+    Ptes->PageCount += PageCount;
+    MI_SPIN_RELEASE(&Ptes->Lock, OldIrql);
+    MI_ATOMIC_ADD64(&Ptes->FreePages, (LONG64)PageCount);
+    return STATUS_SUCCESS;
+}
+
+static
+BOOLEAN
+MiSysPteGrow(
+    _Inout_ PMI_SYSTEM_PTES Ptes,
+    _In_ ULONG64 Count,
+    _In_ ULONG SeenChunks)
+{
+    ULONG64 Pages;
+    BOOLEAN Grown = FALSE;
+
+    if (!MI_CAN_WAIT() || Ptes->GrowPages == 0)
+        return FALSE;
+
+    MI_MUTEX_ACQUIRE(&Ptes->GrowLock);
+    if (MI_PEEK(Ptes->ChunkCount) != SeenChunks)
+    {
+        Grown = TRUE;
+    }
+    else
+    {
+        Pages = (Count > Ptes->GrowPages) ? Count : Ptes->GrowPages;
+        if (Pages > Ptes->PageLimit - Ptes->PageCount)
+            Pages = Ptes->PageLimit - Ptes->PageCount;
+        if (Pages >= Count && NT_SUCCESS(MiSysPteAddChunk(Ptes, Pages)))
+            Grown = TRUE;
+    }
+    MI_MUTEX_RELEASE(&Ptes->GrowLock);
+    return Grown;
 }
 
 NTSTATUS
@@ -103,48 +218,58 @@ MiSystemPtesInitialize(
 
     RtlZeroMemory(Ptes, sizeof(*Ptes));
     Ptes->System = System;
-    Ptes->PageCount = PageCount;
-    Ptes->FreePages = (LONG64)PageCount;
+    Ptes->PageLimit = PageCount;
     Ptes->CacheCount = (CpuCount == 0) ? 1 : ((CpuCount > MI_SYSPTE_CPU_CACHES) ? MI_SYSPTE_CPU_CACHES : CpuCount);
     Ptes->DefaultStackPages = 6;
     MI_SPIN_INIT(&Ptes->Lock);
     MI_SPIN_INIT(&Ptes->PopulateLock);
-    MiVadRootInitialize(&Ptes->Allocations, 0, PageCount - 1);
+    MI_MUTEX_INIT(&Ptes->GrowLock);
 
     for (i = 0; i < MI_SYSPTE_CPU_CACHES; i++)
         MI_SPIN_INIT(&Ptes->Cache[i].Lock);
 
-    Status = MiSystemRegionCreate(System, PageCount, FALSE, &Ptes->Vad, &Ptes->Base);
+    Status = MiSysPteAddChunk(Ptes, PageCount);
     if (!NT_SUCCESS(Status))
     {
         MI_FREE(Ptes);
         return Status;
     }
 
-    /* Process roots copy the kernel's top-level entries on AMD64. Seed one
-     * leaf path per top-level span before processes can be created, so later
-     * table population remains visible through those shared entries. This
-     * needs only a few table pages, not tables for every page of the arena. */
-    {
-        ULONG64 Span = 1ULL << System->Arch->Level[System->Arch->PagingLevels - 1].Shift;
-        ULONG64 End = Ptes->Base + (PageCount << PAGE_SHIFT);
-        ULONG64 Va = Ptes->Base;
-
-        while (Va < End)
-        {
-            Status = MiPtPinSystemRange(&System->SystemSpace, Va, PAGE_SIZE, NULL, NULL);
-            if (!NT_SUCCESS(Status))
-            {
-                MiSystemRegionDelete(System, Ptes->Vad, TRUE);
-                MI_FREE(Ptes);
-                return Status;
-            }
-            Va = (Va & ~(Span - 1)) + Span;
-        }
-    }
-
     System->SystemPtes = Ptes;
     return STATUS_SUCCESS;
+}
+
+VOID
+MiSystemPtesAllowGrowth(
+    _Inout_ PMI_SYSTEM System,
+    _In_ ULONG64 PageLimit,
+    _In_ ULONG64 GrowPages)
+{
+    PMI_SYSTEM_PTES Ptes = System->SystemPtes;
+
+    MI_ASSERT(Ptes != NULL && Ptes->ChunkCount == 1);
+    MI_ASSERT(PageLimit >= Ptes->PageCount && GrowPages != 0);
+    Ptes->PageLimit = PageLimit;
+    Ptes->GrowPages = GrowPages;
+}
+
+BOOLEAN
+MiSystemPtesContain(
+    _In_ PMI_SYSTEM System,
+    _In_ ULONG64 VirtualAddress,
+    _In_ ULONG64 PageCount)
+{
+    PMI_SYSTEM_PTES Ptes = System->SystemPtes;
+    BOOLEAN Found;
+    KIRQL OldIrql;
+
+    if (Ptes == NULL)
+        return FALSE;
+
+    MI_SPIN_ACQUIRE(&Ptes->Lock, &OldIrql);
+    Found = (BOOLEAN)(MiSysPteChunkOf(Ptes, VirtualAddress, PageCount) != NULL);
+    MI_SPIN_RELEASE(&Ptes->Lock, OldIrql);
+    return Found;
 }
 
 VOID
@@ -185,17 +310,22 @@ MiSystemPtesUninitialize(
             {
                 ULONG64 Va = Cache->Entry[Class][--Cache->Depth[Class]];
 
-                MiSysPteRangeRelease(Ptes, (Va - Ptes->Base) >> PAGE_SHIFT, 1ULL << Class);
+                MiSysPteRangeRelease(Ptes, Va, 1ULL << Class);
                 MI_ATOMIC_ADD64(&Ptes->FreePages, (LONG64)(1ULL << Class));
             }
         }
     }
 
     MI_ASSERT(MI_ATOMIC_READ64(&Ptes->FreePages) == (LONG64)Ptes->PageCount);
-    MI_ASSERT(Ptes->Allocations.NodeCount == 0);
 
     System->SystemPtes = NULL;
-    MiSystemRegionDelete(System, Ptes->Vad, TRUE);
+    while (Ptes->ChunkCount != 0)
+    {
+        PMI_SYSPTE_CHUNK Chunk = &Ptes->Chunk[--Ptes->ChunkCount];
+
+        MI_ASSERT(Chunk->Allocations.NodeCount == 0);
+        MiSystemRegionDelete(System, Chunk->Vad, TRUE);
+    }
     MI_FREE(Ptes);
 }
 
@@ -227,7 +357,8 @@ MiReserveSystemPtesEx(
 {
     PMI_SYSTEM_PTES Ptes = System->SystemPtes;
     ULONG64 Pages = PageCount;
-    ULONG64 Index;
+    ULONG64 Va;
+    ULONG SeenChunks;
     NTSTATUS FailureStatus;
 
     *Base = 0;
@@ -255,19 +386,21 @@ MiReserveSystemPtesEx(
 
         if (Va != 0)
         {
-            MI_ASSERT(Va >= Ptes->Base && ((Va - Ptes->Base) & (PAGE_SIZE - 1)) == 0);
-            MI_ASSERT(Pages <= Ptes->PageCount && ((Va - Ptes->Base) >> PAGE_SHIFT) <= Ptes->PageCount - Pages);
-            MI_ASSERT((((Va - Ptes->Base) >> PAGE_SHIFT) & (Pages - 1)) == 0);
+            MI_ASSERT((Va & (PAGE_SIZE - 1)) == 0 && MiSystemPtesContain(System, Va, Pages));
             *Base = Va;
             return STATUS_SUCCESS;
         }
     }
 
-    Index = MiSysPteRangeReserve(Ptes, Pages,
-                                 (Pages <= MI_SYSPTE_CLASS_MAX_PAGES) ? Pages : 1,
-                                 &FailureStatus);
-    if (Index == ~0ULL)
-        return FailureStatus;
+    for (;;)
+    {
+        Va = MiSysPteRangeReserve(Ptes, Pages, (Pages <= MI_SYSPTE_CLASS_MAX_PAGES) ? Pages : 1, &SeenChunks,
+                                  &FailureStatus);
+        if (Va != 0)
+            break;
+        if (FailureStatus != STATUS_INSUFFICIENT_RESOURCES || !MiSysPteGrow(Ptes, Pages, SeenChunks))
+            return FailureStatus;
+    }
 
     {
         KIRQL OldIrql;
@@ -279,7 +412,7 @@ MiReserveSystemPtesEx(
         MI_SPIN_ACQUIRE(&Ptes->PopulateLock, &OldIrql);
         MI_ASSERT(Ptes->SpareTableCount <= MI_SYSPTE_SPARE_TABLES);
         Status = MiPtPinSystemRange(&System->SystemSpace,
-                                    Ptes->Base + (Index << PAGE_SHIFT),
+                                    Va,
                                     Pages << PAGE_SHIFT,
                                     Ptes->SpareTable,
                                     &Ptes->SpareTableCount);
@@ -287,12 +420,12 @@ MiReserveSystemPtesEx(
         MI_SPIN_RELEASE(&Ptes->PopulateLock, OldIrql);
         if (!NT_SUCCESS(Status))
         {
-            MiSysPteRangeRelease(Ptes, Index, Pages);
+            MiSysPteRangeRelease(Ptes, Va, Pages);
             return Status;
         }
     }
     MI_ATOMIC_ADD64(&Ptes->FreePages, -(LONG64)Pages);
-    *Base = Ptes->Base + (Index << PAGE_SHIFT);
+    *Base = Va;
     return STATUS_SUCCESS;
 }
 
@@ -357,8 +490,7 @@ MiReleaseSystemPtes(
     ULONG64 Pages = PageCount;
 
     MI_ASSERT((VirtualAddress & (PAGE_SIZE - 1)) == 0);
-    MI_ASSERT(VirtualAddress >= Ptes->Base && VirtualAddress + ((ULONG64)PageCount << PAGE_SHIFT) <=
-                                                  Ptes->Base + (Ptes->PageCount << PAGE_SHIFT));
+    MI_ASSERT(MiSystemPtesContain(System, VirtualAddress, PageCount));
 
     if (PageCount <= MI_SYSPTE_CLASS_MAX_PAGES)
     {
@@ -382,6 +514,6 @@ MiReleaseSystemPtes(
             return;
     }
 
-    MiSysPteRangeRelease(Ptes, (VirtualAddress - Ptes->Base) >> PAGE_SHIFT, Pages);
+    MiSysPteRangeRelease(Ptes, VirtualAddress, Pages);
     MI_ATOMIC_ADD64(&Ptes->FreePages, (LONG64)Pages);
 }
