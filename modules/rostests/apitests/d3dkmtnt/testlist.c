@@ -16,6 +16,7 @@ extern void func_exitshared(void);
 extern void func_exitshared_child(void);
 extern void func_synclife(void);
 extern void func_queryregistry(void);
+extern void func_gdi32names(void);
 extern void func_win32unames(void);
 
 const struct test winetest_testlist[] =
@@ -28,6 +29,7 @@ const struct test winetest_testlist[] =
     { "exitshared_child", func_exitshared_child },
     { "synclife",     func_synclife },
     { "queryregistry", func_queryregistry },
+    { "gdi32names",   func_gdi32names },
     { "win32unames",  func_win32unames },
     { 0, 0 }
 };

@@ -836,3 +836,15 @@
 @ stdcall -version=0x600+ D3DKMTPresentMultiPlaneOverlay3(ptr) NtGdiDdDDIPresentMultiPlaneOverlay3
 @ stdcall -version=0x600+ D3DKMTGetPresentQueueEvent(long ptr) NtGdiDdDDIGetPresentQueueEvent
 @ stdcall -version=0x600+ D3DKMTShareObjects(long ptr ptr long ptr) NtGdiDdDDIShareObjects
+@ stdcall -version=0xA00+ D3DKMTAbandonSwapChain(ptr) NtGdiDdDDIAbandonSwapChain
+@ stdcall -version=0xA00+ D3DKMTAcquireSwapChain(ptr) NtGdiDdDDIAcquireSwapChain
+@ stdcall -version=0xA00+ D3DKMTAddSurfaceToSwapChain(ptr) NtGdiDdDDIAddSurfaceToSwapChain
+@ stdcall -version=0xA00+ D3DKMTCreateBundleObject(ptr) NtGdiDdDDICreateBundleObject
+@ stdcall -version=0xA00+ D3DKMTCreateSwapChain(ptr) NtGdiDdDDICreateSwapChain
+@ stdcall -version=0xA00+ D3DKMTExtractBundleObject(ptr) NtGdiDdDDIExtractBundleObject
+@ stdcall -version=0xA00+ D3DKMTGetSetSwapChainMetadata(ptr) NtGdiDdDDIGetSetSwapChainMetadata
+@ stdcall -version=0xA00+ D3DKMTOpenSwapChain(ptr) NtGdiDdDDIOpenSwapChain
+@ stdcall -version=0xA00+ D3DKMTReleaseSwapChain(ptr) NtGdiDdDDIReleaseSwapChain
+@ stdcall -version=0xA00+ D3DKMTRemoveSurfaceFromSwapChain(ptr) NtGdiDdDDIRemoveSurfaceFromSwapChain
+@ stdcall -version=0xA00+ D3DKMTSetDodIndirectSwapchain(ptr) NtGdiDdDDISetDodIndirectSwapchain
+@ stdcall -version=0xA00+ D3DKMTUnOrderedPresentSwapChain(ptr) NtGdiDdDDIUnOrderedPresentSwapChain
