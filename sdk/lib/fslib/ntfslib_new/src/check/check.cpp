@@ -165,7 +165,8 @@ private:
     {
         const UCHAR* Bytes = reinterpret_cast<const UCHAR*>(Name);
         ULONG Hash = 2166136261u;
-        ULONG Length = FIELD_OFFSET(FileNameEx, Name) + Name->NameLength * sizeof(WCHAR);
+        ULONG Length = FIELD_OFFSET(FileNameEx, Name) +
+                       Bytes[FIELD_OFFSET(FileNameEx, NameLength)] * sizeof(WCHAR);
 
         for (ULONG Index = 0; Index < sizeof(Name->ParentFileReference); Index++)
             Hash = (Hash ^ Bytes[Index]) * 16777619u;
@@ -411,7 +412,8 @@ VolumeCheck::CheckAttributes(_In_ ULONGLONG Number, _In_ ULONGLONG Owner, _In_ P
                     reinterpret_cast<const FileNameEx*>(reinterpret_cast<PUCHAR>(Attr) + Attr->Resident.DataOffset);
 
                 if (Attr->Resident.DataLength < FIELD_OFFSET(FileNameEx, Name) ||
-                    Attr->Resident.DataLength < FIELD_OFFSET(FileNameEx, Name) + Name->NameLength * sizeof(WCHAR))
+                    Attr->Resident.DataLength < FIELD_OFFSET(FileNameEx, Name) +
+                        reinterpret_cast<const UCHAR*>(Name)[FIELD_OFFSET(FileNameEx, NameLength)] * sizeof(WCHAR))
                 {
                     Event(NtfsCheckRecordCorrupt, Number, Offset);
                     return;

@@ -55,6 +55,7 @@ ValidateFixup(_In_ PNTFSRecordHeader Header,
     ULONG UsaSize = Header->SizeOfUpdateSequence * sizeof(USHORT);
 
     if (!NtfsGetFixupStride(Header->SizeOfUpdateSequence, RecordSize, BytesPerSector, Stride) ||
+        (Header->UpdateSequenceOffset & (sizeof(USHORT) - 1)) != 0 ||
         Header->UpdateSequenceOffset > RecordSize ||
         UsaSize > RecordSize - Header->UpdateSequenceOffset)
     {
