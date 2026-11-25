@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT D3DKMT API Tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     win32u exports the WDDM services under the NtDxgk names
+ * PURPOSE:     win32u exports the WDDM services Windows 11 exports, under the same names
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF
  */
 
@@ -10,21 +10,65 @@
 typedef NTSTATUS (APIENTRY *PFN_ENUMADAPTERS3)(D3DKMT_ENUMADAPTERS3 *);
 typedef NTSTATUS (APIENTRY *PFN_CLOSEADAPTER)(D3DKMT_CLOSEADAPTER *);
 
-static const PCSTR Win32uDxgkNames[] =
+static const PCSTR Win32uExportNames[] =
 {
+    "NtDxgkCancelPresents",
+    "NtDxgkConnectDoorbell",
+    "NtDxgkCreateDoorbell",
+    "NtDxgkCreateNativeFence",
+    "NtDxgkDestroyDoorbell",
     "NtDxgkEnumAdapters3",
     "NtDxgkGetNativeFenceLogDetail",
     "NtDxgkIsFeatureEnabled",
+    "NtDxgkNotifyWorkSubmission",
+    "NtDxgkOpenNativeFenceFromNtHandle",
+    "NtDxgkOutputDuplPresentToHwQueue",
     "NtDxgkRegisterVailProcess",
     "NtDxgkSubmitPresentBltToHwQueue",
     "NtDxgkSubmitPresentToHwQueue",
+    "NtGdiDdDDIChangeVideoMemoryReservation",
+    "NtGdiDdDDICheckMultiPlaneOverlaySupport",
+    "NtGdiDdDDICheckMultiPlaneOverlaySupport2",
+    "NtGdiDdDDICheckMultiPlaneOverlaySupport3",
+    "NtGdiDdDDIConfigureSharedResource",
+    "NtGdiDdDDICreateOutputDupl",
+    "NtGdiDdDDICreateProtectedSession",
+    "NtGdiDdDDIDestroyOutputDupl",
+    "NtGdiDdDDIGetMultiPlaneOverlayCaps",
+    "NtGdiDdDDIGetPostCompositionCaps",
+    "NtGdiDdDDIGetPresentQueueEvent",
+    "NtGdiDdDDIGetProcessDeviceRemovalSupport",
+    "NtGdiDdDDIOpenProtectedSessionFromNtHandle",
+    "NtGdiDdDDIOutputDuplGetFrameInfo",
+    "NtGdiDdDDIOutputDuplGetMetaData",
+    "NtGdiDdDDIOutputDuplGetPointerShapeData",
+    "NtGdiDdDDIOutputDuplPresent",
+    "NtGdiDdDDIOutputDuplReleaseFrame",
+    "NtGdiDdDDIPresentMultiPlaneOverlay",
+    "NtGdiDdDDIPresentMultiPlaneOverlay2",
+    "NtGdiDdDDIPresentMultiPlaneOverlay3",
+    "NtGdiDdDDIPresentRedirected",
+    "NtGdiDdDDIQueryClockCalibration",
+    "NtGdiDdDDIQueryProcessOfferInfo",
+    "NtGdiDdDDIQueryProtectedSessionInfoFromNtHandle",
+    "NtGdiDdDDIQueryVidPnExclusiveOwnership",
+    "NtGdiDdDDISetMonitorColorSpaceTransform",
+    "NtGdiDdDDITrimProcessCommitment",
 };
 
 static const PCSTR Win32uNoGdiNames[] =
 {
+    "NtGdiDdDDICancelPresents",
+    "NtGdiDdDDIConnectDoorbell",
+    "NtGdiDdDDICreateDoorbell",
+    "NtGdiDdDDICreateNativeFence",
+    "NtGdiDdDDIDestroyDoorbell",
     "NtGdiDdDDIEnumAdapters3",
     "NtGdiDdDDIGetNativeFenceLogDetail",
     "NtGdiDdDDIIsFeatureEnabled",
+    "NtGdiDdDDINotifyWorkSubmission",
+    "NtGdiDdDDIOpenNativeFenceFromNtHandle",
+    "NtGdiDdDDIOutputDuplPresentToHwQueue",
     "NtGdiDdDDIRegisterVailProcess",
     "NtGdiDdDDISubmitPresentBltToHwQueue",
     "NtGdiDdDDISubmitPresentToHwQueue",
@@ -47,8 +91,8 @@ START_TEST(win32unames)
     if (Win32u == NULL)
         return;
 
-    for (Index = 0; Index < ARRAYSIZE(Win32uDxgkNames); ++Index)
-        ok(GetProcAddress(Win32u, Win32uDxgkNames[Index]) != NULL, "win32u does not export %s\n", Win32uDxgkNames[Index]);
+    for (Index = 0; Index < ARRAYSIZE(Win32uExportNames); ++Index)
+        ok(GetProcAddress(Win32u, Win32uExportNames[Index]) != NULL, "win32u does not export %s\n", Win32uExportNames[Index]);
     for (Index = 0; Index < ARRAYSIZE(Win32uNoGdiNames); ++Index)
         ok(GetProcAddress(Win32u, Win32uNoGdiNames[Index]) == NULL, "win32u exports %s\n", Win32uNoGdiNames[Index]);
 

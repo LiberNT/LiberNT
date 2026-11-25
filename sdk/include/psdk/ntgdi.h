@@ -5102,7 +5102,7 @@ __kernel_entry
 W32KAPI
 NTSTATUS
 APIENTRY
-NtGdiDdDDICancelPresents(
+NtDxgkCancelPresents(
     _In_ const struct _D3DKMT_CANCEL_PRESENTS* unnamedParam1);
 
 __kernel_entry
@@ -5256,14 +5256,14 @@ __kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDIQueryRemoteVidPnSourceFromGdi
 __kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDISetHwProtectionTeardownRecovery(_In_ struct _D3DKMT_SETHWPROTECTIONTEARDOWNRECOVERY* unnamedParam1);
 __kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDISetVidPnSourceHwProtection(_In_ struct _D3DKMT_SETVIDPNSOURCEHWPROTECTION* unnamedParam1);
 __kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDITrimProcessCommitment(_Inout_ struct _D3DKMT_TRIMPROCESSCOMMITMENT* unnamedParam1);
-__kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDIConnectDoorbell(_In_ struct _D3DKMT_CONNECT_DOORBELL* unnamedParam1);
-__kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDICreateDoorbell(_In_ struct _D3DKMT_CREATE_DOORBELL* unnamedParam1);
-__kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDICreateNativeFence(_Inout_ struct _D3DKMT_CREATENATIVEFENCE* unnamedParam1);
-__kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDIDestroyDoorbell(_In_ struct _D3DKMT_DESTROY_DOORBELL* unnamedParam1);
+__kernel_entry W32KAPI NTSTATUS APIENTRY NtDxgkConnectDoorbell(_In_ struct _D3DKMT_CONNECT_DOORBELL* unnamedParam1);
+__kernel_entry W32KAPI NTSTATUS APIENTRY NtDxgkCreateDoorbell(_In_ struct _D3DKMT_CREATE_DOORBELL* unnamedParam1);
+__kernel_entry W32KAPI NTSTATUS APIENTRY NtDxgkCreateNativeFence(_Inout_ struct _D3DKMT_CREATENATIVEFENCE* unnamedParam1);
+__kernel_entry W32KAPI NTSTATUS APIENTRY NtDxgkDestroyDoorbell(_In_ struct _D3DKMT_DESTROY_DOORBELL* unnamedParam1);
 __kernel_entry W32KAPI NTSTATUS APIENTRY NtDxgkGetNativeFenceLogDetail(_Inout_ struct _D3DKMT_GETNATIVEFENCELOGDETAIL* unnamedParam1);
-__kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDINotifyWorkSubmission(_In_ struct _D3DKMT_NOTIFY_WORK_SUBMISSION* unnamedParam1);
-__kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDIOpenNativeFenceFromNtHandle(_Inout_ struct _D3DKMT_OPENNATIVEFENCEFROMNTHANDLE* unnamedParam1);
-__kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDIOutputDuplPresentToHwQueue(_In_ const struct _D3DKMT_OUTPUTDUPLPRESENTTOHWQUEUE* unnamedParam1);
+__kernel_entry W32KAPI NTSTATUS APIENTRY NtDxgkNotifyWorkSubmission(_In_ struct _D3DKMT_NOTIFY_WORK_SUBMISSION* unnamedParam1);
+__kernel_entry W32KAPI NTSTATUS APIENTRY NtDxgkOpenNativeFenceFromNtHandle(_Inout_ struct _D3DKMT_OPENNATIVEFENCEFROMNTHANDLE* unnamedParam1);
+__kernel_entry W32KAPI NTSTATUS APIENTRY NtDxgkOutputDuplPresentToHwQueue(_In_ const struct _D3DKMT_OUTPUTDUPLPRESENTTOHWQUEUE* unnamedParam1);
 __kernel_entry W32KAPI NTSTATUS APIENTRY NtDxgkRegisterVailProcess(_In_ GUID* unnamedParam1);
 
 /* Multi-argument D3DKMT entry points (non-single-struct signatures). */
