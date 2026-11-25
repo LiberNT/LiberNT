@@ -766,6 +766,10 @@ SpiMemCopy(PVOID pvDst, PVOID pvSrc, ULONG cbSize, BOOL bProtect)
     {
         _SEH2_TRY
         {
+            if ((ULONG_PTR)pvDst < MmUserProbeAddress)
+                ProbeForWrite(pvDst, cbSize, sizeof(UCHAR));
+            else
+                ProbeForRead(pvSrc, cbSize, sizeof(UCHAR));
             RtlCopyMemory(pvDst, pvSrc, cbSize);
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
