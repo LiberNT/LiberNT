@@ -395,7 +395,7 @@ dhcpack(struct packet *packet)
 	cancel_timeout(send_request, ip);
 
 	/* Figure out the lease time. */
-	if (ip->client->new->options[DHO_DHCP_LEASE_TIME].data)
+	if (ip->client->new->options[DHO_DHCP_LEASE_TIME].len == 4)
 		ip->client->new->expiry = getULong(
 		    ip->client->new->options[DHO_DHCP_LEASE_TIME].data);
 	else
@@ -410,14 +410,14 @@ dhcpack(struct packet *packet)
 
 	/* Take the server-provided renewal time if there is one;
 	   otherwise figure it out according to the spec. */
-	if (ip->client->new->options[DHO_DHCP_RENEWAL_TIME].len)
+	if (ip->client->new->options[DHO_DHCP_RENEWAL_TIME].len == 4)
 		ip->client->new->renewal = getULong(
 		    ip->client->new->options[DHO_DHCP_RENEWAL_TIME].data);
 	else
 		ip->client->new->renewal = ip->client->new->expiry / 2;
 
 	/* Same deal with the rebind time. */
-	if (ip->client->new->options[DHO_DHCP_REBINDING_TIME].len)
+	if (ip->client->new->options[DHO_DHCP_REBINDING_TIME].len == 4)
 		ip->client->new->rebind = getULong(
 		    ip->client->new->options[DHO_DHCP_REBINDING_TIME].data);
 	else
@@ -451,7 +451,7 @@ void set_name_servers( PDHCP_ADAPTER Adapter, struct client_lease *new_lease ) {
         return;
 
 
-    if( new_lease->options[DHO_DOMAIN_NAME_SERVERS].len ) {
+    if( new_lease->options[DHO_DOMAIN_NAME_SERVERS].len >= (int)sizeof(ULONG) ) {
 
         struct iaddr nameserver;
         char *nsbuf;

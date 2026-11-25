@@ -103,7 +103,7 @@ parse_option_buffer(struct packet *packet,
 	unsigned char *s, *t, *end = buffer + length;
 	int len, code;
 
-	for (s = buffer; *s != DHO_END && s < end; ) {
+	for (s = buffer; s < end && *s != DHO_END; ) {
 		code = s[0];
 
 		/* Pad options don't have a length - just skip them. */
