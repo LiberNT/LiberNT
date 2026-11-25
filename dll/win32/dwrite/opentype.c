@@ -1720,7 +1720,11 @@ static unsigned int opentype_cmap_format4_get_ranges(const struct dwrite_cmap *c
 static UINT16 opentype_cmap_format6_10_get_glyph(const struct dwrite_cmap *cmap, unsigned int ch)
 {
     const UINT16 *glyphs = cmap->data;
+#ifdef __REACTOS__
+    if (ch < cmap->u.format6_10.first || ch >= cmap->u.format6_10.last) return 0;
+#else
     if (ch < cmap->u.format6_10.first || ch > cmap->u.format6_10.last) return 0;
+#endif
     return glyphs[ch - cmap->u.format6_10.first];
 }
 
@@ -1871,6 +1875,10 @@ void dwrite_cmap_init(struct dwrite_cmap *cmap, IDWriteFontFile *file, unsigned 
 
     num_records = table_read_be_word(&table, 2);
     records = table_read_ensure(&table, 4, sizeof(*records) * num_records);
+#ifdef __REACTOS__
+    if (!records)
+        goto failed;
+#endif
 
     for (i = 0; i < ARRAY_SIZE(encodings); ++i)
     {
@@ -1901,12 +1909,31 @@ void dwrite_cmap_init(struct dwrite_cmap *cmap, IDWriteFontFile *file, unsigned 
         case 4:
             length = table_read_be_word(&table, offset + 2);
             cmap->u.format4.seg_count = count = table_read_be_word(&table, offset + 6) / 2;
+#ifdef __REACTOS__
+            cmap->u.format4.ends = table_read_ensure(&table, offset + 14, count * 8 + 2);
+            if (!cmap->u.format4.ends)
+            {
+                cmap->u.format4.seg_count = 0;
+                break;
+            }
+#else
             cmap->u.format4.ends = table_read_ensure(&table, offset + 14, count * 2);
+#endif
             cmap->u.format4.starts = cmap->u.format4.ends + count + 1;
             cmap->u.format4.id_delta = cmap->u.format4.starts + count;
             cmap->u.format4.id_range_offset = cmap->u.format4.id_delta + count;
             cmap->u.format4.glyph_id_array = cmap->data = cmap->u.format4.id_range_offset + count;
+#ifdef __REACTOS__
+            {
+                unsigned int fixed = 16 + 8 * count;
+                unsigned int declared = length > fixed ? length - fixed : 0;
+                unsigned int available = table.size - (offset + fixed);
+
+                cmap->u.format4.glyph_id_array_len = min(declared, available) / 2;
+            }
+#else
             cmap->u.format4.glyph_id_array_len = (length - 16 - 8 * count) / 2;
+#endif
             cmap->get_glyph = opentype_cmap_format4_get_glyph;
             cmap->get_ranges = opentype_cmap_format4_get_ranges;
             break;
@@ -1924,6 +1951,13 @@ void dwrite_cmap_init(struct dwrite_cmap *cmap, IDWriteFontFile *file, unsigned 
         case 12:
         case 13:
             cmap->u.format12_13.group_count = count = table_read_be_dword(&table, offset + 12);
+#ifdef __REACTOS__
+            if (count > table.size / (3 * 4))
+            {
+                cmap->u.format12_13.group_count = 0;
+                break;
+            }
+#endif
             cmap->data = table_read_ensure(&table, offset + 16, count * 3 * 4);
             cmap->get_glyph = format == 12 ? opentype_cmap_format12_get_glyph : opentype_cmap_format13_get_glyph;
             cmap->get_ranges = opentype_cmap_format12_13_get_ranges;
