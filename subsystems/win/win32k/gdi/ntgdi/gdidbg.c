@@ -573,6 +573,12 @@ GdiDbgPostServiceHook(ULONG ulSyscallId, ULONG_PTR ulResult)
 #endif /* DBG_ENABLE_SERVICE_HOOKS */
 
 
+/* Undocumented but exported ntoskrnl function */
+NTKERNELAPI
+PPEB
+NTAPI
+PsGetProcessPeb(PEPROCESS Process);
+
 NTSTATUS NTAPI
 QueryEnvironmentVariable(PUNICODE_STRING Name,
                          PUNICODE_STRING Value)
@@ -590,58 +596,75 @@ QueryEnvironmentVariable(PUNICODE_STRING Name,
        return(STATUS_VARIABLE_NOT_FOUND);
    }
 
-   Peb = NtCurrentPeb();
+   Peb = PsGetProcessPeb(PsGetCurrentProcess());
 
    if (Peb == NULL)
    {
        return(STATUS_VARIABLE_NOT_FOUND);
    }
 
-   Environment = Peb->ProcessParameters->Environment;
-
-   if (Environment == NULL)
+   Status = STATUS_VARIABLE_NOT_FOUND;
+   _SEH2_TRY
    {
-      return(STATUS_VARIABLE_NOT_FOUND);
-   }
+      PRTL_USER_PROCESS_PARAMETERS ProcessParams;
 
-   Value->Length = 0;
+      ProbeForRead(&Peb->ProcessParameters, sizeof(Peb->ProcessParameters), sizeof(PVOID));
+      ProcessParams = *(PRTL_USER_PROCESS_PARAMETERS volatile *)&Peb->ProcessParameters;
+      if (ProcessParams == NULL)
+         _SEH2_LEAVE;
+      ProbeForRead(&ProcessParams->Environment, sizeof(ProcessParams->Environment), sizeof(PVOID));
+      Environment = *(PWSTR volatile *)&ProcessParams->Environment;
 
-   wcs = Environment;
-   while (*wcs)
-   {
-      var.Buffer = wcs++;
-      wcs = wcschr(wcs, L'=');
-      if (wcs == NULL)
+      if (Environment == NULL)
       {
-         wcs = var.Buffer + wcslen(var.Buffer);
+         _SEH2_LEAVE;
       }
-      if (*wcs)
-      {
-         var.Length = var.MaximumLength = (wcs - var.Buffer) * sizeof(WCHAR);
-         val = ++wcs;
-         wcs += wcslen(wcs);
+      ProbeForRead(Environment, sizeof(WCHAR), 1);
 
-         if (RtlEqualUnicodeString(&var, Name, TRUE))
+      Value->Length = 0;
+
+      wcs = Environment;
+      while (*wcs)
+      {
+         var.Buffer = wcs++;
+         wcs = wcschr(wcs, L'=');
+         if (wcs == NULL)
          {
-            Value->Length = (wcs - val) * sizeof(WCHAR);
-            if (Value->Length <= Value->MaximumLength)
-            {
-               memcpy(Value->Buffer, val,
-                      min(Value->Length + sizeof(WCHAR), Value->MaximumLength));
-               Status = STATUS_SUCCESS;
-            }
-            else
-            {
-               Status = STATUS_BUFFER_TOO_SMALL;
-            }
-
-            return(Status);
+            wcs = var.Buffer + wcslen(var.Buffer);
          }
-      }
-      wcs++;
-   }
+         if (*wcs)
+         {
+            var.Length = var.MaximumLength = (wcs - var.Buffer) * sizeof(WCHAR);
+            val = ++wcs;
+            wcs += wcslen(wcs);
 
-   return(STATUS_VARIABLE_NOT_FOUND);
+            if (RtlEqualUnicodeString(&var, Name, TRUE))
+            {
+               Value->Length = (wcs - val) * sizeof(WCHAR);
+               if (Value->Length <= Value->MaximumLength)
+               {
+                  memcpy(Value->Buffer, val,
+                         min(Value->Length + sizeof(WCHAR), Value->MaximumLength));
+                  Status = STATUS_SUCCESS;
+               }
+               else
+               {
+                  Status = STATUS_BUFFER_TOO_SMALL;
+               }
+
+               _SEH2_LEAVE;
+            }
+         }
+         wcs++;
+      }
+   }
+   _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+   {
+      Status = STATUS_VARIABLE_NOT_FOUND;
+   }
+   _SEH2_END;
+
+   return(Status);
 }
 
 static int __cdecl
