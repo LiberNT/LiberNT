@@ -447,19 +447,28 @@ PspQueryCommandLine(
 
     _SEH2_TRY
     {
-        PRTL_USER_PROCESS_PARAMETERS Parameters = Peb->ProcessParameters;
+        PRTL_USER_PROCESS_PARAMETERS Parameters;
+        UNICODE_STRING CommandLine;
 
-        if (Parameters != NULL &&
-            Parameters->CommandLine.Length != 0 &&
-            Parameters->CommandLine.Buffer != NULL)
+        ProbeForRead(&Peb->ProcessParameters, sizeof(Peb->ProcessParameters), sizeof(PVOID));
+        Parameters = *(PRTL_USER_PROCESS_PARAMETERS volatile *)&Peb->ProcessParameters;
+        RtlInitEmptyUnicodeString(&CommandLine, NULL, 0);
+        if (Parameters != NULL)
         {
-            CopyLength = Parameters->CommandLine.Length;
+            ProbeForRead(&Parameters->CommandLine, sizeof(Parameters->CommandLine), sizeof(PVOID));
+            CommandLine = *(volatile UNICODE_STRING *)&Parameters->CommandLine;
+        }
+
+        if (CommandLine.Length != 0 && CommandLine.Buffer != NULL)
+        {
+            CopyLength = CommandLine.Length;
+            ProbeForRead(CommandLine.Buffer, CopyLength, 1);
 
             Copy = ExAllocatePoolWithTag(PagedPool, CopyLength, TAG_SEPA);
             if (Copy != NULL)
             {
                 RtlCopyMemory(Copy,
-                              Parameters->CommandLine.Buffer,
+                              CommandLine.Buffer,
                               CopyLength);
             }
             else
