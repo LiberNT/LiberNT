@@ -226,8 +226,10 @@ FileRecord::UpdateReparsePoint(
     ULONG ExistingLength = 0;
     ULONG EaInformation = 0;
     BOOLEAN IsDirectory;
+    ULONG ResidentLength;
     BOOLEAN Promote = FALSE;
     BOOLEAN Committed = FALSE;
+    BOOLEAN RecordFull = FALSE;
     BOOLEAN HadReparsePoint;
     UINT32 FileNameFields;
     NTSTATUS Status;
@@ -536,6 +538,7 @@ Restore:
         Header =
             reinterpret_cast<PFileRecordHeader>(Data);
         ClearDataRunCache();
+        RecordFull = !Delete && Status == STATUS_BUFFER_TOO_SMALL;
     }
 
 Done:
@@ -545,5 +548,26 @@ Done:
     delete[] RecordBackup;
     delete[] FinalData;
     delete[] ExistingData;
-    return Status;
+    if (!RecordFull)
+        return Status;
+
+    /* TODO: move attributes to an extension record when no resident data can leave the base record */
+    DataAttribute = FindAttributeInRecord(TypeData, NULL, NULL);
+    if (!DataAttribute ||
+        DataAttribute->IsNonResident ||
+        DataAttribute->Flags != 0 ||
+        !NT_SUCCESS(ValidateResidentAttributeForUpdate(DataAttribute, &ResidentLength)) ||
+        ResidentLength == 0)
+    {
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+    Status = PromoteResidentData(DataAttribute,
+                                 NULL,
+                                 0,
+                                 0,
+                                 ResidentLength,
+                                 ResidentLength);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    return UpdateReparsePoint(Buffer, BufferLength, Delete);
 }
