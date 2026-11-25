@@ -528,10 +528,44 @@ static LONG entryNameCmp(
  *
  * Find and read the element of a storage with the given name.
  */
+#ifdef __REACTOS__
+struct dirref_cycle
+{
+  DirRef saved;
+  ULONG power;
+  ULONG length;
+};
+
+static void dirref_cycle_init(struct dirref_cycle *cycle)
+{
+  cycle->saved = DIRENTRY_NULL;
+  cycle->power = 1;
+  cycle->length = 0;
+}
+
+static BOOL dirref_cycle_step(struct dirref_cycle *cycle, DirRef next)
+{
+  if (next != DIRENTRY_NULL && next == cycle->saved)
+    return TRUE;
+  if (++cycle->length == cycle->power)
+  {
+    cycle->saved = next;
+    cycle->power <<= 1;
+    cycle->length = 0;
+  }
+  return FALSE;
+}
+
+#endif
 static DirRef findElement(StorageBaseImpl *storage, DirRef storageEntry,
     const OLECHAR *name, DirEntry *data)
 {
   DirRef currentEntry;
+#ifdef __REACTOS__
+  struct dirref_cycle cycle;
+
+  dirref_cycle_init(&cycle);
+#endif
 
   /* Read the storage entry to find the root of the tree. */
   StorageBaseImpl_ReadDirEntry(storage, storageEntry, data);
@@ -555,6 +589,10 @@ static DirRef findElement(StorageBaseImpl *storage, DirRef storageEntry,
 
     else if (cmp > 0)
       currentEntry = data->rightChild;
+#ifdef __REACTOS__
+    if (dirref_cycle_step(&cycle, currentEntry))
+      return DIRENTRY_NULL;
+#endif
   }
 
   return currentEntry;
@@ -574,6 +612,9 @@ static HRESULT findTreeParent(StorageBaseImpl *storage, DirRef storageEntry,
     ULONG *relation)
 {
   DirRef childEntry;
+#ifdef __REACTOS__
+  struct dirref_cycle cycle;
+#endif
   DirEntry childData;
 
   /* Read the storage entry to find the root of the tree. */
@@ -583,11 +624,18 @@ static HRESULT findTreeParent(StorageBaseImpl *storage, DirRef storageEntry,
   *relation = DIRENTRY_RELATION_DIR;
 
   childEntry = parentData->dirRootEntry;
+#ifdef __REACTOS__
+  dirref_cycle_init(&cycle);
+#endif
 
   while (childEntry != DIRENTRY_NULL)
   {
     LONG cmp;
 
+#ifdef __REACTOS__
+    if (dirref_cycle_step(&cycle, childEntry))
+      return STG_E_DOCFILECORRUPT;
+#endif
     StorageBaseImpl_ReadDirEntry(storage, childEntry, &childData);
 
     cmp = entryNameCmp(childName, childData.name);
@@ -816,9 +864,18 @@ static HRESULT removeFromTree(
        */
       DirRef newRightChildParent = entryToDelete.leftChild;
       DirEntry newRightChildParentEntry;
+#ifdef __REACTOS__
+      struct dirref_cycle cycle;
+
+      dirref_cycle_init(&cycle);
+#endif
 
       do
       {
+#ifdef __REACTOS__
+        if (dirref_cycle_step(&cycle, newRightChildParent))
+          return STG_E_DOCFILECORRUPT;
+#endif
         hr = StorageBaseImpl_ReadDirEntry(
                 This,
                 newRightChildParent,
@@ -961,6 +1018,11 @@ static HRESULT IEnumSTATSTGImpl_GetNextRef(
   DirEntry entry;
   HRESULT hr;
   WCHAR result_name[DIRENTRY_NAME_MAX_LEN];
+#ifdef __REACTOS__
+  struct dirref_cycle cycle;
+
+  dirref_cycle_init(&cycle);
+#endif
 
   TRACE("%p,%p\n", This, ref);
 
@@ -970,6 +1032,13 @@ static HRESULT IEnumSTATSTGImpl_GetNextRef(
 
   while (SUCCEEDED(hr) && searchNode != DIRENTRY_NULL)
   {
+#ifdef __REACTOS__
+    if (dirref_cycle_step(&cycle, searchNode))
+    {
+      hr = STG_E_DOCFILECORRUPT;
+      break;
+    }
+#endif
     hr = StorageBaseImpl_ReadDirEntry(This->parentStorage, searchNode, &entry);
 
     if (SUCCEEDED(hr))
