@@ -139,6 +139,7 @@ jobs:
         [ "$LIVE_CD" = "true" ] || FLAGS="$FLAGS -DPREINSTALL_IMAGE_SIZE_MB=4096"
         ./configure.sh $FLAGS -a ${{matrix.arch}} \
           -DREACTOS_TARGET_NT=0xA00 \
+          -DENABLE_REMOTE_ASSISTANCE=OFF \
           -DENABLE_CCACHE=1
         ENV_NAME=$([ "${{matrix.compiler}}" = "clang" ] && echo Clang || echo GCC)
         echo "outdir=output-$ENV_NAME-${{matrix.arch}}-$BUILD_TYPE" >> "$GITHUB_OUTPUT"
