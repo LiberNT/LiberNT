@@ -119,10 +119,8 @@ Chaque compilation de la page [Releases](https://github.com/LiberNT/LiberNT/rele
 
 | Fichier | Ce que c'est |
 | --- | --- |
-| `bootcd-iso-…-<arch>-…zip` | `bootcd.iso`, une image de CD qui lance LiberNT ou démarre l'installation de LiberNT |
+| `LiberNT-…-<arch>-….iso` | `LiberNT.iso`, une image de CD qui lance LiberNT ou démarre l'installation de LiberNT |
 | `LiberNT-img-…-<arch>-…zip` | `LiberNT.img`, un disque où LiberNT est déjà installé |
-| `LiberNT-vhd-…-<arch>-…zip` | `LiberNT.vhd`, le même disque préinstallé pour les machines virtuelles utilisant VHD |
-| `LiberNT-vhdx-…-<arch>-…zip` | `LiberNT.vhdx`, le même disque préinstallé pour Hyper-V génération 2 |
 
 > [!NOTE]
 > Ce sont des compilations Debug réalisées avec Clang par GitHub Actions à partir de la branche `master`.
@@ -140,7 +138,7 @@ Le moyen le plus rapide d'essayer LiberNT est le disque préinstallé :
 
 ### Étape 3 : installer LiberNT
 
-Démarrez `bootcd.iso` dans une machine virtuelle ou sur un PC, et suivez les instructions de l'**installation de LiberNT**.
+Démarrez `LiberNT.iso` dans une machine virtuelle ou sur un PC, et suivez les instructions de l'**installation de LiberNT**.
 
 Le disque préinstallé contient aussi l'installation de LiberNT. Lancez `C:\<architecture>\libernt.exe`, par exemple `C:\arm64\libernt.exe`, pour installer LiberNT sur un autre disque depuis le système en cours d'exécution.
 
@@ -222,7 +220,7 @@ ninja liberntimg
 
 | Commande | Crée | Pour |
 | --- | --- | --- |
-| `ninja bootcd` | `bootcd.iso` | Installer LiberNT depuis une image de CD, dans une machine virtuelle ou sur un PC. |
+| `ninja liberntiso` | `LiberNT.iso` | Installer LiberNT depuis une image de CD, dans une machine virtuelle ou sur un PC. |
 | `ninja liberntimg` | `LiberNT.img` | Démarrer un disque où LiberNT est déjà installé. Lancez-le dans une machine virtuelle comme QEMU, ou écrivez-le sur une clé USB ou une carte SD. Il démarre en UEFI ou en BIOS. |
 | `ninja liberntvhd` | `LiberNT.vhd`, `LiberNT.vhdx` | Utiliser le même disque préinstallé dans des machines virtuelles : le VHD dans VirtualBox et Hyper-V génération 1, le VHDX dans Hyper-V génération 2, qui n'accepte pas les disques VHD. |
 

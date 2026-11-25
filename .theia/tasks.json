@@ -4,9 +4,9 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "build bootcd",
+            "label": "build liberntiso",
             "type": "shell",
-            "command": "ninja bootcd",
+            "command": "ninja liberntiso",
             "options": {
                 "cwd": "${workspaceFolder}/build"
             },
@@ -28,18 +28,18 @@
             ]
         },
         {
-            "label": "launch bootcd",
+            "label": "launch liberntiso",
             "type": "process",
             "options": {
                 "cwd": "${workspaceFolder}/build"
             },
             "dependsOn": [
-                "build bootcd"
+                "build liberntiso"
             ],
             "dependsOrder": "sequence",
             "command": "qemu-system-i386",
             "args": [
-                "-cdrom", "bootcd.iso",
+                "-cdrom", "LiberNT.iso",
                 "-hda", "${env:HOME}/reactos_hdd.qcow",
                 "-boot", "d",
                 "-m", "1024",

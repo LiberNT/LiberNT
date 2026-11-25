@@ -8,7 +8,7 @@ Préparez l'environnement de compilation et configurez une compilation comme dé
 
 | Commande | Crée | Pour |
 |---|---|---|
-| `ninja bootcd` | `bootcd.iso` | Lancer LiberNT depuis une image de CD, ou y démarrer l'installation de LiberNT et installer LiberNT sur un disque. |
+| `ninja liberntiso` | `LiberNT.iso` | Lancer LiberNT depuis une image de CD, ou y démarrer l'installation de LiberNT et installer LiberNT sur un disque. |
 | `ninja liberntimg` | `LiberNT.img` | Démarrer un disque où LiberNT est déjà installé. Il démarre en UEFI ou en BIOS. |
 | `ninja liberntvhd` | `LiberNT.vhd`, `LiberNT.vhdx` | Utiliser le même disque préinstallé dans des machines virtuelles : le VHD dans VirtualBox et Hyper-V génération 1, le VHDX dans Hyper-V génération 2, qui n'accepte pas les disques VHD. |
 
@@ -16,7 +16,7 @@ Chaque cible compile d'abord tout ce dont elle a besoin, et les fichiers sont é
 
 ## Installer depuis le CD d'installation
 
-Démarrez `bootcd.iso` dans une machine virtuelle ou sur un PC, et suivez les instructions de l'installation de LiberNT. L'installation affiche les disques comme le programme d'installation de Windows, et peut créer, supprimer, formater, réduire et étendre des partitions. Elle installe LiberNT sur NTFS et crée la partition système EFI dont il a besoin.
+Démarrez `LiberNT.iso` dans une machine virtuelle ou sur un PC, et suivez les instructions de l'installation de LiberNT. L'installation affiche les disques comme le programme d'installation de Windows, et peut créer, supprimer, formater, réduire et étendre des partitions. Elle installe LiberNT sur NTFS et crée la partition système EFI dont il a besoin.
 
 ## Utiliser le disque préinstallé
 

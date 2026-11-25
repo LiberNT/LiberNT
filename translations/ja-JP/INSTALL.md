@@ -8,7 +8,7 @@
 
 | コマンド | 作成されるもの | 用途 |
 |---|---|---|
-| `ninja bootcd` | `bootcd.iso` | CD イメージから LiberNT を実行する、または LiberNT セットアップを起動してディスクに LiberNT をインストールする。 |
+| `ninja liberntiso` | `LiberNT.iso` | CD イメージから LiberNT を実行する、または LiberNT セットアップを起動してディスクに LiberNT をインストールする。 |
 | `ninja liberntimg` | `LiberNT.img` | LiberNT がインストール済みのディスクを起動する。UEFI と BIOS のどちらでも起動します。 |
 | `ninja liberntvhd` | `LiberNT.vhd`、`LiberNT.vhdx` | 同じプリインストール済みディスクを仮想マシンで使う。VHD は VirtualBox と Hyper-V 第 1 世代で、VHDX は VHD ディスクを受け付けない Hyper-V 第 2 世代で使います。 |
 
@@ -16,7 +16,7 @@
 
 ## セットアップ CD からインストールする
 
-仮想マシンまたは PC で `bootcd.iso` を起動し、LiberNT セットアップの指示に従います。セットアップは Windows セットアップと同じようにドライブを一覧表示し、パーティションの作成、削除、フォーマット、縮小、拡張ができます。LiberNT を NTFS にインストールし、必要な EFI システムパーティションを作成します。
+仮想マシンまたは PC で `LiberNT.iso` を起動し、LiberNT セットアップの指示に従います。セットアップは Windows セットアップと同じようにドライブを一覧表示し、パーティションの作成、削除、フォーマット、縮小、拡張ができます。LiberNT を NTFS にインストールし、必要な EFI システムパーティションを作成します。
 
 ## プリインストール済みディスクを使う
 

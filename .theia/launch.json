@@ -6,8 +6,8 @@
     {
       "type": "cppdbg",
       "request": "launch",
-      "name": "bootcd (qemu)",
-      "preLaunchTask": "launch bootcd",
+      "name": "liberntiso (qemu)",
+      "preLaunchTask": "launch liberntiso",
       "miDebuggerServerAddress": "localhost:9091",
       "miDebuggerArgs": "-l 15 -ex 'set sysroot ${workspaceRoot}/build/symbols'",
       "program": "${workspaceRoot}/build/ntos/ntoskrnl.exe",

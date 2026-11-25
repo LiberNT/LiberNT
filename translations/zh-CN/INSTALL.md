@@ -10,7 +10,7 @@
 
 | 命令 | 生成 | 用途 |
 |---|---|---|
-| `ninja bootcd` | `bootcd.iso` | 从 CD 镜像运行 LiberNT，或从该镜像启动 LiberNT 安装程序，把 LiberNT 装到磁盘。 |
+| `ninja liberntiso` | `LiberNT.iso` | 从 CD 镜像运行 LiberNT，或从该镜像启动 LiberNT 安装程序，把 LiberNT 装到磁盘。 |
 | `ninja liberntimg` | `LiberNT.img` | 启动一块已装好 LiberNT 的磁盘，UEFI 与 BIOS 均可。 |
 | `ninja liberntvhd` | `LiberNT.vhd`、`LiberNT.vhdx` | 在虚拟机中复用同一份预装盘：VHD 用于 VirtualBox 和 Hyper-V 第一代，VHDX 用于 Hyper-V 第二代(该代不支持 VHD)。 |
 
@@ -18,7 +18,7 @@
 
 ## 从安装光盘安装
 
-在虚拟机或 PC 上启动 `bootcd.iso`，按 LiberNT 安装程序的提示操作。安装程序的磁盘列表与 Windows 安装程序一致，可新建、删除、格式化、压缩和扩展分区。它会把 LiberNT 装到 NTFS 分区，并创建所需的 EFI 系统分区。
+在虚拟机或 PC 上启动 `LiberNT.iso`，按 LiberNT 安装程序的提示操作。安装程序的磁盘列表与 Windows 安装程序一致，可新建、删除、格式化、压缩和扩展分区。它会把 LiberNT 装到 NTFS 分区，并创建所需的 EFI 系统分区。
 
 ## 使用预装盘
 

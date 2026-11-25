@@ -121,10 +121,8 @@ LiberNT 将现代硬件与平台引入 NT 架构。
 
 | 文件 | 内容 |
 | --- | --- |
-| `bootcd-iso-…-<arch>-…zip` | `bootcd.iso`，可运行 LiberNT 或启动 LiberNT 安装程序的 CD 镜像 |
+| `LiberNT-…-<arch>-….iso` | `LiberNT.iso`，可运行 LiberNT 或启动 LiberNT 安装程序的 CD 镜像 |
 | `LiberNT-img-…-<arch>-…zip` | `LiberNT.img`，已装好 LiberNT 的磁盘 |
-| `LiberNT-vhd-…-<arch>-…zip` | `LiberNT.vhd`，同一份预装盘，供基于 VHD 的虚拟机使用 |
-| `LiberNT-vhdx-…-<arch>-…zip` | `LiberNT.vhdx`，同一份预装盘，供 Hyper-V 第二代使用 |
 
 > [!NOTE]
 > 这些构建由 GitHub Actions 从 `master` 分支生成，均为 Clang Debug 版本。
@@ -142,7 +140,7 @@ LiberNT 将现代硬件与平台引入 NT 架构。
 
 ### 第 3 步：安装 LiberNT
 
-在虚拟机或 PC 上启动 `bootcd.iso`，按 **LiberNT 安装程序**的提示操作。
+在虚拟机或 PC 上启动 `LiberNT.iso`，按 **LiberNT 安装程序**的提示操作。
 
 预装盘里同样带有 LiberNT 安装程序。在运行中的系统里执行 `C:\<architecture>\libernt.exe`，例如 `C:\arm64\libernt.exe`，就能把 LiberNT 装到另一块磁盘。
 
@@ -224,7 +222,7 @@ ninja liberntimg
 
 | 命令 | 生成 | 用途 |
 | --- | --- | --- |
-| `ninja bootcd` | `bootcd.iso` | 在虚拟机或 PC 上从 CD 镜像安装 LiberNT。 |
+| `ninja liberntiso` | `LiberNT.iso` | 在虚拟机或 PC 上从 CD 镜像安装 LiberNT。 |
 | `ninja liberntimg` | `LiberNT.img` | 启动一块已装好 LiberNT 的磁盘。可在 QEMU 等虚拟机中运行，也可写入 U 盘或 SD 卡；UEFI 与 BIOS 均可启动。 |
 | `ninja liberntvhd` | `LiberNT.vhd`、`LiberNT.vhdx` | 在虚拟机里复用同一份预装盘：VHD 用于 VirtualBox 和 Hyper-V 第一代，VHDX 用于 Hyper-V 第二代(该代不支持 VHD)。 |
 

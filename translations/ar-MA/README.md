@@ -121,10 +121,8 @@ LiberNT نظام تشغيل NT حر. والاسم يدل على ذلك: كلمة
 
 | الملف | ما هو |
 | --- | --- |
-| ‎`bootcd-iso-…-<arch>-…zip`‎ | ‎`bootcd.iso`‎، صورة قرص مضغوط تشغّل LiberNT أو تبدأ برنامج إعداد LiberNT |
+| ‎`LiberNT-…-<arch>-….iso`‎ | ‎`LiberNT.iso`‎، صورة قرص مضغوط تشغّل LiberNT أو تبدأ برنامج إعداد LiberNT |
 | ‎`LiberNT-img-…-<arch>-…zip`‎ | ‎`LiberNT.img`‎، قرص مثبّت عليه LiberNT مسبقًا |
-| ‎`LiberNT-vhd-…-<arch>-…zip`‎ | ‎`LiberNT.vhd`‎، القرص المثبّت مسبقًا نفسه للآلات الافتراضية التي تعتمد VHD |
-| ‎`LiberNT-vhdx-…-<arch>-…zip`‎ | ‎`LiberNT.vhdx`‎، القرص المثبّت مسبقًا نفسه لـ Hyper-V من الجيل الثاني |
 
 > [!NOTE]
 > هذه نسخ Debug مبنية بـ Clang، تنتجها GitHub Actions من الفرع ‎`master`‎.
@@ -142,7 +140,7 @@ LiberNT نظام تشغيل NT حر. والاسم يدل على ذلك: كلمة
 
 ### الخطوة 3: تثبيت LiberNT
 
-أقلع ‎`bootcd.iso`‎ في آلة افتراضية أو على حاسوب، واتبع تعليمات **برنامج إعداد LiberNT**.
+أقلع ‎`LiberNT.iso`‎ في آلة افتراضية أو على حاسوب، واتبع تعليمات **برنامج إعداد LiberNT**.
 
 يحمل القرص المثبّت مسبقًا أيضًا برنامج إعداد LiberNT. شغّل ‎`C:\<المعمارية>\libernt.exe`‎، مثلًا ‎`C:\arm64\libernt.exe`‎، لتثبيت LiberNT على قرص آخر من النظام قيد التشغيل.
 
@@ -248,7 +246,7 @@ ninja liberntimg
 
 | الأمر | ينشئ | استخدمه من أجل |
 | --- | --- | --- |
-| ‎`ninja bootcd`‎ | ‎`bootcd.iso`‎ | تثبيت LiberNT من صورة قرص مضغوط، في آلة افتراضية أو على حاسوب. |
+| ‎`ninja liberntiso`‎ | ‎`LiberNT.iso`‎ | تثبيت LiberNT من صورة قرص مضغوط، في آلة افتراضية أو على حاسوب. |
 | ‎`ninja liberntimg`‎ | ‎`LiberNT.img`‎ | إقلاع قرص مثبّت عليه LiberNT مسبقًا. شغّله في آلة افتراضية مثل QEMU، أو اكتبه على وحدة USB أو بطاقة SD. يقلع عبر UEFI أو BIOS. |
 | ‎`ninja liberntvhd`‎ | ‎`LiberNT.vhd`‎، ‎`LiberNT.vhdx`‎ | استخدام القرص المثبّت مسبقًا نفسه في الآلات الافتراضية: VHD في VirtualBox وHyper-V من الجيل الأول، وVHDX في Hyper-V من الجيل الثاني الذي لا يقبل أقراص VHD. |
 

@@ -252,7 +252,7 @@ if(ENABLE_FEX_ARM64EC_TEST_PAYLOADS)
             COMMENT "Copying optional AMD64 cmd_rostest.exe for CHPE testing")
         add_custom_target(fex-arm64ec-amd64-test-binary
             DEPENDS "${FEX_ARM64EC_AMD64_TEST_DEST}")
-        add_dependencies(bootcd fex-arm64ec-amd64-test-binary)
+        add_dependencies(liberntiso fex-arm64ec-amd64-test-binary)
 
         add_cd_file(
             FILE "${FEX_ARM64EC_AMD64_TEST_DEST}"
@@ -277,7 +277,7 @@ if(ENABLE_FEX_ARM64EC_TEST_PAYLOADS)
             COMMENT "Copying optional AMD64 ntdll_apitest.exe for CHPE testing")
         add_custom_target(fex-arm64ec-amd64-ntdll-apitest-binary
             DEPENDS "${FEX_ARM64EC_AMD64_NTDLL_APITEST_DEST}")
-        add_dependencies(bootcd fex-arm64ec-amd64-ntdll-apitest-binary)
+        add_dependencies(liberntiso fex-arm64ec-amd64-ntdll-apitest-binary)
 
         add_cd_file(
             FILE "${FEX_ARM64EC_AMD64_NTDLL_APITEST_DEST}"
