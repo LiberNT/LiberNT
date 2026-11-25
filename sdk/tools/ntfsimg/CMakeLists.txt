@@ -87,4 +87,4 @@ target_compile_definitions(ntfsimg PRIVATE NTFSLIB_HAVE_FUSE=0)
 target_include_directories(ntfsimg PRIVATE ${REACTOS_SOURCE_DIR}/base/applications/cmdutils/lntexpandstorage)
 set_source_files_properties(${REACTOS_SOURCE_DIR}/base/applications/cmdutils/lntexpandstorage/expandcore.c
     PROPERTIES COMPILE_DEFINITIONS EXPAND_VOLUME_ONLY)
-target_link_libraries(ntfsimg PRIVATE ntfslib_host ntfslib_format_host)
+target_link_libraries(ntfsimg PRIVATE ntfslib_host ntfslib_format_host libwimcorehost)
