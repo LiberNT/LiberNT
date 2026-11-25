@@ -144,3 +144,7 @@ endif()
 # Linked to every user-mode module; an image that defines its own _load_config_used never pulls it.
 add_library(loadconfig loadconfig.c)
 add_dependencies(loadconfig psdk)
+
+add_library(loadconfig_system32 OBJECT loadconfig.c)
+target_compile_definitions(loadconfig_system32 PRIVATE LOADCONFIG_DEPENDENT_LOAD_FLAGS=LOAD_LIBRARY_SEARCH_SYSTEM32)
+add_dependencies(loadconfig_system32 psdk)

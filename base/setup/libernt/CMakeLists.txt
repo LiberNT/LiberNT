@@ -36,6 +36,7 @@ add_executable(libernt ${SOURCE} libernt.rc)
 
 add_pch(libernt libernt.h SOURCE)
 set_module_type(libernt win32gui UNICODE ANYHOST)
+target_sources(libernt PRIVATE $<TARGET_OBJECTS:loadconfig_system32>)
 target_link_libraries(libernt uuid tzlib volresize libwimcore)
 add_delay_importlibs(libernt setuplib)
 add_importlibs(libernt advapi32 gdi32 user32 comctl32 dwmapi shlwapi setupapi ole32 oleaut32 version bcrypt msvcrt kernel32 ntdll)

@@ -1454,6 +1454,8 @@ wWinMain(
     ULONG Error;
     ULONG UpgradeResult = ERROR_GEN_FAILURE;
 
+    SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32);
+
     SetupData.bUpgradeOnly = (wcsstr(lpszCmdLine, L"/upgrade") != NULL);
     if (IsSetupAlreadyRunning(hInst))
         return SetupData.bUpgradeOnly ? ERROR_ALREADY_EXISTS : 0;

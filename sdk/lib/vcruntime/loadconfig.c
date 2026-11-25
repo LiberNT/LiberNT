@@ -7,11 +7,17 @@
 
 #include <windef.h>
 #include <winnt.h>
+#include <winbase.h>
+
+#ifndef LOADCONFIG_DEPENDENT_LOAD_FLAGS
+#define LOADCONFIG_DEPENDENT_LOAD_FLAGS 0
+#endif
 
 static ULONG_PTR ImageSecurityCookie = sizeof(void *) == 8 ? (ULONG_PTR)0x00002B992DDFA232ULL : (ULONG_PTR)0xBB40E64EUL;
 
 const IMAGE_LOAD_CONFIG_DIRECTORY _load_config_used =
 {
     .Size = sizeof(IMAGE_LOAD_CONFIG_DIRECTORY),
+    .DependentLoadFlags = LOADCONFIG_DEPENDENT_LOAD_FLAGS,
     .SecurityCookie = (ULONG_PTR)&ImageSecurityCookie,
 };
