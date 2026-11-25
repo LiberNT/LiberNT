@@ -114,7 +114,7 @@ typedef struct _WX_REQUEST
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(WX_REQUEST, WxGetRequest);
 
-static EVT_WDFCX_DEVICE_POST_PREPARE_HARDWARE WxEvtPostPrepareHardware;
+static EVT_WDFCX_DEVICE_POST_D0_ENTRY_POST_HARDWARE_ENABLED WxEvtPostD0EntryPostHardwareEnabled;
 static EVT_NET_ADAPTER_PRE_PROCESS_OID_REQUEST WxPreprocessOid;
 static EVT_WDF_OBJECT_CONTEXT_CLEANUP WxDeviceCleanup;
 static EVT_WDF_OBJECT_CONTEXT_CLEANUP WxAdapterCleanup;
@@ -690,10 +690,9 @@ WxInitializeAdapterState(
 
 static
 NTSTATUS
-WxEvtPostPrepareHardware(
+WxEvtPostD0EntryPostHardwareEnabled(
     _In_ WDFDEVICE Device,
-    _In_ WDFCMRESLIST ResourcesRaw,
-    _In_ WDFCMRESLIST ResourcesTranslated)
+    _In_ WDF_POWER_DEVICE_STATE PreviousState)
 {
     WX_DEVICE *Dev = WxTryGetDevice(Device);
     WDF_OBJECT_ATTRIBUTES Attributes;
@@ -702,8 +701,8 @@ WxEvtPostPrepareHardware(
     WX_ADAPTER_INIT *InitContext;
     NTSTATUS Status;
 
-    UNREFERENCED_PARAMETER(ResourcesRaw);
-    UNREFERENCED_PARAMETER(ResourcesTranslated);
+    UNREFERENCED_PARAMETER(PreviousState);
+    NT_ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
 
     if (Dev == NULL || Dev->Config.CreateAdapter == NULL)
         return STATUS_INVALID_DEVICE_STATE;
@@ -775,7 +774,7 @@ WxDeviceInitConfig(
         return STATUS_INSUFFICIENT_RESOURCES;
 
     WDFCX_PNPPOWER_EVENT_CALLBACKS_INIT(&Callbacks);
-    Callbacks.EvtCxDevicePostPrepareHardware = WxEvtPostPrepareHardware;
+    Callbacks.EvtCxDevicePostD0EntryPostHardwareEnabled = WxEvtPostD0EntryPostHardwareEnabled;
     WdfCxDeviceInitSetPnpPowerEventCallbacks(CxInit, &Callbacks);
     return STATUS_SUCCESS;
 }
