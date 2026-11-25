@@ -565,6 +565,13 @@ if(ENABLE_KERNEL_UBSAN)
     cmake_language(DEFER DIRECTORY ${CMAKE_SOURCE_DIR} CALL add_kernel_library_ubsan)
 endif()
 
+set(LIBERNT_CODESIGN_CERT "" CACHE FILEPATH "Certificate that signs the built modules")
+set(LIBERNT_CODESIGN_KEY "" CACHE FILEPATH "Private key that signs the built modules")
+if(LIBERNT_CODESIGN_CERT AND LIBERNT_CODESIGN_KEY)
+    find_program(OSSLSIGNCODE_PROGRAM osslsigncode REQUIRED)
+    find_program(CODESIGN_PYTHON_EXECUTABLE NAMES python3 python REQUIRED NO_CMAKE_FIND_ROOT_PATH)
+endif()
+
 function(set_module_type MODULE TYPE)
     cmake_parse_arguments(__module "UNICODE;ANYHOST;HOSTBOUND" "IMAGEBASE;KMDF_VERSION;KMDF_MINIMUM_VERSION" "ENTRYPOINT" ${ARGN})
 

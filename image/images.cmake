@@ -254,7 +254,7 @@ endfunction()
 
 
 function(image_list_command _image _var)
-    set(${_var} ${CMAKE_COMMAND} -DMODE=list
+    set(_command ${CMAKE_COMMAND} -DMODE=list
         -DBASE=${CMAKE_CURRENT_BINARY_DIR}/${_image}.$<CONFIG>.lst
         -DOPTIONAL=${CMAKE_CURRENT_BINARY_DIR}/${_image}.optional.$<CONFIG>.lst
         -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/${_image}.effective.lst
@@ -263,7 +263,13 @@ function(image_list_command _image _var)
         "-DINVENTORY_HEADER=LiberNT ${KERNEL_VERSION} ${KERNEL_VERSION_BUILD}-${REVISION}"
         -DINVENTORY_BUILD=${LIBERNT_BUILD_NUMBER}
         -DINVENTORY_IMAGE=${_image}
-        -P ${REACTOS_SOURCE_DIR}/sdk/cmake/optional_files.cmake PARENT_SCOPE)
+        -P ${REACTOS_SOURCE_DIR}/sdk/cmake/optional_files.cmake)
+    if(LIBERNT_CODESIGN_CERT AND LIBERNT_CODESIGN_KEY)
+        list(APPEND _command COMMAND ${CODESIGN_PYTHON_EXECUTABLE} ${REACTOS_SOURCE_DIR}/sdk/tools/codesign_image.py
+            --osslsigncode ${OSSLSIGNCODE_PROGRAM} --cert ${LIBERNT_CODESIGN_CERT} --key ${LIBERNT_CODESIGN_KEY}
+            --root ${REACTOS_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/${_image}.effective.lst)
+    endif()
+    set(${_var} ${_command} PARENT_SCOPE)
 endfunction()
 
 ## LiveImage -- Constitutes a small RAMDISK ISO, and is also merged with the BootCD
