@@ -980,6 +980,27 @@ static HRESULT BmpDecoder_ReadHeaders(BmpDecoder* This, IStream *stream)
         }
     }
 
+#ifdef __REACTOS__
+    {
+        ULONGLONG width, height, rowbytes;
+
+        if (This->bih.bV5Size == sizeof(BITMAPCOREHEADER))
+        {
+            BITMAPCOREHEADER *bch = (BITMAPCOREHEADER*)&This->bih;
+            width = bch->bcWidth;
+            height = bch->bcHeight;
+        }
+        else
+        {
+            width = (ULONG)This->bih.bV5Width;
+            height = This->bih.bV5Height < 0 ? -(LONGLONG)This->bih.bV5Height : This->bih.bV5Height;
+        }
+        rowbytes = max((width * This->bitsperpixel + 31) / 32 * 4, width * 4);
+        if (height && rowbytes > UINT_MAX / height)
+            return WINCODEC_ERR_UNKNOWNIMAGEFORMAT;
+    }
+
+#endif
     if (This->packed)
     {
         /* In a packed DIB, the image follows the palette. */
