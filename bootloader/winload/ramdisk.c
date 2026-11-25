@@ -7,11 +7,18 @@
 
 #include "winload.h"
 #include <ramdisk.h>
-#include <wim.h>
+#include <libwim/wimboot.h>
+#include <ntfsbl.h>
 
 #define RD_SECTOR_SIZE        512
 #define RD_MAX_SIZE           0xFFFFF000ULL
 #define RD_MINIMUM_EXTRA      (64ULL * 1024 * 1024)
+#define RD_VOLUME_START       (1024ULL * 1024)
+#define RD_VOLUME_FIXED       (16ULL * 1024 * 1024)
+#define RD_VOLUME_ENTRY       2048
+#define RD_VOLUME_SLACK       (8ULL * 1024 * 1024)
+#define RD_COPY_CHUNK         (1024 * 1024)
+#define RD_OVERLAY_BYTES      4096
 #define RD_MAX_CLUSTER        (128 * RD_SECTOR_SIZE)
 #define RD_READ_CHUNK         0x1000000
 #define RD_PATH_CHARS         260
@@ -37,6 +44,12 @@
 #define MBR_ENTRY_TYPE        4
 #define MBR_ENTRY_START       8
 #define MBR_ENTRY_SECTORS     12
+#define MBR_DISK_SIGNATURE    0x1B8
+#define MBR_ACTIVE            0x80
+#define MBR_TYPE_NTFS         0x07
+
+#define RD_OVERLAY_DIRECTORY  "System Volume Information"
+#define RD_OVERLAY_PATH       "System Volume Information/WimOverlay.dat"
 
 typedef struct _RD_SOURCE
 {
@@ -45,7 +58,16 @@ typedef struct _RD_SOURCE
     ULONGLONG Size;
 } RD_SOURCE, *PRD_SOURCE;
 
+typedef struct _RD_WIM_BUILD
+{
+    const WIMBOOT_IMAGE* Image;
+    ULONG Entries;
+    NTSTATUS Status;
+} RD_WIM_BUILD, *PRD_WIM_BUILD;
+
 static FAT32_WRITER RdWriter;
+static DK_DEVICE RdNtfsDevice;
+static BOOLEAN RdNtfsVolume;
 static PUCHAR RdBase;
 static PUCHAR RdMoveSource;
 static ULONGLONG RdSize;
@@ -128,6 +150,52 @@ RdGetIsoName(
 
 static
 BOOLEAN
+RdCreateDirectory(
+    _In_ PCSTR Path)
+{
+    ASSERT(Path[0] == '/' && Path[1] != ANSI_NULL);
+
+    if (RdNtfsVolume)
+        return NT_SUCCESS(NtfsBlCreateDirectory(Path + 1));
+
+    return Fat32CreateDirectory(&RdWriter, Path);
+}
+
+static
+BOOLEAN
+RdCopyFile(
+    _In_ PRD_SOURCE Source,
+    _In_ PCSTR Path,
+    _In_ ULONGLONG Offset,
+    _In_ ULONG Size)
+{
+    PUCHAR Data = NULL;
+    BOOLEAN Success;
+
+    ASSERT(Path[0] == '/' && Path[1] != ANSI_NULL);
+
+    if (!RdNtfsVolume)
+    {
+        return Fat32CreateFileEx(&RdWriter, Path, Size, &Data) &&
+               (Size == 0 || RdRead(Source, Offset, Data, Size));
+    }
+
+    if (Size != 0)
+    {
+        Data = FwAllocatePages(Size);
+        if (!Data)
+            return FALSE;
+    }
+
+    Success = (Size == 0 || RdRead(Source, Offset, Data, Size)) &&
+              NT_SUCCESS(NtfsBlWriteFile(Path + 1, Data, Size));
+    if (Data)
+        FwFreePages(Data, Size);
+    return Success;
+}
+
+static
+BOOLEAN
 RdCopyIsoDirectory(
     _In_ PRD_SOURCE Source,
     _In_ ULONG Block,
@@ -137,7 +205,7 @@ RdCopyIsoDirectory(
 {
     CHAR Name[RD_NAME_CHARS];
     CHAR Child[RD_PATH_CHARS];
-    PUCHAR Directory, Record, Data;
+    PUCHAR Directory, Record;
     ULONG Offset = 0;
     ULONG Size;
     BOOLEAN Success = FALSE;
@@ -183,7 +251,7 @@ RdCopyIsoDirectory(
 
         if (Record[ISO_RECORD_FLAGS] & ISO_FLAG_DIRECTORY)
         {
-            if ((!Measure && !Fat32CreateDirectory(&RdWriter, Child)) ||
+            if ((!Measure && !RdCreateDirectory(Child)) ||
                 !RdCopyIsoDirectory(Source, LeUlong(Record + ISO_RECORD_EXTENT), Size, Child, Measure))
             {
                 goto Done;
@@ -193,12 +261,10 @@ RdCopyIsoDirectory(
         {
             *Measure += ALIGN_UP_BY((ULONGLONG)Size, RD_MAX_CLUSTER);
         }
-        else if (!Fat32CreateFileEx(&RdWriter, Child, Size, &Data) ||
-                 (Size != 0 &&
-                  !RdRead(Source,
-                          (ULONGLONG)LeUlong(Record + ISO_RECORD_EXTENT) * ISO_BLOCK_SIZE,
-                          Data,
-                          Size)))
+        else if (!RdCopyFile(Source,
+                             Child,
+                             (ULONGLONG)LeUlong(Record + ISO_RECORD_EXTENT) * ISO_BLOCK_SIZE,
+                             Size))
         {
             goto Done;
         }
@@ -228,6 +294,41 @@ RdReadFile(
         RtlCopyMemory(Copy, Data, *Size);
 
     return Copy;
+}
+
+static
+PVOID
+RdReadNtfsFile(
+    PCSTR Path,
+    PULONG Size)
+{
+    ULONGLONG FileSize;
+    BOOLEAN IsDirectory;
+    PVOID File;
+    PVOID Data = NULL;
+    ULONG Read;
+
+    while (*Path == '\\' || *Path == '/')
+        Path++;
+
+    if (!NT_SUCCESS(NtfsBlOpenFile(Path, &File, &FileSize, &IsDirectory)))
+        return NULL;
+
+    if (!IsDirectory && FileSize != 0 && FileSize <= MAXULONG)
+    {
+        Data = FwAllocatePages((SIZE_T)FileSize);
+        if (Data &&
+            (!NT_SUCCESS(NtfsBlReadFileAt(File, 0, Data, (ULONG)FileSize, &Read)) || Read != FileSize))
+        {
+            FwFreePages(Data, (SIZE_T)FileSize);
+            Data = NULL;
+        }
+    }
+
+    NtfsBlCloseFile(File);
+    if (Data)
+        *Size = (ULONG)FileSize;
+    return Data;
 }
 
 static
@@ -261,6 +362,7 @@ RdLoadIsoFile(
     _In_ PCWSTR Path,
     _Out_ PRD_SOURCE File)
 {
+    UCHAR Magic[sizeof(RdWimMagic)];
     CHAR Name[RD_NAME_CHARS];
     CHAR Component[RD_NAME_CHARS];
     PUCHAR Directory, Record;
@@ -332,24 +434,23 @@ RdLoadIsoFile(
 
     RtlZeroMemory(File, sizeof(*File));
     File->Size = Length;
+
+    /* A WIM is read from the medium while its volume is built, never as a whole */
+    if (Length > sizeof(Magic) &&
+        RdRead(Medium, (ULONGLONG)Block * ISO_BLOCK_SIZE, Magic, sizeof(Magic)) &&
+        RtlEqualMemory(Magic, RdWimMagic, sizeof(Magic)))
+    {
+        File->Device = Medium->Device;
+        File->Device.Offset += (ULONGLONG)Block * ISO_BLOCK_SIZE;
+        File->Device.Length = Length;
+        return TRUE;
+    }
+
     File->Memory = FwAllocatePages(Length);
     if (!File->Memory)
         return FALSE;
 
     return RdRead(Medium, (ULONGLONG)Block * ISO_BLOCK_SIZE, File->Memory, Length);
-}
-
-static
-VOID
-RdWimProgress(
-    _In_opt_ PVOID Context,
-    _In_ ULONGLONG BytesAdvanced,
-    _In_opt_ PCSTR CurrentPath)
-{
-    UNREFERENCED_PARAMETER(Context);
-    UNREFERENCED_PARAMETER(CurrentPath);
-
-    RdAdvance(BytesAdvanced);
 }
 
 static
@@ -480,43 +581,289 @@ RdCopyIso(
 
 static
 BOOLEAN
-RdBuildFromWim(
+RdMountNtfs(
+    _In_ PUCHAR Memory,
+    _In_ ULONGLONG Offset,
+    _In_ ULONGLONG Length)
+{
+    RtlZeroMemory(&RdNtfsDevice, sizeof(RdNtfsDevice));
+    RdNtfsDevice.Memory = Memory;
+    RdNtfsDevice.Offset = Offset;
+    RdNtfsDevice.Length = Length;
+    RdNtfsDevice.BlockSize = RD_SECTOR_SIZE;
+    return NT_SUCCESS(NtfsBlMount(&RdNtfsDevice));
+}
+
+static
+PVOID
+RdWimAllocate(
+    _In_ size_t Size,
+    _In_opt_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    return FwAllocate(Size);
+}
+
+static
+VOID
+RdWimFree(
+    _In_opt_ PVOID Pointer,
+    _In_opt_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    if (Pointer)
+        FwFree(Pointer);
+}
+
+static
+int
+RdWimRead(
+    void* Context,
+    uint64_t Offset,
+    void* Buffer,
+    size_t Size)
+{
+    return RdRead((PRD_SOURCE)Context, Offset, Buffer, Size) ? 0 : -1;
+}
+
+static
+int
+RdWimCount(
+    void* Context,
+    const WIMBOOT_ENTRY* Entry)
+{
+    UNREFERENCED_PARAMETER(Entry);
+    ((PRD_WIM_BUILD)Context)->Entries++;
+    return 0;
+}
+
+static
+int
+RdWimCreate(
+    void* Context,
+    const WIMBOOT_ENTRY* Entry)
+{
+    PRD_WIM_BUILD Build = Context;
+    UCHAR Reparse[WIMBOOT_POINTER_SIZE];
+
+    if (Entry->IsDirectory)
+    {
+        Build->Status = NtfsBlCreateDirectory(Entry->Path);
+    }
+    else
+    {
+        if (Entry->Size != 0)
+            WimBootPointer(Reparse, Build->Image, Entry);
+        Build->Status = NtfsBlCreateWimFile(Entry->Path,
+                                            Entry->Attributes,
+                                            Entry->Size,
+                                            Entry->Size != 0 ? Reparse : NULL,
+                                            Entry->Size != 0 ? sizeof(Reparse) : 0);
+    }
+
+    if (!NT_SUCCESS(Build->Status))
+    {
+        OslTrace("RAM disk: %s could not be created (0x%lx)", Entry->Path, Build->Status);
+        return 1;
+    }
+    return 0;
+}
+
+static
+BOOLEAN
+RdIsWim(
+    _In_ PRD_SOURCE File)
+{
+    UCHAR Magic[sizeof(RdWimMagic)];
+
+    if (File->Size <= sizeof(Magic))
+        return FALSE;
+    if (File->Memory)
+        return RtlEqualMemory(File->Memory, RdWimMagic, sizeof(Magic));
+    return RdRead(File, 0, Magic, sizeof(Magic)) && RtlEqualMemory(Magic, RdWimMagic, sizeof(Magic));
+}
+
+static
+VOID
+RdWriteMbr(
+    _Out_writes_bytes_(RD_SECTOR_SIZE) PUCHAR Sector,
+    _In_ ULONGLONG VolumeBytes,
+    _In_ ULONG Signature)
+{
+    PUCHAR Entry = Sector + MBR_TABLE;
+    ULONG Start = (ULONG)(RD_VOLUME_START / RD_SECTOR_SIZE);
+    ULONG Sectors = (ULONG)(VolumeBytes / RD_SECTOR_SIZE);
+    ULONG i;
+
+    ASSERT(VolumeBytes / RD_SECTOR_SIZE <= MAXULONG);
+
+    RtlZeroMemory(Sector, RD_SECTOR_SIZE);
+    for (i = 0; i < sizeof(ULONG); i++)
+    {
+        Sector[MBR_DISK_SIGNATURE + i] = (UCHAR)(Signature >> (8 * i));
+        Entry[MBR_ENTRY_START + i] = (UCHAR)(Start >> (8 * i));
+        Entry[MBR_ENTRY_SECTORS + i] = (UCHAR)(Sectors >> (8 * i));
+    }
+    Entry[0] = MBR_ACTIVE;
+    Entry[MBR_ENTRY_TYPE] = MBR_TYPE_NTFS;
+    Sector[MBR_SIGNATURE] = 0x55;
+    Sector[MBR_SIGNATURE + 1] = 0xAA;
+}
+
+static
+BOOLEAN
+RdStreamWim(
+    _In_ PRD_SOURCE File,
+    _In_ PCSTR Path)
+{
+    ULONGLONG Done;
+    PUCHAR Chunk;
+    PVOID Handle = NULL;
+    ULONG Bytes;
+    BOOLEAN Success;
+
+    Chunk = FwAllocate(RD_COPY_CHUNK);
+    Success = Chunk != NULL &&
+              NT_SUCCESS(NtfsBlWriteFile(Path, NULL, 0)) &&
+              NT_SUCCESS(NtfsBlOpenFile(Path, &Handle, NULL, NULL));
+
+    for (Done = 0; Success && Done < File->Size; Done += Bytes)
+    {
+        Bytes = (ULONG)min(File->Size - Done, (ULONGLONG)RD_COPY_CHUNK);
+        Success = RdRead(File, Done, Chunk, Bytes) &&
+                  NT_SUCCESS(NtfsBlWriteFileAt(Handle, Done, Chunk, Bytes));
+    }
+
+    NtfsBlCloseFile(Handle);
+    if (Chunk)
+        FwFree(Chunk);
+    return Success;
+}
+
+static
+BOOLEAN
+RdRegisterWim(
+    _In_ const WIMBOOT_IMAGE* Image,
+    _In_ PCSTR FileName,
+    _In_ ULONG Signature)
+{
+    WCHAR Path[RD_NAME_CHARS + 1];
+    PUCHAR Overlay;
+    ULONG Length;
+    ULONG i;
+    BOOLEAN Success;
+
+    Path[0] = L'\\';
+    for (i = 0; FileName[i] != ANSI_NULL && i < RD_NAME_CHARS - 1; i++)
+        Path[i + 1] = (WCHAR)(UCHAR)FileName[i];
+    Path[i + 1] = UNICODE_NULL;
+
+    Overlay = FwAllocate(RD_OVERLAY_BYTES);
+    if (!Overlay)
+        return FALSE;
+
+    Length = WimBootOverlay(Overlay, RD_OVERLAY_BYTES, Image, (const uint16_t*)Path, RD_VOLUME_START, Signature);
+    Success = Length != 0 &&
+              NT_SUCCESS(NtfsBlCreateDirectory(RD_OVERLAY_DIRECTORY)) &&
+              NT_SUCCESS(NtfsBlWriteFile(RD_OVERLAY_PATH, Overlay, Length));
+    FwFree(Overlay);
+    return Success;
+}
+
+static
+BOOLEAN
+RdBuildWimVolume(
     _In_ PRD_SOURCE File,
     _In_opt_ PRD_SOURCE Medium,
     _In_reads_bytes_opt_(ISO_BLOCK_SIZE) const UCHAR* Descriptor,
     _In_ PCSTR FileName,
-    _In_ ULONGLONG ExtraBytes)
+    _Out_ PULONGLONG Length)
 {
-    WIM_LOADER_IMAGE_STATS Stats;
-    WIM_LOADER_CTX Wim;
-    ULONGLONG Payload;
+    WimCoreAllocator Allocator = { RdWimAllocate, RdWimFree, NULL };
+    RD_WIM_BUILD Build;
+    WIMBOOT_IMAGE Image;
+    WimCoreCtx Wim;
+    ULONGLONG Payload = 0;
+    ULONGLONG VolumeBytes;
+    ULONG Signature;
     BOOLEAN Success = FALSE;
 
-    if (WimLoaderOpen(File->Memory, File->Size, &Wim) != ESUCCESS)
-        return FALSE;
-
-    if (WimLoaderSelectImage(&Wim, Wim.BootIndex ? Wim.BootIndex : 1) == ESUCCESS &&
-        WimLoaderQuerySelectedImageStats(&Wim, &Stats) == ESUCCESS)
+    RtlZeroMemory(&Build, sizeof(Build));
+    wimcore_init(&Wim);
+    if ((File->Memory
+            ? wimcore_open_memory(&Wim, &Allocator, File->Memory, File->Size)
+            : wimcore_open(&Wim, &Allocator, RdWimRead, File, File->Size)) != 0 ||
+        WimBootOpen(&Wim, &Image) != WIMBOOT_OK ||
+        WimBootWalk(&Wim, &Image, RdWimCount, &Build) != WIMBOOT_OK)
     {
-        Payload = Stats.FileBytes;
-        RdSkipRootName = FileName;
-        Success = !Medium || RdCopyIso(Medium, Descriptor, &Payload);
-        RdSkipRootName = NULL;
-
-        Success = Success &&
-                  RdCreateVolume(Payload, ExtraBytes) &&
-                  WimLoaderExtractToFat(&Wim, &RdWriter, RdWimProgress, NULL) == ESUCCESS;
+        FwPrint(L"The WIM image cannot be used.\r\n");
+        goto Done;
     }
 
-    WimLoaderClose(&Wim);
+    RdSkipRootName = FileName;
+    if (Medium && !RdCopyIso(Medium, Descriptor, &Payload))
+        goto Done;
 
-    if (Success && Medium)
+    VolumeBytes = ALIGN_UP_BY(File->Size, RD_MAX_CLUSTER) + Payload + RD_VOLUME_FIXED +
+                  (ULONGLONG)Build.Entries * RD_VOLUME_ENTRY + RD_VOLUME_SLACK;
+    VolumeBytes = ALIGN_UP_BY(VolumeBytes, MM_PAGE_SIZE);
+    if (VolumeBytes > RD_MAX_SIZE - RD_VOLUME_START)
     {
-        RdSkipRootName = FileName;
+        FwPrint(L"The RAM disk is larger than 4 GB.\r\n");
+        goto Done;
+    }
+
+    RdSize = RD_VOLUME_START + VolumeBytes;
+    RdBase = MmAllocateMemoryWithType((SIZE_T)RdSize, LoaderXIPRom);
+    if (!RdBase)
+        RdBase = MmAllocateHighMemoryWithType((SIZE_T)RdSize, LoaderXIPRom);
+    if (!RdBase)
+    {
+        FwPrint(L"Not enough memory for a %I64u MB RAM disk.\r\n", RdSize >> 20);
+        goto Done;
+    }
+    RtlZeroMemory(RdBase, (SIZE_T)RdSize);
+
+    Signature = LeUlong(Image.Guid) | 1;
+    RdWriteMbr(RdBase, VolumeBytes, Signature);
+    if (!NT_SUCCESS(NtfsBlFormatMemory(RdBase + RD_VOLUME_START,
+                                       VolumeBytes,
+                                       (ULONG)(RD_VOLUME_START / RD_SECTOR_SIZE),
+                                       L"LiberNT")) ||
+        !RdMountNtfs(RdBase, RD_VOLUME_START, VolumeBytes))
+    {
+        goto Done;
+    }
+
+    RdTotalBytes = max(File->Size + Payload, 1);
+    RdCopiedBytes = 0;
+    RdPercent = 0;
+    Build.Image = &Image;
+    Build.Status = STATUS_SUCCESS;
+    if (!RdStreamWim(File, FileName) ||
+        !RdRegisterWim(&Image, FileName, Signature) ||
+        WimBootWalk(&Wim, &Image, RdWimCreate, &Build) != WIMBOOT_OK)
+    {
+        goto Done;
+    }
+
+    if (Medium)
+    {
+        RdNtfsVolume = TRUE;
         Success = RdCopyIso(Medium, Descriptor, NULL);
-        RdSkipRootName = NULL;
+        RdNtfsVolume = FALSE;
+        if (!Success)
+            goto Done;
     }
 
+    /* The volume loads the WIM it backs its files with when it opens */
+    Success = NT_SUCCESS(NtfsBlUnmount()) && RdMountNtfs(RdBase, RD_VOLUME_START, VolumeBytes);
+    *Length = VolumeBytes;
+
+Done:
+    RdSkipRootName = NULL;
+    wimcore_close(&Wim);
+    OslTrace("RAM disk: %lu WIM entries, %I64u MB of medium files", Build.Entries, Payload >> 20);
     return Success;
 }
 
@@ -541,12 +888,23 @@ OslBuildRamdisk(
     ULONG i;
     BOOLEAN HaveMedium = FALSE;
     BOOLEAN DiskImage = FALSE;
+    BOOLEAN WimVolume = FALSE;
     BOOLEAN Success;
 
     RtlZeroMemory(&Medium, sizeof(Medium));
     RtlZeroMemory(&File, sizeof(File));
     Parent.Ramdisk = FALSE;
     RdTotalBytes = MAXULONGLONG;
+
+    for (Leaf = Path, i = 0; Path[i] != UNICODE_NULL; i++)
+    {
+        if (Path[i] == L'\\')
+            Leaf = &Path[i + 1];
+    }
+
+    for (i = 0; Leaf[i] != UNICODE_NULL && i < RD_NAME_CHARS - 1; i++)
+        FileName[i] = (CHAR)Leaf[i];
+    FileName[i] = ANSI_NULL;
 
     if (Image)
     {
@@ -591,24 +949,16 @@ OslBuildRamdisk(
                   RdCreateVolume(Payload, ExtraBytes) &&
                   RdCopyIso(&Medium, Descriptor, NULL);
     }
-    else if (File.Size > sizeof(RdWimMagic) &&
-             RtlEqualMemory(File.Memory, RdWimMagic, sizeof(RdWimMagic)))
+    else if (RdIsWim(&File))
     {
-        for (Leaf = Path, i = 0; Path[i] != UNICODE_NULL; i++)
-        {
-            if (Path[i] == L'\\')
-                Leaf = &Path[i + 1];
-        }
-
-        for (i = 0; Leaf[i] != UNICODE_NULL && i < RD_NAME_CHARS - 1; i++)
-            FileName[i] = (CHAR)Leaf[i];
-        FileName[i] = ANSI_NULL;
-
-        Success = RdBuildFromWim(&File,
-                                 HaveMedium ? &Medium : NULL,
-                                 HaveMedium ? Descriptor : NULL,
-                                 FileName,
-                                 ExtraBytes);
+        DiskImage = TRUE;
+        WimVolume = TRUE;
+        ImageOffset = RD_VOLUME_START;
+        Success = RdBuildWimVolume(&File,
+                                   HaveMedium ? &Medium : NULL,
+                                   HaveMedium ? Descriptor : NULL,
+                                   FileName,
+                                   &ImageLength);
     }
     else if (RdIsDiskImage(&File, &ImageOffset, &ImageLength))
     {
@@ -645,13 +995,15 @@ OslBuildRamdisk(
     {
         Device->Offset = ImageOffset;
         Device->Length = ImageLength;
-        FsMemoryReader = NULL;
+        FsMemoryReader = WimVolume ? RdReadNtfsFile : NULL;
+        FsMemoryDriverName = L"ntfs";
     }
     else
     {
         Device->Offset = RdWriter.VolumeBase - RdBase;
         Device->Length = RdWriter.VolumeSize;
         FsMemoryReader = RdReadFile;
+        FsMemoryDriverName = L"fastfat";
     }
     return TRUE;
 }

@@ -91,6 +91,7 @@ FsGetDriverName(
     _In_ PDK_DEVICE Device);
 
 extern PVOID (*FsMemoryReader)(PCSTR Path, PULONG Size);
+extern PCWSTR FsMemoryDriverName;
 
 BOOLEAN
 CdfsMount(
