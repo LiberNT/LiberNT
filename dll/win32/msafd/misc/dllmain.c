@@ -573,12 +573,16 @@ WSPDuplicateSocket(
         NtClose(hProcess);
         return MsafdReturnWithErrno(STATUS_ACCESS_DENIED, lpErrno, 0, NULL);
     }
+    /* The duplicated socket handle has to be inheritable: duplicating a
+     * socket is the cross-process transfer mechanism, and handles passed
+     * to a child through PROC_THREAD_ATTRIBUTE_HANDLE_LIST are required
+     * to be inheritable. */
     bDuplicated = DuplicateHandle(GetCurrentProcess(),
                                   (HANDLE)Socket->Handle,
                                   hProcess,
                                   (LPHANDLE)&hDuplicatedHandle,
                                   0,
-                                  FALSE,
+                                  TRUE,
                                   DUPLICATE_SAME_ACCESS);
     if( !bDuplicated )
     {
