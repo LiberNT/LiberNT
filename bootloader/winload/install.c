@@ -8,6 +8,7 @@
 #include "winload.h"
 #include <ntfsbl.h>
 #include <sha256.h>
+#include <libwim/wimboot.h>
 
 #define ISO_BLOCK_SIZE        2048
 #define ISO_DESCRIPTOR_BLOCK  16
@@ -31,6 +32,7 @@
 #define OSL_INSTALL_INF_MAX    (4 * 1024 * 1024)
 #define OSL_INSTALL_INVENTORY  "servicing\\LiberNT.files"
 #define OSL_INSTALL_SETUP_INF  "txtsetup.sif"
+#define OSL_INSTALL_PACKED     "boot.wim"
 #define OSL_INSTALL_IMAGE_LINE "; Image "
 #define OSL_INSTALL_STATUS     "install.log"
 #define OSL_INSTALL_CHUNK      0x100000
@@ -70,6 +72,8 @@ typedef struct _OSL_NAME
     ULONG Block;
     ULONG Size;
     BOOLEAN Directory;
+    BOOLEAN Packed;
+    UCHAR Hash[20];
     CHAR Path[ANYSIZE_ARRAY];
 } OSL_NAME, *POSL_NAME;
 
@@ -137,6 +141,9 @@ typedef struct _OSL_INSTALL
     ULONG UndoCapacity;
     ULONG BackupCount;
     ULONGLONG BackupBytes;
+    WimCoreCtx Wim;
+    ULONGLONG WimOffset;
+    BOOLEAN WimOpen;
     BOOLEAN DropObsolete;
     BOOLEAN UndoReady;
 } OSL_INSTALL, *POSL_INSTALL;
@@ -359,6 +366,93 @@ OslIndexDirectory(
 }
 
 static
+void*
+OslWimAllocate(
+    _In_ size_t Size,
+    _In_opt_ void* Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    return FwAllocate(Size);
+}
+
+static
+void
+OslWimFree(
+    _In_ void* Memory,
+    _In_opt_ void* Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    FwFree(Memory);
+}
+
+static
+int
+OslWimRead(
+    _In_ void* Context,
+    _In_ uint64_t Offset,
+    _Out_writes_bytes_(Size) void* Buffer,
+    _In_ size_t Size)
+{
+    POSL_INSTALL Install = (POSL_INSTALL)Context;
+
+    return Size <= MAXULONG && OslReadImage(Install, Install->WimOffset + Offset, Buffer, (ULONG)Size) ? 0 : -1;
+}
+
+static
+int
+OslIndexPacked(
+    _In_ void* Context,
+    _In_ const WIMBOOT_ENTRY* Entry)
+{
+    POSL_INSTALL Install = (POSL_INSTALL)Context;
+    CHAR Path[OSL_INSTALL_PATH_CHARS];
+    POSL_NAME Name;
+    PCHAR Char;
+
+    if (Entry->Size > MAXULONG || !NT_SUCCESS(RtlStringCbCopyA(Path, sizeof(Path), Entry->Path)))
+        return 1;
+    for (Char = Path; *Char; Char++)
+    {
+        if (*Char == '/')
+            *Char = '\\';
+    }
+    if (OslFindName(&Install->Files, Path))
+        return 0;
+
+    Name = OslAddName(&Install->Files, Path);
+    if (!Name)
+        return 1;
+    Name->Directory = Entry->IsDirectory != 0;
+    Name->Size = (ULONG)Entry->Size;
+    Name->Packed = TRUE;
+    RtlCopyMemory(Name->Hash, Entry->Hash, sizeof(Name->Hash));
+    return 0;
+}
+
+/* A medium that keeps its system in boot.wim lists the files of its boot image beside its own */
+static
+BOOLEAN
+OslIndexPackedImage(
+    _Inout_ POSL_INSTALL Install)
+{
+    static const WimCoreAllocator Allocator = { OslWimAllocate, OslWimFree, NULL };
+    POSL_NAME Packed = OslFindName(&Install->Files, OSL_INSTALL_PACKED);
+    WIMBOOT_IMAGE Image;
+
+    if (!Packed || Packed->Directory || Packed->Packed)
+        return TRUE;
+
+    ASSERT(!Install->WimOpen);
+    Install->WimOffset = (ULONGLONG)Packed->Block * ISO_BLOCK_SIZE;
+    wimcore_init(&Install->Wim);
+    if (wimcore_open(&Install->Wim, &Allocator, OslWimRead, Install, Packed->Size) != 0)
+        return FALSE;
+    Install->WimOpen = TRUE;
+    return WimBootOpenImage(&Install->Wim, 0, &Image) == WIMBOOT_OK &&
+           WimBootWalk(&Install->Wim, &Image, OslIndexPacked, Install) == WIMBOOT_OK;
+}
+
+static
 BOOLEAN
 OslIndexImage(
     _Inout_ POSL_INSTALL Install)
@@ -376,7 +470,26 @@ OslIndexImage(
                              LeUlong(Descriptor + ISO_ROOT_RECORD + ISO_RECORD_EXTENT),
                              LeUlong(Descriptor + ISO_ROOT_RECORD + ISO_RECORD_LENGTH),
                              "",
-                             0);
+                             0) &&
+           OslIndexPackedImage(Install);
+}
+
+static
+BOOLEAN
+OslReadImageFile(
+    _Inout_ POSL_INSTALL Install,
+    _In_ POSL_NAME File,
+    _Out_writes_bytes_(File->Size) PVOID Buffer)
+{
+    ASSERT(!File->Directory);
+    if (File->Size == 0)
+        return TRUE;
+    if (File->Packed)
+    {
+        return Install->WimOpen &&
+               wimcore_read_blob_into(&Install->Wim, File->Hash, Buffer, File->Size, NULL, NULL, File->Path) == 0;
+    }
+    return OslReadImage(Install, (ULONGLONG)File->Block * ISO_BLOCK_SIZE, Buffer, File->Size);
 }
 
 static
@@ -428,7 +541,7 @@ OslReadImageText(
     Text = FwAllocate(File->Size + 1);
     if (!Text)
         return NULL;
-    if (File->Size != 0 && !OslReadImage(Install, (ULONGLONG)File->Block * ISO_BLOCK_SIZE, Text, File->Size))
+    if (!OslReadImageFile(Install, File, Text))
     {
         FwFree(Text);
         return NULL;
@@ -775,7 +888,7 @@ OslWriteFromImage(
     Data = FwAllocatePages(max(File->Size, 1));
     if (Data)
     {
-        if (File->Size != 0 && !OslReadImage(Install, (ULONGLONG)File->Block * ISO_BLOCK_SIZE, Data, File->Size))
+        if (!OslReadImageFile(Install, File, Data))
             Status = STATUS_UNEXPECTED_IO_ERROR;
         else
             Status = OslWriteVerified(Install, Target, Data, File->Size);
@@ -1870,6 +1983,8 @@ OslFreeInstall(
         FwFree(Install->OldText);
     if (Install->Buffer)
         FwFreePages(Install->Buffer, OSL_INSTALL_CHUNK);
+    if (Install->WimOpen)
+        wimcore_close(&Install->Wim);
     OslFreeNames(&Install->Files);
     OslFreeNames(&Install->Inventory);
     OslFreeNames(&Install->Exclude);
