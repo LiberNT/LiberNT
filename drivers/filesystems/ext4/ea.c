@@ -181,6 +181,7 @@ Ext4ApplyEaList(
     PFILE_FULL_EA_INFORMATION Entry = List;
     E4_ATTR Attr = Fcb->Attr;
     ULONG Mask = 0, NewType = 0, ErrorOffset;
+    BOOLEAN DeferSymlink = FALSE;
     NTSTATUS Status;
     int Error = EOK;
 
@@ -261,15 +262,30 @@ Ext4ApplyEaList(
     }
 
     /* The mode attribute is how a file becomes a symbolic link, a device node, a fifo or a socket */
-    /* FIXME: a link gets its target with the write that follows, in another transaction; a crash between the two
-     * leaves an empty link */
-    if (Error == EOK && NewType != 0)
+    if (Error == EOK && NewType == E4_S_IFLNK)
+    {
+        if (Ccb->ParentInode == 0)
+            Error = ENOTSUP;
+        else if ((Fcb->Attr.Mode & E4_S_IFMT) != E4_S_IFREG || Fcb->Attr.Size != 0 || Fcb->Attr.Links != 1)
+            Error = EINVAL;
+        else
+            DeferSymlink = TRUE;
+    }
+    else if (Error == EOK && NewType != 0)
+    {
         Error = E4SetType(&Vcb->Core, Ccb->ParentInode, Ccb->Name, Ccb->NameLength, Fcb->Inode, NewType | (Attr.Mode & 07777));
+    }
     if (Error == EOK && Mask != 0) Error = E4SetAttr(&Vcb->Core, Fcb->Inode, Mask, &Attr);
     if (Vcb->Core.TransDepth != 0) Error = E4End(&Vcb->Core, Error);
     Status = Ext4Status(Vcb, Error);
     Ext4UnlockCore(Vcb);
     if (!NT_SUCCESS(Status)) return Status;
+
+    if (DeferSymlink)
+    {
+        Fcb->PendingSymlink = TRUE;
+        Fcb->PendingSymlinkMode = NewType | (Attr.Mode & 07777);
+    }
 
     Ext4MarkCoreDirty(Vcb);
     Status = Ext4RefreshFcb(Fcb);

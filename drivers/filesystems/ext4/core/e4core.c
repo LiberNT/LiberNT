@@ -622,14 +622,62 @@ E4SetAttr(
     return E4End(Volume, Result);
 }
 
+static
 int
-E4SetType(
+E4StoreLinkTarget(
+    E4_VOLUME *Volume,
+    struct ext4_inode_ref *Ref,
+    const char *Target,
+    uint32_t Length)
+{
+    struct ext4_sblock *Sb = &Volume->Fs.sb;
+    int Result = EOK;
+
+    ext4_inode_clear_flag(Ref->inode, EXT4_INODE_FLAG_EXTENTS);
+    memset(Ref->inode->blocks, 0, sizeof(Ref->inode->blocks));
+    if (Length < E4_FAST_LINK_MAX)
+    {
+        memcpy(Ref->inode->blocks, Target, Length);
+    }
+    else
+    {
+        struct ext4_block Block;
+        ext4_fsblk_t Physical;
+        ext4_lblk_t Logical;
+
+        if (ext4_sb_feature_incom(Sb, EXT4_FINCOM_EXTENTS))
+        {
+            ext4_inode_set_flag(Ref->inode, EXT4_INODE_FLAG_EXTENTS);
+            ext4_extent_tree_init(Ref);
+        }
+        Result = ext4_fs_append_inode_dblk(Ref, &Physical, &Logical);
+        if (Result == EOK)
+            Result = ext4_trans_block_get_noread(&Volume->Device, &Block, Physical);
+        if (Result == EOK)
+        {
+            memset(Block.data, 0, Volume->BlockSize);
+            memcpy(Block.data, Target, Length);
+            ext4_bcache_set_flag(Block.buf, BC_UPTODATE);
+            ext4_trans_set_block_dirty(Block.buf);
+            Result = ext4_block_set(&Volume->Device, &Block);
+        }
+    }
+    if (Result == EOK)
+        ext4_inode_set_size(Ref->inode, Length);
+    return Result;
+}
+
+static
+int
+E4SetTypeNode(
     E4_VOLUME *Volume,
     uint32_t Directory,
     const char *Name,
     uint32_t NameLength,
     uint32_t Inode,
-    uint32_t Mode)
+    uint32_t Mode,
+    const char *LinkTarget,
+    uint32_t LinkTargetLength)
 {
     struct ext4_sblock *Sb = &Volume->Fs.sb;
     struct ext4_dir_search_result Found;
@@ -638,8 +686,15 @@ E4SetType(
     uint64_t Sectors, AttributeSectors;
     int Result;
 
-    if ((NewType != E4_S_IFLNK) && (NewType != E4_S_IFIFO) && (NewType != E4_S_IFCHR) && (NewType != E4_S_IFBLK) &&
-        (NewType != E4_S_IFSOCK))
+    if (LinkTarget != NULL)
+    {
+        if (NewType != E4_S_IFLNK)
+            return EINVAL;
+        if ((LinkTargetLength == 0) || (LinkTargetLength > E4_SYMLINK_MAX) || (LinkTargetLength > Volume->BlockSize))
+            return ENAMETOOLONG;
+    }
+    else if ((NewType != E4_S_IFIFO) && (NewType != E4_S_IFCHR) && (NewType != E4_S_IFBLK) &&
+             (NewType != E4_S_IFSOCK))
     {
         return EINVAL;
     }
@@ -674,30 +729,64 @@ E4SetType(
             Result = ENOENT;
         if (Result == EOK)
         {
+            if (LinkTarget != NULL)
+            {
+                Result = E4StoreLinkTarget(Volume, &Child, LinkTarget, LinkTargetLength);
+            }
+            else
+            {
+                ext4_inode_clear_flag(Child.inode, EXT4_INODE_FLAG_EXTENTS);
+                memset(Child.inode->blocks, 0, sizeof(Child.inode->blocks));
+            }
+        }
+        if (Result == EOK)
+        {
             if (ext4_sb_feature_incom(Sb, EXT4_FINCOM_FILETYPE))
             {
                 ext4_dir_en_set_inode_type(Sb, Found.dentry, E4ModeToEntryType(NewType));
                 ext4_dir_set_csum(&Parent, (struct ext4_dir_en *)Found.block.data);
                 ext4_trans_set_block_dirty(Found.block.buf);
             }
+            ext4_inode_set_mode(Sb, Child.inode, NewType | (Mode & 07777));
+            E4Touch(Volume, &Child, (LinkTarget != NULL) ? (E4_SET_MODIFY | E4_SET_CHANGE) : E4_SET_CHANGE);
         }
         ext4_dir_destroy_result(&Parent, &Found);
     }
 
     if (Result == EOK)
-    {
-        ext4_inode_set_mode(Sb, Child.inode, NewType | (Mode & 07777));
-        ext4_inode_clear_flag(Child.inode, EXT4_INODE_FLAG_EXTENTS);
-        memset(Child.inode->blocks, 0, sizeof(Child.inode->blocks));
-        E4Touch(Volume, &Child, E4_SET_CHANGE);
         Result = ext4_fs_put_inode_ref(&Child);
-    }
     else
-    {
         ext4_fs_put_inode_ref(&Child);
-    }
     ext4_fs_put_inode_ref(&Parent);
     return E4End(Volume, Result);
+}
+
+int
+E4SetType(
+    E4_VOLUME *Volume,
+    uint32_t Directory,
+    const char *Name,
+    uint32_t NameLength,
+    uint32_t Inode,
+    uint32_t Mode)
+{
+    return E4SetTypeNode(Volume, Directory, Name, NameLength, Inode, Mode, NULL, 0);
+}
+
+int
+E4SetSymlink(
+    E4_VOLUME *Volume,
+    uint32_t Directory,
+    const char *Name,
+    uint32_t NameLength,
+    uint32_t Inode,
+    uint32_t Mode,
+    const char *Target,
+    uint32_t TargetLength)
+{
+    if (Target == NULL)
+        return EINVAL;
+    return E4SetTypeNode(Volume, Directory, Name, NameLength, Inode, E4_S_IFLNK | (Mode & 07777), Target, TargetLength);
 }
 
 int
@@ -1883,40 +1972,9 @@ E4WriteLink(
         Result = ext4_fs_truncate_inode(&Ref, 0);
 
     if (Result == EOK)
-    {
-        ext4_inode_clear_flag(Ref.inode, EXT4_INODE_FLAG_EXTENTS);
-        memset(Ref.inode->blocks, 0, sizeof(Ref.inode->blocks));
-        if (Length < E4_FAST_LINK_MAX)
-        {
-            memcpy(Ref.inode->blocks, Target, Length);
-        }
-        else
-        {
-            struct ext4_block Block;
-            ext4_fsblk_t Physical;
-            ext4_lblk_t Logical;
-
-            if (ext4_sb_feature_incom(Sb, EXT4_FINCOM_EXTENTS))
-            {
-                ext4_inode_set_flag(Ref.inode, EXT4_INODE_FLAG_EXTENTS);
-                ext4_extent_tree_init(&Ref);
-            }
-            Result = ext4_fs_append_inode_dblk(&Ref, &Physical, &Logical);
-            if (Result == EOK)
-                Result = ext4_trans_block_get_noread(&Volume->Device, &Block, Physical);
-            if (Result == EOK)
-            {
-                memset(Block.data, 0, Volume->BlockSize);
-                memcpy(Block.data, Target, Length);
-                ext4_bcache_set_flag(Block.buf, BC_UPTODATE);
-                ext4_trans_set_block_dirty(Block.buf);
-                Result = ext4_block_set(&Volume->Device, &Block);
-            }
-        }
-    }
+        Result = E4StoreLinkTarget(Volume, &Ref, Target, Length);
     if (Result == EOK)
     {
-        ext4_inode_set_size(Ref.inode, Length);
         E4Touch(Volume, &Ref, E4_SET_MODIFY | E4_SET_CHANGE);
         Result = ext4_fs_put_inode_ref(&Ref);
     }

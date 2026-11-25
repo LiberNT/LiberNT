@@ -239,6 +239,24 @@ static int DoCreate(const char *path, uint32_t mode, uint32_t uid, uint32_t gid,
     return r;
 }
 
+static int DoCreateSymlink(const char *path, uint32_t mode, uint32_t uid, uint32_t gid,
+                           const char *target, uint32_t tlen, uint32_t *out)
+{
+    uint32_t parent, ino;
+    const char *leaf;
+    E4_ATTR a;
+    int r = Resolve(path, &ino, &parent, &leaf);
+    if (r == EOK) return EEXIST;
+    if (r != ENOENT) return r;
+    memset(&a, 0, sizeof(a));
+    a.Mode = E4_S_IFREG | 0644; a.Uid = uid; a.Gid = gid;
+    r = E4Create(&V, parent, leaf, LeafLen(leaf), &a, &ino);
+    if (r != EOK) return r;
+    r = E4SetSymlink(&V, parent, leaf, LeafLen(leaf), ino, mode, target, tlen);
+    if (r == EOK && out) *out = ino;
+    return r;
+}
+
 static int DoRemove(const char *path)
 {
     uint32_t parent, ino;
@@ -500,8 +518,7 @@ static int Stress(const char *image, uint64_t seed, int count, int remount_every
             memset(&N[i], 0, sizeof(N[i]));
             for (k = 0; k < tl; k++) N[i].target[k] = 'a' + R() % 26;
             N[i].mode = 0777; N[i].uid = R() % 3000; N[i].gid = N[i].uid;
-            r = DoCreate(path, E4_S_IFLNK | 0777, N[i].uid, N[i].gid, 0, 0, &ino); CHECK(r, "symlink");
-            r = E4WriteLink(&V, ino, N[i].target, tl); CHECK(r, "writelink");
+            r = DoCreateSymlink(path, E4_S_IFLNK | 0777, N[i].uid, N[i].gid, N[i].target, tl, &ino); CHECK(r, "symlink");
             strcpy(N[i].path, path); N[i].used = 1; N[i].islink = 1;
         }
         else if (op == 17)
@@ -635,8 +652,7 @@ int main(int argc, char **argv)
         else if (!strcmp(c, "symlink") && n >= 2)
         {
             uint32_t ino;
-            r = DoCreate(A(1), E4_S_IFLNK | 0777, 0, 0, 0, 0, &ino);
-            if (r == EOK) r = E4WriteLink(&V, ino, A(0), (uint32_t)strlen(A(0)));
+            r = DoCreateSymlink(A(1), E4_S_IFLNK | 0777, 0, 0, A(0), (uint32_t)strlen(A(0)), &ino);
         }
         else if (!strcmp(c, "chown") && n >= 3)
         {

@@ -386,6 +386,7 @@ static
 NTSTATUS
 Ext4WriteLinkTarget(
     _In_ PEXT4_FCB Fcb,
+    _In_opt_ PEXT4_CCB Ccb,
     _In_ PIRP Irp,
     _In_ ULONGLONG Offset,
     _In_ ULONG Length)
@@ -399,10 +400,23 @@ Ext4WriteLinkTarget(
     if (Length > E4_SYMLINK_MAX) return STATUS_NAME_TOO_LONG;
     if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
-    Ext4LockCore(Vcb);
-    Status = Ext4Status(Vcb, E4WriteLink(&Vcb->Core, Fcb->Inode, (const char *)Buffer, Length));
-    Ext4UnlockCore(Vcb);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (Fcb->PendingSymlink)
+    {
+        if (Ccb == NULL) return STATUS_INVALID_PARAMETER;
+        Ext4LockCore(Vcb);
+        Status = Ext4Status(Vcb, E4SetSymlink(&Vcb->Core, Ccb->ParentInode, Ccb->Name, Ccb->NameLength,
+                                              Fcb->Inode, Fcb->PendingSymlinkMode, (const char *)Buffer, Length));
+        Ext4UnlockCore(Vcb);
+        if (!NT_SUCCESS(Status)) return Status;
+        Fcb->PendingSymlink = FALSE;
+    }
+    else
+    {
+        Ext4LockCore(Vcb);
+        Status = Ext4Status(Vcb, E4WriteLink(&Vcb->Core, Fcb->Inode, (const char *)Buffer, Length));
+        Ext4UnlockCore(Vcb);
+        if (!NT_SUCCESS(Status)) return Status;
+    }
 
     ExAcquireResourceExclusiveLite(&Fcb->PagingIoResource, TRUE);
     Ext4SetHeaderSizes(Fcb, Length);
@@ -615,7 +629,7 @@ Ext4DispatchWrite(
     }
     else if (Fcb->Symlink)
     {
-        Status = Ext4WriteLinkTarget(Fcb, Irp, Offset, Length);
+        Status = Ext4WriteLinkTarget(Fcb, (PEXT4_CCB)FileObject->FsContext2, Irp, Offset, Length);
         Information = NT_SUCCESS(Status) ? Length : 0;
     }
     else if (Fcb->ReparseTag != 0)
