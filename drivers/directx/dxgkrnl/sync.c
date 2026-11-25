@@ -2217,6 +2217,35 @@ DxgkpSyncCreateView(
     return STATUS_SUCCESS;
 }
 
+static PDXGKRNL_DEVICE
+DxgkpSyncReferenceOpenerDevice(
+    _In_ PDXGKRNL_SYNC_OBJECT Backing)
+{
+    PDXGKRNL_ADAPTER Adapter = Backing->Device != NULL ? Backing->Device->Adapter : NULL;
+    PDXGKRNL_DEVICE Device = NULL;
+    PLIST_ENTRY Entry;
+
+    PAGED_CODE();
+    if (Adapter == NULL)
+        return NULL;
+    (VOID)KeWaitForSingleObject(&Adapter->AdapterMutex, Executive, KernelMode, FALSE, NULL);
+    for (Entry = Adapter->DeviceListHead.Flink; Entry != &Adapter->DeviceListHead; Entry = Entry->Flink)
+    {
+        PDXGKRNL_DEVICE Candidate = CONTAINING_RECORD(Entry, DXGKRNL_DEVICE, DeviceListEntry);
+
+        if (Candidate->OwnerProcess == PsGetCurrentProcess() &&
+            InterlockedCompareExchange(&Candidate->ExecutionState, 0, 0) == D3DKMT_DEVICEEXECUTION_ACTIVE &&
+            DxgkReferenceDevice(Candidate))
+        {
+            Device = Candidate;
+            break;
+        }
+    }
+    KeReleaseMutex(&Adapter->AdapterMutex, FALSE);
+    ASSERT(Device == NULL || Device->Adapter == Adapter);
+    return Device;
+}
+
 /*
  * DxgkOpenSynchronizationObject
  *
@@ -2233,7 +2262,6 @@ NTAPI
 DxgkOpenSynchronizationObject(
     _Inout_ D3DKMT_OPENSYNCHRONIZATIONOBJECT *pData)
 {
-    PDXGKRNL_ADAPTER Adapter;
     PDXGKRNL_DEVICE Device;
     PDXGKRNL_SYNC_OBJECT Backing = NULL;
     D3DDDI_SYNCHRONIZATIONOBJECT_FLAGS Flags;
@@ -2273,25 +2301,7 @@ DxgkOpenSynchronizationObject(
 
     /* The alias belongs to a device the calling process owns on the backing
      * object's adapter; a process with no such device cannot open it. */
-    Adapter = Backing->Device != NULL ? Backing->Device->Adapter : NULL;
-    Device = NULL;
-    if (Adapter != NULL)
-    {
-        (VOID)KeWaitForSingleObject(&Adapter->AdapterMutex, Executive, KernelMode, FALSE, NULL);
-        for (Entry = Adapter->DeviceListHead.Flink; Entry != &Adapter->DeviceListHead; Entry = Entry->Flink)
-        {
-            PDXGKRNL_DEVICE Candidate = CONTAINING_RECORD(Entry, DXGKRNL_DEVICE, DeviceListEntry);
-
-            if (Candidate->OwnerProcess == PsGetCurrentProcess() &&
-                InterlockedCompareExchange(&Candidate->ExecutionState, 0, 0) == D3DKMT_DEVICEEXECUTION_ACTIVE &&
-                DxgkReferenceDevice(Candidate))
-            {
-                Device = Candidate;
-                break;
-            }
-        }
-        KeReleaseMutex(&Adapter->AdapterMutex, FALSE);
-    }
+    Device = DxgkpSyncReferenceOpenerDevice(Backing);
     if (Device == NULL)
     {
         DxgkpDereferenceSyncObject(Backing);
@@ -2310,11 +2320,11 @@ DxgkOpenSynchronizationObject(
 /* ========================================================================
  * NT-handle sharing
  *
- * A monitored fence created with Shared and NtSecuritySharing is exported by
+ * A sync object created with Shared and NtSecuritySharing is exported by
  * D3DKMTShareObjects as an NT object that references the authoritative sync
  * object.  D3DKMTOpenSyncObjectFromNtHandle2 opens it on a device of the
  * calling process; the access granted to the NT handle decides whether that
- * view may wait on and signal the fence.
+ * view may wait on and signal the object.
  * ====================================================================== */
 
 #define DXGK_SYNC_OPEN_RESERVED_FLAGS 0x7FFFF800UL
@@ -2453,20 +2463,33 @@ DxgkSyncOpenFromNtHandle(
     _In_ HANDLE NtHandle,
     _Out_ D3DKMT_HANDLE *hSyncObject)
 {
+    D3DDDI_SYNCHRONIZATIONOBJECT_FLAGS Flags;
     PDXGKRNL_SYNC_OBJECT SyncObj;
+    PDXGKRNL_DEVICE Device;
+    ACCESS_MASK GrantedAccess;
     NTSTATUS Status;
 
     PAGED_CODE();
     *hSyncObject = 0;
-    Status = DxgkpSyncReferenceNtShared(NtHandle, &SyncObj, NULL);
+    Status = DxgkpSyncReferenceNtShared(NtHandle, &SyncObj, &GrantedAccess);
     if (!NT_SUCCESS(Status))
         return Status;
     if (SyncObj->PublicType == D3DDDI_MONITORED_FENCE || SyncObj->PublicType == D3DDDI_PERIODIC_MONITORED_FENCE)
-        Status = STATUS_INVALID_PARAMETER;
-    else
-        Status = STATUS_NOT_SUPPORTED; /* TODO: legacy sync objects shared through an NT handle */
-    DxgkpDereferenceSyncObject(SyncObj);
-    return Status;
+    {
+        DxgkpDereferenceSyncObject(SyncObj);
+        return STATUS_INVALID_PARAMETER;
+    }
+    Device = DxgkpSyncReferenceOpenerDevice(SyncObj);
+    if (Device == NULL)
+    {
+        DxgkpDereferenceSyncObject(SyncObj);
+        return STATUS_INVALID_HANDLE;
+    }
+    Flags = SyncObj->Flags;
+    Flags.Shared = 0;
+    Flags.NoSignal = (GrantedAccess & D3DDDI_SYNC_OBJECT_SIGNAL) == 0;
+    Flags.NoWait = (GrantedAccess & D3DDDI_SYNC_OBJECT_WAIT) == 0;
+    return DxgkpSyncCreateView(SyncObj, Device, Flags, hSyncObject, NULL, NULL);
 }
 
 /*
@@ -2515,7 +2538,7 @@ DxgkSyncOpenFromNtHandle2(
     /* TODO: CrossAdapter opens on another adapter */
     if (SyncObj->Device == NULL || SyncObj->Device->Adapter != Adapter ||
         Flags.NoGPUAccess != SyncObj->Flags.NoGPUAccess ||
-        SyncObj->PublicType != D3DDDI_MONITORED_FENCE)
+        SyncObj->PublicType == D3DDDI_PERIODIC_MONITORED_FENCE)
     {
         DxgkpDereferenceSyncObject(SyncObj);
         DxgkDereferenceDevice(Device);

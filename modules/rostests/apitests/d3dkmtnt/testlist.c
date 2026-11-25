@@ -10,10 +10,12 @@
 
 extern void func_sharedaccess(void);
 extern void func_syncabi(void);
+extern void func_legacysync(void);
 
 const struct test winetest_testlist[] =
 {
     { "sharedaccess", func_sharedaccess },
     { "syncabi",      func_syncabi },
+    { "legacysync",   func_legacysync },
     { 0, 0 }
 };

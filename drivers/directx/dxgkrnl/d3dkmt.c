@@ -9254,10 +9254,15 @@ DxgkCreateSynchronizationObject2(
     }
     if (pData->Info.Type != D3DDDI_MONITORED_FENCE && pData->Info.Type != D3DDDI_PERIODIC_MONITORED_FENCE)
     {
-        /* Legacy object types share only through the same global namespace;
-         * no other flag applies to them. */
+        /* Legacy object types share through the global namespace or an NT
+         * handle; no other flag applies to them. */
+        if (pData->Info.Flags.NtSecuritySharing && !pData->Info.Flags.Shared)
+            return STATUS_INVALID_PARAMETER;
+        if (pData->Info.Type == D3DDDI_CPU_NOTIFICATION && pData->Info.Flags.Shared)
+            return STATUS_INVALID_PARAMETER;
         RtlZeroMemory(&SupportedFlags, sizeof(SupportedFlags));
         SupportedFlags.Shared = 1;
+        SupportedFlags.NtSecuritySharing = 1;
 #if (REACTOS_WDDM_TARGET_LEVEL >= 3000) && \
     (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM3_0)
         if (pData->Info.Type == D3DDDI_CPU_NOTIFICATION)

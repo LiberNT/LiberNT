@@ -4,6 +4,7 @@ add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007 -D_DLL -D__USE_CRTIMP)
 list(APPEND SOURCE
     sharedaccess.c
     syncabi.c
+    legacysync.c
     testlist.c)
 add_executable(d3dkmtnt_apitest ${SOURCE})
 target_link_libraries(d3dkmtnt_apitest wine)
