@@ -2101,6 +2101,7 @@ public:
     UINT data_size = 0;
     bool created = false;
     bool ended = false;
+    bool active = false;
     UINT8 pending_polls = 0;
     bool is_predicate = false;
     bool is_counter = false;
@@ -6772,7 +6773,7 @@ void STDMETHODCALLTYPE NativeContext::SetPredication(ID3D11Predicate *value, BOO
     if (!deferred)
     {
         D3D10DDI_HQUERY handle = {};
-        if (query) handle = query->handle;
+        if (query && !query->active) handle = query->handle;
         device->functions.pfnSetPredication(device->driver_device, handle, expected);
     }
     ReplaceObject(predicate, value);
@@ -6801,6 +6802,13 @@ void STDMETHODCALLTYPE NativeContext::Begin(ID3D11Asynchronous *async)
     if (query->device != device || query->desc.Query == D3D11_QUERY_EVENT || query->desc.Query == D3D11_QUERY_TIMESTAMP) return;
     NativeLock guard(device);
     query->ended = false;
+    /* QueryBegin never reaches the driver for the predicate it predicates on: predication stops until End */
+    if (query->is_predicate && predicate && NativeQuery::FromPredicate(predicate) == query && device->functions.pfnSetPredication)
+    {
+        D3D10DDI_HQUERY none = {};
+        device->functions.pfnSetPredication(device->driver_device, none, predicate_value);
+    }
+    query->active = true;
     device->functions.pfnQueryBegin(device->driver_device, query->handle);
 }
 void STDMETHODCALLTYPE NativeContext::End(ID3D11Asynchronous *async)
@@ -6820,6 +6828,12 @@ void STDMETHODCALLTYPE NativeContext::End(ID3D11Asynchronous *async)
     device->functions.pfnQueryEnd(device->driver_device, query->handle);
     query->ended = true;
     query->pending_polls = 0;
+    if (query->active && query->is_predicate && predicate && NativeQuery::FromPredicate(predicate) == query &&
+        device->functions.pfnSetPredication)
+    {
+        device->functions.pfnSetPredication(device->driver_device, query->handle, predicate_value);
+    }
+    query->active = false;
 }
 HRESULT STDMETHODCALLTYPE NativeContext::GetData(ID3D11Asynchronous *async, void *data, UINT size, UINT flags)
 {
