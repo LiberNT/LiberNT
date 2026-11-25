@@ -21,11 +21,13 @@ HKCU,"Keyboard Layout\Toggle","Layout Hotkey",0x00000000,"2"
 ; Cdrom class driver
 HKLM,"SYSTEM\CurrentControlSet\Services\Cdrom","Start",0x00010001,0x00000000
 
-; Writable RAM drive
-HKLM,"SYSTEM\CurrentControlSet\Services\RamDrv","ErrorControl",0x00010001,0x00000000
-HKLM,"SYSTEM\CurrentControlSet\Services\RamDrv","ImagePath",0x00020000,"system32\drivers\ramdrv.sys"
-HKLM,"SYSTEM\CurrentControlSet\Services\RamDrv","Start",0x00010001,0x00000001
-HKLM,"SYSTEM\CurrentControlSet\Services\RamDrv","Type",0x00010001,0x00000001
+; Write space of the boot RAM volume, taken from memory as it is written
+HKLM,"SYSTEM\CurrentControlSet\Services\RdScratch","ErrorControl",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Services\RdScratch","ImagePath",0x00020000,"system32\drivers\rdscratch.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\RdScratch","Start",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Services\RdScratch","Type",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\RdScratch\Parameters","ScratchSpace",0x00010001,512
+HKLM,"SYSTEM\CurrentControlSet\Enum\Ramdisk\RamVolume\{D9B257FC-684E-4DCB-AB79-03CFA2F6B750}","UpperFilters",0x00010000,"RdScratch"
 
 ; Reset BootExecute to an empty value: AutoChk should not start in MiniNT mode
 HKLM,"SYSTEM\CurrentControlSet\Control\Session Manager","BootExecute",0x00010000,""
@@ -41,8 +43,6 @@ HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList","ProfilesDirecto
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList","ProgramData",0x00020000,"%SystemDrive%\ProgramData"
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList","Default",0x00020000,"%SystemDrive%\Users\Default"
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList","Public",0x00020000,"%SystemDrive%\Users\Public"
-HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\S-1-5-19","ProfileImagePath",0x00020000,"R:\ServiceProfiles\LocalService"
-HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\S-1-5-20","ProfileImagePath",0x00020000,"R:\ServiceProfiles\NetworkService"
 
 ; Shell Folders
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders","Common Documents",0x00020000,"%SystemDrive%\Users\Public\Documents"
