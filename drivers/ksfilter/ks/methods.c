@@ -94,9 +94,9 @@ FindMethodHandler(
     return STATUS_NOT_FOUND;
 }
 
+static
 NTSTATUS
-NTAPI
-KspMethodHandlerWithAllocator(
+KspDispatchMethod(
     IN  PIRP Irp,
     IN  ULONG MethodSetsCount,
     IN  const KSMETHOD_SET *MethodSet,
@@ -183,6 +183,30 @@ KspMethodHandlerWithAllocator(
     }
 
     /* done */
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+KspMethodHandlerWithAllocator(
+    IN  PIRP Irp,
+    IN  ULONG MethodSetsCount,
+    IN  const KSMETHOD_SET *MethodSet,
+    IN  PFNKSALLOCATOR Allocator OPTIONAL,
+    IN  ULONG MethodItemSize OPTIONAL)
+{
+    NTSTATUS Status;
+
+    _SEH2_TRY
+    {
+        Status = KspDispatchMethod(Irp, MethodSetsCount, MethodSet, Allocator, MethodItemSize);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
     return Status;
 }
 
