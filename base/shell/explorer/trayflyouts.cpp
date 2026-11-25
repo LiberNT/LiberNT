@@ -7142,6 +7142,8 @@ typedef VOID (WINAPI *PFN_WLANFREEMEMORY)(PVOID);
 
 #define TFY_WM_WLANNOTIFY (WM_APP + 41)
 #define TFY_WM_NETREFRESH (WM_APP + 42)
+#define TFY_WM_WLANCONNECTFAIL (WM_APP + 47)
+#define TFY_WLAN_WRONG_KEY_TEXT L"The network security key isn't correct. Please try again."
 #define TFY_TIMER_SCAN 9
 #define TFY_TIMER_POLL 10
 #define TFY_TIMER_RESCAN 12
@@ -7679,6 +7681,15 @@ public:
         if (pData->NotificationSource != WLAN_NOTIFICATION_SOURCE_ACM &&
             pData->NotificationSource != WLAN_NOTIFICATION_SOURCE_MSM)
             return;
+        if (pData->NotificationSource == WLAN_NOTIFICATION_SOURCE_ACM &&
+            pData->NotificationCode == wlan_notification_acm_connection_attempt_fail)
+        {
+            WLAN_REASON_CODE reason = WLAN_REASON_CODE_UNKNOWN;
+            if (pData->pData && pData->dwDataSize >= sizeof(WLAN_CONNECTION_NOTIFICATION_DATA))
+                reason = ((PWLAN_CONNECTION_NOTIFICATION_DATA)pData->pData)->wlanReasonCode;
+            ::PostMessageW(hWnd, TFY_WM_WLANCONNECTFAIL, (WPARAM)reason, 0);
+            return;
+        }
         ::PostMessageW(hWnd, TFY_WM_WLANNOTIFY, (WPARAM)pData->NotificationCode,
                        (LPARAM)pData->NotificationSource);
     }
@@ -8573,7 +8584,8 @@ public:
     {
         m_bPassMode = FALSE;
         HideEdit();
-        if (!wcscmp(m_szBanner, L"The security key must be at least 8 characters"))
+        if (!wcscmp(m_szBanner, L"The security key must be at least 8 characters") ||
+            !wcscmp(m_szBanner, TFY_WLAN_WRONG_KEY_TEXT))
             m_szBanner[0] = 0;
         Relayout();
     }
@@ -9152,6 +9164,36 @@ public:
         return (LRESULT)m_hbrEdit;
     }
 
+    LRESULT OnWlanConnectFail(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
+    {
+        BOOL bWrongKey = ((WLAN_REASON_CODE)wParam == WLAN_REASON_CODE_MSMSEC_PSK_MISMATCH_SUSPECTED);
+        if (!m_bConnecting)
+            return 0;
+        m_bConnecting = FALSE;
+        KillTimer(TFY_TIMER_POLL);
+        for (SIZE_T i = 0; i < m_Rows.GetCount(); i++)
+        {
+            if (m_Rows[i].nType != 2 || !m_szSelName[0] || wcscmp(m_Rows[i].szName, m_szSelName) ||
+                m_Rows[i].bConnected)
+                continue;
+            if (!bWrongKey)
+            {
+                StringCchCopyW(m_Rows[i].szStatus, _countof(m_Rows[i].szStatus), L"Can't connect");
+                continue;
+            }
+            m_Rows[i].szStatus[0] = 0;
+            StringCchCopyW(m_szBanner, _countof(m_szBanner), TFY_WLAN_WRONG_KEY_TEXT);
+            if (m_iSel == (int)i)
+            {
+                m_bPassMode = TRUE;
+                Relayout();
+                ShowEdit();
+            }
+        }
+        Relayout();
+        return 0;
+    }
+
     LRESULT OnWlanNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
     {
         if ((DWORD)lParam == WLAN_NOTIFICATION_SOURCE_MSM)
@@ -9178,19 +9220,6 @@ public:
                 KillTimer(TFY_TIMER_POLL);
                 m_szBanner[0] = 0;
                 TfyQueueNetworkRefresh(m_hWnd, FALSE);
-                break;
-            case wlan_notification_acm_connection_attempt_fail:
-                if (!m_bConnecting)
-                    break;
-                m_bConnecting = FALSE;
-                KillTimer(TFY_TIMER_POLL);
-                for (SIZE_T i = 0; i < m_Rows.GetCount(); i++)
-                {
-                    if (m_Rows[i].nType == 2 && m_szSelName[0] && !wcscmp(m_Rows[i].szName, m_szSelName) &&
-                        !m_Rows[i].bConnected)
-                        StringCchCopyW(m_Rows[i].szStatus, _countof(m_Rows[i].szStatus), L"Can't connect");
-                }
-                Relayout();
                 break;
             case wlan_notification_acm_disconnected:
             case wlan_notification_acm_interface_arrival:
@@ -9585,6 +9614,7 @@ public:
         MESSAGE_HANDLER(WM_KEYDOWN, OnKeyDown)
         MESSAGE_HANDLER(WM_CTLCOLOREDIT, OnCtlColorEdit)
         MESSAGE_HANDLER(TFY_WM_WLANNOTIFY, OnWlanNotify)
+        MESSAGE_HANDLER(TFY_WM_WLANCONNECTFAIL, OnWlanConnectFail)
         MESSAGE_HANDLER(TFY_WM_NETREFRESH, OnNetRefresh)
         MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
     END_MSG_MAP()
