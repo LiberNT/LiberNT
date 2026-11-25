@@ -23,6 +23,33 @@
 #define NTFS_WOF_HUFFMAN_LENGTHS 17
 #define NTFS_WOF_LZX_DEFAULT_BLOCK_SIZE 32768
 #define NTFS_WOF_LZX_DEFAULT_FILE_SIZE 12000000
+/* Layouts of the WIM provider reparse data, of WimOverlay.dat and of the WIM header as wimlib's wof.h and wim.h record them */
+#define NTFS_WOF_WIM_PROVIDER_VERSION 2
+#define NTFS_WOF_WIM_REPARSE_LENGTH 96
+#define NTFS_WOF_WIM_REPARSE_DATA_LENGTH 88
+#define NTFS_WOF_WIM_VERSION_OFFSET 16
+#define NTFS_WOF_WIM_FLAGS_OFFSET 20
+#define NTFS_WOF_WIM_SOURCE_OFFSET 24
+#define NTFS_WOF_WIM_SIZE_OFFSET 72
+#define NTFS_WOF_WIM_STORED_SIZE_OFFSET 80
+#define NTFS_WOF_WIM_RESOURCE_OFFSET 88
+#define NTFS_WIM_OVERLAY_MAGIC 0x66436F57
+#define NTFS_WIM_OVERLAY_VERSION 1
+#define NTFS_WIM_OVERLAY_HEADER_SIZE 24
+#define NTFS_WIM_OVERLAY_ENTRY_SIZE 40
+#define NTFS_WIM_OVERLAY_NAME_OFFSET 0x68
+#define NTFS_WIM_OVERLAY_MAXIMUM_SIZE 0x100000
+#define NTFS_WIM_HEADER_SIZE 208
+#define NTFS_WIM_HEADER_FLAGS_OFFSET 16
+#define NTFS_WIM_HEADER_CHUNK_OFFSET 20
+#define NTFS_WIM_HEADER_GUID_OFFSET 24
+#define NTFS_WIM_HEADER_PART_OFFSET 40
+#define NTFS_WIM_FLAG_COMPRESSION 0x00000002
+#define NTFS_WIM_FLAG_SPANNED 0x00000008
+#define NTFS_WIM_FLAG_COMPRESS_XPRESS 0x00020000
+#define NTFS_WIM_FLAG_COMPRESS_LZX 0x00040000
+#define NTFS_WIM_DEFAULT_CHUNK_SIZE 32768
+#define NTFS_WIM_XPRESS_MAXIMUM_CHUNK_SIZE 65536
 
 typedef struct _NTFS_WOF_REPARSE_BUFFER
 {
@@ -35,6 +62,24 @@ typedef struct _NTFS_WOF_REPARSE_BUFFER
 
 static_assert(sizeof(NTFS_WOF_REPARSE_BUFFER) == 24,
               "WOF reparse layout changed");
+
+typedef struct _NTFS_WOF_WIM_POINTER
+{
+    ULONGLONG DataSourceId;
+    ULONGLONG Size;
+    ULONGLONG StoredSize;
+    ULONGLONG Offset;
+} NTFS_WOF_WIM_POINTER, *PNTFS_WOF_WIM_POINTER;
+
+typedef struct _NTFS_WOF_BACKING
+{
+    PFileRecord File;
+    PAttribute Attribute;
+    PVolume DiskVolume;
+    PNtfsWimDataSource Source;
+    ULONGLONG Base;
+    ULONGLONG Size;
+} NTFS_WOF_BACKING, *PNTFS_WOF_BACKING;
 
 typedef struct _NTFS_WOF_BIT_STREAM
 {
@@ -1013,8 +1058,29 @@ NtfsWofReadAttributeExact(_In_ PFileRecord File,
 }
 
 static NTSTATUS
-NtfsWofReadChunkOffset(_In_ PFileRecord File,
-                       _In_ PAttribute BackingAttribute,
+NtfsWofReadBacking(_In_ PNTFS_WOF_BACKING Backing,
+                   _Out_ PUCHAR Buffer,
+                   _In_ ULONG Length,
+                   _In_ ULONGLONG Offset)
+{
+    if (Offset > Backing->Size || Length > Backing->Size - Offset)
+        return STATUS_FILE_CORRUPT_ERROR;
+    if (Backing->Source)
+    {
+        return Backing->DiskVolume->ReadWimDataSource(Backing->Source,
+                                                      Buffer,
+                                                      Length,
+                                                      Backing->Base + Offset);
+    }
+    return NtfsWofReadAttributeExact(Backing->File,
+                                     Backing->Attribute,
+                                     Buffer,
+                                     Length,
+                                     Offset);
+}
+
+static NTSTATUS
+NtfsWofReadChunkOffset(_In_ PNTFS_WOF_BACKING Backing,
                        _In_ ULONGLONG EntryIndex,
                        _In_ ULONG EntrySize,
                        _Out_ PULONGLONG Value)
@@ -1026,17 +1092,53 @@ NtfsWofReadChunkOffset(_In_ PFileRecord File,
     if (EntryIndex > (~(ULONGLONG)0) / EntrySize)
         return STATUS_FILE_CORRUPT_ERROR;
     EntryOffset = EntryIndex * EntrySize;
-    Status = NtfsWofReadAttributeExact(File,
-                                       BackingAttribute,
-                                       Buffer,
-                                       EntrySize,
-                                       EntryOffset);
+    Status = NtfsWofReadBacking(Backing,
+                                Buffer,
+                                EntrySize,
+                                EntryOffset);
     if (!NT_SUCCESS(Status))
         return Status;
 
     *Value = EntrySize == sizeof(ULONG)
         ? NtfsWofReadLe32(Buffer)
         : NtfsWofReadLe64(Buffer);
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+NtfsWofParseWimPointer(
+    _In_reads_bytes_(NTFS_WOF_WIM_REPARSE_LENGTH) const UCHAR* Raw,
+    _Out_ PNTFS_WOF_WIM_POINTER Pointer)
+{
+    const ReparsePointEx* Header = reinterpret_cast<const ReparsePointEx*>(Raw);
+    NTSTATUS Status;
+
+    Status = NtfsValidateReparseBuffer(Raw,
+                                       NTFS_WOF_WIM_REPARSE_LENGTH,
+                                       NULL);
+    if (!NT_SUCCESS(Status) ||
+        Header->ReparseDataLength != NTFS_WOF_WIM_REPARSE_DATA_LENGTH ||
+        Header->Padding != 0 ||
+        NtfsWofReadLe32(Raw + sizeof(ReparsePointEx)) != NTFS_WOF_CURRENT_VERSION ||
+        NtfsWofReadLe32(Raw + sizeof(ReparsePointEx) + sizeof(ULONG)) != NTFS_WOF_PROVIDER_WIM ||
+        NtfsWofReadLe32(Raw + NTFS_WOF_WIM_VERSION_OFFSET) != NTFS_WOF_WIM_PROVIDER_VERSION)
+    {
+        return STATUS_IO_REPARSE_DATA_INVALID;
+    }
+    /* TODO: pointer files the WIM provider marked as not active or suspended */
+    if (NtfsWofReadLe32(Raw + NTFS_WOF_WIM_FLAGS_OFFSET) != 0)
+        return STATUS_IO_REPARSE_TAG_NOT_HANDLED;
+
+    Pointer->DataSourceId = NtfsWofReadLe64(Raw + NTFS_WOF_WIM_SOURCE_OFFSET);
+    Pointer->Size = NtfsWofReadLe64(Raw + NTFS_WOF_WIM_SIZE_OFFSET);
+    Pointer->StoredSize = NtfsWofReadLe64(Raw + NTFS_WOF_WIM_STORED_SIZE_OFFSET);
+    Pointer->Offset = NtfsWofReadLe64(Raw + NTFS_WOF_WIM_RESOURCE_OFFSET);
+    if (Pointer->StoredSize == 0 ||
+        Pointer->StoredSize > Pointer->Size ||
+        Pointer->Offset > (~(ULONGLONG)0) - Pointer->StoredSize)
+    {
+        return STATUS_IO_REPARSE_DATA_INVALID;
+    }
     return STATUS_SUCCESS;
 }
 
@@ -1053,20 +1155,24 @@ FileRecord::TryCopyWofCompressedData(
     PAttribute ReparseAttribute;
     PAttribute BackingAttribute;
     NTFS_WOF_REPARSE_BUFFER ReparseBuffer;
+    NTFS_WOF_WIM_POINTER WimPointer = {};
+    NTFS_WOF_BACKING Backing = {};
     PNTFS_WOF_DECOMPRESS_WORKSPACE Workspace = NULL;
     PUCHAR StoredBuffer = NULL;
     PUCHAR ChunkBuffer = NULL;
     ULONGLONG LogicalSize;
-    ULONGLONG BackingSize;
     ULONGLONG ChunkCount;
     ULONGLONG TableEntryCount;
     ULONGLONG TableSize;
     ULONGLONG DataRegionSize;
     ULONGLONG ChunkIndex;
     ULONGLONG RelativeStart;
+    ULONG ChunkSize;
     ULONG TableEntrySize;
     ULONG BytesToRead;
     ULONG BytesRead = 0;
+    BOOLEAN WimBacked = FALSE;
+    BOOLEAN Lzx;
     NTSTATUS Status = STATUS_SUCCESS;
 
     if (!LogicalAttribute || !Buffer || !Length || !Handled)
@@ -1076,7 +1182,7 @@ FileRecord::TryCopyWofCompressedData(
     if (WofProbeState == 1)
         return STATUS_SUCCESS;
 
-    if (WofProbeState == 0)
+    if (WofProbeState != 2)
     {
         ULONGLONG ReparseSize;
 
@@ -1107,53 +1213,74 @@ FileRecord::TryCopyWofCompressedData(
         }
 
         *Handled = TRUE;
-        if (ReparseSize != sizeof(ReparseBuffer))
-            return STATUS_IO_REPARSE_DATA_INVALID;
-        Status = NtfsWofReadAttributeExact(
-            this,
-            ReparseAttribute,
-            (PUCHAR)&ReparseBuffer,
-            sizeof(ReparseBuffer),
-            0);
-        if (!NT_SUCCESS(Status))
-            return Status;
-        Status = NtfsValidateReparseBuffer(
-            (const UCHAR*)&ReparseBuffer,
-            sizeof(ReparseBuffer),
-            NULL);
-        if (!NT_SUCCESS(Status) ||
-            ReparseBuffer.Header.ReparseDataLength !=
-                NTFS_WOF_REPARSE_DATA_LENGTH ||
-            ReparseBuffer.Header.Padding != 0 ||
-            ReparseBuffer.WofVersion !=
-                NTFS_WOF_CURRENT_VERSION ||
-            ReparseBuffer.ProviderVersion !=
-                NTFS_WOF_FILE_PROVIDER_VERSION)
+        if (ReparseSize == NTFS_WOF_WIM_REPARSE_LENGTH)
         {
-            return STATUS_IO_REPARSE_DATA_INVALID;
-        }
-        if (ReparseBuffer.WofProvider != NTFS_WOF_PROVIDER_FILE)
-            return STATUS_IO_REPARSE_TAG_NOT_HANDLED;
+            UCHAR Raw[NTFS_WOF_WIM_REPARSE_LENGTH];
 
-        WofAlgorithm = ReparseBuffer.CompressionFormat;
-        switch (WofAlgorithm)
-        {
-            case NTFS_WOF_COMPRESSION_XPRESS4K:
-                WofChunkSize = 4 * 1024;
-                break;
-            case NTFS_WOF_COMPRESSION_LZX:
-                WofChunkSize = 32 * 1024;
-                break;
-            case NTFS_WOF_COMPRESSION_XPRESS8K:
-                WofChunkSize = 8 * 1024;
-                break;
-            case NTFS_WOF_COMPRESSION_XPRESS16K:
-                WofChunkSize = 16 * 1024;
-                break;
-            default:
-                return STATUS_IO_REPARSE_TAG_NOT_HANDLED;
+            Status = NtfsWofReadAttributeExact(
+                this,
+                ReparseAttribute,
+                Raw,
+                sizeof(Raw),
+                0);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            Status = NtfsWofParseWimPointer(Raw, &WimPointer);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            WimBacked = TRUE;
+            WofProbeState = 3;
         }
-        WofProbeState = 2;
+        else
+        {
+            if (ReparseSize != sizeof(ReparseBuffer))
+                return STATUS_IO_REPARSE_DATA_INVALID;
+            Status = NtfsWofReadAttributeExact(
+                this,
+                ReparseAttribute,
+                (PUCHAR)&ReparseBuffer,
+                sizeof(ReparseBuffer),
+                0);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            Status = NtfsValidateReparseBuffer(
+                (const UCHAR*)&ReparseBuffer,
+                sizeof(ReparseBuffer),
+                NULL);
+            if (!NT_SUCCESS(Status) ||
+                ReparseBuffer.Header.ReparseDataLength !=
+                    NTFS_WOF_REPARSE_DATA_LENGTH ||
+                ReparseBuffer.Header.Padding != 0 ||
+                ReparseBuffer.WofVersion !=
+                    NTFS_WOF_CURRENT_VERSION ||
+                ReparseBuffer.ProviderVersion !=
+                    NTFS_WOF_FILE_PROVIDER_VERSION)
+            {
+                return STATUS_IO_REPARSE_DATA_INVALID;
+            }
+            if (ReparseBuffer.WofProvider != NTFS_WOF_PROVIDER_FILE)
+                return STATUS_IO_REPARSE_TAG_NOT_HANDLED;
+
+            WofAlgorithm = ReparseBuffer.CompressionFormat;
+            switch (WofAlgorithm)
+            {
+                case NTFS_WOF_COMPRESSION_XPRESS4K:
+                    WofChunkSize = 4 * 1024;
+                    break;
+                case NTFS_WOF_COMPRESSION_LZX:
+                    WofChunkSize = 32 * 1024;
+                    break;
+                case NTFS_WOF_COMPRESSION_XPRESS8K:
+                    WofChunkSize = 8 * 1024;
+                    break;
+                case NTFS_WOF_COMPRESSION_XPRESS16K:
+                    WofChunkSize = 16 * 1024;
+                    break;
+                default:
+                    return STATUS_IO_REPARSE_TAG_NOT_HANDLED;
+            }
+            WofProbeState = 2;
+        }
     }
 
     *Handled = TRUE;
@@ -1173,18 +1300,55 @@ FileRecord::TryCopyWofCompressedData(
     BytesToRead = (ULONG)min(LogicalSize - Offset,
                              (ULONGLONG)*Length);
 
-    BackingAttribute = GetAttribute(TypeData,
-                                    WofCompressedDataName);
-    if (!BackingAttribute ||
-        (BackingAttribute->Flags &
-            (ATTR_COMPRESSION_MASK | ATTR_ENCRYPTED)))
+    if (WimBacked)
     {
-        return STATUS_FILE_CORRUPT_ERROR;
+        if (LogicalSize != WimPointer.Size)
+            return STATUS_FILE_CORRUPT_ERROR;
+        Backing.Source = DiskVolume->FindWimDataSource(WimPointer.DataSourceId);
+        if (!Backing.Source)
+            return STATUS_IO_REPARSE_TAG_NOT_HANDLED;
+        if (WimPointer.Offset > Backing.Source->Size ||
+            WimPointer.StoredSize > Backing.Source->Size - WimPointer.Offset)
+        {
+            return STATUS_FILE_CORRUPT_ERROR;
+        }
+        Backing.DiskVolume = DiskVolume;
+        Backing.Base = WimPointer.Offset;
+        Backing.Size = WimPointer.StoredSize;
+        if (WimPointer.StoredSize == WimPointer.Size)
+        {
+            Status = NtfsWofReadBacking(&Backing,
+                                        Buffer,
+                                        BytesToRead,
+                                        Offset);
+            if (NT_SUCCESS(Status))
+                *Length -= BytesToRead;
+            return Status;
+        }
+        if (!Backing.Source->Compressed)
+            return STATUS_FILE_CORRUPT_ERROR;
+        ChunkSize = Backing.Source->ChunkSize;
+        Lzx = Backing.Source->Lzx;
     }
-    BackingSize = GetAttributeDataSize(BackingAttribute);
+    else
+    {
+        BackingAttribute = GetAttribute(TypeData,
+                                        WofCompressedDataName);
+        if (!BackingAttribute ||
+            (BackingAttribute->Flags &
+                (ATTR_COMPRESSION_MASK | ATTR_ENCRYPTED)))
+        {
+            return STATUS_FILE_CORRUPT_ERROR;
+        }
+        Backing.File = this;
+        Backing.Attribute = BackingAttribute;
+        Backing.Size = GetAttributeDataSize(BackingAttribute);
+        ChunkSize = WofChunkSize;
+        Lzx = WofAlgorithm == NTFS_WOF_COMPRESSION_LZX;
+    }
 
-    ChunkCount = LogicalSize / WofChunkSize;
-    if (LogicalSize % WofChunkSize)
+    ChunkCount = LogicalSize / ChunkSize;
+    if (LogicalSize % ChunkSize)
         ChunkCount++;
     if (ChunkCount == 0)
         return STATUS_FILE_CORRUPT_ERROR;
@@ -1199,19 +1363,19 @@ FileRecord::TryCopyWofCompressedData(
         return STATUS_FILE_CORRUPT_ERROR;
     }
     TableSize = TableEntryCount * TableEntrySize;
-    if (TableSize > BackingSize)
+    if (TableSize > Backing.Size)
         return STATUS_FILE_CORRUPT_ERROR;
-    DataRegionSize = BackingSize - TableSize;
+    DataRegionSize = Backing.Size - TableSize;
 
-    StoredBuffer = new(PagedPool, TAG_NTFS) UCHAR[WofChunkSize];
-    ChunkBuffer = new(PagedPool, TAG_NTFS) UCHAR[WofChunkSize];
+    StoredBuffer = new(PagedPool, TAG_NTFS) UCHAR[ChunkSize];
+    ChunkBuffer = new(PagedPool, TAG_NTFS) UCHAR[ChunkSize];
     if (!StoredBuffer || !ChunkBuffer)
     {
         Status = STATUS_INSUFFICIENT_RESOURCES;
         goto Done;
     }
 
-    ChunkIndex = Offset / WofChunkSize;
+    ChunkIndex = Offset / ChunkSize;
     if (ChunkIndex == 0)
     {
         RelativeStart = 0;
@@ -1219,8 +1383,7 @@ FileRecord::TryCopyWofCompressedData(
     else
     {
         Status = NtfsWofReadChunkOffset(
-            this,
-            BackingAttribute,
+            &Backing,
             ChunkIndex - 1,
             TableEntrySize,
             &RelativeStart);
@@ -1231,7 +1394,7 @@ FileRecord::TryCopyWofCompressedData(
     while (BytesRead < BytesToRead)
     {
         ULONGLONG ChunkStartOffset =
-            ChunkIndex * (ULONGLONG)WofChunkSize;
+            ChunkIndex * (ULONGLONG)ChunkSize;
         ULONGLONG RelativeEnd;
         ULONGLONG StoredSize64;
         ULONGLONG DataOffset;
@@ -1246,8 +1409,7 @@ FileRecord::TryCopyWofCompressedData(
         else
         {
             Status = NtfsWofReadChunkOffset(
-                this,
-                BackingAttribute,
+                &Backing,
                 ChunkIndex,
                 TableEntrySize,
                 &RelativeEnd);
@@ -1264,9 +1426,9 @@ FileRecord::TryCopyWofCompressedData(
         StoredSize64 = RelativeEnd - RelativeStart;
         UncompressedSize = (ULONG)min(
             LogicalSize - ChunkStartOffset,
-            (ULONGLONG)WofChunkSize);
+            (ULONGLONG)ChunkSize);
         if (StoredSize64 > UncompressedSize ||
-            StoredSize64 > WofChunkSize ||
+            StoredSize64 > ChunkSize ||
             TableSize > (~(ULONGLONG)0) - RelativeStart)
         {
             Status = STATUS_FILE_CORRUPT_ERROR;
@@ -1274,9 +1436,8 @@ FileRecord::TryCopyWofCompressedData(
         }
 
         DataOffset = TableSize + RelativeStart;
-        Status = NtfsWofReadAttributeExact(
-            this,
-            BackingAttribute,
+        Status = NtfsWofReadBacking(
+            &Backing,
             StoredBuffer,
             (ULONG)StoredSize64,
             DataOffset);
@@ -1304,7 +1465,7 @@ FileRecord::TryCopyWofCompressedData(
                 RtlZeroMemory(Workspace, sizeof(*Workspace));
             }
 
-            if (WofAlgorithm == NTFS_WOF_COMPRESSION_LZX)
+            if (Lzx)
             {
                 Status = NtfsWofDecompressLzx(
                     Workspace,
@@ -1344,5 +1505,354 @@ Done:
     delete Workspace;
     delete[] ChunkBuffer;
     delete[] StoredBuffer;
+    return Status;
+}
+
+PNtfsWimDataSource
+Volume::FindWimDataSource(_In_ ULONGLONG DataSourceId)
+{
+    for (PNtfsWimDataSource Source = WimSources; Source; Source = Source->Next)
+    {
+        if (Source->Id == DataSourceId)
+            return Source;
+    }
+    return NULL;
+}
+
+BOOLEAN
+Volume::IsWimDataSource(_In_ ULONG RecordNumber)
+{
+    for (PNtfsWimDataSource Source = WimSources; Source; Source = Source->Next)
+    {
+        if (Source->RecordNumber == RecordNumber)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+NTSTATUS
+Volume::ReadWimDataSource(_In_ PNtfsWimDataSource Source,
+                          _Out_writes_bytes_(Length) PUCHAR Buffer,
+                          _In_ ULONG Length,
+                          _In_ ULONGLONG Offset)
+{
+    ULONG Low = 0;
+    ULONG High = Source->ExtentCount;
+    ULONG Done = 0;
+    NTSTATUS Status;
+
+    if (Offset > Source->Size || Length > Source->Size - Offset)
+        return STATUS_FILE_CORRUPT_ERROR;
+
+    while (Low + 1 < High)
+    {
+        ULONG Middle = Low + (High - Low) / 2;
+
+        if (Source->Extents[Middle].FileOffset <= Offset)
+            Low = Middle;
+        else
+            High = Middle;
+    }
+
+    while (Done < Length)
+    {
+        PNtfsWimExtent Extent;
+        ULONGLONG Position = Offset + Done;
+        ULONGLONG Available;
+        ULONG Chunk;
+
+        if (Low >= Source->ExtentCount)
+            return STATUS_FILE_CORRUPT_ERROR;
+        Extent = &Source->Extents[Low];
+        ASSERT(Position >= Extent->FileOffset);
+        if (Position - Extent->FileOffset >= Extent->Length)
+        {
+            Low++;
+            continue;
+        }
+
+        Available = Extent->Length - (Position - Extent->FileOffset);
+        Chunk = Available < Length - Done ? (ULONG)Available : Length - Done;
+        Status = ReadVolume(Extent->DiskOffset + (Position - Extent->FileOffset),
+                            Chunk,
+                            Buffer + Done);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Done += Chunk;
+    }
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+NtfsWofMapWimExtents(_In_ PVolume DiskVolume,
+                     _In_ PFileRecord File,
+                     _In_ PAttribute Data,
+                     _Out_ PNtfsWimExtent* ExtentsOut,
+                     _Out_ PULONG CountOut)
+{
+    PNtfsWimExtent Extents;
+    PDataRun Runs;
+    ULONGLONG FileOffset = 0;
+    ULONG Count = 0;
+
+    *ExtentsOut = NULL;
+    *CountOut = 0;
+    Runs = File->FindNonResidentData(Data);
+    if (!Runs)
+        return STATUS_FILE_CORRUPT_ERROR;
+    for (PDataRun Run = Runs; Run; Run = Run->NextRun)
+    {
+        if (Run->IsSparse || Count == MAXULONG)
+        {
+            FreeDataRun(Runs);
+            return STATUS_FILE_CORRUPT_ERROR;
+        }
+        Count++;
+    }
+
+    Extents = new(NonPagedPool, TAG_NTFS) NtfsWimExtent[Count];
+    if (!Extents)
+    {
+        FreeDataRun(Runs);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Count = 0;
+    for (PDataRun Run = Runs; Run; Run = Run->NextRun)
+    {
+        Extents[Count].FileOffset = FileOffset;
+        Extents[Count].DiskOffset = GetOffset(Run->LCN);
+        Extents[Count].Length = GetRunSize(Run);
+        FileOffset += Extents[Count].Length;
+        Count++;
+    }
+    FreeDataRun(Runs);
+    if (FileOffset < Data->NonResident.DataSize)
+    {
+        delete[] Extents;
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+
+    *ExtentsOut = Extents;
+    *CountOut = Count;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+Volume::RemapWimDataSource(_In_ PFileRecord File)
+{
+    for (PNtfsWimDataSource Source = WimSources; Source; Source = Source->Next)
+    {
+        PAttribute Data;
+        PNtfsWimExtent Extents = NULL;
+        ULONG Count = 0;
+        NTSTATUS Status;
+
+        if (Source->RecordNumber != File->RecordNumber)
+            continue;
+
+        Data = File->GetAttribute(TypeData, NULL);
+        Status = Data && Data->IsNonResident && Data->NonResident.DataSize == Source->Size
+            ? NtfsWofMapWimExtents(this, File, Data, &Extents, &Count)
+            : STATUS_FILE_CORRUPT_ERROR;
+        delete[] Source->Extents;
+        Source->Extents = Extents;
+        Source->ExtentCount = Count;
+        return Status;
+    }
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+NtfsWofOpenWimDataSource(_In_ PVolume DiskVolume,
+                         _In_ ULONGLONG DataSourceId,
+                         _In_reads_bytes_(16) const UCHAR* Guid,
+                         _In_ PWCHAR Path,
+                         _Out_ PNtfsWimDataSource* SourceOut)
+{
+    UCHAR Header[NTFS_WIM_HEADER_SIZE];
+    PNtfsWimDataSource Source = NULL;
+    PFileRecord File = NULL;
+    PAttribute Data;
+    ULONG Flags;
+    ULONG ChunkSize;
+    NTSTATUS Status;
+
+    *SourceOut = NULL;
+    /* TODO: WIM files on another volume; the partition recorded in WimOverlay.dat is not followed */
+    Status = DiskVolume->MFT->GetFileRecordFromQuery(Path, &File);
+    if (!NT_SUCCESS(Status))
+        return Status == STATUS_INSUFFICIENT_RESOURCES ? Status : STATUS_SUCCESS;
+
+    Data = File->GetAttribute(TypeData, NULL);
+    if (!Data ||
+        !Data->IsNonResident ||
+        (Data->Flags & (ATTR_COMPRESSION_MASK | ATTR_ENCRYPTED)) ||
+        Data->NonResident.DataSize < NTFS_WIM_HEADER_SIZE ||
+        Data->NonResident.InitalizedDataSize != Data->NonResident.DataSize)
+    {
+        goto Done;
+    }
+
+    Status = NtfsWofReadAttributeExact(File, Data, Header, sizeof(Header), 0);
+    if (!NT_SUCCESS(Status))
+    {
+        Status = STATUS_SUCCESS;
+        goto Done;
+    }
+
+    Flags = NtfsWofReadLe32(Header + NTFS_WIM_HEADER_FLAGS_OFFSET);
+    ChunkSize = NtfsWofReadLe32(Header + NTFS_WIM_HEADER_CHUNK_OFFSET);
+    if (ChunkSize == 0)
+        ChunkSize = NTFS_WIM_DEFAULT_CHUNK_SIZE;
+    if (RtlCompareMemory(Header, "MSWIM\0\0", 8) != 8 ||
+        NtfsWofReadLe32(Header + 8) != NTFS_WIM_HEADER_SIZE ||
+        RtlCompareMemory(Header + NTFS_WIM_HEADER_GUID_OFFSET, Guid, 16) != 16 ||
+        (Flags & NTFS_WIM_FLAG_SPANNED) ||
+        NtfsWofReadLe16(Header + NTFS_WIM_HEADER_PART_OFFSET) != 1 ||
+        NtfsWofReadLe16(Header + NTFS_WIM_HEADER_PART_OFFSET + sizeof(USHORT)) != 1)
+    {
+        goto Done;
+    }
+    if (Flags & NTFS_WIM_FLAG_COMPRESSION)
+    {
+        /* TODO: LZMS and solid WIM resources, and LZX chunks other than 32 KB */
+        if (Flags & NTFS_WIM_FLAG_COMPRESS_XPRESS)
+        {
+            if (ChunkSize < 4096 ||
+                ChunkSize > NTFS_WIM_XPRESS_MAXIMUM_CHUNK_SIZE ||
+                (ChunkSize & (ChunkSize - 1)))
+            {
+                goto Done;
+            }
+        }
+        else if (!(Flags & NTFS_WIM_FLAG_COMPRESS_LZX) ||
+                 ChunkSize != NTFS_WOF_LZX_DEFAULT_BLOCK_SIZE)
+        {
+            goto Done;
+        }
+    }
+
+    Source = new(NonPagedPool, TAG_NTFS) NtfsWimDataSource;
+    if (!Source)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Done;
+    }
+    RtlZeroMemory(Source, sizeof(*Source));
+    Status = NtfsWofMapWimExtents(DiskVolume, File, Data, &Source->Extents, &Source->ExtentCount);
+    if (!NT_SUCCESS(Status))
+    {
+        delete Source;
+        if (Status != STATUS_INSUFFICIENT_RESOURCES)
+            Status = STATUS_SUCCESS;
+        goto Done;
+    }
+
+    Source->Id = DataSourceId;
+    Source->RecordNumber = File->RecordNumber;
+    Source->Size = Data->NonResident.DataSize;
+    Source->ChunkSize = ChunkSize;
+    Source->Compressed = (Flags & NTFS_WIM_FLAG_COMPRESSION) != 0;
+    Source->Lzx = (Flags & NTFS_WIM_FLAG_COMPRESS_LZX) != 0;
+    *SourceOut = Source;
+
+Done:
+    delete File;
+    return Status;
+}
+
+NTSTATUS
+Volume::LoadWimDataSources()
+{
+    static WCHAR OverlayPath[] =
+        L"\\System Volume Information\\WimOverlay.dat";
+    PFileRecord File = NULL;
+    PAttribute Data;
+    PUCHAR Overlay = NULL;
+    PWCHAR Path = NULL;
+    ULONG Length = 0;
+    ULONG Count;
+    NTSTATUS Status;
+
+    ASSERT(!WimSources);
+    Status = MFT->GetFileRecordFromQuery(OverlayPath, &File);
+    if (!NT_SUCCESS(Status))
+        return Status == STATUS_INSUFFICIENT_RESOURCES ? Status : STATUS_SUCCESS;
+
+    Data = File->GetAttribute(TypeData, NULL);
+    if (!Data ||
+        GetAttributeDataSize(Data) < NTFS_WIM_OVERLAY_HEADER_SIZE ||
+        GetAttributeDataSize(Data) > NTFS_WIM_OVERLAY_MAXIMUM_SIZE)
+    {
+        goto Done;
+    }
+    Status = File->ReadAttributeAlloc(Data, &Overlay, &Length);
+    if (!NT_SUCCESS(Status))
+    {
+        if (Status != STATUS_INSUFFICIENT_RESOURCES)
+            Status = STATUS_SUCCESS;
+        goto Done;
+    }
+
+    Count = NtfsWofReadLe32(Overlay + 12);
+    if (Length < NTFS_WIM_OVERLAY_HEADER_SIZE ||
+        NtfsWofReadLe32(Overlay) != NTFS_WIM_OVERLAY_MAGIC ||
+        NtfsWofReadLe32(Overlay + 4) != NTFS_WIM_OVERLAY_VERSION ||
+        Count > (Length - NTFS_WIM_OVERLAY_HEADER_SIZE) / NTFS_WIM_OVERLAY_ENTRY_SIZE)
+    {
+        goto Done;
+    }
+
+    for (ULONG Index = 0; Index < Count; Index++)
+    {
+        const UCHAR* Entry = Overlay + NTFS_WIM_OVERLAY_HEADER_SIZE + Index * NTFS_WIM_OVERLAY_ENTRY_SIZE;
+        ULONGLONG DataSourceId = NtfsWofReadLe64(Entry);
+        ULONG LocationOffset = NtfsWofReadLe32(Entry + 8);
+        ULONG LocationLength = NtfsWofReadLe32(Entry + 12);
+        PNtfsWimDataSource Source;
+        ULONG Characters;
+
+        if (LocationOffset > Length ||
+            LocationLength > Length - LocationOffset ||
+            LocationLength < NTFS_WIM_OVERLAY_NAME_OFFSET + 2 * sizeof(WCHAR) ||
+            ((LocationLength - NTFS_WIM_OVERLAY_NAME_OFFSET) % sizeof(WCHAR)) ||
+            FindWimDataSource(DataSourceId))
+        {
+            continue;
+        }
+
+        Characters = (LocationLength - NTFS_WIM_OVERLAY_NAME_OFFSET) / sizeof(WCHAR);
+        Path = new(PagedPool, TAG_NTFS) WCHAR[Characters];
+        if (!Path)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto Done;
+        }
+        RtlCopyMemory(Path,
+                      Overlay + LocationOffset + NTFS_WIM_OVERLAY_NAME_OFFSET,
+                      Characters * sizeof(WCHAR));
+        if (Path[0] != L'\\' || Path[Characters - 1] != L'\0')
+        {
+            delete[] Path;
+            Path = NULL;
+            continue;
+        }
+
+        Status = NtfsWofOpenWimDataSource(this, DataSourceId, Entry + 24, Path, &Source);
+        delete[] Path;
+        Path = NULL;
+        if (!NT_SUCCESS(Status))
+            goto Done;
+        if (Source)
+        {
+            Source->Next = WimSources;
+            WimSources = Source;
+        }
+    }
+
+Done:
+    delete[] Overlay;
+    delete File;
     return Status;
 }

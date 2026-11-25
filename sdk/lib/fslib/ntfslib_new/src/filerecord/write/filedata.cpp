@@ -1911,6 +1911,7 @@ FileRecord::MaterializeWofCompressedData(
     BOOLEAN Committed = FALSE;
     BOOLEAN LogicalHadSparse = FALSE;
     BOOLEAN ReuseLogicalRuns = FALSE;
+    BOOLEAN WimBacked;
     NTSTATUS ReleaseStatus;
     NTSTATUS Status;
 
@@ -1943,16 +1944,20 @@ FileRecord::MaterializeWofCompressedData(
         return STATUS_NOT_IMPLEMENTED;
     }
 
-    BackingAttribute = GetAttribute(
-        TypeData,
-        WofCompressedDataName);
+    WimBacked = WofProbeState == 3;
+    BackingAttribute = WimBacked
+        ? NULL
+        : GetAttribute(
+            TypeData,
+            WofCompressedDataName);
     ReparseAttribute = GetAttribute(
         TypeReparsePoint,
         NULL);
-    if (!BackingAttribute ||
+    if ((!BackingAttribute && !WimBacked) ||
         !ReparseAttribute ||
         GetAttributeOwner(LogicalAttribute) != this ||
-        GetAttributeOwner(BackingAttribute) != this ||
+        (BackingAttribute &&
+         GetAttributeOwner(BackingAttribute) != this) ||
         GetAttributeOwner(ReparseAttribute) != this)
     {
         return STATUS_FILE_CORRUPT_ERROR;
@@ -1962,9 +1967,10 @@ FileRecord::MaterializeWofCompressedData(
              ATTR_ENCRYPTED)) ||
         (!LogicalAttribute->IsNonResident &&
          LogicalAttribute->Flags != 0) ||
-        (BackingAttribute->Flags &
+        (BackingAttribute &&
+         (BackingAttribute->Flags &
             (ATTR_COMPRESSION_MASK |
-             ATTR_ENCRYPTED)) ||
+             ATTR_ENCRYPTED))) ||
         ReparseAttribute->Flags != 0)
     {
         return STATUS_FILE_CORRUPT_ERROR;
@@ -2020,7 +2026,7 @@ FileRecord::MaterializeWofCompressedData(
         if (!NT_SUCCESS(Status))
             goto Done;
     }
-    if (BackingAttribute->IsNonResident)
+    if (BackingAttribute && BackingAttribute->IsNonResident)
     {
         DecodedRuns = FindNonResidentData(
             BackingAttribute);
@@ -2206,19 +2212,22 @@ FileRecord::MaterializeWofCompressedData(
     if (!NT_SUCCESS(Status))
         goto Restore;
 
-    BackingAttribute = FindAttributeInRecord(
-        TypeData,
-        WofCompressedDataName,
-        NULL);
-    if (!BackingAttribute)
+    if (!WimBacked)
     {
-        Status = STATUS_FILE_CORRUPT_ERROR;
-        goto Restore;
+        BackingAttribute = FindAttributeInRecord(
+            TypeData,
+            WofCompressedDataName,
+            NULL);
+        if (!BackingAttribute)
+        {
+            Status = STATUS_FILE_CORRUPT_ERROR;
+            goto Restore;
+        }
+        Status = RemoveAttributeRecord(
+            BackingAttribute);
+        if (!NT_SUCCESS(Status))
+            goto Restore;
     }
-    Status = RemoveAttributeRecord(
-        BackingAttribute);
-    if (!NT_SUCCESS(Status))
-        goto Restore;
 
     LogicalAttribute = FindAttributeInRecord(
         TypeData,
@@ -3262,6 +3271,18 @@ FileRecord::SetFileDataSize(_In_ AttributeType AttrType,
                     ? ResizeSparseData(TargetAttribute,
                                        NewSize)
                     : STATUS_FILE_CORRUPT_ERROR;
+            }
+            /* FIXME: an empty sparse stream of a directory, of a reserved record or in an extension record keeps the cluster the promotion gave it */
+            if (NT_SUCCESS(Status) &&
+                OldDataLength == 0 &&
+                AttributeOwner == this &&
+                !(Header->Flags & FR_IS_DIRECTORY) &&
+                RecordNumber > NTFS_LAST_RESERVED_FILE_RECORD)
+            {
+                Status = SetZeroData(AttrType,
+                                     StreamName,
+                                     0,
+                                     NewSize);
             }
             return Status;
         }

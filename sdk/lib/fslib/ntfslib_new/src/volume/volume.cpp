@@ -207,6 +207,13 @@ NtfsProbePartitionAndOpenVolumeEx(
         goto Done;
     }
 
+    Status = VolumeObject->LoadWimDataSources();
+    if (!NT_SUCCESS(Status))
+    {
+        delete VolumeObject;
+        goto Done;
+    }
+
     *VolumeOut = reinterpret_cast<PNtfsVolume>(VolumeObject);
 
 Done:
@@ -244,6 +251,15 @@ Volume::~Volume()
         ASSERT(!LookupSlots[Index].Busy);
         delete[] LookupSlots[Index].Buffer;
         LookupSlots[Index].Buffer = NULL;
+    }
+
+    while (WimSources)
+    {
+        PNtfsWimDataSource Next = WimSources->Next;
+
+        delete[] WimSources->Extents;
+        delete WimSources;
+        WimSources = Next;
     }
 
     delete LFS;

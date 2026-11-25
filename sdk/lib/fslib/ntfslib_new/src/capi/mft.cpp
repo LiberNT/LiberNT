@@ -182,6 +182,37 @@ NtfsMasterFileTableCreateFile(
 }
 
 NTSTATUS
+NtfsMasterFileTableCreateWofFile(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_reads_(QueryLength) PWCHAR Query,
+    _In_ ULONG QueryLength,
+    _In_ ULONG FileAttributes,
+    _In_ ULONGLONG Size,
+    _In_reads_bytes_(ReparseLength) const UCHAR* Reparse,
+    _In_ ULONG ReparseLength)
+{
+    PNtfsFileRecord File = NULL;
+    NTSTATUS Status;
+
+    if (!Reparse || ReparseLength < sizeof(UINT32) || Size == 0 ||
+        *reinterpret_cast<const UINT32*>(Reparse) != NTFS_IO_REPARSE_TAG_WOF)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Status = NtfsMasterFileTableCreateFile(Mft, Query, QueryLength, FALSE, FileAttributes, &File);
+    if (NT_SUCCESS(Status))
+        Status = NtfsFileRecordSetSparse(File, TypeData, NULL, TRUE);
+    if (NT_SUCCESS(Status))
+        Status = NtfsFileRecordSetFileDataSize(File, TypeData, NULL, Size);
+    if (NT_SUCCESS(Status))
+        Status = NtfsFileRecordSetReparsePoint(File, Reparse, ReparseLength);
+
+    NtfsFileRecordDestroy(File);
+    return Status;
+}
+
+NTSTATUS
 NtfsMasterFileTableCreateFileEx(
     _In_ PNtfsMasterFileTable Mft,
     _In_reads_(QueryLength) PWCHAR Query,

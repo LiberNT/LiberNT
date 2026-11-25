@@ -200,6 +200,26 @@ struct DataRun
 struct NonResidentMappingUpdate;
 typedef struct NonResidentMappingUpdate *PNonResidentMappingUpdate;
 
+typedef struct NtfsWimExtent
+{
+    ULONGLONG FileOffset;
+    ULONGLONG DiskOffset;
+    ULONGLONG Length;
+} NtfsWimExtent, *PNtfsWimExtent;
+
+typedef struct NtfsWimDataSource
+{
+    struct NtfsWimDataSource* Next;
+    ULONGLONG Id;
+    ULONG RecordNumber;
+    ULONGLONG Size;
+    ULONG ChunkSize;
+    BOOLEAN Compressed;
+    BOOLEAN Lzx;
+    ULONG ExtentCount;
+    PNtfsWimExtent Extents;
+} NtfsWimDataSource, *PNtfsWimDataSource;
+
 struct DataRunCacheEntry;
 typedef struct DataRunCacheEntry *PDataRunCacheEntry;
 
@@ -708,6 +728,27 @@ public:
     PUCHAR RecordCacheData[NTFS_SECURITY_CACHE_ENTRIES] = {};
     ULONGLONG RecordCacheStamp[NTFS_SECURITY_CACHE_ENTRIES] = {};
     ULONG RecordCacheNext = 0;
+
+    /* WIM files of this volume that back its WOF pointer files; built when the volume opens and constant afterwards. */
+    PNtfsWimDataSource WimSources = NULL;
+
+    NTSTATUS
+    LoadWimDataSources();
+
+    PNtfsWimDataSource
+    FindWimDataSource(_In_ ULONGLONG DataSourceId);
+
+    BOOLEAN
+    IsWimDataSource(_In_ ULONG RecordNumber);
+
+    NTSTATUS
+    RemapWimDataSource(_In_ class FileRecord* File);
+
+    NTSTATUS
+    ReadWimDataSource(_In_ PNtfsWimDataSource Source,
+                      _Out_writes_bytes_(Length) PUCHAR Buffer,
+                      _In_ ULONG Length,
+                      _In_ ULONGLONG Offset);
 
     ~Volume();
 
@@ -1289,7 +1330,7 @@ private:
     ULONG PendingEaInformation = 0;
     ULONG PendingReparseTag = 0;
     ULONG PendingStorageFlags = 0;
-    UCHAR WofProbeState = 0; /* 0 unknown, 1 absent/non-file, 2 present */
+    UCHAR WofProbeState = 0; /* 0 unknown, 1 absent/non-file, 2 present, 3 backed by a WIM and parsed on each read */
     ULONG WofAlgorithm = 0;
     ULONG WofChunkSize = 0;
 
