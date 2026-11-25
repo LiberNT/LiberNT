@@ -172,6 +172,21 @@ jobs:
         [ "$LIVE_CD" = "true" ] && [ "$BUILD_TYPE" != "debug" ] && TARGETS=liberntiso
         ninja -C ${{steps.configure.outputs.outdir}} $TARGETS -k0
 
+    - name: Run clang-tidy on changed lines
+      if: ${{ github.event_name == 'pull_request' && matrix.compiler == 'clang' && matrix.arch == 'amd64' && !matrix.profile && (matrix.build || 'debug') == 'debug' }}
+      run: |
+        . "$HOME/.local/opt/rosbe/rosbe-env.sh"
+        # actions/checkout fetches depth 1; deepen until the merge base exists
+        git fetch origin "${{ github.base_ref }}" --filter=blob:none
+        for i in 1 2 3 4 5 6 7 8; do
+          git merge-base "origin/${{ github.base_ref }}" HEAD >/dev/null 2>&1 && break
+          git fetch --deepen=500 origin "+$GITHUB_REF" "${{ github.base_ref }}" 2>/dev/null || \
+            git fetch --deepen=500 origin "${{ github.base_ref }}"
+        done
+        git diff --name-only --diff-filter=ACMR "origin/${{ github.base_ref }}...HEAD" -- '*.c' '*.cc' '*.cpp' '*.cxx' > /tmp/changed.txt
+        python3 sdk/tools/clang_check.py ${{steps.configure.outputs.outdir}} \
+          --files-from /tmp/changed.txt --base "origin/${{ github.base_ref }}"
+
     - name: Print ccache statistics
       if: ${{ always() && steps.ccache_restore.outcome == 'success' }}
       run: ccache -s
