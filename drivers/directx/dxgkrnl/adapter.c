@@ -18789,38 +18789,6 @@ DxgkpInitializeMiniport(
         return STATUS_REVISION_MISMATCH;
     }
 
-    /*
-     * WDDM 2.3 replaces CommitVidPn with SetTimingsFromVidPn for full
-     * display miniports. Render-only full-table drivers have no CommitVidPn
-     * surface and are therefore not forced into a display contract.
-     */
-    if (!UseDodLayout &&
-        DxgkCapsCoreInterfaceVersionAtLeast(
-            Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_3) &&
-        DriverInitializationData->DxgkDdiCommitVidPn != NULL &&
-        DriverInitializationData->DxgkDdiSetTimingsFromVidPn == NULL)
-    {
-        DXGKRNL_ERR("DxgkpInitializeMiniport: WDDM 2.3 display miniport "
-                    "is missing mandatory SetTimingsFromVidPn\n");
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    /*
-     * CollectDiagnosticInfo is a WDDM 2.6 core requirement for full graphics
-     * miniports. Its AddDevice failure form explicitly permits a NULL adapter
-     * context, so registration must establish the callback before any PDO is
-     * handed to the driver.
-     */
-    if (!UseDodLayout &&
-        DxgkCapsCoreInterfaceVersionAtLeast(
-            Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_6) &&
-        DriverInitializationData->DxgkDdiCollectDiagnosticInfo == NULL)
-    {
-        DXGKRNL_ERR("DxgkpInitializeMiniport: WDDM 2.6 miniport "
-                    "is missing mandatory CollectDiagnosticInfo\n");
-        return STATUS_INVALID_PARAMETER;
-    }
-
     /* --- One-time global init ------------------------------------------- */
 
     Status = DxgkpEnsureGlobalInitialization();

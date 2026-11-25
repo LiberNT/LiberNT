@@ -403,6 +403,154 @@ TestInitDataRequiredMembers(VOID)
     ok(!DxgkInitDataCoreHasRequiredMembers(&Data, sizeof(Data)), "a table without both child status members was accepted\n");
 }
 
+typedef NTSTATUS (NTAPI *PDXGK_TEST_INITIALIZE)(PDRIVER_OBJECT, PUNICODE_STRING, PDRIVER_INITIALIZATION_DATA);
+
+NTSTATUS NTAPI IoCreateDriver(_In_opt_ PUNICODE_STRING DriverName, _In_ PDRIVER_INITIALIZE InitializationFunction);
+
+typedef struct _INIT_DATA_ORACLE_CASE
+{
+    PCSTR Name;
+    ULONG Version;
+    SIZE_T Extra[2];
+} INIT_DATA_ORACLE_CASE;
+
+/* Every table passes the Windows 11 init-data checks (measured: OBJECT_NAME_COLLISION through a guard extension). */
+static const INIT_DATA_ORACLE_CASE InitDataOracleCases[] =
+{
+    { "WDDM 2.4 required", DXGKDDI_INTERFACE_VERSION_WDDM2_4, { 0, 0 } },
+    { "WDDM 2.4 CommitVidPn", DXGKDDI_INTERFACE_VERSION_WDDM2_4, { FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiCommitVidPn), 0 } },
+    { "WDDM 2.4 CommitVidPn SetTimingsFromVidPn", DXGKDDI_INTERFACE_VERSION_WDDM2_4,
+      { FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiCommitVidPn), FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiSetTimingsFromVidPn) } },
+    { "WDDM 2.4 CollectDiagnosticInfo", DXGKDDI_INTERFACE_VERSION_WDDM2_4, { FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiCollectDiagnosticInfo), 0 } },
+    { "WDDM 3.2 required", 0x11007, { 0, 0 } },
+    { "WDDM 3.2 CommitVidPn", 0x11007, { FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiCommitVidPn), 0 } },
+    { "WDDM 3.2 CommitVidPn SetTimingsFromVidPn", 0x11007,
+      { FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiCommitVidPn), FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiSetTimingsFromVidPn) } },
+    { "WDDM 3.2 CollectDiagnosticInfo", 0x11007, { FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiCollectDiagnosticInfo), 0 } },
+};
+
+static NTSTATUS InitDataOracleBaseline = STATUS_UNSUCCESSFUL;
+static NTSTATUS InitDataOracleRefused = STATUS_UNSUCCESSFUL;
+static NTSTATUS InitDataOracleResults[RTL_NUMBER_OF(InitDataOracleCases)];
+
+static
+VOID
+FillRequiredInitData(
+    _Out_ PDRIVER_INITIALIZATION_DATA Data,
+    _In_ ULONG Version)
+{
+    RtlZeroMemory(Data, sizeof(*Data));
+    Data->Version = Version;
+    Data->DxgkDdiAddDevice = (PDXGKDDI_ADD_DEVICE)InitDataDummy;
+    Data->DxgkDdiStartDevice = (PDXGKDDI_START_DEVICE)InitDataDummy;
+    Data->DxgkDdiStopDevice = (PDXGKDDI_STOP_DEVICE)InitDataDummy;
+    Data->DxgkDdiRemoveDevice = (PDXGKDDI_REMOVE_DEVICE)InitDataDummy;
+    Data->DxgkDdiDispatchIoRequest = (PDXGKDDI_DISPATCH_IO_REQUEST)InitDataDummy;
+    Data->DxgkDdiInterruptRoutine = (PDXGKDDI_INTERRUPT_ROUTINE)InitDataDummy;
+    Data->DxgkDdiDpcRoutine = (PDXGKDDI_DPC_ROUTINE)InitDataDummy;
+    Data->DxgkDdiQueryChildRelations = (PDXGKDDI_QUERY_CHILD_RELATIONS)InitDataDummy;
+    Data->DxgkDdiQueryChildStatus = (PDXGKDDI_QUERY_CHILD_STATUS)InitDataDummy;
+    Data->DxgkDdiQueryDeviceDescriptor = (PDXGKDDI_QUERY_DEVICE_DESCRIPTOR)InitDataDummy;
+    Data->DxgkDdiSetPowerState = (PDXGKDDI_SET_POWER_STATE)InitDataDummy;
+    Data->DxgkDdiResetDevice = (PDXGKDDI_RESET_DEVICE)InitDataDummy;
+    Data->DxgkDdiUnload = (PDXGKDDI_UNLOAD)InitDataDummy;
+}
+
+static
+NTSTATUS
+InitDataResolveEntry(
+    _Out_ PDXGK_TEST_INITIALIZE *Initialize)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Device\\DxgKrnl");
+    IO_STATUS_BLOCK IoStatus;
+    PDEVICE_OBJECT Device;
+    PFILE_OBJECT File;
+    PVOID Entry = NULL;
+    KEVENT Event;
+    PIRP Irp;
+    NTSTATUS Status;
+
+    *Initialize = NULL;
+    Status = IoGetDeviceObjectPointer(&Name, GENERIC_READ | GENERIC_WRITE, &File, &Device);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(0x230047, Device, NULL, 0, &Entry, sizeof(Entry), TRUE, &Event, &IoStatus);
+    if (Irp == NULL)
+    {
+        ObDereferenceObject(File);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    Status = IoCallDriver(Device, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatus.Status;
+    }
+    ObDereferenceObject(File);
+    if (NT_SUCCESS(Status))
+        *Initialize = (PDXGK_TEST_INITIALIZE)Entry;
+    return Status;
+}
+
+static
+NTSTATUS
+NTAPI
+InitDataOracleEntry(
+    _In_ PDRIVER_OBJECT DriverObject,
+    _In_ PUNICODE_STRING RegistryPath)
+{
+    UNICODE_STRING Service = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\Kmtest");
+    PDXGK_TEST_INITIALIZE Initialize;
+    DRIVER_INITIALIZATION_DATA Data;
+    ULONG Index;
+    ULONG Extra;
+
+    UNREFERENCED_PARAMETER(RegistryPath);
+    InitDataOracleBaseline = InitDataResolveEntry(&Initialize);
+    if (!NT_SUCCESS(InitDataOracleBaseline))
+        return STATUS_SUCCESS;
+    FillRequiredInitData(&Data, 0x11007);
+    InitDataOracleBaseline = Initialize(DriverObject, &Service, &Data);
+    if (!NT_SUCCESS(InitDataOracleBaseline))
+        return STATUS_SUCCESS;
+    FillRequiredInitData(&Data, 0x11007);
+    Data.DxgkDdiUnload = NULL;
+    InitDataOracleRefused = Initialize(DriverObject, &Service, &Data);
+    for (Index = 0; Index < RTL_NUMBER_OF(InitDataOracleCases); Index++)
+    {
+        FillRequiredInitData(&Data, InitDataOracleCases[Index].Version);
+        for (Extra = 0; Extra < RTL_NUMBER_OF(InitDataOracleCases[Index].Extra); Extra++)
+        {
+            if (InitDataOracleCases[Index].Extra[Extra] != 0)
+                *(PULONG_PTR)((PUCHAR)&Data + InitDataOracleCases[Index].Extra[Extra]) = (ULONG_PTR)InitDataDummy;
+        }
+        InitDataOracleResults[Index] = Initialize(DriverObject, &Service, &Data);
+    }
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+TestInitDataOracle(VOID)
+{
+    UNICODE_STRING DriverName = RTL_CONSTANT_STRING(L"\\Driver\\KmtestDxgkInitData");
+    NTSTATUS Status;
+    ULONG Index;
+
+    Status = IoCreateDriver(&DriverName, InitDataOracleEntry);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+    ok_eq_hex(InitDataOracleBaseline, STATUS_SUCCESS);
+    if (!NT_SUCCESS(InitDataOracleBaseline))
+        return;
+    ok_eq_hex(InitDataOracleRefused, STATUS_REVISION_MISMATCH);
+    for (Index = 0; Index < RTL_NUMBER_OF(InitDataOracleCases); Index++)
+        ok(InitDataOracleResults[Index] == STATUS_OBJECT_NAME_COLLISION, "%s: 0x%08lx, expected the registered-driver collision\n",
+           InitDataOracleCases[Index].Name, InitDataOracleResults[Index]);
+}
+
 START_TEST(DxgkWddmAbi)
 {
     TestPresentAllocationListBinding();
@@ -413,6 +561,7 @@ START_TEST(DxgkWddmAbi)
     TestVsyncControlStatus();
     TestNativeFenceStatus();
     TestInitDataRequiredMembers();
+    TestInitDataOracle();
 
     ok_eq_ulong(DXGKDDI_INTERFACE_VERSION_WDDM2_4, 0x9006);
     ok_eq_ulong(DXGKDDI_INTERFACE_VERSION_WDDM2_5, 0xA00B);
