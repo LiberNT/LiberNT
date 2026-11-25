@@ -776,49 +776,24 @@ co_UserCallNextHookEx(PHOOK Hook,
                 case HCBT_CREATEWND:
                 {
                     LPCBT_CREATEWNDW pcbtcww = (LPCBT_CREATEWNDW)lParam;
+                    LPCREATESTRUCTW pcsUser = NULL;
+                    CBT_CREATEWNDW CbtCaptured;
+                    CREATESTRUCTW CsCaptured;
 
                     TRACE("HOOK HCBT_CREATEWND\n");
                     _SEH2_TRY
                     {
-                        if (Ansi)
-                        {
-                            ProbeForRead( pcbtcww,
-                                          sizeof(CBT_CREATEWNDA),
-                                          1);
-                            ProbeForWrite(pcbtcww->lpcs,
-                                          sizeof(CREATESTRUCTA),
-                                          1);
-                            ProbeForRead( pcbtcww->lpcs->lpszName,
-                                          sizeof(CHAR),
-                                          1);
+                        ProbeForWrite(pcbtcww, sizeof(CBT_CREATEWNDW), 1);
+                        CbtCaptured = *pcbtcww;
+                        pcsUser = CbtCaptured.lpcs;
+                        ProbeForWrite(pcsUser, sizeof(CREATESTRUCTW), 1);
+                        CsCaptured = *pcsUser;
+                        ProbeForRead(CsCaptured.lpszName, Ansi ? sizeof(CHAR) : sizeof(WCHAR), 1);
 
-                            if (!IS_ATOM(pcbtcww->lpcs->lpszClass))
-                            {
-                                _Analysis_assume_(pcbtcww->lpcs->lpszClass != NULL);
-                                ProbeForRead(pcbtcww->lpcs->lpszClass,
-                                             sizeof(CHAR),
-                                             1);
-                            }
-                        }
-                        else
+                        if (!IS_ATOM(CsCaptured.lpszClass))
                         {
-                            ProbeForRead( pcbtcww,
-                                          sizeof(CBT_CREATEWNDW),
-                                          1);
-                            ProbeForWrite(pcbtcww->lpcs,
-                                          sizeof(CREATESTRUCTW),
-                                          1);
-                            ProbeForRead( pcbtcww->lpcs->lpszName,
-                                          sizeof(WCHAR),
-                                          1);
-
-                            if (!IS_ATOM(pcbtcww->lpcs->lpszClass))
-                            {
-                                _Analysis_assume_(pcbtcww->lpcs->lpszClass != NULL);
-                                ProbeForRead(pcbtcww->lpcs->lpszClass,
-                                             sizeof(WCHAR),
-                                             1);
-                            }
+                            _Analysis_assume_(CsCaptured.lpszClass != NULL);
+                            ProbeForRead(CsCaptured.lpszClass, Ansi ? sizeof(CHAR) : sizeof(WCHAR), 1);
                         }
                     }
                     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -834,7 +809,21 @@ co_UserCallNextHookEx(PHOOK Hook,
                     /* The next call handles the structures. */
                     if (!BadChk && Hook->Proc)
                     {
-                       lResult = co_HOOK_CallHookNext(Hook, Code, wParam, lParam);
+                       CbtCaptured.lpcs = &CsCaptured;
+                       lResult = co_HOOK_CallHookNext(Hook, Code, wParam, (LPARAM)&CbtCaptured);
+                       _SEH2_TRY
+                       {
+                           pcbtcww->hwndInsertAfter = CbtCaptured.hwndInsertAfter;
+                           pcsUser->x = CsCaptured.x;
+                           pcsUser->y = CsCaptured.y;
+                           pcsUser->cx = CsCaptured.cx;
+                           pcsUser->cy = CsCaptured.cy;
+                       }
+                       _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+                       {
+                           ERR("HOOK HCBT_CREATEWND write back ERROR!\n");
+                       }
+                       _SEH2_END;
                     }
                     break;
                 }
