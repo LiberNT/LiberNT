@@ -29,7 +29,9 @@
 #ifndef APC_LEVEL
 #define APC_LEVEL 1
 #endif
-#ifndef MM_HOST_TEST
+#ifdef MM_HOST_TEST
+#define KeGetCurrentIrql() MiHostIrql
+#else
 #define KeGetCurrentIrql() 0
 #endif
 #define STATUS_ACCESS_VIOLATION ((NTSTATUS)0xC0000005)
