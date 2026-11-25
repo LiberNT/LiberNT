@@ -2877,6 +2877,26 @@ LPITEMIDLIST WINAPI ILCloneFirst(LPCITEMIDLIST pidl)
  * NOTES
  *   the first two bytes are the len, the pidl is following then
  */
+#ifdef __REACTOS__
+static BOOL ILIsTerminatedWithin(LPCITEMIDLIST pidl, WORD size)
+{
+    WORD pos = 0;
+
+    while (size - pos >= sizeof(USHORT))
+    {
+        USHORT cb;
+
+        memcpy(&cb, (const BYTE *)pidl + pos, sizeof(cb));
+        if (!cb)
+            return TRUE;
+        if (cb < sizeof(USHORT) || cb > size - pos)
+            return FALSE;
+        pos += cb;
+    }
+    return FALSE;
+}
+
+#endif
 HRESULT WINAPI ILLoadFromStream (IStream * pStream, LPITEMIDLIST * ppPidl)
 {
     WORD        wLen = 0;
@@ -2897,7 +2917,12 @@ HRESULT WINAPI ILLoadFromStream (IStream * pStream, LPITEMIDLIST * ppPidl)
         if (wLen != 0)
         {
             *ppPidl = SHAlloc (wLen);
+#ifdef __REACTOS__
+            if (*ppPidl && SUCCEEDED(IStream_Read(pStream, *ppPidl , wLen, &dwBytesRead)) &&
+                dwBytesRead == wLen && ILIsTerminatedWithin(*ppPidl, wLen))
+#else
             if (SUCCEEDED(IStream_Read(pStream, *ppPidl , wLen, &dwBytesRead)))
+#endif
             {
                 TRACE("Stream read OK\n");
                 ret = S_OK;

@@ -528,6 +528,8 @@ static HRESULT Stream_ReadChunk(IStream* stm, LPVOID *data)
     HRESULT hr = stm->Read(&size, sizeof(size), &count);
     if (FAILED(hr) || count != sizeof(size))
         return E_FAIL;
+    if (size < sizeof(size))
+        return S_FALSE;
 
     chunk = static_cast<sized_chunk *>(HeapAlloc(GetProcessHeap(), 0, size));
     if (!chunk)
@@ -548,16 +550,18 @@ static HRESULT Stream_ReadChunk(IStream* stm, LPVOID *data)
     return S_OK;
 }
 
-static BOOL Stream_LoadVolume(LOCAL_VOLUME_INFO *vol, CShellLink::volume_info *volume)
+static BOOL Stream_LoadVolume(LOCAL_VOLUME_INFO *vol, DWORD avail, CShellLink::volume_info *volume)
 {
+    DWORD size = min(vol->dwSize, avail);
+
     volume->serial = vol->dwVolSerial;
     volume->type = vol->dwType;
 
     if (!vol->dwVolLabelOfs)
         return FALSE;
-    if (vol->dwSize <= vol->dwVolLabelOfs)
+    if (size <= vol->dwVolLabelOfs)
         return FALSE;
-    INT len = vol->dwSize - vol->dwVolLabelOfs;
+    INT len = size - vol->dwVolLabelOfs;
 
     LPSTR label = (LPSTR)vol;
     label += vol->dwVolLabelOfs; // FIXME: 0x14 Unicode
@@ -588,8 +592,8 @@ static HRESULT Stream_LoadLocation(IStream *stm,
 {
     char *p = NULL;
     HRESULT hr = Stream_ReadChunk(stm, (LPVOID*) &p);
-    if (FAILED(hr))
-        return hr;
+    if (hr != S_OK)
+        return FAILED(hr) ? hr : S_OK;
 
     LOCATION_INFO *loc = reinterpret_cast<LOCATION_INFO *>(p);
     if (loc->dwTotalSize < sizeof(LOCATION_INFO))
@@ -605,7 +609,7 @@ static HRESULT Stream_LoadLocation(IStream *stm,
         LOCAL_VOLUME_INFO *volume_info;
 
         volume_info = (LOCAL_VOLUME_INFO*) &p[loc->dwVolTableOfs];
-        Stream_LoadVolume(volume_info, volume);
+        Stream_LoadVolume(volume_info, loc->dwTotalSize - loc->dwVolTableOfs, volume);
     }
 
     /* if there's a local path, load it */
@@ -655,6 +659,21 @@ HRESULT CShellLink::GetAdvertiseInfo(LPWSTR *str, DWORD dwSig)
 
     *str = pInfo->szwDarwinID;
     return S_OK;
+}
+
+static BOOL ILIsItemBoundary(LPCITEMIDLIST pidl, UINT offset)
+{
+    UINT pos = 0;
+
+    while (pos < offset)
+    {
+        USHORT cb = ((LPCITEMIDLIST)((const BYTE *)pidl + pos))->mkid.cb;
+
+        if (!cb)
+            return FALSE;
+        pos += cb;
+    }
+    return pos == offset;
 }
 
 /************************************************************************
@@ -779,7 +798,8 @@ HRESULT STDMETHODCALLTYPE CShellLink::Load(IStream *stm)
         return hr;
 
     LPEXP_SPECIAL_FOLDER pSpecial = (LPEXP_SPECIAL_FOLDER)SHFindDataBlock(m_pDBList, EXP_SPECIAL_FOLDER_SIG);
-    if (pSpecial && pSpecial->cbSize == sizeof(*pSpecial) && ILGetSize(m_pPidl) > pSpecial->cbOffset)
+    if (pSpecial && pSpecial->cbSize == sizeof(*pSpecial) && ILGetSize(m_pPidl) > pSpecial->cbOffset &&
+        ILIsItemBoundary(m_pPidl, pSpecial->cbOffset))
     {
         if (LPITEMIDLIST folder = SHCloneSpecialIDList(NULL, pSpecial->idSpecialFolder, FALSE))
         {
