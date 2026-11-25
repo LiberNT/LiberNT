@@ -16,6 +16,8 @@
 
 #define LOAD(Type, Name) reinterpret_cast<Type>(GetProcAddress(GetModuleHandleW(L"gdi32.dll"), Name))
 #define UMD_SENTINEL 0x1111111111111111LL
+#define HI(v) (ULONG)((ULONGLONG)(v) >> 32)
+#define LO(v) (ULONG)(v)
 
 typedef HRESULT (WINAPI *PFN_CREATE_FACTORY)(REFIID, void **);
 
@@ -64,26 +66,28 @@ CheckAdapter(IDXGIAdapter1 *Adapter, UINT Index)
     hrNull = Adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), NULL);
 
     ok(hrD3D11 == DXGI_ERROR_UNSUPPORTED, "adapter %u: ID3D11Device returned %#lx\n", Index, hrD3D11);
-    ok(D3D11.QuadPart == UMD_SENTINEL, "adapter %u: ID3D11Device wrote %#I64x\n", Index, D3D11.QuadPart);
+    ok(D3D11.QuadPart == UMD_SENTINEL, "adapter %u: ID3D11Device wrote 0x%08lx%08lx\n", Index, HI(D3D11.QuadPart), LO(D3D11.QuadPart));
     ok(hrD3D10 == hrDevice, "adapter %u: ID3D10Device %#lx, IDXGIDevice %#lx\n", Index, hrD3D10, hrDevice);
     ok(hrNull == hrDevice, "adapter %u: no version pointer %#lx, IDXGIDevice %#lx\n", Index, hrNull, hrDevice);
     if (FAILED(hrDevice))
     {
         ok(hrDevice == DXGI_ERROR_UNSUPPORTED, "adapter %u: IDXGIDevice returned %#lx\n", Index, hrDevice);
-        ok(Device.QuadPart == UMD_SENTINEL, "adapter %u: unsupported IDXGIDevice wrote %#I64x\n", Index, Device.QuadPart);
-        ok(D3D10.QuadPart == UMD_SENTINEL, "adapter %u: unsupported ID3D10Device wrote %#I64x\n", Index, D3D10.QuadPart);
+        ok(Device.QuadPart == UMD_SENTINEL, "adapter %u: unsupported IDXGIDevice wrote 0x%08lx%08lx\n", Index,
+           HI(Device.QuadPart), LO(Device.QuadPart));
+        ok(D3D10.QuadPart == UMD_SENTINEL, "adapter %u: unsupported ID3D10Device wrote 0x%08lx%08lx\n", Index,
+           HI(D3D10.QuadPart), LO(D3D10.QuadPart));
         return;
     }
     ok(hrDevice == S_OK, "adapter %u: IDXGIDevice returned %#lx\n", Index, hrDevice);
-    ok(D3D10.QuadPart == Device.QuadPart, "adapter %u: ID3D10Device version %#I64x, IDXGIDevice %#I64x\n",
-       Index, D3D10.QuadPart, Device.QuadPart);
+    ok(D3D10.QuadPart == Device.QuadPart, "adapter %u: ID3D10Device version 0x%08lx%08lx, IDXGIDevice 0x%08lx%08lx\n",
+       Index, HI(D3D10.QuadPart), LO(D3D10.QuadPart), HI(Device.QuadPart), LO(Device.QuadPart));
     if (!KernelUmdVersion(Desc.AdapterLuid, &Kernel))
     {
         skip("adapter %u: no kernel user-mode driver version\n", Index);
         return;
     }
-    ok(Device.QuadPart == Kernel.QuadPart, "adapter %u '%ls': UMD version %#I64x, kernel %#I64x\n",
-       Index, Desc.Description, Device.QuadPart, Kernel.QuadPart);
+    ok(Device.QuadPart == Kernel.QuadPart, "adapter %u '%ls': UMD version 0x%08lx%08lx, kernel 0x%08lx%08lx\n",
+       Index, Desc.Description, HI(Device.QuadPart), LO(Device.QuadPart), HI(Kernel.QuadPart), LO(Kernel.QuadPart));
 }
 
 START_TEST(umd_version)
