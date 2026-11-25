@@ -315,7 +315,7 @@ IKsClock_DispatchDeviceIoControl(
 {
     PIO_STACK_LOCATION IoStack;
     UNICODE_STRING GuidString;
-    PKSPROPERTY Property;
+    KSIDENTIFIER Identifier;
     NTSTATUS Status;
 
     DPRINT("IKsClock_DispatchDeviceIoControl\n");
@@ -333,18 +333,18 @@ IKsClock_DispatchDeviceIoControl(
     Status = KsPropertyHandler(Irp, 1, ClockPropertySet);
 
     /* get property from input buffer */
-    Property = (PKSPROPERTY)IoStack->Parameters.DeviceIoControl.Type3InputBuffer;
+    KspCaptureIdentifier(Irp, &Identifier);
 
-    if (!NT_SUCCESS(RtlStringFromGUID(&Property->Set, &GuidString)))
+    if (!NT_SUCCESS(RtlStringFromGUID(&Identifier.Set, &GuidString)))
         RtlInitEmptyUnicodeString(&GuidString, NULL, 0);
-    DPRINT("IKsClock_DispatchDeviceIoControl property Set |%S| Id %u Flags %x Status %lx ResultLength %lu\n", GuidString.Buffer, Property->Id, Property->Flags, Status, Irp->IoStatus.Information);
+    DPRINT("IKsClock_DispatchDeviceIoControl property Set |%S| Id %u Flags %x Status %lx ResultLength %lu\n", GuidString.Buffer, Identifier.Id, Identifier.Flags, Status, Irp->IoStatus.Information);
     RtlFreeUnicodeString(&GuidString);
 
 
-    Irp->IoStatus.Status = STATUS_SUCCESS;
+    Irp->IoStatus.Status = Status;
     CompleteRequest(Irp, IO_NO_INCREMENT);
 
-    return STATUS_SUCCESS;
+    return Status;
 }
 
 NTSTATUS
