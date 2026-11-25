@@ -430,7 +430,7 @@ NtGdiPolyPolyDraw( IN HDC hDC,
     PULONG SafeCounts;
     NTSTATUS Status = STATUS_SUCCESS;
     BOOL Ret = TRUE;
-    ULONG nPoints = 0, nInvalid = 0, i;
+    ULONG nPoints = 0, nInvalid = 0, nCaptured, i;
     BOOL bOverflow = FALSE;
 
     if (!UnsafePoints || !UnsafeCounts ||
@@ -543,6 +543,19 @@ NtGdiPolyPolyDraw( IN HDC hDC,
     if (!NT_SUCCESS(Status))
     {
         ExFreePoolWithTag(pTemp, TAG_SHAPE);
+        return FALSE;
+    }
+
+    for (i = 0, nCaptured = 0; i < Count; i++)
+    {
+        if (SafeCounts[i] < 2 || SafeCounts[i] > nPoints - nCaptured)
+            break;
+        nCaptured += SafeCounts[i];
+    }
+    if (i != Count || nCaptured != nPoints)
+    {
+        ExFreePoolWithTag(pTemp, TAG_SHAPE);
+        EngSetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
 
