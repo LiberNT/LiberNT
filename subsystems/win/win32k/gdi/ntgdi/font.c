@@ -736,6 +736,8 @@ NtGdiGetFontData(
   PTEXTOBJ TextObj;
   PFONTGDI FontGdi;
   DWORD Result = GDI_ERROR;
+  DWORD Needed;
+  PVOID Captured = NULL;
   NTSTATUS Status = STATUS_SUCCESS;
 
   if (Buffer && Size)
@@ -773,9 +775,43 @@ NtGdiGetFontData(
 
   FontGdi = ObjToGDI(TextObj->Font, FONT);
 
-  Result = ftGdiGetFontData(FontGdi, Table, Offset, Buffer, Size);
+  if (Buffer && Size)
+  {
+     Needed = ftGdiGetFontData(FontGdi, Table, Offset, NULL, 0);
+     if (Needed != GDI_ERROR)
+     {
+        Size = min(Size, Needed);
+        Captured = ExAllocatePoolWithTag(PagedPool, max(Size, 1), GDITAG_TEXT);
+     }
+     if (Captured)
+     {
+        Result = ftGdiGetFontData(FontGdi, Table, Offset, Captured, Size);
+     }
+  }
+  else
+  {
+     Result = ftGdiGetFontData(FontGdi, Table, Offset, Buffer, Size);
+  }
 
   TEXTOBJ_UnlockText(TextObj);
+
+  if (Captured)
+  {
+     if (Result != GDI_ERROR && Result <= Size)
+     {
+        _SEH2_TRY
+        {
+            ProbeForWrite(Buffer, Result, 1);
+            RtlCopyMemory(Buffer, Captured, Result);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Result = GDI_ERROR;
+        }
+        _SEH2_END
+     }
+     ExFreePoolWithTag(Captured, GDITAG_TEXT);
+  }
 
   return Result;
 }
