@@ -676,28 +676,88 @@ static UINT32 Native12FloatToUnorm8(float value)
     return static_cast<UINT32>(value * 255.0f + 0.5f);
 }
 
-/* TODO: color spaces other than the format default (SetColorSpace1) are not converted */
-static UINT32 Native12ToBgra8(DXGI_FORMAT format, const BYTE *texel)
+static INIT_ONCE native12_unorm10_once = INIT_ONCE_STATIC_INIT;
+static BYTE native12_unorm10_table[1024];
+static BYTE native12_unorm2_table[4];
+static INIT_ONCE native12_half_once = INIT_ONCE_STATIC_INIT;
+static BYTE native12_half_srgb_table[65536];
+static BYTE native12_half_unorm_table[65536];
+
+static BOOL CALLBACK Native12InitHalfTables(INIT_ONCE *, void *, void **)
 {
-    UINT32 pixel;
-    memcpy(&pixel, texel, sizeof(pixel));
-    switch (format)
+    InitOnceExecuteOnce(&native12_srgb_once, Native12InitSrgbTable, NULL, NULL);
+    for (UINT i = 0; i < ARRAYSIZE(native12_half_srgb_table); ++i)
     {
-        case DXGI_FORMAT_R8G8B8A8_UNORM:
-            return (pixel & 0xff00ff00) | ((pixel >> 16) & 0xff) | ((pixel & 0xff) << 16);
-        case DXGI_FORMAT_R10G10B10A2_UNORM:
-            return Native12Unorm8((pixel >> 20) & 0x3ff, 0x3ff) | Native12Unorm8((pixel >> 10) & 0x3ff, 0x3ff) << 8
-                    | Native12Unorm8(pixel & 0x3ff, 0x3ff) << 16 | Native12Unorm8(pixel >> 30, 3) << 24;
-        case DXGI_FORMAT_R16G16B16A16_FLOAT:
-        {
-            USHORT channels[4];
-            memcpy(channels, texel, sizeof(channels));
-            return Native12LinearToSrgb8(Native12HalfToFloat(channels[2])) | Native12LinearToSrgb8(Native12HalfToFloat(channels[1])) << 8
-                    | Native12LinearToSrgb8(Native12HalfToFloat(channels[0])) << 16 | Native12FloatToUnorm8(Native12HalfToFloat(channels[3])) << 24;
-        }
-        default:
-            return pixel;
+        float value = Native12HalfToFloat(static_cast<USHORT>(i));
+        native12_half_srgb_table[i] = static_cast<BYTE>(Native12LinearToSrgb8(value));
+        native12_half_unorm_table[i] = static_cast<BYTE>(Native12FloatToUnorm8(value));
     }
+    return TRUE;
+}
+
+static BOOL CALLBACK Native12InitUnormTables(INIT_ONCE *, void *, void **)
+{
+    for (UINT i = 0; i < ARRAYSIZE(native12_unorm10_table); ++i)
+        native12_unorm10_table[i] = static_cast<BYTE>(Native12Unorm8(i, 0x3ff));
+    for (UINT i = 0; i < ARRAYSIZE(native12_unorm2_table); ++i)
+        native12_unorm2_table[i] = static_cast<BYTE>(Native12Unorm8(i, 3));
+    return TRUE;
+}
+
+/* TODO: color spaces other than the format default (SetColorSpace1) are not converted */
+static HRESULT Native12ConvertForeign(DXGI_FORMAT format, const BYTE *source, UINT row_pitch, UINT width, UINT height,
+        BYTE *target, UINT target_pitch, UINT target_width, UINT target_height)
+{
+    UINT texel_size = format == DXGI_FORMAT_R16G16B16A16_FLOAT ? 8 : 4;
+    UINT *columns = static_cast<UINT *>(HeapAlloc(GetProcessHeap(), 0, target_width * sizeof(*columns)));
+    if (!columns) return E_OUTOFMEMORY;
+    for (UINT x = 0; x < target_width; ++x)
+        columns[x] = static_cast<UINT>(static_cast<UINT64>(x) * width / target_width * texel_size);
+    if (format == DXGI_FORMAT_R10G10B10A2_UNORM) InitOnceExecuteOnce(&native12_unorm10_once, Native12InitUnormTables, NULL, NULL);
+    if (format == DXGI_FORMAT_R16G16B16A16_FLOAT) InitOnceExecuteOnce(&native12_half_once, Native12InitHalfTables, NULL, NULL);
+    for (UINT y = 0; y < target_height; ++y)
+    {
+        const BYTE *row = source + static_cast<UINT64>(y) * height / target_height * row_pitch;
+        UINT32 *out = reinterpret_cast<UINT32 *>(target + static_cast<SIZE_T>(y) * target_pitch);
+        UINT32 pixel;
+        switch (format)
+        {
+            case DXGI_FORMAT_R8G8B8A8_UNORM:
+                for (UINT x = 0; x < target_width; ++x)
+                {
+                    pixel = *reinterpret_cast<const UINT32 *>(row + columns[x]);
+                    out[x] = (pixel & 0xff00ff00) | ((pixel >> 16) & 0xff) | ((pixel & 0xff) << 16);
+                }
+                break;
+            case DXGI_FORMAT_R10G10B10A2_UNORM:
+                for (UINT x = 0; x < target_width; ++x)
+                {
+                    pixel = *reinterpret_cast<const UINT32 *>(row + columns[x]);
+                    out[x] = native12_unorm10_table[(pixel >> 20) & 0x3ff] | native12_unorm10_table[(pixel >> 10) & 0x3ff] << 8
+                            | static_cast<UINT32>(native12_unorm10_table[pixel & 0x3ff]) << 16
+                            | static_cast<UINT32>(native12_unorm2_table[pixel >> 30]) << 24;
+                }
+                break;
+            case DXGI_FORMAT_R16G16B16A16_FLOAT:
+                for (UINT x = 0; x < target_width; ++x)
+                {
+                    const USHORT *channels = reinterpret_cast<const USHORT *>(row + columns[x]);
+                    out[x] = native12_half_srgb_table[channels[2]] | native12_half_srgb_table[channels[1]] << 8
+                            | static_cast<UINT32>(native12_half_srgb_table[channels[0]]) << 16
+                            | static_cast<UINT32>(native12_half_unorm_table[channels[3]]) << 24;
+                }
+                break;
+            default:
+                if (width == target_width)
+                    memcpy(out, row, static_cast<SIZE_T>(target_width) * sizeof(*out));
+                else
+                    for (UINT x = 0; x < target_width; ++x)
+                        out[x] = *reinterpret_cast<const UINT32 *>(row + columns[x]);
+                break;
+        }
+    }
+    HeapFree(GetProcessHeap(), 0, columns);
+    return S_OK;
 }
 
 void Native12SwapChain::ReleaseBuffers()
@@ -1145,7 +1205,6 @@ HRESULT Native12SwapChain::WriteForeign(RECT *rect, ID3D12Resource *readback, UI
         BYTE *target = static_cast<BYTE *>(lock_args.pData);
         UINT width = readback_layout.Footprint.Width, height = readback_layout.Footprint.Height;
         DXGI_FORMAT format = readback_layout.Footprint.Format;
-        UINT texel_size = format == DXGI_FORMAT_R16G16B16A16_FLOAT ? 8 : 4;
         if (format == DXGI_FORMAT_R16G16B16A16_FLOAT) InitOnceExecuteOnce(&native12_srgb_once, Native12InitSrgbTable, NULL, NULL);
         /* FIXME: a zero-size source region presents the whole buffer; Windows fills the window with one texel */
         if (width_limit && height_limit && (width_limit < width || height_limit < height))
@@ -1153,13 +1212,8 @@ HRESULT Native12SwapChain::WriteForeign(RECT *rect, ID3D12Resource *readback, UI
             width = width_limit;
             height = height_limit;
         }
-        for (UINT y = 0; y < foreign_height; ++y)
-        {
-            const BYTE *row = source + static_cast<UINT64>(y) * height / foreign_height * readback_layout.Footprint.RowPitch;
-            UINT32 *out = reinterpret_cast<UINT32 *>(target + static_cast<SIZE_T>(y) * foreign_pitch);
-            for (UINT x = 0; x < foreign_width; ++x)
-                out[x] = Native12ToBgra8(format, row + static_cast<UINT64>(x) * width / foreign_width * texel_size);
-        }
+        hr = Native12ConvertForeign(format, source, readback_layout.Footprint.RowPitch, width, height,
+                target, foreign_pitch, foreign_width, foreign_height);
         D3D12_RANGE written = {0, 0};
         readback->Unmap(0, &written);
     }
