@@ -16,6 +16,7 @@
 #include <dispmprt.h>
 #include "adapter_map_core.h"
 #include "adapter_start_core.h"
+#include "present_list_core.h"
 
 typedef struct _DXGK_TEST_RESOURCE_LIST
 {
@@ -287,8 +288,49 @@ TestStartCapsValidation(VOID)
     ok_eq_hex(DxgkAdapterStartValidateCaps(&Caps), STATUS_INVALID_PARAMETER);
 }
 
+static VOID
+TestPresentAllocationListBinding(VOID)
+{
+    DXGK_ALLOCATIONLIST List[DXGK_PRESENT_MAX_INDEX + 1];
+
+    ok_eq_ulong(DXGK_PRESENT_SOURCE_INDEX, 1UL);
+    ok_eq_ulong(DXGK_PRESENT_DESTINATION_INDEX, 2UL);
+    ok_eq_size(sizeof(DXGK_ALLOCATIONLIST), (SIZE_T)(sizeof(PVOID) == 8 ? 24 : 16));
+    ok_eq_size(FIELD_OFFSET(DXGK_ALLOCATIONLIST, VirtualAddress), (SIZE_T)(sizeof(PVOID) == 8 ? 16 : 8));
+
+    RtlZeroMemory(List, sizeof(List));
+    List[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation = (HANDLE)(ULONG_PTR)0x1110;
+    List[DXGK_PRESENT_SOURCE_INDEX].SegmentId = 3;
+    List[DXGK_PRESENT_DESTINATION_INDEX].hDeviceSpecificAllocation = (HANDLE)(ULONG_PTR)0x2220;
+    List[DXGK_PRESENT_DESTINATION_INDEX].WriteOperation = 1;
+    List[DXGK_PRESENT_DESTINATION_INDEX].SegmentId = 1;
+    DxgkPresentListCoreBindVirtualAddresses(List, FALSE, TRUE, 0x100040000ULL, TRUE, 0x100830000ULL);
+    ok_eq_pointer(List[0].hDeviceSpecificAllocation, NULL);
+    ok_eq_ulonglong(List[0].VirtualAddress, 0ULL);
+    ok_eq_pointer(List[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation, (HANDLE)(ULONG_PTR)0x1110);
+    ok_eq_ulong(List[DXGK_PRESENT_SOURCE_INDEX].SegmentId, 3UL);
+    ok_eq_ulong(List[DXGK_PRESENT_SOURCE_INDEX].WriteOperation, 0UL);
+    ok_eq_ulonglong(List[DXGK_PRESENT_SOURCE_INDEX].VirtualAddress, 0x100040000ULL);
+    ok_eq_pointer(List[DXGK_PRESENT_DESTINATION_INDEX].hDeviceSpecificAllocation, (HANDLE)(ULONG_PTR)0x2220);
+    ok_eq_ulong(List[DXGK_PRESENT_DESTINATION_INDEX].SegmentId, 1UL);
+    ok_eq_ulong(List[DXGK_PRESENT_DESTINATION_INDEX].WriteOperation, 1UL);
+    ok_eq_ulonglong(List[DXGK_PRESENT_DESTINATION_INDEX].VirtualAddress, 0x100830000ULL);
+
+    RtlZeroMemory(List, sizeof(List));
+    List[DXGK_PRESENT_SOURCE_INDEX].PhysicalAddress.QuadPart = 0x5000;
+    List[DXGK_PRESENT_DESTINATION_INDEX].PhysicalAddress.QuadPart = 0x6000;
+    DxgkPresentListCoreBindVirtualAddresses(List, TRUE, TRUE, 0x100040000ULL, TRUE, 0x100830000ULL);
+    ok_eq_longlong(List[DXGK_PRESENT_SOURCE_INDEX].PhysicalAddress.QuadPart, 0x5000LL);
+    ok_eq_longlong(List[DXGK_PRESENT_DESTINATION_INDEX].PhysicalAddress.QuadPart, 0x6000LL);
+
+    DxgkPresentListCoreBindVirtualAddresses(List, FALSE, TRUE, 0x100040000ULL, FALSE, 0x100830000ULL);
+    ok_eq_ulonglong(List[DXGK_PRESENT_SOURCE_INDEX].VirtualAddress, 0x100040000ULL);
+    ok_eq_longlong(List[DXGK_PRESENT_DESTINATION_INDEX].PhysicalAddress.QuadPart, 0x6000LL);
+}
+
 START_TEST(DxgkWddmAbi)
 {
+    TestPresentAllocationListBinding();
     TestStartCapsValidation();
     TestMapMemoryContractCore();
     TestAdapterStartRolePolicy();
