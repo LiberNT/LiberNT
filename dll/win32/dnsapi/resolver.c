@@ -440,7 +440,8 @@ ResolverParseRecord(const UCHAR *Packet, INT Length, PCWSTR Owner, WORD Type, DW
             Offset += Packet[Offset] + 1;
             Strings++;
         }
-        if (Offset != Data + DataLength || !Strings)
+        if (Offset != Data + DataLength || !Strings ||
+            FIELD_OFFSET(DNS_TXT_DATAW, pStringArray[Strings]) > MAXWORD)
             return NULL;
         Size = FIELD_OFFSET(DNS_RECORDW, Data.TXT.pStringArray[Strings]);
     }
