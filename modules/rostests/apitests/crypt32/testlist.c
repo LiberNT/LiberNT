@@ -9,6 +9,7 @@ extern void func_ChainNotBefore(void);
 extern void func_ChainRevocation(void);
 extern void func_Countersign(void);
 extern void func_CryptProtectMemory(void);
+extern void func_CryptStringToBinary(void);
 extern void func_FindOIDInfo(void);
 extern void func_GeneralizedTime(void);
 extern void func_RevocationTimeout(void);
@@ -23,6 +24,7 @@ const struct test winetest_testlist[] =
     { "ChainRevocation", func_ChainRevocation },
     { "Countersign", func_Countersign },
     { "CryptProtectMemory", func_CryptProtectMemory },
+    { "CryptStringToBinary", func_CryptStringToBinary },
     { "FindOIDInfo", func_FindOIDInfo },
     { "GeneralizedTime", func_GeneralizedTime },
     { "RevocationTimeout", func_RevocationTimeout },

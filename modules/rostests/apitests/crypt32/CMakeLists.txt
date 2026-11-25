@@ -7,6 +7,7 @@ list(APPEND SOURCE
     ChainRevocation.c
     Countersign.c
     CryptProtectMemory.c
+    CryptStringToBinary.c
     FindOIDInfo.c
     GeneralizedTime.c
     RevocationTimeout.c
