@@ -110,7 +110,8 @@ Ndis6ValidateMiniportDriverCharacteristics(
     }
 
 #if NDIS_SUPPORT_NDIS680
-    if (Characteristics->MinorNdisVersion >= 80)
+    /* Windows 11 requires the revision 3 header from NDIS 6.80 to 6.88 only; NDIS 6.89 takes revision 2 again. */
+    if (Characteristics->MinorNdisVersion >= 80 && Characteristics->MinorNdisVersion != 89)
     {
         RequiredRevision = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3;
         RequiredSize = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3;
@@ -139,6 +140,16 @@ Ndis6ValidateMiniportDriverCharacteristics(
         return NDIS_STATUS_BAD_CHARACTERISTICS;
 
     *CopySize = RequiredSize;
+#if NDIS_SUPPORT_NDIS680
+    if (Characteristics->MinorNdisVersion >= 80 &&
+        Characteristics->Header.Revision >= NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3 &&
+        Characteristics->Header.Size >= NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3)
+    {
+        *CopySize = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3;
+    }
+#endif
+    ASSERT(*CopySize >= RequiredSize);
+    ASSERT(*CopySize <= sizeof(NDIS_MINIPORT_DRIVER_CHARACTERISTICS));
     return NDIS_STATUS_SUCCESS;
 }
 
