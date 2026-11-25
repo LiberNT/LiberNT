@@ -758,6 +758,7 @@ NtGdiOpenDCW(
     _At_((PUMDHPDEV*)pUMdhpdev, _Out_) PVOID pUMdhpdev)
 {
     UNICODE_STRING ustrDevice;
+    UNICODE_STRING ustrCaptured;
     WCHAR awcDevice[CCHDEVICENAME];
     PVOID dhpdev;
     HDC hdc;
@@ -775,10 +776,11 @@ NtGdiOpenDCW(
         {
             /* Probe the UNICODE_STRING and the buffer */
             ProbeForRead(pustrDevice, sizeof(UNICODE_STRING), 1);
-            ProbeForRead(pustrDevice->Buffer, pustrDevice->Length, 1);
+            ustrCaptured = *pustrDevice;
+            ProbeForRead(ustrCaptured.Buffer, ustrCaptured.Length, 1);
 
             /* Copy the string */
-            RtlCopyUnicodeString(&ustrDevice, pustrDevice);
+            RtlCopyUnicodeString(&ustrDevice, &ustrCaptured);
 
             /* Allocate and store pdmAllocated if pdmInit is not NULL */
             if (pdmInit)

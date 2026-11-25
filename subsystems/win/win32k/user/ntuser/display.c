@@ -460,6 +460,7 @@ NtUserEnumDisplayDevices(
     DWORD dwFlags)
 {
     UNICODE_STRING ustrDevice;
+    UNICODE_STRING ustrCaptured;
     WCHAR awcDevice[CCHDEVICENAME];
     DISPLAY_DEVICEW dispdev;
     NTSTATUS Status;
@@ -478,10 +479,11 @@ NtUserEnumDisplayDevices(
         {
             /* Probe the UNICODE_STRING and the buffer */
             ProbeForRead(pustrDevice, sizeof(UNICODE_STRING), 1);
-            ProbeForRead(pustrDevice->Buffer, pustrDevice->Length, 1);
+            ustrCaptured = *pustrDevice;
+            ProbeForRead(ustrCaptured.Buffer, ustrCaptured.Length, 1);
 
             /* Copy the string */
-            RtlCopyUnicodeString(&ustrDevice, pustrDevice);
+            RtlCopyUnicodeString(&ustrDevice, &ustrCaptured);
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -1502,6 +1504,7 @@ NtUserChangeDisplaySettings(
 {
     WCHAR awcDevice[CCHDEVICENAME];
     UNICODE_STRING ustrDevice;
+    UNICODE_STRING ustrCaptured;
     DEVMODEW dmLocal;
     LONG lRet;
 
@@ -1539,10 +1542,11 @@ NtUserChangeDisplaySettings(
         {
             /* Probe the UNICODE_STRING and the buffer */
             ProbeForRead(pustrDevice, sizeof(UNICODE_STRING), 1);
-            ProbeForRead(pustrDevice->Buffer, pustrDevice->Length, 1);
+            ustrCaptured = *pustrDevice;
+            ProbeForRead(ustrCaptured.Buffer, ustrCaptured.Length, 1);
 
             /* Copy the string */
-            RtlCopyUnicodeString(&ustrDevice, pustrDevice);
+            RtlCopyUnicodeString(&ustrDevice, &ustrCaptured);
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {

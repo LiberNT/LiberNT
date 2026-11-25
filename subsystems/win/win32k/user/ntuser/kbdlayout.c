@@ -1217,6 +1217,7 @@ NtUserLoadKeyboardLayoutEx(
     HKL hRetKL;
     WCHAR Buffer[KL_NAMELENGTH];
     UNICODE_STRING uszSafeKLID;
+    UNICODE_STRING uszCaptured;
     PWINSTATION_OBJECT pWinSta;
     HANDLE hSafeFile;
 
@@ -1236,8 +1237,9 @@ NtUserLoadKeyboardLayoutEx(
     _SEH2_TRY
     {
         ProbeForRead(puszKLID, sizeof(*puszKLID), 1);
-        ProbeForRead(puszKLID->Buffer, sizeof(puszKLID->Length), 1);
-        RtlCopyUnicodeString(&uszSafeKLID, puszKLID);
+        uszCaptured = *puszKLID;
+        ProbeForRead(uszCaptured.Buffer, uszCaptured.Length, 1);
+        RtlCopyUnicodeString(&uszSafeKLID, &uszCaptured);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
