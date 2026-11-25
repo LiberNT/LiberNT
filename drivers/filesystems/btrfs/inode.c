@@ -246,17 +246,12 @@ BtrfsLookupName(
 
     for (;;)
     {
-        BOOLEAN Exact;
-
         Status = BtrfsReadDirEntry(Vcb, Root, Directory, Cursor, &Entry);
         if (!NT_SUCCESS(Status)) break;
 
         Cursor = Entry.Index + 1;
         if (RtlEqualUnicodeString(&Entry.Name, Name, TRUE))
         {
-            Exact = RtlEqualUnicodeString(&Entry.Name, Name, FALSE);
-            ASSERTMSG("Btrfs: the name hash missed an entry of the same name\n", !Exact);
-            UNREFERENCED_PARAMETER(Exact);
             *Location = Entry.Location;
             *Type = Entry.Type;
             BtrfsFreeDirEntry(&Entry);
