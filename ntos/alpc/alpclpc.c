@@ -1793,7 +1793,19 @@ NtQueryInformationPort(
     Status = AlpcpReferencePortByHandle(PortHandle, READ_CONTROL, PreviousMode, &Port);
     if (!NT_SUCCESS(Status)) return Status;
 
-    if (ReturnLength) *ReturnLength = 0;
     ObDereferenceObject(Port);
+
+    if (ReturnLength)
+    {
+        _SEH2_TRY
+        {
+            *ReturnLength = 0;
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
     return STATUS_SUCCESS;
 }
