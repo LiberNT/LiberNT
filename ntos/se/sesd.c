@@ -168,6 +168,38 @@ SepWriteParts(
 
 static
 NTSTATUS
+SepCheckParts(
+    _In_ const SEP_SD_PARTS *Parts);
+
+static
+NTSTATUS
+SepCheckWrittenParts(
+    _In_ PSECURITY_DESCRIPTOR Block,
+    _In_ ULONG Length)
+{
+    SEP_SD_PARTS Written;
+    PVOID Part[SEP_PART_COUNT];
+    ULONG Size[SEP_PART_COUNT];
+    ULONG Offset;
+    ULONG i;
+
+    SepReadParts(Block, &Written);
+    SepMeasureParts(&Written, Part, Size);
+
+    for (i = 0; i < SEP_PART_COUNT; i++)
+    {
+        if (Part[i] == NULL) continue;
+
+        Offset = (ULONG)((PUCHAR)Part[i] - (PUCHAR)Block);
+        if (Offset > Length || Size[i] > Length - Offset)
+            return STATUS_INVALID_SECURITY_DESCR;
+    }
+
+    return SepCheckParts(&Written);
+}
+
+static
+NTSTATUS
 SepNewDescriptor(
     _In_ SECURITY_DESCRIPTOR_CONTROL Control,
     _In_ const SEP_SD_PARTS *Parts,
@@ -186,6 +218,8 @@ SepNewDescriptor(
     if (Block == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
     Status = SepWriteParts(Block, &Length, Control, Parts);
+    if (NT_SUCCESS(Status))
+        Status = SepCheckWrittenParts(Block, Length);
     if (NT_SUCCESS(Status))
     {
         *Descriptor = Block;
