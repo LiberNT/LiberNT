@@ -13,6 +13,7 @@ extern void func_KnownFolderName(void);
 extern void func_LocalizedName(void);
 extern void func_SHAssocEnumHandlers(void);
 extern void func_SHGetDriveMedia(void);
+extern void func_StockIconResources(void);
 extern void func_Control_RunDLLW(void);
 extern void func_CFSFolder(void);
 extern void func_CheckEscapes(void);
@@ -118,6 +119,7 @@ const struct test winetest_testlist[] =
     { "LocalizedName", func_LocalizedName },
     { "SHAssocEnumHandlers", func_SHAssocEnumHandlers },
     { "SHGetDriveMedia", func_SHGetDriveMedia },
+    { "StockIconResources", func_StockIconResources },
     { "Control_RunDLLW", func_Control_RunDLLW },
     { "CFSFolder", func_CFSFolder },
     { "CheckEscapes", func_CheckEscapes },

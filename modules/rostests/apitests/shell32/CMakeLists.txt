@@ -13,6 +13,7 @@ list(APPEND SOURCE
     LocalizedName.cpp
     SHAssocEnumHandlers.cpp
     SHGetDriveMedia.cpp
+    StockIconResources.c
     CFSFolder.cpp
     CheckEscapes.cpp
     CIDLData.cpp
