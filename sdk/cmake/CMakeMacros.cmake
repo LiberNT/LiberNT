@@ -214,7 +214,7 @@ function(add_cd_file)
     if(NOT __cd EQUAL -1)
         # manage dependency
         if(_CD_TARGET AND NOT _CD_OPTIONAL)
-            add_dependencies(preinstall_partition ${_CD_TARGET} registry_inf)
+            add_dependencies(preinstall_files ${_CD_TARGET} registry_inf)
         endif()
         foreach(item ${_CD_FILE})
             if(_CD_NAME_ON_CD)

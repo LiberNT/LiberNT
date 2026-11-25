@@ -226,7 +226,7 @@ endforeach()
 add_custom_target(arm64x_runtime ALL DEPENDS ${_arm64x_files})
 add_dependencies(arm64x_runtime fex_arm64ec_runtime)
 add_dependencies(liberntiso arm64x_runtime)
-add_dependencies(preinstall_partition arm64x_runtime)
+add_dependencies(preinstall_files arm64x_runtime)
 
 if(_arm64ec_system_files)
     add_cd_file(TARGET fex_arm64ec_runtime FILE ${_arm64ec_system_files}

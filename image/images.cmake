@@ -345,15 +345,20 @@ endforeach()
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/bootcd.cmake.lst "${CMAKE_CURRENT_BINARY_DIR}/empty\n")
 
 image_list_command(bootcd _bootcd_list_command)
+image_list_command(preinstall _preinstall_list_command)
+add_custom_target(preinstall_files)
 set(_bootcd_wim_command)
 set(_bootcd_wim_depends)
 if(BOOTLOADER_UEFI AND BOOTLOADER_WIM_RAMDISK)
     set(_bootcd_wim_command
+        COMMAND ${_preinstall_list_command}
         COMMAND ${CMAKE_COMMAND}
             -DLIST=${CMAKE_CURRENT_BINARY_DIR}/bootcd.effective.lst
             "-DKEEP=^/?(loader/|efi/|boot/|bootmgr=|setup[.]exe=)"
             -DWIM=${CMAKE_CURRENT_BINARY_DIR}/bootcd.wim
             -DSTAGE=${CMAKE_CURRENT_BINARY_DIR}/bootcd.stage
+            -DINSTALL_LIST=${CMAKE_CURRENT_BINARY_DIR}/preinstall.effective.lst
+            -DINSTALL_STAGE=${CMAKE_CURRENT_BINARY_DIR}/bootcd.install.stage
             -DWIMAGE=$<TARGET_FILE:native-wimage>
             -P ${REACTOS_SOURCE_DIR}/image/bcd/medialist.cmake)
     set(_bootcd_wim_depends native-wimage)
@@ -372,6 +377,9 @@ add_custom_target(bootcd
     COMMAND ${CMAKE_COMMAND} -E echo "${_escape}[33mWarning bootcd is deprecated as ninja liberntiso now builds LiberNT.iso${_escape}[0m"
     VERBATIM)
 add_dependencies(bootcd liberntiso)
+if(_bootcd_wim_command)
+    add_dependencies(liberntiso preinstall_files)
+endif()
 
 
 ## LiberNTImg
@@ -788,7 +796,6 @@ if(DEFINED EFI_PLATFORM_ID)
     endif()
 endif()
 
-image_list_command(preinstall _preinstall_list_command)
 add_custom_target(preinstall_partition
     COMMAND ${_preinstall_list_command}
     COMMAND ${CMAKE_COMMAND} -E rm -f
@@ -825,6 +832,7 @@ add_custom_target(preinstall_partition
         ${REACTOS_SOURCE_DIR}/image/data/filesecurity.txt
     DEPENDS ${_preinstall_partition_deps}
     VERBATIM)
+add_dependencies(preinstall_partition preinstall_files)
 
 add_custom_target(liberntimg
     COMMAND ${CMAKE_COMMAND} -E rm -f ${_preinstall_image_file}
