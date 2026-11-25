@@ -57,10 +57,10 @@ XmlFindOpen(LPCWSTR xml, LPCWSTR tag)
 /*
  * Extract the text content of the first <tag>...</tag> into out (NUL-terminated,
  * up to outChars-1 chars).  Returns TRUE on success.  Leading/trailing ASCII
- * whitespace is trimmed.
+ * whitespace is trimmed when trimWs is TRUE.
  */
 static BOOL
-XmlGetText(LPCWSTR xml, LPCWSTR tag, LPWSTR out, size_t outChars)
+XmlGetText(LPCWSTR xml, LPCWSTR tag, LPWSTR out, size_t outChars, BOOL trimWs)
 {
     LPCWSTR start = XmlFindOpen(xml, tag);
     LPCWSTR end;
@@ -73,16 +73,18 @@ XmlGetText(LPCWSTR xml, LPCWSTR tag, LPWSTR out, size_t outChars)
     if (start == NULL)
         return FALSE;
 
-    while (*start == L' ' || *start == L'\t' || *start == L'\r' || *start == L'\n')
-        start++;
+    if (trimWs)
+        while (*start == L' ' || *start == L'\t' || *start == L'\r' || *start == L'\n')
+            start++;
 
     end = wcschr(start, L'<');
     if (end == NULL)
         return FALSE;
 
-    while (end > start && (end[-1] == L' ' || end[-1] == L'\t' ||
-                           end[-1] == L'\r' || end[-1] == L'\n'))
-        end--;
+    if (trimWs)
+        while (end > start && (end[-1] == L' ' || end[-1] == L'\t' ||
+                               end[-1] == L'\r' || end[-1] == L'\n'))
+            end--;
 
     while (start < end)
     {
@@ -208,22 +210,29 @@ WlanSvcFreeProfile(PWLANSVC_PROFILE Profile)
  * stored verbatim for WlanGetProfile.
  */
 DWORD
-WlanSvcParseProfileXml(LPCWSTR Xml, PWLANSVC_PROFILE *ppProfile)
+WlanSvcParseProfileXml(LPCWSTR Xml, PWLANSVC_PROFILE *ppProfile, PDWORD pdwReasonCode)
 {
     PWLANSVC_PROFILE prof;
     WCHAR buf[512];
     size_t xmlLen;
+    DWORD reasonScratch;
 
+    if (pdwReasonCode == NULL)
+        pdwReasonCode = &reasonScratch;
+    *pdwReasonCode = WLAN_REASON_CODE_INVALID_PROFILE_SCHEMA;
     *ppProfile = NULL;
     if (Xml == NULL)
         return ERROR_INVALID_PARAMETER;
 
     prof = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*prof));
     if (prof == NULL)
+    {
+        *pdwReasonCode = WLAN_REASON_CODE_UNKNOWN;
         return ERROR_NOT_ENOUGH_MEMORY;
+    }
 
     /* Profile <name> (the top-level one, used as the store key). */
-    if (XmlGetText(Xml, L"name", buf, ARRAYSIZE(buf)))
+    if (XmlGetText(Xml, L"name", buf, ARRAYSIZE(buf), TRUE))
         wcsncpy(prof->Name, buf, WLAN_MAX_NAME_LENGTH - 1);
 
     /* The SSID's own <name> lives under <SSIDConfig><SSID>; search from there
@@ -232,7 +241,7 @@ WlanSvcParseProfileXml(LPCWSTR Xml, PWLANSVC_PROFILE *ppProfile)
         LPCWSTR ssidScope = wcsstr(Xml, L"<SSID>");
         if (ssidScope == NULL)
             ssidScope = wcsstr(Xml, L"<SSIDConfig");
-        if (ssidScope != NULL && XmlGetText(ssidScope, L"name", buf, ARRAYSIZE(buf)))
+        if (ssidScope != NULL && XmlGetText(ssidScope, L"name", buf, ARRAYSIZE(buf), TRUE))
             SsidFromText(buf, &prof->Ssid);
     }
 
@@ -256,14 +265,14 @@ WlanSvcParseProfileXml(LPCWSTR Xml, PWLANSVC_PROFILE *ppProfile)
 
     /* connectionType (ESS=infrastructure, IBSS=adhoc). */
     prof->BssType = dot11_BSS_type_infrastructure;
-    if (XmlGetText(Xml, L"connectionType", buf, ARRAYSIZE(buf)))
+    if (XmlGetText(Xml, L"connectionType", buf, ARRAYSIZE(buf), TRUE))
     {
         if (_wcsicmp(buf, L"IBSS") == 0)
             prof->BssType = dot11_BSS_type_independent;
     }
 
     prof->AutoConnect = TRUE;
-    if (XmlGetText(Xml, L"connectionMode", buf, ARRAYSIZE(buf)))
+    if (XmlGetText(Xml, L"connectionMode", buf, ARRAYSIZE(buf), TRUE))
     {
         if (_wcsicmp(buf, L"manual") == 0)
             prof->AutoConnect = FALSE;
@@ -273,7 +282,7 @@ WlanSvcParseProfileXml(LPCWSTR Xml, PWLANSVC_PROFILE *ppProfile)
     prof->Cipher = DOT11_CIPHER_ALGO_NONE;
     prof->SecurityEnabled = FALSE;
 
-    if (XmlGetText(Xml, L"authentication", buf, ARRAYSIZE(buf)))
+    if (XmlGetText(Xml, L"authentication", buf, ARRAYSIZE(buf), TRUE))
     {
         if (_wcsicmp(buf, L"WPA2PSK") == 0 || _wcsicmp(buf, L"RSNAPSK") == 0)
             prof->Auth = DOT11_AUTH_ALGO_RSNA_PSK;
@@ -291,7 +300,7 @@ WlanSvcParseProfileXml(LPCWSTR Xml, PWLANSVC_PROFILE *ppProfile)
             prof->Auth = DOT11_AUTH_ALGO_80211_OPEN;
     }
 
-    if (XmlGetText(Xml, L"encryption", buf, ARRAYSIZE(buf)))
+    if (XmlGetText(Xml, L"encryption", buf, ARRAYSIZE(buf), TRUE))
     {
         if (_wcsicmp(buf, L"AES") == 0)
             prof->Cipher = DOT11_CIPHER_ALGO_CCMP;
@@ -306,7 +315,7 @@ WlanSvcParseProfileXml(LPCWSTR Xml, PWLANSVC_PROFILE *ppProfile)
     prof->SecurityEnabled = (prof->Auth != DOT11_AUTH_ALGO_80211_OPEN);
 
     /* keyMaterial (passphrase / PSK), carried opaquely for the supplicant. */
-    if (XmlGetText(Xml, L"keyMaterial", buf, ARRAYSIZE(buf)))
+    if (XmlGetText(Xml, L"keyMaterial", buf, ARRAYSIZE(buf), FALSE))
     {
         size_t klen = wcslen(buf);
         size_t i;
@@ -315,6 +324,7 @@ WlanSvcParseProfileXml(LPCWSTR Xml, PWLANSVC_PROFILE *ppProfile)
         {
             SecureZeroMemory(buf, sizeof(buf));
             WlanSvcFreeProfile(prof);
+            *pdwReasonCode = WLAN_REASON_CODE_MSMSEC_PROFILE_PSK_LENGTH;
             return ERROR_BAD_PROFILE;
         }
         for (i = 0; i < klen; i++)
@@ -323,6 +333,7 @@ WlanSvcParseProfileXml(LPCWSTR Xml, PWLANSVC_PROFILE *ppProfile)
             {
                 SecureZeroMemory(buf, sizeof(buf));
                 WlanSvcFreeProfile(prof);
+                *pdwReasonCode = WLAN_REASON_CODE_MSMSEC_PROFILE_PASSPHRASE_CHAR;
                 return ERROR_BAD_PROFILE;
             }
             prof->Key[i] = (UCHAR)buf[i];
@@ -336,6 +347,7 @@ WlanSvcParseProfileXml(LPCWSTR Xml, PWLANSVC_PROFILE *ppProfile)
         (prof->KeyLength < 8 || prof->KeyLength > NWIFI_MAX_PSK_BYTES))
     {
         WlanSvcFreeProfile(prof);
+        *pdwReasonCode = WLAN_REASON_CODE_MSMSEC_PROFILE_PSK_LENGTH;
         return ERROR_BAD_PROFILE;
     }
     if ((prof->Auth == DOT11_AUTH_ALGO_RSNA_PSK ||
@@ -353,6 +365,7 @@ WlanSvcParseProfileXml(LPCWSTR Xml, PWLANSVC_PROFILE *ppProfile)
                   (c >= 'A' && c <= 'F')))
             {
                 WlanSvcFreeProfile(prof);
+                *pdwReasonCode = WLAN_REASON_CODE_MSMSEC_PROFILE_KEYMATERIAL_CHAR;
                 return ERROR_BAD_PROFILE;
             }
         }
@@ -361,6 +374,7 @@ WlanSvcParseProfileXml(LPCWSTR Xml, PWLANSVC_PROFILE *ppProfile)
         (prof->KeyLength == 0 || prof->KeyLength >= NWIFI_MAX_PSK_BYTES))
     {
         WlanSvcFreeProfile(prof);
+        *pdwReasonCode = WLAN_REASON_CODE_MSMSEC_PROFILE_PSK_LENGTH;
         return ERROR_BAD_PROFILE;
     }
 
@@ -370,11 +384,13 @@ WlanSvcParseProfileXml(LPCWSTR Xml, PWLANSVC_PROFILE *ppProfile)
     if (prof->Xml == NULL)
     {
         WlanSvcFreeProfile(prof);
+        *pdwReasonCode = WLAN_REASON_CODE_UNKNOWN;
         return ERROR_NOT_ENOUGH_MEMORY;
     }
     memcpy(prof->Xml, Xml, xmlLen);
 
     *ppProfile = prof;
+    *pdwReasonCode = WLAN_REASON_CODE_SUCCESS;
     return ERROR_SUCCESS;
 }
 
@@ -644,7 +660,7 @@ WlanSvcLoadProfiles(PWLANSVC_INTERFACE Iface)
             HeapFree(GetProcessHeap(), 0, Protected);
         }
 
-        if (WlanSvcParseProfileXml(Keyed ? Keyed : Xml, &Profile) == ERROR_SUCCESS &&
+        if (WlanSvcParseProfileXml(Keyed ? Keyed : Xml, &Profile, NULL) == ERROR_SUCCESS &&
             WlanSvcFindProfile(Iface, Profile->Name) == NULL)
         {
             wcscpy(Profile->FileName, Find.cFileName);
@@ -714,13 +730,9 @@ WlanSvcSetProfile(PWLANSVC_INTERFACE Iface,
     if (pdwReasonCode)
         *pdwReasonCode = WLAN_REASON_CODE_SUCCESS;
 
-    dwResult = WlanSvcParseProfileXml(Xml, &prof);
+    dwResult = WlanSvcParseProfileXml(Xml, &prof, pdwReasonCode);
     if (dwResult != ERROR_SUCCESS)
-    {
-        if (pdwReasonCode)
-            *pdwReasonCode = dwResult; /* coarse reason code */
         return dwResult;
-    }
 
     prof->Flags = dwFlags;
 
