@@ -152,9 +152,8 @@ DxgkContextSyncCapture(
         if (!NT_SUCCESS(Status))
             goto Failure;
         /* TODO: legacy objects opened on another device; their state changes serialize per device */
-        if (ViewDevice != Device || Capture->Objects[Index]->Device == NULL ||
-            Capture->Objects[Index]->Device->Adapter != Device->Adapter ||
-            (Capture->Objects[Index]->Device != Device && Capture->Objects[Index]->PublicType != D3DDDI_MONITORED_FENCE))
+        if (ViewDevice != Device || !DxgkSyncObjectOnAdapter(Capture->Objects[Index], Device->Adapter) ||
+            (Capture->Objects[Index]->PublicType != D3DDDI_MONITORED_FENCE && !DxgkSyncObjectIsHomeDevice(Capture->Objects[Index], Device)))
         {
             DxgkpDereferenceSyncObject(Capture->Objects[Index]);
             Capture->Objects[Index] = NULL;

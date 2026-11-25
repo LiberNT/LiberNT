@@ -2321,8 +2321,12 @@ typedef struct _DXGKRNL_SYNC_OBJECT
     LIST_ENTRY                  GlobalShareListEntry;
     LIST_ENTRY                  ViewListHead;
     LIST_ENTRY                  ViewListEntry;
-    LIST_ENTRY                  NtShareListHead;
     volatile LONG               ViewCount;
+    /* A shared object's state lives in a core that belongs to no device; every holder, the creator included, holds a view of it. */
+    PDXGKRNL_ADAPTER            CoreAdapter;
+    LUID                        CoreAdapterLuid;
+    DXGK_SYNC_WAIT_CORE_REGISTRY CoreWaitRegistry;
+    struct _DXGKRNL_SYNC_OBJECT *HomeView;
     volatile LONG               MonitoredPageQuarantined;
 
     /*
@@ -3555,6 +3559,16 @@ DxgkpReferenceSyncObjectView(
 VOID
 DxgkSyncWakeViews(
     _In_opt_ PDXGKRNL_SYNC_OBJECT SyncObj);
+
+BOOLEAN
+DxgkSyncObjectOnAdapter(
+    _In_ PDXGKRNL_SYNC_OBJECT SyncObj,
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+BOOLEAN
+DxgkSyncObjectIsHomeDevice(
+    _In_ PDXGKRNL_SYNC_OBJECT SyncObj,
+    _In_ PDXGKRNL_DEVICE Device);
 
 NTSTATUS
 DxgkSyncSharedObjectsInitialize(VOID);

@@ -7,6 +7,7 @@ list(APPEND SOURCE
     legacysync.c
     swapchain.c
     exitshared.c
+    synclife.c
     testlist.c)
 add_executable(d3dkmtnt_apitest ${SOURCE})
 target_link_libraries(d3dkmtnt_apitest wine)

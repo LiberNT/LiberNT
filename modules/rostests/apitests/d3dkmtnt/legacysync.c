@@ -130,8 +130,23 @@ LegacySyncShared(
             LegacySyncDestroy(Open.hSyncObject, Name);
         if (Open2.hSyncObject != 0)
             LegacySyncDestroy(Open2.hSyncObject, Name);
-        /* TODO: open after the creator's destroy once the NT object keeps the sync object alive */
+
+        LegacySyncDestroy(Create.hSyncObject, Name);
+        ZeroMemory(&Open, sizeof(Open));
+        Open.hNtHandle = Shared;
+        Status = LegacySyncWin32u("NtGdiDdDDIOpenSyncObjectFromNtHandle")(&Open);
+        ok(Status == STATUS_SUCCESS, "%s: device-less open after the creator's destroy status 0x%08lx\n", Name, Status);
+        ZeroMemory(&Open2, sizeof(Open2));
+        Open2.hNtHandle = Shared;
+        Open2.hDevice = hDevice2;
+        Status = LegacySyncWin32u("NtGdiDdDDIOpenSyncObjectFromNtHandle2")(&Open2);
+        ok(Status == STATUS_SUCCESS, "%s: device open after the creator's destroy status 0x%08lx\n", Name, Status);
+        if (Open.hSyncObject != 0)
+            LegacySyncDestroy(Open.hSyncObject, Name);
+        if (Open2.hSyncObject != 0)
+            LegacySyncDestroy(Open2.hSyncObject, Name);
         CloseHandle(Shared);
+        return;
     }
     LegacySyncDestroy(Create.hSyncObject, Name);
 }

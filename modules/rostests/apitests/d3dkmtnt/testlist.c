@@ -14,6 +14,7 @@ extern void func_legacysync(void);
 extern void func_swapchain(void);
 extern void func_exitshared(void);
 extern void func_exitshared_child(void);
+extern void func_synclife(void);
 
 const struct test winetest_testlist[] =
 {
@@ -23,5 +24,6 @@ const struct test winetest_testlist[] =
     { "swapchain",    func_swapchain },
     { "exitshared",   func_exitshared },
     { "exitshared_child", func_exitshared_child },
+    { "synclife",     func_synclife },
     { 0, 0 }
 };
