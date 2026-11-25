@@ -401,7 +401,8 @@ VolumeCheck::CheckAttributes(_In_ ULONGLONG Number, _In_ ULONGLONG Owner, _In_ P
         }
         else
         {
-            if ((ULONG)Attr->Resident.DataOffset + Attr->Resident.DataLength > Attr->Length)
+            if (Attr->Resident.DataOffset > Attr->Length ||
+                Attr->Resident.DataLength > Attr->Length - Attr->Resident.DataOffset)
             {
                 Event(NtfsCheckRecordCorrupt, Number, Offset);
                 return;
