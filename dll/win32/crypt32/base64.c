@@ -1075,12 +1075,12 @@ BOOL WINAPI CryptStringToBinaryA(LPCSTR pszString,
         return FALSE;
     }
     /* Only the bottom byte contains valid types */
-    if (dwFlags & 0xfffffff0)
+    if (dwFlags & ~(CRYPT_STRING_STRICT | CRYPT_STRING_NOCRLF | CRYPT_STRING_NOCR | 0xf))
     {
         SetLastError(ERROR_INVALID_DATA);
         return FALSE;
     }
-    switch (dwFlags)
+    switch (dwFlags & 0xf)
     {
     case CRYPT_STRING_BASE64_ANY:
         decoder = Base64AnyToBinaryA;
@@ -1293,12 +1293,12 @@ BOOL WINAPI CryptStringToBinaryW(LPCWSTR pszString,
         return FALSE;
     }
     /* Only the bottom byte contains valid types */
-    if (dwFlags & 0xfffffff0)
+    if (dwFlags & ~(CRYPT_STRING_STRICT | CRYPT_STRING_NOCRLF | CRYPT_STRING_NOCR | 0xf))
     {
         SetLastError(ERROR_INVALID_DATA);
         return FALSE;
     }
-    switch (dwFlags)
+    switch (dwFlags & 0xf)
     {
     case CRYPT_STRING_BASE64_ANY:
         decoder = Base64AnyToBinaryW;
