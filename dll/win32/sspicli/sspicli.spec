@@ -31,6 +31,7 @@
 @ stdcall InitSecurityInterfaceW() secur32.InitSecurityInterfaceW
 @ stdcall InitializeSecurityContextA(ptr ptr str long long long ptr long ptr ptr ptr ptr) secur32.InitializeSecurityContextA
 @ stdcall InitializeSecurityContextW(ptr ptr wstr long long long ptr long ptr ptr ptr ptr) secur32.InitializeSecurityContextW
+@ stdcall LogonUserExExW(wstr wstr wstr long long ptr ptr ptr ptr ptr ptr) advapi32.LogonUserExExW
 @ stdcall LsaCallAuthenticationPackage(long long ptr long ptr ptr ptr) secur32.LsaCallAuthenticationPackage
 @ stdcall LsaConnectUntrusted(ptr) secur32.LsaConnectUntrusted
 @ stdcall LsaDeregisterLogonProcess(long) secur32.LsaDeregisterLogonProcess
