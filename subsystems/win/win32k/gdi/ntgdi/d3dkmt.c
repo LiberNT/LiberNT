@@ -911,10 +911,10 @@ NtGdiDdDDICreateOverlay(_Inout_ D3DKMT_CREATEOVERLAY* unnamedParam1)
 
 NTSTATUS
 APIENTRY
-NtGdiDdDDICreateSynchronizationObject(_Inout_ D3DKMT_CREATESYNCHRONIZATIONOBJECT* unnamedParam1)
+NtGdiDdDDICreateSynchronizationObject(_Inout_ D3DKMT_CREATESYNCHRONIZATIONOBJECT2* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    D3DKMT_CALL_CALLBACK(RxgkIntPfnCreateSynchronizationObject, unnamedParam1);
+    D3DKMT_CALL_CALLBACK(RxgkIntPfnCreateSynchronizationObject2, unnamedParam1);
 }
 
 NTSTATUS
@@ -1339,14 +1339,6 @@ NtGdiDdDDIOpenResource2(_Inout_ D3DKMT_OPENRESOURCE* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
     D3DKMT_CALL_CALLBACK(RxgkIntPfnOpenResource, unnamedParam1);
-}
-
-NTSTATUS
-APIENTRY
-NtGdiDdDDICreateSynchronizationObject2(_Inout_ D3DKMT_CREATESYNCHRONIZATIONOBJECT2* unnamedParam1)
-{
-    RETURN_STATUS_IF_NULL(unnamedParam1);
-    D3DKMT_CALL_CALLBACK(RxgkIntPfnCreateSynchronizationObject2, unnamedParam1);
 }
 
 NTSTATUS

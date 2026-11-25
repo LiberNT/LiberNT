@@ -9,9 +9,11 @@
 #include <apitest.h>
 
 extern void func_sharedaccess(void);
+extern void func_syncabi(void);
 
 const struct test winetest_testlist[] =
 {
     { "sharedaccess", func_sharedaccess },
+    { "syncabi",      func_syncabi },
     { 0, 0 }
 };

@@ -77,7 +77,6 @@
 @ stdcall NtGdiDdDDICreateOverlay(ptr)
 @ stdcall NtGdiDdDDICreatePagingQueue(ptr)
 @ stdcall NtGdiDdDDICreateSynchronizationObject(ptr)
-@ stdcall NtGdiDdDDICreateSynchronizationObject2(ptr)
 @ stdcall NtGdiDdDDIDestroyAllocation(ptr)
 @ stdcall NtGdiDdDDIDestroyAllocation2(ptr)
 @ stdcall NtGdiDdDDIDestroyContext(ptr)

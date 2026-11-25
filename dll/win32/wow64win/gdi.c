@@ -861,8 +861,20 @@ NTSTATUS WINAPI wow64_NtGdiDdDDICreateKeyedMutex2( UINT *args )
 
 NTSTATUS WINAPI wow64_NtGdiDdDDICreateSynchronizationObject( UINT *args )
 {
+#ifdef __REACTOS__
+    D3DKMT_CREATESYNCHRONIZATIONOBJECT2 *desc = get_ptr( &args );
+
+    if (!desc) return STATUS_INVALID_PARAMETER;
+    if (desc->Info.Type == D3DDDI_CPU_NOTIFICATION)
+    {
+        ULONG event = HandleToUlong( desc->Info.CPUNotification.Event );
+        desc->Info.CPUNotification.Event = Handle32ToHandle( event );
+    }
+    return NtGdiDdDDICreateSynchronizationObject( (D3DKMT_CREATESYNCHRONIZATIONOBJECT *)desc );
+#else
     D3DKMT_CREATESYNCHRONIZATIONOBJECT *desc = get_ptr( &args );
     return NtGdiDdDDICreateSynchronizationObject( desc );
+#endif
 }
 
 NTSTATUS WINAPI wow64_NtGdiDdDDICreateSynchronizationObject2( UINT *args )

@@ -3985,7 +3985,7 @@ W32KAPI
 NTSTATUS
 APIENTRY
 NtGdiDdDDICreateSynchronizationObject(
-    _Inout_ D3DKMT_CREATESYNCHRONIZATIONOBJECT* unnamedParam1);
+    _Inout_ D3DKMT_CREATESYNCHRONIZATIONOBJECT2* unnamedParam1);
 
 __kernel_entry
 W32KAPI
@@ -4312,13 +4312,6 @@ NtGdiDdDDIWaitForSynchronizationObject(
     _In_ const D3DKMT_WAITFORSYNCHRONIZATIONOBJECT* unnamedParam1);
 
 /* WDDM 2.0 D3DKMT additions (ReactOS) */
-__kernel_entry
-W32KAPI
-NTSTATUS
-APIENTRY
-NtGdiDdDDICreateSynchronizationObject2(
-    _Inout_ D3DKMT_CREATESYNCHRONIZATIONOBJECT2* unnamedParam1);
-
 __kernel_entry
 W32KAPI
 NTSTATUS

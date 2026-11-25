@@ -18,3 +18,25 @@ D3DKMTOpenResource(
     (VOID)Descriptor[sizeof(*pData) - 1];
     return NtGdiDdDDIOpenResource(pData);
 }
+
+NTSTATUS
+APIENTRY
+D3DKMTCreateSynchronizationObject(
+    _Inout_ D3DKMT_CREATESYNCHRONIZATIONOBJECT *pData)
+{
+    D3DKMT_CREATESYNCHRONIZATIONOBJECT2 Create;
+    NTSTATUS Status;
+
+    C_ASSERT(sizeof(Create.Info.Reserved) >= sizeof(pData->Info.Reserved));
+
+    if (pData == NULL)
+        return STATUS_INVALID_PARAMETER;
+    RtlZeroMemory(&Create, sizeof(Create));
+    Create.hDevice = pData->hDevice;
+    Create.Info.Type = pData->Info.Type;
+    RtlCopyMemory(&Create.Info.Reserved, &pData->Info.Reserved, sizeof(pData->Info.Reserved));
+    Status = NtGdiDdDDICreateSynchronizationObject(&Create);
+    if (NT_SUCCESS(Status))
+        pData->hSyncObject = Create.hSyncObject;
+    return Status;
+}

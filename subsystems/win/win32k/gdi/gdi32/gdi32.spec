@@ -670,7 +670,7 @@
 @ stdcall -version=0xA00+ D3DKMTCreateNativeFence(ptr) NtGdiDdDDICreateNativeFence
 @ stdcall -version=0x600+ D3DKMTCreateOverlay(ptr) NtGdiDdDDICreateOverlay
 @ stdcall -version=0xA00+ D3DKMTCreateProtectedSession(ptr) NtGdiDdDDICreateProtectedSession
-@ stdcall -version=0x600+ D3DKMTCreateSynchronizationObject(ptr) NtGdiDdDDICreateSynchronizationObject
+@ stdcall -version=0x600+ D3DKMTCreateSynchronizationObject(ptr)
 @ stdcall -version=0x600+ D3DKMTDestroyAllocation(ptr) NtGdiDdDDIDestroyAllocation
 @ stdcall -version=0x600+ D3DKMTDestroyContext(ptr) NtGdiDdDDIDestroyContext
 @ stdcall -version=0x600+ D3DKMTDestroyDCFromMemory(ptr)
@@ -743,7 +743,7 @@
 @ stdcall -version=0x600+ D3DKMTWaitForIdle(ptr) NtGdiDdDDIWaitForIdle
 @ stdcall -version=0x600+ D3DKMTWaitForSynchronizationObject(ptr) NtGdiDdDDIWaitForSynchronizationObject
 @ stdcall -version=0x600+ D3DKMTWaitForVerticalBlankEvent(ptr) NtGdiDdDDIWaitForVerticalBlankEvent
-@ stdcall -version=0x600+ D3DKMTCreateSynchronizationObject2(ptr) NtGdiDdDDICreateSynchronizationObject2
+@ stdcall -version=0x600+ D3DKMTCreateSynchronizationObject2(ptr) NtGdiDdDDICreateSynchronizationObject
 @ stdcall -version=0x600+ D3DKMTWaitForSynchronizationObject2(ptr) NtGdiDdDDIWaitForSynchronizationObject2
 @ stdcall -version=0x600+ D3DKMTSignalSynchronizationObject2(ptr) NtGdiDdDDISignalSynchronizationObject2
 @ stdcall -version=0x600+ D3DKMTMakeResident(ptr) NtGdiDdDDIMakeResident
