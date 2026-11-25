@@ -629,14 +629,16 @@ NtGdiSetDIBitsToDeviceInternal(
     BOOL bCompressed;
 
     if (!Bits) return 0;
+    if (cjMaxInfo < sizeof(BITMAPCOREHEADER)) return 0;
 
-    pbmiSafe = ExAllocatePoolWithTag(PagedPool, cjMaxInfo, 'pmTG');
+    pbmiSafe = ExAllocatePoolZero(PagedPool, sizeof(BITMAPV5HEADER) + 256 * sizeof(RGBQUAD), 'pmTG');
     if (!pbmiSafe) return 0;
 
     _SEH2_TRY
     {
         ProbeForRead(bmi, cjMaxInfo, 1);
         ProbeForRead(Bits, cjMaxBits, 1);
+        cjMaxInfo = min(cjMaxInfo, sizeof(BITMAPV5HEADER) + 256 * sizeof(RGBQUAD));
         RtlCopyMemory(pbmiSafe, bmi, cjMaxInfo);
         bmi = pbmiSafe;
     }
@@ -646,6 +648,12 @@ NtGdiSetDIBitsToDeviceInternal(
         goto Exit;
     }
     _SEH2_END;
+
+    if (bmi->bmiHeader.biSize < sizeof(BITMAPCOREHEADER) || bmi->bmiHeader.biSize > cjMaxInfo)
+    {
+        ret = 0;
+        goto Exit;
+    }
 
     DPRINT("StartScan %d ScanLines %d Bits %p bmi %p ColorUse %d\n"
            "    Height %d Width %d biSizeImage %d\n"
