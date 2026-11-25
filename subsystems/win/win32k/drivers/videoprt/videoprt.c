@@ -104,6 +104,25 @@ DriverEntry(
 
 static
 NTSTATUS
+IntVideoPortCreateDeviceMapKey(VOID)
+{
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\HARDWARE\\DEVICEMAP\\VIDEO");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE KeyHandle;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    /* The HARDWARE hive holds only volatile keys, and the display driver that starts first creates this one */
+    InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwCreateKey(&KeyHandle, KEY_SET_VALUE, &ObjectAttributes, 0, NULL, REG_OPTION_VOLATILE, NULL);
+    if (NT_SUCCESS(Status))
+        ZwClose(KeyHandle);
+    return Status;
+}
+
+static
+NTSTATUS
 IntVideoPortAddDeviceMapLink(
     PVIDEO_PORT_DEVICE_EXTENSION DeviceExtension)
 {
@@ -123,6 +142,13 @@ IntVideoPortAddDeviceMapLink(
         RegistryPath = &DeviceExtension->NewRegistryPath;
     else
         RegistryPath = &DeviceExtension->RegistryPath;
+
+    Status = IntVideoPortCreateDeviceMapKey();
+    if (!NT_SUCCESS(Status))
+    {
+        ERR_(VIDEOPRT, "Failed to create the DEVICEMAP\\VIDEO key: 0x%X\n", Status);
+        return Status;
+    }
 
     /* Add entry to DEVICEMAP\VIDEO key in registry. */
     Status = RtlWriteRegistryValue(RTL_REGISTRY_DEVICEMAP,
