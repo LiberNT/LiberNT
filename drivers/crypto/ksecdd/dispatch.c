@@ -171,8 +171,7 @@ KsecDeviceControl(
 
         default:
             DPRINT1("Unhandled control code 0x%lx\n", IoControlCode);
-            __debugbreak();
-            return STATUS_INVALID_PARAMETER;
+            return STATUS_NOT_SUPPORTED;
     }
 
     return Status;
