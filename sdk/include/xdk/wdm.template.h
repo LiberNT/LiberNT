@@ -1140,13 +1140,13 @@ typedef PVOID SE_IMAGE_VERIFICATION_CALLBACK_TOKEN;
 #ifdef __cplusplus
 extern "C" {
 #endif
-FIRMWARE_TYPE NTAPI ExGetFirmwareType(void);
-BOOLEAN NTAPI ExIsManufacturingModeEnabled(void);
-BOOLEAN NTAPI ExIsSoftBoot(void);
+NTKERNELAPI FIRMWARE_TYPE NTAPI ExGetFirmwareType(void);
+NTKERNELAPI BOOLEAN NTAPI ExIsManufacturingModeEnabled(void);
+NTKERNELAPI BOOLEAN NTAPI ExIsSoftBoot(void);
 NTSTATUS NTAPI KeConvertAuxiliaryCounterToPerformanceCounter(ULONG64 AuxiliaryCounterValue, PULONG64 PerformanceCounterValue, PULONG64 ConversionError);
-void NTAPI PoSetHiberRange(PVOID MemoryMap, ULONG Flags, PVOID Address, ULONG_PTR Length, ULONG Tag);
-ULONG NTAPI RtlCrc32(const void * Buffer, size_t Size, ULONG InitialCrc);
-ULONGLONG NTAPI RtlCrc64(const void * Buffer, size_t Size, ULONGLONG InitialCrc);
+NTKERNELAPI void NTAPI PoSetHiberRange(PVOID MemoryMap, ULONG Flags, PVOID Address, ULONG_PTR Length, ULONG Tag);
+NTSYSAPI ULONG NTAPI RtlCrc32(const void * Buffer, size_t Size, ULONG InitialCrc);
+NTSYSAPI ULONGLONG NTAPI RtlCrc64(const void * Buffer, size_t Size, ULONGLONG InitialCrc);
 #ifdef __cplusplus
 }
 #endif

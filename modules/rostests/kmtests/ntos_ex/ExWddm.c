@@ -303,14 +303,6 @@ MmGetPhysicalMemoryRangesEx(
 
 BOOLEAN
 NTAPI
-ExIsManufacturingModeEnabled(VOID);
-
-BOOLEAN
-NTAPI
-ExIsSoftBoot(VOID);
-
-BOOLEAN
-NTAPI
 ExQueryFastCacheDevLicense(VOID);
 
 ULONGLONG
