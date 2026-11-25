@@ -128,6 +128,25 @@ IntRestoreTebWndCallback (HWND hWnd, PWND pWnd, PVOID pActCtx)
   ClientInfo->CallbackWnd.pActCtx = pActCtx;
 }
 
+NTSTATUS FASTCALL
+IntCaptureCallbackResult(PVOID Destination, PVOID ResultPointer, SIZE_T Length)
+{
+   NTSTATUS Status = STATUS_SUCCESS;
+
+   _SEH2_TRY
+   {
+      ProbeForRead(ResultPointer, Length, 1);
+      RtlCopyMemory(Destination, ResultPointer, Length);
+   }
+   _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+   {
+      Status = _SEH2_GetExceptionCode();
+   }
+   _SEH2_END;
+
+   return Status;
+}
+
 /* FUNCTIONS *****************************************************************/
 
 /* Calls ClientLoadLibrary in user32 */
@@ -419,6 +438,7 @@ co_IntCallWindowProc(WNDPROC Proc,
    _SEH2_TRY
    {
       /* Simulate old behaviour: copy into our local buffer */
+      ProbeForRead(ResultPointer, ArgumentLength, 1);
       RtlMoveMemory(Arguments, ResultPointer, ArgumentLength);
    }
    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -574,7 +594,10 @@ co_IntLoadDefaultCursors(VOID)
    }
 
    /* HACK: The desktop class doen't have a proper cursor yet, so set it here */
-    gDesktopCursor = *((HCURSOR*)ResultPointer);
+   if (!NT_SUCCESS(IntCaptureCallbackResult(&gDesktopCursor, ResultPointer, sizeof(HCURSOR))))
+   {
+      return FALSE;
+   }
 
    return TRUE;
 }
@@ -895,6 +918,7 @@ co_IntCallHookProc(INT HookId,
       _SEH2_TRY
       {
          /* Simulate old behaviour: copy into our local buffer */
+         ProbeForRead(ResultPointer, ArgumentLength, 1);
          RtlMoveMemory(Argument, ResultPointer, ArgumentLength);
          Result = Common->Result;
       }
@@ -1075,11 +1099,8 @@ co_IntCallLoadMenu( HINSTANCE hModule,
 
    UserEnterCo();
 
-   if (NT_SUCCESS(Status))
-   {
-      Result = *(LRESULT*)ResultPointer;
-   }
-   else
+   if (!NT_SUCCESS(Status) ||
+       !NT_SUCCESS(IntCaptureCallbackResult(&Result, ResultPointer, sizeof(LRESULT))))
    {
       Result = 0;
    }
@@ -1155,11 +1176,8 @@ co_IntCopyImage(HANDLE hnd, UINT type, INT desiredx, INT desiredy, UINT flags)
 
    UserEnterCo();
 
-   if (NT_SUCCESS(Status))
-   {
-      Handle = *(HANDLE*)ResultPointer;
-   }
-   else
+   if (!NT_SUCCESS(Status) ||
+       !NT_SUCCESS(IntCaptureCallbackResult(&Handle, ResultPointer, sizeof(HANDLE))))
    {
       ERR("CopyImage callback failed!\n");
       Handle = NULL;
@@ -1207,6 +1225,7 @@ co_IntGetCharsetInfo(LCID Locale, PCHARSETINFO pCs)
       _SEH2_TRY
       {
          /* Need to copy into our local buffer */
+         ProbeForRead(ResultPointer, ArgumentLength, 1);
          RtlMoveMemory(Argument, ResultPointer, ArgumentLength);
       }
       _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -1269,7 +1288,12 @@ co_IntSetWndIcons(VOID)
       return FALSE;
    }
 
-   RtlMoveMemory(Common, ResultPointer, ArgumentLength);
+   if (!NT_SUCCESS(IntCaptureCallbackResult(Common, ResultPointer, ArgumentLength)))
+   {
+      ERR("Set Window Icons callback returned no result!\n");
+      IntCbFreeMemory(Argument);
+      return FALSE;
+   }
    gpsi->hIconSmWindows = Common->hIconSmWindows;
    gpsi->hIconWindows   = Common->hIconWindows;
 
@@ -1353,7 +1377,12 @@ co_IntSetupOBM(VOID)
       return;
    }
 
-   RtlMoveMemory(Common, ResultPointer, ArgumentLength);
+   if (!NT_SUCCESS(IntCaptureCallbackResult(Common, ResultPointer, ArgumentLength)))
+   {
+      ERR("Set OBM callback returned no result!\n");
+      IntCbFreeMemory(Argument);
+      return;
+   }
    RtlCopyMemory(gpsi->oembmi, Common->oembmi, sizeof(gpsi->oembmi));
 
    IntCbFreeMemory(Argument);
@@ -1368,12 +1397,13 @@ co_UserCBClientPrinterThunk( PVOID pkt, INT InSize, PVOID pvOutData, INT OutSize
 {
    NTSTATUS Status;
    PVOID ResultPointer;
+   ULONG ResultLength = 0;
 
    Status = KeUserModeCallback( USER32_CALLBACK_UMPD,
                                 pkt,
                                 InSize,
                                &ResultPointer,
-                               (PULONG)&OutSize );
+                               &ResultLength );
 
 
    if (!NT_SUCCESS(Status))
@@ -1382,7 +1412,11 @@ co_UserCBClientPrinterThunk( PVOID pkt, INT InSize, PVOID pvOutData, INT OutSize
       return 1;
    }
 
-   if (OutSize) RtlMoveMemory( pvOutData, ResultPointer, OutSize );
+   if (OutSize > 0 &&
+       !NT_SUCCESS(IntCaptureCallbackResult(pvOutData, ResultPointer, min((ULONG)OutSize, ResultLength))))
+   {
+      return 1;
+   }
 
    return 0;
 }
@@ -1405,8 +1439,11 @@ co_IntImmProcessKey(HWND hWnd, HKL hKL, UINT vKey, LPARAM lParam, DWORD dwHotKey
                                 &ResultLength);
     UserEnterCo();
 
-    if (NT_SUCCESS(Status))
-        ret = *(LPDWORD)ResultPointer;
+    if (!NT_SUCCESS(Status) ||
+        !NT_SUCCESS(IntCaptureCallbackResult(&ret, ResultPointer, sizeof(DWORD))))
+    {
+        ret = 0;
+    }
 
     return ret;
 }

@@ -55,6 +55,9 @@ IntCbAllocateMemory(ULONG Size);
 VOID FASTCALL
 IntCbFreeMemory(PVOID Data);
 
+NTSTATUS FASTCALL
+IntCaptureCallbackResult(PVOID Destination, PVOID ResultPointer, SIZE_T Length);
+
 HMENU APIENTRY co_IntCallLoadMenu(HINSTANCE,PUNICODE_STRING);
 
 NTSTATUS APIENTRY co_IntClientThreadSetup(VOID);

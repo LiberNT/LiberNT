@@ -92,7 +92,12 @@ IntDDEPostCallback(
       return 0;
    }
 
-   RtlCopyMemory(Common, ResultPointer, ArgumentLength);
+   if (!NT_SUCCESS(IntCaptureCallbackResult(Common, ResultPointer, ArgumentLength)))
+   {
+      ERR("DDE Post callback returned no result!\n");
+      IntCbFreeMemory(Argument);
+      return 0;
+   }
 
    size    = Common->size;
    *lParam = Common->lParam;
@@ -155,7 +160,12 @@ IntDDEGetCallback(
       return FALSE;
    }
 
-   RtlMoveMemory(Common, ResultPointer, ArgumentLength);
+   if (!NT_SUCCESS(IntCaptureCallbackResult(Common, ResultPointer, ArgumentLength)))
+   {
+      ERR("DDE Get callback returned no result!\n");
+      IntCbFreeMemory(Argument);
+      return FALSE;
+   }
 
    pMsg->lParam = Common->lParam;
 
