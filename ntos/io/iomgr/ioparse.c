@@ -1187,9 +1187,10 @@ IopParseDeviceEx(
         return STATUS_OBJECT_PATH_NOT_FOUND;
     }
 
-    if (!IopCheckDeviceAndDriver(OpenPacket, DeviceObject))
+    Status = IopCheckDeviceAndDriver(OpenPacket, DeviceObject);
+    if (!NT_SUCCESS(Status))
     {
-        return STATUS_DELETE_PENDING;
+        return Status;
     }
 
     Status = IopCheckDeviceAccess(DeviceObject,
@@ -1266,7 +1267,7 @@ IopParseDeviceEx(
     }
 
     /* The file object names the device that was opened; requests go to the top of what serves it */
-    Status = IopReferenceDeviceObject(DeviceObject);
+    Status = IopReferenceDeviceObject(DeviceObject, OpenPacket);
     if (!NT_SUCCESS(Status))
     {
         if (TxnParameters.TransactionObject != NULL) ObDereferenceObject(TxnParameters.TransactionObject);

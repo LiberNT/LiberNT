@@ -542,7 +542,8 @@ IopReadyDeviceObjects(
 NTSTATUS
 NTAPI
 IopReferenceDeviceObject(
-    _In_ PDEVICE_OBJECT DeviceObject);
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ POPEN_PACKET OpenPacket);
 
 VOID
 NTAPI

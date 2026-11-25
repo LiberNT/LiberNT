@@ -108,7 +108,8 @@ IopGetDeviceAttachmentBase(
 NTSTATUS
 NTAPI
 IopReferenceDeviceObject(
-    IN PDEVICE_OBJECT DeviceObject)
+    IN PDEVICE_OBJECT DeviceObject,
+    IN POPEN_PACKET OpenPacket OPTIONAL)
 {
     PEXTENDED_DEVOBJ_EXTENSION Extension;
     KIRQL OldIrql;
@@ -126,7 +127,18 @@ IopReferenceDeviceObject(
         return STATUS_DELETE_PENDING;
     }
 
+    /* The check before the open ran unlocked; this one, under the lock of the increment, decides */
+    if (OpenPacket != NULL &&
+        (DeviceObject->Flags & DO_EXCLUSIVE) &&
+        DeviceObject->ReferenceCount != 0 &&
+        !OpenPacket->Override)
+    {
+        KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+        return STATUS_ACCESS_DENIED;
+    }
+
     DeviceObject->ReferenceCount++;
+    ASSERT(DeviceObject->ReferenceCount != 0);
 
     KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
 
@@ -285,7 +297,7 @@ IopDeleteDevice(
     }
 }
 
-BOOLEAN
+NTSTATUS
 IopCheckDeviceAndDriver(
     _In_ POPEN_PACKET OpenPacket,
     _In_ PDEVICE_OBJECT DeviceObject)
@@ -297,20 +309,20 @@ IopCheckDeviceAndDriver(
                                      DOE_REMOVE_PENDING |
                                      DOE_REMOVE_PROCESSED))
     {
-        return FALSE;
+        return STATUS_DELETE_PENDING;
     }
 
-    if (DeviceObject->DriverObject->Flags & DRVO_UNLOAD_INVOKED) return FALSE;
+    if (DeviceObject->DriverObject->Flags & DRVO_UNLOAD_INVOKED) return STATUS_DELETE_PENDING;
 
     if (OpenPacket != NULL &&
         (DeviceObject->Flags & DO_EXCLUSIVE) &&
         DeviceObject->ReferenceCount != 0 &&
         !OpenPacket->Override)
     {
-        return FALSE;
+        return STATUS_ACCESS_DENIED;
     }
 
-    return TRUE;
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS

@@ -163,8 +163,8 @@ NTSTATUS IopGetDeviceObjectPointer(_In_ PUNICODE_STRING ObjectName,
                                    _Out_ PFILE_OBJECT *FileObject,
                                    _Out_ PDEVICE_OBJECT *DeviceObject,
                                    _In_ ULONG AttachFlag);
-BOOLEAN IopCheckDeviceAndDriver(_In_ POPEN_PACKET OpenPacket,
-                                _In_ PDEVICE_OBJECT DeviceObject);
+NTSTATUS IopCheckDeviceAndDriver(_In_ POPEN_PACKET OpenPacket,
+                                 _In_ PDEVICE_OBJECT DeviceObject);
 NTSTATUS IopSetDeviceSecurityDescriptor(_In_ PDEVICE_OBJECT DeviceObject,
                                         _In_ PSECURITY_INFORMATION SecurityInformation,
                                         _In_ PSECURITY_DESCRIPTOR SecurityDescriptor,

@@ -31,12 +31,6 @@ IopInvalidDeviceRequest(
         return STATUS_NOT_SUPPORTED;
     }
 
-    if (StackPtr->MajorFunction == IRP_MJ_PNP)
-    {
-        IoCompleteRequest(Irp, IO_NO_INCREMENT);
-        return Irp->IoStatus.Status;
-    }
-
     Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
     Irp->IoStatus.Information = 0;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
