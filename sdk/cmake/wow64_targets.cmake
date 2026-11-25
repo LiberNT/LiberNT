@@ -112,6 +112,7 @@ set(WOW64_I386_EXECUTABLES
     sdbinst
     shutdown
     sort
+    start
     subst
     svchost
     taskkill
@@ -134,6 +135,7 @@ set(WOW64_I386_EXECUTABLES
 
 if(ENABLE_ROSTESTS)
     list(APPEND WOW64_I386_EXECUTABLES
+        cmd_apitest
         kmtwow64
         user32_winetest
         win32u_apitest
