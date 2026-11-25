@@ -1012,6 +1012,10 @@ IoGetDeviceProperty(
             return Status;
 
         case DevicePropertyLegacyBusType:
+            /* A device whose bus gave no bus information has no bus type or number to report */
+            if (DeviceNode->ChildInterfaceType == InterfaceTypeUndefined && DeviceNode->ChildBusTypeIndex == (USHORT)-1)
+                return STATUS_OBJECT_NAME_NOT_FOUND;
+
             if (BufferLength < sizeof(INTERFACE_TYPE))
             {
                 *ResultLength = sizeof(INTERFACE_TYPE);
@@ -1024,6 +1028,9 @@ IoGetDeviceProperty(
             return STATUS_SUCCESS;
 
         case DevicePropertyBusNumber:
+            if (DeviceNode->ChildInterfaceType == InterfaceTypeUndefined && DeviceNode->ChildBusTypeIndex == (USHORT)-1)
+                return STATUS_OBJECT_NAME_NOT_FOUND;
+
             if (BufferLength < sizeof(ULONG))
             {
                 *ResultLength = sizeof(ULONG);

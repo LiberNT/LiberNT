@@ -97,6 +97,16 @@ START_TEST(IoRootPdo)
         if (!RootPdoIsRegistryDevice(Device, &HasBootConfiguration))
             continue;
 
+        {
+            ULONG Value = 0xA5A5A5A5, Length = 0;
+
+            /* The root enumerator answers no bus information, so Windows 11 has no bus type or number to report */
+            Status = IoGetDeviceProperty(Device, DevicePropertyLegacyBusType, sizeof(Value), &Value, &Length);
+            ok_eq_hex(Status, STATUS_OBJECT_NAME_NOT_FOUND);
+            Status = IoGetDeviceProperty(Device, DevicePropertyBusNumber, sizeof(Value), &Value, &Length);
+            ok_eq_hex(Status, STATUS_OBJECT_NAME_NOT_FOUND);
+        }
+
         if (!HasBootConfiguration)
         {
             /* Windows 11 answers both with success and no list for an installed root device that has none */
