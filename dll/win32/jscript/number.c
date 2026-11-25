@@ -19,6 +19,9 @@
 #include <math.h>
 #include <locale.h>
 #include <assert.h>
+#ifdef __REACTOS__
+#include <float.h>
+#endif
 
 #include "jscript.h"
 
@@ -682,6 +685,26 @@ HRESULT create_number_constr(script_ctx_t *ctx, jsdisp_t *object_prototype, jsdi
             PROPF_CONSTR|1, &number->dispex, ret);
 
     jsdisp_release(&number->dispex);
+#ifdef __REACTOS__
+    if(SUCCEEDED(hres)) {
+        static const struct {
+            const WCHAR *name;
+            double value;
+        } constants[] = {
+            {L"MAX_VALUE",         DBL_MAX},
+            {L"MIN_VALUE",         4.9406564584124654e-324},
+            {L"NaN",               NAN},
+            {L"NEGATIVE_INFINITY", -INFINITY},
+            {L"POSITIVE_INFINITY", INFINITY},
+        };
+        unsigned i;
+
+        for(i = 0; i < ARRAY_SIZE(constants) && SUCCEEDED(hres); i++)
+            hres = jsdisp_define_data_property(*ret, constants[i].name, 0, jsval_number(constants[i].value));
+        if(FAILED(hres))
+            jsdisp_release(*ret);
+    }
+#endif
     return hres;
 }
 
