@@ -343,8 +343,7 @@ DxgkSharedObjectsInitialize(VOID)
     GenericMapping.GenericWrite = STANDARD_RIGHTS_WRITE |
                                   SHARED_ALLOCATION_WRITE;
     GenericMapping.GenericExecute = STANDARD_RIGHTS_EXECUTE;
-    GenericMapping.GenericAll = STANDARD_RIGHTS_ALL |
-                                SHARED_ALLOCATION_WRITE;
+    GenericMapping.GenericAll = SHARED_ALLOCATION_ALL_ACCESS;
 
     RtlZeroMemory(&TypeInitializer, sizeof(TypeInitializer));
     RtlInitUnicodeString(&TypeName, L"DxgkSharedResource");

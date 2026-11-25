@@ -2356,7 +2356,7 @@ DxgkSyncSharedObjectsInitialize(VOID)
     RtlInitUnicodeString(&TypeName, L"DxgkSharedSyncObject");
     TypeInitializer.Length = sizeof(TypeInitializer);
     TypeInitializer.InvalidAttributes = OBJ_OPENLINK;
-    TypeInitializer.GenericMapping.GenericRead = STANDARD_RIGHTS_READ | SYNCHRONIZE | D3DDDI_SYNC_OBJECT_WAIT;
+    TypeInitializer.GenericMapping.GenericRead = STANDARD_RIGHTS_READ | D3DDDI_SYNC_OBJECT_WAIT;
     TypeInitializer.GenericMapping.GenericWrite = STANDARD_RIGHTS_WRITE | D3DDDI_SYNC_OBJECT_SIGNAL;
     TypeInitializer.GenericMapping.GenericExecute = STANDARD_RIGHTS_EXECUTE | SYNCHRONIZE;
     TypeInitializer.GenericMapping.GenericAll = D3DDDI_SYNC_OBJECT_ALL_ACCESS;
