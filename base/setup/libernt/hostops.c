@@ -1352,10 +1352,8 @@ HostInstallSetupBoot(
     SetFileAttributesW(Work, FILE_ATTRIBUTE_NORMAL);
     DeleteFileW(Work);
     DeleteFileW(Saved);
-    if (!CopyFileW(Media, Work, FALSE) || !SetFileAttributesW(Work, FILE_ATTRIBUTE_NORMAL))
-        return GetLastError();
 
-    Error = OpenBcdStoreFile(Work, &Hive);
+    Error = CreateBcdStoreFrom(Media, Work, &Hive);
     if (Error == ERROR_SUCCESS)
     {
         Error = WriteSetupBootEntry(Hive, HOST_SETUP_MANAGER, HOST_SETUP_LOADER, HOST_SETUP_DESCRIPTION,
@@ -2198,8 +2196,9 @@ HostExtractImageFile(
     WimCoreCtx Wim;
     HOST_FIND Find;
     PUCHAR Data = NULL;
+    PBYTE Check;
     HANDLE File, Out;
-    DWORD Error, Written;
+    DWORD Error, Written, CheckSize;
 
     Error = OpenInstallImage(SourceRoot, &File, &Wim, &Image);
     if (Error != ERROR_SUCCESS)
@@ -2219,20 +2218,31 @@ HostExtractImageFile(
 
     if (Error == ERROR_SUCCESS)
     {
-        Out = CreateFileW(OutPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, NULL);
+        Out = CreateFileW(OutPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         if (Out == INVALID_HANDLE_VALUE)
         {
             Error = GetLastError();
         }
         else
         {
-            if (Find.Size && (!WriteFile(Out, Data, (DWORD)Find.Size, &Written, NULL) || Written != Find.Size))
+            if (Find.Size && (!WriteFile(Out, Data, (DWORD)Find.Size, &Written, NULL) || Written != Find.Size ||
+                              !FlushFileBuffers(Out)))
+            {
                 Error = GetLastError() ? GetLastError() : ERROR_WRITE_FAULT;
+            }
             CloseHandle(Out);
-            if (Error != ERROR_SUCCESS)
-                DeleteFileW(OutPath);
         }
     }
+    if (Error == ERROR_SUCCESS && Find.Size)
+    {
+        Check = ReadSmallFile(OutPath, &CheckSize);
+        if (!Check || CheckSize != Find.Size || memcmp(Check, Data, CheckSize) != 0)
+            Error = ERROR_INVALID_DATA;
+        if (Check)
+            HeapFree(ProcessHeap, 0, Check);
+    }
+    if (Error != ERROR_SUCCESS && Find.Found)
+        DeleteFileW(OutPath);
 
     if (Data)
         HeapFree(GetProcessHeap(), 0, Data);
@@ -2466,63 +2476,65 @@ static BOOL
 GetBootStorePaths(
     _Out_writes_(MAX_PATH) PWSTR Work,
     _Out_writes_(MAX_PATH) PWSTR Old,
-    _Out_writes_(MAX_PATH) PWSTR Saved)
+    _Out_writes_(MAX_PATH) PWSTR Saved,
+    _Out_writes_(MAX_PATH) PWSTR Template)
 {
     return GetTempPathW(MAX_PATH, Work) &&
            SUCCEEDED(StringCchCopyW(Old, MAX_PATH, Work)) &&
            SUCCEEDED(StringCchCopyW(Saved, MAX_PATH, Work)) &&
+           SUCCEEDED(StringCchCopyW(Template, MAX_PATH, Work)) &&
            SUCCEEDED(StringCchCatW(Work, MAX_PATH, HOST_INSTALL_STORE_WORK)) &&
            SUCCEEDED(StringCchCatW(Old, MAX_PATH, L"LiberNT-Previous.bcd")) &&
-           SUCCEEDED(StringCchCatW(Saved, MAX_PATH, L"LiberNT-Install.saved.bcd"));
+           SUCCEEDED(StringCchCatW(Saved, MAX_PATH, L"LiberNT-Install.saved.bcd")) &&
+           SUCCEEDED(StringCchCatW(Template, MAX_PATH, L"LiberNT-Template.bcd"));
 }
 
 VOID
 HostReleaseBootStores(
     _Inout_ PHOST_BOOT_STORES Stores)
 {
-    WCHAR Work[MAX_PATH], Old[MAX_PATH], Saved[MAX_PATH];
+    WCHAR Work[MAX_PATH], Old[MAX_PATH], Saved[MAX_PATH], Template[MAX_PATH];
 
     if (Stores->Template)
         RegCloseKey(Stores->Template);
     if (Stores->Previous)
         RegCloseKey(Stores->Previous);
     ZeroMemory(Stores, sizeof(*Stores));
-    if (GetBootStorePaths(Work, Old, Saved))
+    if (GetBootStorePaths(Work, Old, Saved, Template))
     {
         DeleteBcdWork(Work);
         DeleteBcdWork(Old);
         DeleteFileW(Saved);
+        DeleteFileW(Template);
     }
 }
 
-/* A hive file loads only once no scanner holds it open, so the stores load before the system files are written */
 DWORD
 HostStageBootStores(
     _In_ PCWSTR SourceRoot,
     _In_ PHOST_PARTITION SystemPartition,
     _Out_ PHOST_BOOT_STORES Stores)
 {
-    WCHAR Work[MAX_PATH], Old[MAX_PATH], Saved[MAX_PATH], Store[MAX_PATH];
+    WCHAR Work[MAX_PATH], Old[MAX_PATH], Saved[MAX_PATH], Template[MAX_PATH], Store[MAX_PATH];
     DWORD Error;
 
     ZeroMemory(Stores, sizeof(*Stores));
-    if (!GetBootStorePaths(Work, Old, Saved) || !HostPath(SystemPartition->DeviceName, HOST_LIBERNT_STORE, Store))
+    if (!GetBootStorePaths(Work, Old, Saved, Template) ||
+        !HostPath(SystemPartition->DeviceName, HOST_LIBERNT_STORE, Store))
+    {
         return ERROR_BUFFER_OVERFLOW;
+    }
     HostReleaseBootStores(Stores);
 
-    Error = HostExtractImageFile(SourceRoot, HOST_INSTALL_TEMPLATE, Work);
+    Error = HostExtractImageFile(SourceRoot, HOST_INSTALL_TEMPLATE, Template);
     if (Error == ERROR_SUCCESS)
     {
-        Error = OpenBcdStoreFile(Work, &Stores->Template);
-        if (Error != ERROR_SUCCESS)
-        {
-            Stores->Template = NULL;
-            HostLog(L"The boot configuration template %s cannot be loaded: %lu", Work, Error);
-        }
+        Error = CreateBcdStoreFrom(Template, Work, &Stores->Template);
+        HostLog(L"Boot configuration made from the template %s: %lu", Template, Error);
     }
     if (Error == ERROR_SUCCESS && GetFileAttributesW(Store) != INVALID_FILE_ATTRIBUTES &&
         (!CopyFileW(Store, Old, FALSE) || !SetFileAttributesW(Old, FILE_ATTRIBUTE_NORMAL) ||
-         OpenBcdStoreFile(Old, &Stores->Previous) != ERROR_SUCCESS))
+         OpenBcdStoreFileReadOnly(Old, &Stores->Previous) != ERROR_SUCCESS))
     {
         Stores->Previous = NULL;
         HostLog(L"The boot configuration %s cannot be read; its entries are not kept", Store);
@@ -2544,7 +2556,7 @@ HostInstallImageBoot(
 {
     BYTE SystemDevice[BCD_DEVICE_ELEMENT_MAX], OsDevice[BCD_DEVICE_ELEMENT_MAX];
     WCHAR Store[MAX_PATH], Source[MAX_PATH], Destination[MAX_PATH];
-    WCHAR Work[MAX_PATH], Old[MAX_PATH], Saved[MAX_PATH];
+    WCHAR Work[MAX_PATH], Old[MAX_PATH], Saved[MAX_PATH], Template[MAX_PATH];
     DWORD SystemSize = sizeof(SystemDevice), OsSize = sizeof(OsDevice), Error;
     PCWSTR BootName = HostGetRemovableBootName(Machine);
 
@@ -2554,7 +2566,7 @@ HostInstallImageBoot(
     if (FAILED(StringCchPrintfW(Source, ARRAYSIZE(Source), L"%sefi\\boot\\%s", SourceRoot, BootName)) ||
         !HostPath(SystemPartition->DeviceName, HOST_LIBERNT_MANAGER, Destination) ||
         !HostPath(SystemPartition->DeviceName, HOST_LIBERNT_STORE, Store) ||
-        !GetBootStorePaths(Work, Old, Saved))
+        !GetBootStorePaths(Work, Old, Saved, Template))
     {
         return ERROR_BUFFER_OVERFLOW;
     }

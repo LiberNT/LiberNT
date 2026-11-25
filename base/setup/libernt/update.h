@@ -48,6 +48,17 @@ OpenBcdStoreFile(
     _Out_ PHKEY Store);
 
 DWORD
+OpenBcdStoreFileReadOnly(
+    _In_ PCWSTR Path,
+    _Out_ PHKEY Store);
+
+DWORD
+CreateBcdStoreFrom(
+    _In_ PCWSTR Source,
+    _In_ PCWSTR Path,
+    _Out_ PHKEY Store);
+
+DWORD
 BuildBcdPartitionDevice(
     _In_ const GUID* PartitionId,
     _In_ const GUID* DiskId,

@@ -834,6 +834,63 @@ WriteInstalledBootEntries(
 }
 
 DWORD
+OpenBcdStoreFileReadOnly(
+    _In_ PCWSTR Path,
+    _Out_ PHKEY Store)
+{
+    BOOLEAN Enabled;
+    LONG Error;
+
+    RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, TRUE, FALSE, &Enabled);
+    RtlAdjustPrivilege(SE_BACKUP_PRIVILEGE, TRUE, FALSE, &Enabled);
+    Error = RegLoadAppKeyW(Path, Store, KEY_READ, REG_PROCESS_APPKEY, 0);
+    DPRINT1("Boot configuration store %S loaded to be read: %ld\n", Path, Error);
+    return Error;
+}
+
+/* A scanner may hold a hive file written a moment ago, which blocks loading it for writing but not for reading,
+   and the registry creates the new store's file itself */
+DWORD
+CreateBcdStoreFrom(
+    _In_ PCWSTR Source,
+    _In_ PCWSTR Path,
+    _Out_ PHKEY Store)
+{
+    static const PCWSTR LogSuffixes[] = { L".LOG1", L".LOG2" };
+    WCHAR Log[MAX_PATH];
+    HKEY From;
+    LONG Error;
+    UINT Index;
+
+    *Store = NULL;
+    for (Index = 0; Index < ARRAYSIZE(LogSuffixes); Index++)
+    {
+        if (SUCCEEDED(StringCchPrintfW(Log, ARRAYSIZE(Log), L"%s%s", Path, LogSuffixes[Index])))
+            DeleteFileW(Log);
+    }
+    SetFileAttributesW(Path, FILE_ATTRIBUTE_NORMAL);
+    if (!DeleteFileW(Path) && GetLastError() != ERROR_FILE_NOT_FOUND)
+        return GetLastError();
+
+    Error = OpenBcdStoreFileReadOnly(Source, &From);
+    if (Error != ERROR_SUCCESS)
+        return Error;
+    Error = RegLoadAppKeyW(Path, Store, KEY_ALL_ACCESS, REG_PROCESS_APPKEY, 0);
+    if (Error == ERROR_SUCCESS)
+    {
+        Error = CopyKeyTree(From, *Store);
+        if (Error != ERROR_SUCCESS)
+        {
+            RegCloseKey(*Store);
+            *Store = NULL;
+        }
+    }
+    RegCloseKey(From);
+    DPRINT1("Boot configuration store %S made from %S: %ld\n", Path, Source, Error);
+    return Error;
+}
+
+DWORD
 BuildBcdPartitionDevice(
     _In_ const GUID* PartitionId,
     _In_ const GUID* DiskId,
