@@ -766,6 +766,7 @@ NtListenPort(
     _Out_ PPORT_MESSAGE ConnectMessage)
 {
     NTSTATUS Status;
+    CSHORT Type;
 
     PAGED_CODE();
 
@@ -773,7 +774,18 @@ NtListenPort(
     {
         Status = NtReplyWaitReceivePortEx(PortHandle, NULL, NULL, ConnectMessage, NULL);
         if (Status != STATUS_SUCCESS) return Status;
-        if ((ConnectMessage->u2.s2.Type & ~LPC_KERNELMODE_MESSAGE) == LPC_CONNECTION_REQUEST)
+
+        _SEH2_TRY
+        {
+            Type = ConnectMessage->u2.s2.Type;
+        }
+        _SEH2_EXCEPT(ExSystemExceptionFilter())
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+
+        if ((Type & ~LPC_KERNELMODE_MESSAGE) == LPC_CONNECTION_REQUEST)
         {
             return STATUS_SUCCESS;
         }
