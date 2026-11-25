@@ -178,6 +178,7 @@ typedef struct _DXGKVMM_RESOURCE DXGKVMM_RESOURCE, *PDXGKVMM_RESOURCE;
 #define TAG_DXGK_SUBMITDMA  'QxgD'   /* DXGQ - tracked submit DMA buffers */
 #define TAG_DXGK_HANDLE     'HxgD'   /* DXGH - typed D3DKMT handle entry   */
 #define TAG_DXGK_CAPTURE    'UxgD'   /* DXGU - captured user buffers       */
+#define TAG_DXGK_SWAPCHAIN  'WxgD'   /* DXGW - swap chain metadata         */
 #define TAG_DXGK_OVERLAY    'OxgD'   /* DXGO - hardware overlays           */
 #define DXGKP_MAX_USER_PRIVATE_DATA (1024U * 1024U)
 #define DXGKP_MAX_CAPTURE_ALLOCATIONS 4096U
@@ -3428,6 +3429,13 @@ DxgkD3dkmtDeviceCleanup(
 
 NTSTATUS
 DxgkSharedObjectsInitialize(VOID);
+
+NTSTATUS
+DxgkSwapChainInitialize(VOID);
+
+NTSTATUS
+DxgkSwapChainDispatch(
+    _Inout_ struct _RXGK_SWAPCHAIN_PACKET *Packet);
 
 NTSTATUS
 DxgkCleanupAdapterDevices(

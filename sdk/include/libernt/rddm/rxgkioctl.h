@@ -83,6 +83,8 @@
 #endif
 #define IOCTL_D3DKMT_PUBLIC_OPERATION \
     CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x1D1, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_RXGK_SWAPCHAIN \
+    CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x1DB, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 #define RXGK_WDDM_PACKET_VERSION_1            1U
 #define RXGK_PUBLIC_OPERATION_PACKET_V1_SIZE  48U
@@ -174,6 +176,50 @@ typedef struct _RXGK_OUTPUTDUPL_PACKET
     ULONG Reserved;
     ULONGLONG Surfaces[3];
 } RXGK_OUTPUTDUPL_PACKET, *PRXGK_OUTPUTDUPL_PACKET;
+
+#define RXGK_SWAPCHAIN_PACKET_V1_SIZE       464U
+#define RXGK_SWAPCHAIN_MAX_SURFACES         50U
+#define RXGK_SWAPCHAIN_MAX_METADATA         8192U
+
+#define RXGK_SWAPCHAIN_FLAG_PRODUCER        0x00000001U
+#define RXGK_SWAPCHAIN_FLAG_EVENT           0x00000002U
+#define RXGK_SWAPCHAIN_FLAG_BY_NAME         0x00000004U
+#define RXGK_SWAPCHAIN_FLAG_SET             0x00000008U
+#define RXGK_SWAPCHAIN_FLAG_GLOBAL          0x00000010U
+#define RXGK_SWAPCHAIN_FLAG_NO_BUFFER       0x00000020U
+#define RXGK_SWAPCHAIN_FLAG_FAIL_IF_BUSY    0x00000040U
+#define RXGK_SWAPCHAIN_VALID_FLAGS          0x0000007FU
+
+typedef enum _RXGK_SWAPCHAIN_OPERATION
+{
+    RxgkSwapChainCreate = 1,
+    RxgkSwapChainOpen,
+    RxgkSwapChainAbandon,
+    RxgkSwapChainMetadata,
+    RxgkSwapChainAcquire,
+    RxgkSwapChainRelease,
+    RxgkSwapChainNonSequential,
+} RXGK_SWAPCHAIN_OPERATION;
+
+/* Result carries the operation's status, so a failure still returns SurfaceCount and DataSize.
+ * Data is the metadata buffer, or the BufferAvailableEvent handle of a create or an open. */
+typedef struct _RXGK_SWAPCHAIN_PACKET
+{
+    ULONG Size;
+    ULONG Version;
+    ULONG Operation;
+    ULONG Flags;
+    LONG Result;
+    ULONG hDevice;
+    ULONG DesiredAccess;
+    ULONG DesiredAccessTextures;
+    ULONG SurfaceCount;
+    ULONG DataSize;
+    ULONGLONG SwapChain;
+    ULONGLONG ObjectAttributes;
+    ULONGLONG Data;
+    ULONGLONG Surfaces[RXGK_SWAPCHAIN_MAX_SURFACES];
+} RXGK_SWAPCHAIN_PACKET, *PRXGK_SWAPCHAIN_PACKET;
 
 typedef struct _RXGK_PUBLIC_OPERATION_PACKET
 {

@@ -6180,4 +6180,375 @@ D3DKMTRegisterVailProcess(_In_ GUID *Guid)
 
 #endif
 
+static NTSTATUS
+D3dkmtSendSwapChain(
+    _Inout_ PRXGK_SWAPCHAIN_PACKET Packet,
+    _In_ RXGK_SWAPCHAIN_OPERATION Operation)
+{
+    ULONG_PTR Information = 0;
+    NTSTATUS Status;
+
+    Packet->Size = sizeof(*Packet);
+    Packet->Version = RXGK_WDDM_PACKET_VERSION_1;
+    Packet->Operation = Operation;
+    Status = WddmBridgeSendIoctlWithInformation(IOCTL_RXGK_SWAPCHAIN, Packet, sizeof(*Packet), Packet, sizeof(*Packet), &Information);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Information != sizeof(*Packet))
+        return STATUS_INFO_LENGTH_MISMATCH;
+    return Packet->Result;
+}
+
+static NTSTATUS
+D3dkmtSendSwapChainHandle(
+    _In_ RXGK_SWAPCHAIN_OPERATION Operation,
+    _In_opt_ HANDLE SwapChain)
+{
+    RXGK_SWAPCHAIN_PACKET Packet;
+
+    RtlZeroMemory(&Packet, sizeof(Packet));
+    Packet.SwapChain = (ULONGLONG)(ULONG_PTR)SwapChain;
+    return D3dkmtSendSwapChain(&Packet, Operation);
+}
+
+static VOID
+D3dkmtCloseSwapChainSurfaces(
+    _In_reads_(Count) CONST ULONGLONG *Surfaces,
+    _In_ ULONG Count)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Count; ++Index)
+        ZwClose((HANDLE)(ULONG_PTR)Surfaces[Index]);
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTCreateSwapChain(_Inout_ D3DKMT_CREATESWAPCHAIN *pData)
+{
+    HANDLE Surfaces[RXGK_SWAPCHAIN_MAX_SURFACES];
+    D3DKMT_CREATESWAPCHAIN Captured;
+    RXGK_SWAPCHAIN_PACKET Packet;
+    NTSTATUS Result;
+    NTSTATUS Status;
+    ULONG Index;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    if ((UINT)Captured.bFailAcquireIfSurfaceBusy > 1 ||
+        Captured.SurfaceCount == 0 ||
+        Captured.SurfaceCount > RXGK_SWAPCHAIN_MAX_SURFACES ||
+        Captured.pNtSurfaceHandles == NULL)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Status = WddmBridgeSafeCopyFrom(Surfaces, Captured.pNtSurfaceHandles, Captured.SurfaceCount * sizeof(HANDLE));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+
+    RtlZeroMemory(&Packet, sizeof(Packet));
+    if (Captured.bProducer)
+        Packet.Flags |= RXGK_SWAPCHAIN_FLAG_PRODUCER;
+    if (Captured.bFailAcquireIfSurfaceBusy)
+        Packet.Flags |= RXGK_SWAPCHAIN_FLAG_FAIL_IF_BUSY;
+    if (Captured.BufferAvailableEvent != NULL)
+        Packet.Flags |= RXGK_SWAPCHAIN_FLAG_EVENT;
+    Packet.Data = (ULONGLONG)(ULONG_PTR)Captured.BufferAvailableEvent;
+    Packet.hDevice = Captured.hDevice;
+    Packet.DesiredAccess = Captured.DesiredAccess;
+    Packet.SurfaceCount = Captured.SurfaceCount;
+    Packet.ObjectAttributes = (ULONGLONG)(ULONG_PTR)Captured.pObjectAttributes;
+    for (Index = 0; Index < Captured.SurfaceCount; ++Index)
+        Packet.Surfaces[Index] = (ULONGLONG)(ULONG_PTR)Surfaces[Index];
+    Result = WddmBridgeRejectBadBuffer(D3dkmtSendSwapChain(&Packet, RxgkSwapChainCreate));
+    if (!NT_SUCCESS(Result))
+        return Result;
+    ASSERT(Packet.SwapChain != 0);
+
+    Captured.hNtSwapChain = (HANDLE)(ULONG_PTR)Packet.SwapChain;
+    Status = WddmBridgeSafeCopyTo(&pData->hNtSwapChain, &Captured.hNtSwapChain, sizeof(Captured.hNtSwapChain));
+    if (!NT_SUCCESS(Status))
+    {
+        ZwClose(Captured.hNtSwapChain);
+        return WddmBridgeRejectBadBuffer(Status);
+    }
+    return Result;
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTOpenSwapChain(_Inout_ D3DKMT_OPENSWAPCHAIN *pData)
+{
+    HANDLE Surfaces[RXGK_SWAPCHAIN_MAX_SURFACES];
+    D3DKMT_OPENSWAPCHAIN Captured;
+    RXGK_SWAPCHAIN_PACKET Packet;
+    BOOLEAN ByName;
+    NTSTATUS Result;
+    NTSTATUS Status;
+    ULONG Index;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+
+    ByName = Captured.hNtSwapChain == NULL && Captured.pObjectAttributes != NULL;
+    RtlZeroMemory(&Packet, sizeof(Packet));
+    if (Captured.bProducer)
+        Packet.Flags |= RXGK_SWAPCHAIN_FLAG_PRODUCER;
+    if (Captured.bFailAcquireIfSurfaceBusy)
+        Packet.Flags |= RXGK_SWAPCHAIN_FLAG_FAIL_IF_BUSY;
+    if (Captured.BufferAvailableEvent != NULL)
+        Packet.Flags |= RXGK_SWAPCHAIN_FLAG_EVENT;
+    Packet.Data = (ULONGLONG)(ULONG_PTR)Captured.BufferAvailableEvent;
+    if (Captured.pNtSurfaceHandles == NULL)
+        Packet.Flags |= RXGK_SWAPCHAIN_FLAG_NO_BUFFER;
+    if (ByName)
+        Packet.Flags |= RXGK_SWAPCHAIN_FLAG_BY_NAME;
+    Packet.hDevice = Captured.hDevice;
+    Packet.DesiredAccess = Captured.DesiredAccess;
+    Packet.DesiredAccessTextures = Captured.DesiredAccessTextures;
+    Packet.SurfaceCount = Captured.SurfaceCount;
+    Packet.SwapChain = (ULONGLONG)(ULONG_PTR)Captured.hNtSwapChain;
+    Packet.ObjectAttributes = (ULONGLONG)(ULONG_PTR)Captured.pObjectAttributes;
+    Result = D3dkmtSendSwapChain(&Packet, RxgkSwapChainOpen);
+    if (Result == STATUS_BUFFER_TOO_SMALL)
+    {
+        Captured.SurfaceCount = Packet.SurfaceCount;
+        Status = WddmBridgeSafeCopyTo(&pData->SurfaceCount, &Captured.SurfaceCount, sizeof(Captured.SurfaceCount));
+        return NT_SUCCESS(Status) ? Result : WddmBridgeRejectBadBuffer(Status);
+    }
+    Result = WddmBridgeRejectBadBuffer(Result);
+    if (!NT_SUCCESS(Result))
+        return Result;
+    ASSERT(Packet.SurfaceCount == Captured.SurfaceCount && Packet.SurfaceCount <= RXGK_SWAPCHAIN_MAX_SURFACES);
+
+    for (Index = 0; Index < Packet.SurfaceCount; ++Index)
+        Surfaces[Index] = (HANDLE)(ULONG_PTR)Packet.Surfaces[Index];
+    Status = WddmBridgeSafeCopyTo(Captured.pNtSurfaceHandles, Surfaces, Packet.SurfaceCount * sizeof(HANDLE));
+    if (NT_SUCCESS(Status))
+    {
+        Captured.hNtSwapChain = (HANDLE)(ULONG_PTR)Packet.SwapChain;
+        Status = WddmBridgeSafeCopyTo(&pData->hNtSwapChain, &Captured.hNtSwapChain, sizeof(Captured.hNtSwapChain));
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        /* FIXME: the role the open registered stays taken when the caller's buffer cannot take the handles */
+        D3dkmtCloseSwapChainSurfaces(Packet.Surfaces, Packet.SurfaceCount);
+        if (ByName)
+            ZwClose((HANDLE)(ULONG_PTR)Packet.SwapChain);
+        return WddmBridgeRejectBadBuffer(Status);
+    }
+    return Result;
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTAbandonSwapChain(_In_ D3DKMT_ABANDONSWAPCHAIN *pData)
+{
+    D3DKMT_ABANDONSWAPCHAIN Captured;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    return D3dkmtSendSwapChainHandle(RxgkSwapChainAbandon, Captured.hNtSwapChain);
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTAcquireSwapChain(_Inout_ D3DKMT_ACQUIRESWAPCHAIN *pData)
+{
+    D3DKMT_ACQUIRESWAPCHAIN Captured;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    return D3dkmtSendSwapChainHandle(RxgkSwapChainAcquire, Captured.hNtSwapChain);
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTReleaseSwapChain(_Inout_ D3DKMT_RELEASESWAPCHAIN *pData)
+{
+    D3DKMT_RELEASESWAPCHAIN Captured;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    return D3dkmtSendSwapChainHandle(RxgkSwapChainRelease, Captured.hNtSwapChain);
+}
+
+static NTSTATUS
+D3dkmtSendNonSequential(
+    _In_ HANDLE SwapChain,
+    _In_ BOOL Producer)
+{
+    if (!Producer)
+        return STATUS_INVALID_PARAMETER;
+    return D3dkmtSendSwapChainHandle(RxgkSwapChainNonSequential, SwapChain);
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTAddSurfaceToSwapChain(_Inout_ D3DKMT_ADDSURFACETOSWAPCHAIN *pData)
+{
+    D3DKMT_ADDSURFACETOSWAPCHAIN Captured;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    return D3dkmtSendNonSequential(Captured.hNtSwapChain, Captured.bProducer);
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTRemoveSurfaceFromSwapChain(_In_ D3DKMT_REMOVESURFACEFROMSWAPCHAIN *pData)
+{
+    D3DKMT_REMOVESURFACEFROMSWAPCHAIN Captured;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    return D3dkmtSendNonSequential(Captured.hNtSwapChain, Captured.bProducer);
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTUnOrderedPresentSwapChain(_In_ D3DKMT_UNORDEREDPRESENTSWAPCHAIN *pData)
+{
+    D3DKMT_UNORDEREDPRESENTSWAPCHAIN Captured;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    return D3dkmtSendNonSequential(Captured.hNtSwapChain, Captured.bProducer);
+}
+
+static NTSTATUS
+D3dkmtCopyMetadataOut(
+    _Inout_ D3DKMT_GETSETSWAPCHAINMETADATA *pData,
+    _In_ CONST D3DKMT_GETSETSWAPCHAINMETADATA *Captured,
+    _In_opt_ CONST VOID *Data,
+    _In_ ULONG Copied,
+    _In_ NTSTATUS Result,
+    _In_ ULONG Stored)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (Copied != 0)
+        Status = WddmBridgeSafeCopyTo(Captured->pBuffer, Data, Copied);
+    if (NT_SUCCESS(Status) && Result == STATUS_SUCCESS)
+        Status = WddmBridgeSafeCopyTo(&pData->DataCopied, &Stored, sizeof(Stored));
+    return NT_SUCCESS(Status) ? Result : WddmBridgeRejectBadBuffer(Status);
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTGetSetSwapChainMetadata(_In_ D3DKMT_GETSETSWAPCHAINMETADATA *pData)
+{
+    D3DKMT_GETSETSWAPCHAINMETADATA Captured;
+    RXGK_SWAPCHAIN_PACKET Packet;
+    PVOID Data = NULL;
+    ULONG DataSize;
+    NTSTATUS Result;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+
+    RtlZeroMemory(&Packet, sizeof(Packet));
+    Packet.SwapChain = (ULONGLONG)(ULONG_PTR)Captured.hNtSwapChain;
+    if (Captured.bSetMetaData)
+        Packet.Flags |= RXGK_SWAPCHAIN_FLAG_SET;
+    if (Captured.bProducer)
+        Packet.Flags |= RXGK_SWAPCHAIN_FLAG_PRODUCER;
+    if (Captured.bGlobalMetaData)
+        Packet.Flags |= RXGK_SWAPCHAIN_FLAG_GLOBAL;
+    if (Captured.pBuffer == NULL)
+        Packet.Flags |= RXGK_SWAPCHAIN_FLAG_NO_BUFFER;
+    DataSize = min(Captured.BufferSize, RXGK_SWAPCHAIN_MAX_METADATA);
+    Packet.DataSize = Captured.bSetMetaData ? Captured.BufferSize : DataSize;
+    if (Captured.pBuffer != NULL && DataSize != 0 && (!Captured.bSetMetaData || Captured.BufferSize == DataSize))
+    {
+        Data = ExAllocatePoolWithTag(PagedPool, DataSize, TAG_WDDM_BRIDGE);
+        if (Data == NULL)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        if (Captured.bSetMetaData)
+        {
+            Status = WddmBridgeSafeCopyFrom(Data, Captured.pBuffer, DataSize);
+            if (!NT_SUCCESS(Status))
+            {
+                ExFreePoolWithTag(Data, TAG_WDDM_BRIDGE);
+                return WddmBridgeRejectBadBuffer(Status);
+            }
+        }
+        Packet.Data = (ULONGLONG)(ULONG_PTR)Data;
+    }
+    Result = D3dkmtSendSwapChain(&Packet, RxgkSwapChainMetadata);
+    if (!Captured.bSetMetaData && (Result == STATUS_SUCCESS || Result == STATUS_BUFFER_OVERFLOW))
+    {
+        ASSERT(Result == STATUS_SUCCESS || Data != NULL);
+        Result = D3dkmtCopyMetadataOut(pData, &Captured, Data,
+                                       Data == NULL ? 0 : (Result == STATUS_SUCCESS ? Packet.DataSize : DataSize),
+                                       Result, Packet.DataSize);
+    }
+    if (Data != NULL)
+        ExFreePoolWithTag(Data, TAG_WDDM_BRIDGE);
+    return Result;
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTSetDodIndirectSwapchain(_In_ D3DKMT_SETDODINDIRECTSWAPCHAIN *pData)
+{
+    D3DKMT_SETDODINDIRECTSWAPCHAIN Captured;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    /* TODO: indirect swap chain output of display-only adapters; no public DDI describes it, and Windows 11 refuses every measured input */
+    return STATUS_INVALID_PARAMETER;
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTCreateBundleObject(_Inout_ D3DKMT_CREATEBUNDLEOBJECT *pData)
+{
+    D3DKMT_CREATEBUNDLEOBJECT Captured;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    /* TODO: bundle objects; the Windows 11 descriptor no longer matches the public one, and Windows 11 refuses every measured input */
+    return STATUS_INVALID_PARAMETER;
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTExtractBundleObject(_Inout_ D3DKMT_EXTRACTBUNDLEOBJECT *pData)
+{
+    D3DKMT_EXTRACTBUNDLEOBJECT Captured;
+    PVOID Object;
+    NTSTATUS Status;
+
+    Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
+    if (!NT_SUCCESS(Status))
+        return WddmBridgeRejectBadBuffer(Status);
+    Status = ObReferenceObjectByHandle(Captured.hNtBundleHandle, 0, NULL, ExGetPreviousMode(), &Object, NULL);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    ObDereferenceObject(Object);
+    /* TODO: DxgkSharedBundleObject; no bundle can be created, so every valid handle names another object type */
+    return STATUS_OBJECT_TYPE_MISMATCH;
+}
+
 /* EOF */

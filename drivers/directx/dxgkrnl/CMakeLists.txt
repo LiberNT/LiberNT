@@ -46,6 +46,7 @@ list(APPEND SOURCE
     composition_frame.c
     ntgdi_exports.c
     outputdupl.c
+    swapchain.c
     sync.c
     keyedmutex.c
     overlay.c

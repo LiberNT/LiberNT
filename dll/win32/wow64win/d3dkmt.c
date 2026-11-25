@@ -131,6 +131,18 @@ W32KAPI NTSTATUS WINAPI NtGdiDdDDISetHwProtectionTeardownRecovery(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDISetVidPnSourceHwProtection(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIGetNativeFenceLogDetail(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIRegisterVailProcess(void *desc);
+W32KAPI NTSTATUS WINAPI NtGdiDdDDICreateSwapChain(void *desc);
+W32KAPI NTSTATUS WINAPI NtGdiDdDDIOpenSwapChain(void *desc);
+W32KAPI NTSTATUS WINAPI NtGdiDdDDIAddSurfaceToSwapChain(void *desc);
+W32KAPI NTSTATUS WINAPI NtGdiDdDDIRemoveSurfaceFromSwapChain(void *desc);
+W32KAPI NTSTATUS WINAPI NtGdiDdDDIAbandonSwapChain(void *desc);
+W32KAPI NTSTATUS WINAPI NtGdiDdDDIUnOrderedPresentSwapChain(void *desc);
+W32KAPI NTSTATUS WINAPI NtGdiDdDDIAcquireSwapChain(void *desc);
+W32KAPI NTSTATUS WINAPI NtGdiDdDDIReleaseSwapChain(void *desc);
+W32KAPI NTSTATUS WINAPI NtGdiDdDDIGetSetSwapChainMetadata(void *desc);
+W32KAPI NTSTATUS WINAPI NtGdiDdDDISetDodIndirectSwapchain(void *desc);
+W32KAPI NTSTATUS WINAPI NtGdiDdDDICreateBundleObject(void *desc);
+W32KAPI NTSTATUS WINAPI NtGdiDdDDIExtractBundleObject(void *desc);
 
 typedef struct
 {
@@ -2272,5 +2284,338 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIGetSharedResourceAdapterLuid(UINT *args)
 
     status = NtGdiDdDDIGetSharedResourceAdapterLuid(&desc);
     desc32->AdapterLuid = desc.AdapterLuid;
+    return status;
+}
+
+#define WOW64_SWAPCHAIN_SURFACES 50
+
+typedef struct
+{
+    BOOL bProducer;
+    D3DKMT_HANDLE hDevice;
+    ULONG pObjectAttributes;
+    ACCESS_MASK DesiredAccess;
+    UINT SurfaceCount;
+    ULONG pNtSurfaceHandles;
+    BOOL bFailAcquireIfSurfaceBusy;
+    ULONG BufferAvailableEvent;
+    ULONG hNtSwapChain;
+} D3DKMT_CREATESWAPCHAIN32;
+
+typedef struct
+{
+    ULONG hNtSwapChain;
+    ULONG pObjectAttributes;
+    BOOL bProducer;
+    D3DKMT_HANDLE hDevice;
+    BOOL bFailAcquireIfSurfaceBusy;
+    ACCESS_MASK DesiredAccess;
+    ACCESS_MASK DesiredAccessTextures;
+    ULONG BufferAvailableEvent;
+    UINT SurfaceCount;
+    ULONG pNtSurfaceHandles;
+} D3DKMT_OPENSWAPCHAIN32;
+
+typedef struct
+{
+    ULONG hNtSwapChain;
+    BOOL bProducer;
+    ULONG hNtSurfaceHandle;
+    UINT BufferIdx;
+} D3DKMT_SWAPCHAINSURFACE32;
+
+typedef struct
+{
+    ULONG hNtSwapChain;
+    BOOL bProducer;
+    UINT PresentBufferIdx;
+    UINT MetaDataSize;
+    ULONG pMetaData;
+} D3DKMT_UNORDEREDPRESENTSWAPCHAIN32;
+
+typedef struct
+{
+    ULONG hNtSwapChain;
+    BOOL bProducer;
+    UINT MetaDataSize;
+    ULONG pMetaData;
+} D3DKMT_RELEASESWAPCHAIN32;
+
+typedef struct
+{
+    ULONG hNtSwapChain;
+    BOOL bReleaseBeforeAcquire;
+    BOOL bProducer;
+    D3DKMT_RELEASESWAPCHAIN32 ReleaseInfo;
+    UINT AcquiredBufferIdx;
+    UINT AcquireMetadataSize;
+} D3DKMT_ACQUIRESWAPCHAIN32;
+
+typedef struct
+{
+    ULONG hNtSwapChain;
+    BOOL bSetMetaData;
+    BOOL bProducer;
+    BOOL bGlobalMetaData;
+    UINT BufferSize;
+    ULONG pBuffer;
+    UINT DataCopied;
+} D3DKMT_GETSETSWAPCHAINMETADATA32;
+
+typedef struct
+{
+    D3DKMT_HANDLE hDodAdapter;
+    D3DKMT_HANDLE hDevice;
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId;
+    ULONG hNtSwapChain;
+    BOOL bTerminateOutput;
+} D3DKMT_SETDODINDIRECTSWAPCHAIN32;
+
+typedef struct
+{
+    UINT cObjects;
+    ULONG phObjects;
+    ULONG ppObjectAttributes;
+    ULONG pBundleObjectAttributes;
+    DWORD dwBundleDesiredAccess;
+    ULONG hNtBundleHandle;
+} D3DKMT_CREATEBUNDLEOBJECT32;
+
+typedef struct
+{
+    ULONG hNtBundleHandle;
+    UINT cObjects;
+    ULONG pdwDesiredAccess;
+    ULONG phNtHandles;
+} D3DKMT_EXTRACTBUNDLEOBJECT32;
+
+static void
+swapchain_release_32to64(D3DKMT_RELEASESWAPCHAIN *out, const D3DKMT_RELEASESWAPCHAIN32 *in)
+{
+    out->hNtSwapChain = Handle32ToHandle(in->hNtSwapChain);
+    out->bProducer = in->bProducer;
+    out->MetaDataSize = in->MetaDataSize;
+    out->pMetaData = ULongToPtr(in->pMetaData);
+}
+
+NTSTATUS WINAPI wow64_NtGdiDdDDICreateSwapChain(UINT *args)
+{
+    D3DKMT_CREATESWAPCHAIN32 *desc32 = get_ptr(&args);
+    HANDLE surfaces[WOW64_SWAPCHAIN_SURFACES];
+    D3DKMT_CREATESWAPCHAIN desc;
+    struct object_attr64 attr;
+    const ULONG *surfaces32;
+    NTSTATUS status;
+    UINT i;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+    surfaces32 = ULongToPtr(desc32->pNtSurfaceHandles);
+    desc.bProducer = desc32->bProducer;
+    desc.hDevice = desc32->hDevice;
+    desc.pObjectAttributes = objattr_32to64(&attr, ULongToPtr(desc32->pObjectAttributes));
+    desc.DesiredAccess = desc32->DesiredAccess;
+    desc.SurfaceCount = desc32->SurfaceCount;
+    desc.pNtSurfaceHandles = surfaces32 ? surfaces : NULL;
+    for (i = 0; surfaces32 && i < desc32->SurfaceCount && i < ARRAY_SIZE(surfaces); i++)
+        surfaces[i] = Handle32ToHandle(surfaces32[i]);
+    desc.bFailAcquireIfSurfaceBusy = desc32->bFailAcquireIfSurfaceBusy;
+    desc.BufferAvailableEvent = Handle32ToHandle(desc32->BufferAvailableEvent);
+    desc.hNtSwapChain = NULL;
+    status = NtGdiDdDDICreateSwapChain(&desc);
+    if (NT_SUCCESS(status))
+        desc32->hNtSwapChain = HandleToUlong(desc.hNtSwapChain);
+    return status;
+}
+
+NTSTATUS WINAPI wow64_NtGdiDdDDIOpenSwapChain(UINT *args)
+{
+    D3DKMT_OPENSWAPCHAIN32 *desc32 = get_ptr(&args);
+    HANDLE surfaces[WOW64_SWAPCHAIN_SURFACES];
+    D3DKMT_OPENSWAPCHAIN desc;
+    struct object_attr64 attr;
+    ULONG *surfaces32;
+    NTSTATUS status;
+    UINT i;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+    surfaces32 = ULongToPtr(desc32->pNtSurfaceHandles);
+    desc.hNtSwapChain = Handle32ToHandle(desc32->hNtSwapChain);
+    desc.pObjectAttributes = objattr_32to64(&attr, ULongToPtr(desc32->pObjectAttributes));
+    desc.bProducer = desc32->bProducer;
+    desc.hDevice = desc32->hDevice;
+    desc.bFailAcquireIfSurfaceBusy = desc32->bFailAcquireIfSurfaceBusy;
+    desc.DesiredAccess = desc32->DesiredAccess;
+    desc.DesiredAccessTextures = desc32->DesiredAccessTextures;
+    desc.BufferAvailableEvent = Handle32ToHandle(desc32->BufferAvailableEvent);
+    desc.SurfaceCount = desc32->SurfaceCount;
+    desc.pNtSurfaceHandles = surfaces32 ? surfaces : NULL;
+    status = NtGdiDdDDIOpenSwapChain(&desc);
+    if (status == STATUS_BUFFER_TOO_SMALL)
+        desc32->SurfaceCount = desc.SurfaceCount;
+    if (!NT_SUCCESS(status))
+        return status;
+    for (i = 0; i < desc.SurfaceCount && i < ARRAY_SIZE(surfaces); i++)
+        surfaces32[i] = HandleToUlong(surfaces[i]);
+    desc32->hNtSwapChain = HandleToUlong(desc.hNtSwapChain);
+    return status;
+}
+
+NTSTATUS WINAPI wow64_NtGdiDdDDIAddSurfaceToSwapChain(UINT *args)
+{
+    D3DKMT_SWAPCHAINSURFACE32 *desc32 = get_ptr(&args);
+    D3DKMT_ADDSURFACETOSWAPCHAIN desc;
+    NTSTATUS status;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+    desc.hNtSwapChain = Handle32ToHandle(desc32->hNtSwapChain);
+    desc.bProducer = desc32->bProducer;
+    desc.hNtSurfaceHandle = Handle32ToHandle(desc32->hNtSurfaceHandle);
+    desc.BufferIdx = desc32->BufferIdx;
+    status = NtGdiDdDDIAddSurfaceToSwapChain(&desc);
+    if (NT_SUCCESS(status))
+        desc32->BufferIdx = desc.BufferIdx;
+    return status;
+}
+
+NTSTATUS WINAPI wow64_NtGdiDdDDIRemoveSurfaceFromSwapChain(UINT *args)
+{
+    D3DKMT_SWAPCHAINSURFACE32 *desc32 = get_ptr(&args);
+    D3DKMT_REMOVESURFACEFROMSWAPCHAIN desc;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+    desc.hNtSwapChain = Handle32ToHandle(desc32->hNtSwapChain);
+    desc.bProducer = desc32->bProducer;
+    desc.hNtSurfaceHandle = Handle32ToHandle(desc32->hNtSurfaceHandle);
+    desc.BufferIdx = desc32->BufferIdx;
+    return NtGdiDdDDIRemoveSurfaceFromSwapChain(&desc);
+}
+
+NTSTATUS WINAPI wow64_NtGdiDdDDIAbandonSwapChain(UINT *args)
+{
+    const ULONG *desc32 = get_ptr(&args);
+    D3DKMT_ABANDONSWAPCHAIN desc;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+    desc.hNtSwapChain = Handle32ToHandle(desc32[0]);
+    return NtGdiDdDDIAbandonSwapChain(&desc);
+}
+
+NTSTATUS WINAPI wow64_NtGdiDdDDIUnOrderedPresentSwapChain(UINT *args)
+{
+    const D3DKMT_UNORDEREDPRESENTSWAPCHAIN32 *desc32 = get_ptr(&args);
+    D3DKMT_UNORDEREDPRESENTSWAPCHAIN desc;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+    desc.hNtSwapChain = Handle32ToHandle(desc32->hNtSwapChain);
+    desc.bProducer = desc32->bProducer;
+    desc.PresentBufferIdx = desc32->PresentBufferIdx;
+    desc.MetaDataSize = desc32->MetaDataSize;
+    desc.pMetaData = ULongToPtr(desc32->pMetaData);
+    return NtGdiDdDDIUnOrderedPresentSwapChain(&desc);
+}
+
+NTSTATUS WINAPI wow64_NtGdiDdDDIAcquireSwapChain(UINT *args)
+{
+    D3DKMT_ACQUIRESWAPCHAIN32 *desc32 = get_ptr(&args);
+    D3DKMT_ACQUIRESWAPCHAIN desc;
+    NTSTATUS status;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+    desc.hNtSwapChain = Handle32ToHandle(desc32->hNtSwapChain);
+    desc.bReleaseBeforeAcquire = desc32->bReleaseBeforeAcquire;
+    desc.bProducer = desc32->bProducer;
+    swapchain_release_32to64(&desc.ReleaseInfo, &desc32->ReleaseInfo);
+    desc.AcquiredBufferIdx = desc32->AcquiredBufferIdx;
+    desc.AcquireMetadataSize = desc32->AcquireMetadataSize;
+    status = NtGdiDdDDIAcquireSwapChain(&desc);
+    if (NT_SUCCESS(status))
+    {
+        desc32->AcquiredBufferIdx = desc.AcquiredBufferIdx;
+        desc32->AcquireMetadataSize = desc.AcquireMetadataSize;
+    }
+    return status;
+}
+
+NTSTATUS WINAPI wow64_NtGdiDdDDIReleaseSwapChain(UINT *args)
+{
+    D3DKMT_RELEASESWAPCHAIN32 *desc32 = get_ptr(&args);
+    D3DKMT_RELEASESWAPCHAIN desc;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+    swapchain_release_32to64(&desc, desc32);
+    return NtGdiDdDDIReleaseSwapChain(&desc);
+}
+
+NTSTATUS WINAPI wow64_NtGdiDdDDIGetSetSwapChainMetadata(UINT *args)
+{
+    D3DKMT_GETSETSWAPCHAINMETADATA32 *desc32 = get_ptr(&args);
+    D3DKMT_GETSETSWAPCHAINMETADATA desc;
+    NTSTATUS status;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+    desc.hNtSwapChain = Handle32ToHandle(desc32->hNtSwapChain);
+    desc.bSetMetaData = desc32->bSetMetaData;
+    desc.bProducer = desc32->bProducer;
+    desc.bGlobalMetaData = desc32->bGlobalMetaData;
+    desc.BufferSize = desc32->BufferSize;
+    desc.pBuffer = ULongToPtr(desc32->pBuffer);
+    desc.DataCopied = desc32->DataCopied;
+    status = NtGdiDdDDIGetSetSwapChainMetadata(&desc);
+    if (status == STATUS_SUCCESS)
+        desc32->DataCopied = desc.DataCopied;
+    return status;
+}
+
+NTSTATUS WINAPI wow64_NtGdiDdDDISetDodIndirectSwapchain(UINT *args)
+{
+    const D3DKMT_SETDODINDIRECTSWAPCHAIN32 *desc32 = get_ptr(&args);
+    D3DKMT_SETDODINDIRECTSWAPCHAIN desc;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+    desc.hDodAdapter = desc32->hDodAdapter;
+    desc.hDevice = desc32->hDevice;
+    desc.VidPnSourceId = desc32->VidPnSourceId;
+    desc.hNtSwapChain = Handle32ToHandle(desc32->hNtSwapChain);
+    desc.bTerminateOutput = desc32->bTerminateOutput;
+    return NtGdiDdDDISetDodIndirectSwapchain(&desc);
+}
+
+NTSTATUS WINAPI wow64_NtGdiDdDDICreateBundleObject(UINT *args)
+{
+    const D3DKMT_CREATEBUNDLEOBJECT32 *desc32 = get_ptr(&args);
+    D3DKMT_CREATEBUNDLEOBJECT desc;
+    struct object_attr64 attr;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+    desc.cObjects = desc32->cObjects;
+    desc.phObjects = ULongToPtr(desc32->phObjects);
+    /* TODO: widen the per-object attribute array once bundle objects are created */
+    desc.ppObjectAttributes = ULongToPtr(desc32->ppObjectAttributes);
+    desc.pBundleObjectAttributes = objattr_32to64(&attr, ULongToPtr(desc32->pBundleObjectAttributes));
+    desc.dwBundleDesiredAccess = desc32->dwBundleDesiredAccess;
+    desc.hNtBundleHandle = NULL;
+    return NtGdiDdDDICreateBundleObject(&desc);
+}
+
+NTSTATUS WINAPI wow64_NtGdiDdDDIExtractBundleObject(UINT *args)
+{
+    const D3DKMT_EXTRACTBUNDLEOBJECT32 *desc32 = get_ptr(&args);
+    HANDLE handles[D3DKMT_MAX_OBJECTS_PER_HANDLE];
+    D3DKMT_EXTRACTBUNDLEOBJECT desc;
+    ULONG *handles32;
+    NTSTATUS status;
+    UINT i;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+    handles32 = ULongToPtr(desc32->phNtHandles);
+    desc.hNtBundleHandle = Handle32ToHandle(desc32->hNtBundleHandle);
+    desc.cObjects = desc32->cObjects;
+    desc.pdwDesiredAccess = ULongToPtr(desc32->pdwDesiredAccess);
+    desc.phNtHandles = handles32 ? handles : NULL;
+    status = NtGdiDdDDIExtractBundleObject(&desc);
+    if (!NT_SUCCESS(status))
+        return status;
+    for (i = 0; i < desc.cObjects && i < ARRAY_SIZE(handles); i++)
+        handles32[i] = HandleToUlong(handles[i]);
     return status;
 }

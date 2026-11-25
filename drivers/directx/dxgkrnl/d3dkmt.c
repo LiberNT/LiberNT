@@ -328,6 +328,16 @@ DxgkpDeleteSharedResourceObject(
     }
 }
 
+static NTSTATUS
+DxgkpInitializeSharedObjectTypes(VOID)
+{
+    NTSTATUS Status = DxgkSyncSharedObjectsInitialize();
+
+    if (!NT_SUCCESS(Status))
+        return Status;
+    return DxgkSwapChainInitialize();
+}
+
 NTSTATUS
 DxgkSharedObjectsInitialize(VOID)
 {
@@ -337,7 +347,7 @@ DxgkSharedObjectsInitialize(VOID)
     NTSTATUS Status;
 
     if (DxgkSharedResourceObjectType != NULL)
-        return DxgkSyncSharedObjectsInitialize();
+        return DxgkpInitializeSharedObjectTypes();
 
     GenericMapping.GenericRead = STANDARD_RIGHTS_READ;
     GenericMapping.GenericWrite = STANDARD_RIGHTS_WRITE |
@@ -366,7 +376,7 @@ DxgkSharedObjectsInitialize(VOID)
                                 &DxgkSharedResourceObjectType);
     if (!NT_SUCCESS(Status))
         return Status;
-    return DxgkSyncSharedObjectsInitialize();
+    return DxgkpInitializeSharedObjectTypes();
 }
 
 POBJECT_TYPE
@@ -677,6 +687,7 @@ DxgkpKmtIoctlMinimumConfiguredLevel(
         case IOCTL_D3DKMT_SHAREOBJECTS:
         case IOCTL_RXGK_RESOLVESHAREDRESOURCENTHANDLE:
         case IOCTL_RXGK_OUTPUTDUPL:
+        case IOCTL_RXGK_SWAPCHAIN:
         case IOCTL_DXGKRNL_GET_DOD_INIT_ENTRY:
             return DXGK_CAPS_CORE_LEVEL_WDDM_1_2;
 
@@ -13992,6 +14003,25 @@ DxgkpDispatchBufferedIoctlWorker(
             return Status;
         }
 
+        case IOCTL_RXGK_SWAPCHAIN:
+        {
+            if (!KmtRequest->Internal ||
+                KmtRequest->RequestorMode != KernelMode)
+            {
+                return STATUS_ACCESS_DENIED;
+            }
+            if (InputLength < RXGK_SWAPCHAIN_PACKET_V1_SIZE ||
+                OutputLength < RXGK_SWAPCHAIN_PACKET_V1_SIZE ||
+                SystemBuffer == NULL)
+            {
+                return STATUS_BUFFER_TOO_SMALL;
+            }
+            Status = DxgkSwapChainDispatch((PRXGK_SWAPCHAIN_PACKET)SystemBuffer);
+            if (NT_SUCCESS(Status))
+                KmtRequest->Information = RXGK_SWAPCHAIN_PACKET_V1_SIZE;
+            return Status;
+        }
+
         case IOCTL_RXGK_OUTPUTDUPL:
         {
             if (!KmtRequest->Internal ||
@@ -15412,6 +15442,7 @@ DxgkpIsBufferedKmtIoctl(
         case IOCTL_D3DKMT_PUBLIC_OPERATION:
         case IOCTL_D3DKMT_SHAREOBJECTS:
         case IOCTL_RXGK_OUTPUTDUPL:
+        case IOCTL_RXGK_SWAPCHAIN:
         case IOCTL_RXGK_RESOLVESHAREDRESOURCENTHANDLE:
         case IOCTL_RXGK_VALIDATESHAREDRESOURCEOWNER:
         case IOCTL_RXGK_SETCOMPOSITORSOURCEOWNER:

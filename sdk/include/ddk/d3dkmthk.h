@@ -5025,6 +5025,121 @@ typedef struct _D3DKMT_GETSHAREDRESOURCEADAPTERLUID
     LUID AdapterLuid;              // out: adapter LUID
 } D3DKMT_GETSHAREDRESOURCEADAPTERLUID;
 
+typedef struct _D3DKMT_CREATESWAPCHAIN
+{
+    BOOL                                    bProducer;                  // in: producer or consumer
+    D3DKMT_HANDLE                           hDevice;                    // in: device
+    POBJECT_ATTRIBUTES                      pObjectAttributes;          // in: object attributes of the swap chain
+    ACCESS_MASK                             DesiredAccess;              // in: access to the swap chain
+    UINT                                    SurfaceCount;               // in: number of surfaces
+    _Field_size_(SurfaceCount) HANDLE*      pNtSurfaceHandles;          // in: NT handles of the surfaces
+    BOOL                                    bFailAcquireIfSurfaceBusy;  // in: fail an acquire of a busy surface
+    HANDLE                                  BufferAvailableEvent;       // in: event signaled when a buffer is available
+    HANDLE                                  hNtSwapChain;               // out: NT handle of the swap chain
+} D3DKMT_CREATESWAPCHAIN;
+
+typedef struct _D3DKMT_OPENSWAPCHAIN
+{
+    HANDLE                                  hNtSwapChain;               // in/out_opt: NT handle of the swap chain
+    POBJECT_ATTRIBUTES                      pObjectAttributes;          // in_opt: object attributes to open by name
+    BOOL                                    bProducer;                  // in: producer or consumer
+    D3DKMT_HANDLE                           hDevice;                    // in: device
+    BOOL                                    bFailAcquireIfSurfaceBusy;  // in: fail an acquire of a busy surface
+    ACCESS_MASK                             DesiredAccess;              // in: access to the swap chain
+    ACCESS_MASK                             DesiredAccessTextures;      // in: access to the surfaces
+    HANDLE                                  BufferAvailableEvent;       // in: event signaled when a buffer is available
+    UINT                                    SurfaceCount;               // in/out: number of surfaces
+    _Field_size_opt_(SurfaceCount) HANDLE*  pNtSurfaceHandles;          // out: NT handles of the surfaces
+} D3DKMT_OPENSWAPCHAIN;
+
+typedef struct _D3DKMT_ADDSURFACETOSWAPCHAIN
+{
+    HANDLE                                  hNtSwapChain;               // in: NT handle of the swap chain
+    BOOL                                    bProducer;                  // in: producer or consumer
+    HANDLE                                  hNtSurfaceHandle;           // in: NT handle of the surface to add
+    UINT                                    BufferIdx;                  // out: index the surface was placed at
+} D3DKMT_ADDSURFACETOSWAPCHAIN;
+
+typedef struct _D3DKMT_REMOVESURFACEFROMSWAPCHAIN
+{
+    HANDLE                                  hNtSwapChain;               // in: NT handle of the swap chain
+    BOOL                                    bProducer;                  // in: producer or consumer
+    HANDLE                                  hNtSurfaceHandle;           // in: NT handle of the surface to remove
+    UINT                                    BufferIdx;                  // in: index of the surface to remove
+} D3DKMT_REMOVESURFACEFROMSWAPCHAIN;
+
+typedef struct _D3DKMT_ABANDONSWAPCHAIN
+{
+    HANDLE                                  hNtSwapChain;               // in: NT handle of the swap chain
+} D3DKMT_ABANDONSWAPCHAIN;
+
+typedef struct _D3DKMT_UNORDEREDPRESENTSWAPCHAIN
+{
+    HANDLE                                  hNtSwapChain;               // in: NT handle of the swap chain
+    BOOL                                    bProducer;                  // in: producer or consumer
+    UINT                                    PresentBufferIdx;           // in: index of the buffer to present
+    UINT                                    MetaDataSize;               // in: size of the metadata
+    _Field_size_bytes_(MetaDataSize) PVOID  pMetaData;                  // in: metadata of the frame
+} D3DKMT_UNORDEREDPRESENTSWAPCHAIN;
+
+typedef struct _D3DKMT_RELEASESWAPCHAIN
+{
+    HANDLE                                  hNtSwapChain;               // in: NT handle of the swap chain
+    BOOL                                    bProducer;                  // in: producer or consumer
+    UINT                                    MetaDataSize;               // in: size of the metadata
+    _Field_size_bytes_(MetaDataSize) PVOID  pMetaData;                  // in: metadata of the frame
+} D3DKMT_RELEASESWAPCHAIN;
+
+typedef struct _D3DKMT_ACQUIRESWAPCHAIN
+{
+    HANDLE                                  hNtSwapChain;               // in: NT handle of the swap chain
+    BOOL                                    bReleaseBeforeAcquire;      // in: release before the acquire
+    BOOL                                    bProducer;                  // in: producer or consumer
+    D3DKMT_RELEASESWAPCHAIN                 ReleaseInfo;                // in: release information
+    UINT                                    AcquiredBufferIdx;          // out: index of the acquired buffer
+    UINT                                    AcquireMetadataSize;        // out: size of the frame metadata
+} D3DKMT_ACQUIRESWAPCHAIN;
+
+typedef struct _D3DKMT_GETSETSWAPCHAINMETADATA
+{
+    HANDLE                                  hNtSwapChain;               // in: NT handle of the swap chain
+    BOOL                                    bSetMetaData;               // in: set or get
+    BOOL                                    bProducer;                  // in: producer or consumer
+    BOOL                                    bGlobalMetaData;            // in: global or frame metadata
+    UINT                                    BufferSize;                 // in: size of the buffer
+    _Field_size_bytes_(BufferSize) PVOID    pBuffer;                    // in/out: metadata
+    UINT                                    DataCopied;                 // out: bytes copied
+} D3DKMT_GETSETSWAPCHAINMETADATA;
+
+typedef struct _D3DKMT_SETDODINDIRECTSWAPCHAIN
+{
+    D3DKMT_HANDLE                           hDodAdapter;                // in: display-only adapter
+    D3DKMT_HANDLE                           hDevice;                    // in: device
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID          VidPnSourceId;              // in: source
+    HANDLE                                  hNtSwapChain;               // in: NT handle of the swap chain
+    BOOL                                    bTerminateOutput;           // in: stop the indirect output
+} D3DKMT_SETDODINDIRECTSWAPCHAIN;
+
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_3)
+typedef struct _D3DKMT_CREATEBUNDLEOBJECT
+{
+    _In_range_(1, D3DKMT_MAX_OBJECTS_PER_HANDLE) UINT   cObjects;                   // in: number of objects to bundle
+    _In_reads_(cObjects) CONST D3DKMT_HANDLE*           phObjects;                  // in: objects to bundle
+    _In_reads_(cObjects) POBJECT_ATTRIBUTES*            ppObjectAttributes;         // in: object attributes per object
+    _In_ POBJECT_ATTRIBUTES                             pBundleObjectAttributes;    // in: object attributes of the bundle
+    _In_ DWORD                                          dwBundleDesiredAccess;      // in: access to the bundle
+    _Out_ HANDLE                                        hNtBundleHandle;            // out: NT handle of the bundle
+} D3DKMT_CREATEBUNDLEOBJECT;
+
+typedef struct _D3DKMT_EXTRACTBUNDLEOBJECT
+{
+    _In_ HANDLE                                         hNtBundleHandle;            // in: NT handle of the bundle
+    _In_range_(1, D3DKMT_MAX_OBJECTS_PER_HANDLE) UINT   cObjects;                   // in: number of objects to extract
+    _In_reads_(cObjects) DWORD*                         pdwDesiredAccess;           // in: access per object
+    _Out_writes_(cObjects) HANDLE*                      phNtHandles;                // out: NT handles of the objects
+} D3DKMT_EXTRACTBUNDLEOBJECT;
+#endif
+
 typedef enum _D3DKMT_GPU_PREFERENCE_QUERY_STATE
 {
     D3DKMT_GPU_PREFERENCE_STATE_UNINITIALIZED,
@@ -6287,6 +6402,17 @@ EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTQueryVideoMemoryInfo(_Inout_ D3D
 EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTChangeVideoMemoryReservation(_In_ CONST D3DKMT_CHANGEVIDEOMEMORYRESERVATION*);
 EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTRegisterTrimNotification(_Inout_ D3DKMT_REGISTERTRIMNOTIFICATION*);
 EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTUnregisterTrimNotification(_Inout_ D3DKMT_UNREGISTERTRIMNOTIFICATION*);
+EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTCreateSwapChain(_Inout_ D3DKMT_CREATESWAPCHAIN*);
+EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTOpenSwapChain(_Inout_ D3DKMT_OPENSWAPCHAIN*);
+EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTAcquireSwapChain(_Inout_ D3DKMT_ACQUIRESWAPCHAIN*);
+EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTReleaseSwapChain(_Inout_ D3DKMT_RELEASESWAPCHAIN*);
+EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTGetSetSwapChainMetadata(_In_ D3DKMT_GETSETSWAPCHAINMETADATA*);
+EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTAbandonSwapChain(_In_ D3DKMT_ABANDONSWAPCHAIN*);
+EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTSetDodIndirectSwapchain(_In_ D3DKMT_SETDODINDIRECTSWAPCHAIN*);
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_3)
+EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTCreateBundleObject(_Inout_ D3DKMT_CREATEBUNDLEOBJECT*);
+EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTExtractBundleObject(_Inout_ D3DKMT_EXTRACTBUNDLEOBJECT*);
+#endif
 EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTCheckMultiPlaneOverlaySupport2(_Inout_ D3DKMT_CHECKMULTIPLANEOVERLAYSUPPORT2*);
 EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTPresentMultiPlaneOverlay2(_In_ CONST D3DKMT_PRESENT_MULTIPLANE_OVERLAY2*);
 EXTERN_C _Check_return_ NTSTATUS APIENTRY D3DKMTReclaimAllocations2(_Inout_ D3DKMT_RECLAIMALLOCATIONS2*);

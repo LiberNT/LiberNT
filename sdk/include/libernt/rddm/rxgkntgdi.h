@@ -10,15 +10,18 @@
 /*
  * ReactOS uses each verified native dxgkrnl ordinal as the stable operation
  * number for this internal bridge.  The list contains only public D3DKMT
- * syscall entries independently declared by the WDK.  Private dxgkrnl
- * services and data tables are deliberately not admitted through it.
+ * syscall entries whose descriptor a public SDK or WDK declares.  Private
+ * dxgkrnl services and data tables are deliberately not admitted through it.
  */
 #define RXGK_NTGDI_EXPORTS_0(X) \
     X(119, CheckExclusiveOwnership)
 
 #define RXGK_NTGDI_EXPORTS_1(X) \
+    X(111, AbandonSwapChain) \
     X(112, AcquireKeyedMutex) \
     X(113, AcquireKeyedMutex2) \
+    X(114, AcquireSwapChain) \
+    X(115, AddSurfaceToSwapChain) \
     X(116, AdjustFullscreenGamma) \
     X(118, ChangeVideoMemoryReservation) \
     X(120, CheckMonitorPowerState) \
@@ -31,6 +34,7 @@
     X(127, CloseAdapter) \
     X(128, ConfigureSharedResource) \
     X(129, CreateAllocation) \
+    X(130, CreateBundleObject) \
     X(131, CreateContext) \
     X(132, CreateContextVirtual) \
     X(133, CreateDevice) \
@@ -42,6 +46,7 @@
     X(139, CreateOverlay) \
     X(140, CreatePagingQueue) \
     X(141, CreateProtectedSession) \
+    X(142, CreateSwapChain) \
     X(143, CreateSynchronizationObject) \
     X(145, DestroyAllocation) \
     X(146, DestroyAllocation2) \
@@ -59,6 +64,7 @@
     X(161, EnumAdapters2) \
     X(162, Escape) \
     X(163, Evict) \
+    X(164, ExtractBundleObject) \
     X(165, FlipOverlay) \
     X(166, FlushHeapTransitions) \
     X(167, FreeGpuVirtualAddress) \
@@ -77,6 +83,7 @@
     X(184, GetResourcePresentPrivateDriverData) \
     X(185, GetRuntimeData) \
     X(186, GetScanLine) \
+    X(187, GetSetSwapChainMetadata) \
     X(188, GetSharedPrimaryHandle) \
     X(189, GetSharedResourceAdapterLuid) \
     X(193, InvalidateActiveVidPn) \
@@ -97,6 +104,7 @@
     X(214, OpenProtectedSessionFromNtHandle) \
     X(215, OpenResource) \
     X(216, OpenResourceFromNtHandle) \
+    X(217, OpenSwapChain) \
     X(218, OpenSyncObjectFromNtHandle) \
     X(219, OpenSyncObjectFromNtHandle2) \
     X(220, OpenSyncObjectNtHandleFromName) \
@@ -130,12 +138,15 @@
     X(248, ReleaseKeyedMutex) \
     X(249, ReleaseKeyedMutex2) \
     X(250, ReleaseProcessVidPnSourceOwners) \
+    X(251, ReleaseSwapChain) \
+    X(252, RemoveSurfaceFromSwapChain) \
     X(253, Render) \
     X(254, ReserveGpuVirtualAddress) \
     X(255, SetAllocationPriority) \
     X(256, SetContextInProcessSchedulingPriority) \
     X(257, SetContextSchedulingPriority) \
     X(258, SetDisplayMode) \
+    X(259, SetDodIndirectSwapchain) \
     X(260, SetFSEBlock) \
     X(261, SetGammaRamp) \
     X(262, SetHwProtectionTeardownRecovery) \
@@ -154,6 +165,7 @@
     X(282, SubmitSignalSyncObjectsToHwQueue) \
     X(283, SubmitWaitForSyncObjectsToHwQueue) \
     X(284, TrimProcessCommitment) \
+    X(285, UnOrderedPresentSwapChain) \
     X(286, Unlock) \
     X(287, Unlock2) \
     X(288, UpdateAllocationProperty) \
