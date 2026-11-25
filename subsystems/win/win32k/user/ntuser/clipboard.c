@@ -972,6 +972,7 @@ INT APIENTRY
 NtUserGetClipboardFormatName(UINT fmt, LPWSTR lpszFormatName, INT cchMaxCount)
 {
     INT iRet = 0;
+    WCHAR awcName[256];
 
     UserEnterShared();
 
@@ -988,18 +989,21 @@ NtUserGetClipboardFormatName(UINT fmt, LPWSTR lpszFormatName, INT cchMaxCount)
         goto cleanup;
     }
 
+    iRet = IntGetAtomName((RTL_ATOM)fmt,
+                          awcName,
+                          (ULONG)min(cchMaxCount * sizeof(WCHAR), sizeof(awcName)));
+
     _SEH2_TRY
     {
         ProbeForWrite(lpszFormatName, cchMaxCount * sizeof(WCHAR), 1);
-
-        iRet = IntGetAtomName((RTL_ATOM)fmt,
-                              lpszFormatName,
-                              cchMaxCount * sizeof(WCHAR));
+        if (iRet != 0)
+            RtlCopyMemory(lpszFormatName, awcName, iRet + sizeof(WCHAR));
         iRet /= sizeof(WCHAR);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
         SetLastNtError(_SEH2_GetExceptionCode());
+        iRet = 0;
     }
     _SEH2_END;
 

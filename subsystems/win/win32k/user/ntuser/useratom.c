@@ -100,6 +100,7 @@ NtUserGetAtomName(
     _Inout_ PUNICODE_STRING pustrName)
 {
     WCHAR awcBuffer[256];
+    UNICODE_STRING Captured;
     ULONG cjLength;
 
     /* Retrieve the atom name into a local buffer (max length is 255 chars) */
@@ -110,18 +111,19 @@ NtUserGetAtomName(
         {
             /* Probe the unicode string and the buffer */
             ProbeForRead(pustrName, sizeof(*pustrName), 1);
-            ProbeForWrite(pustrName->Buffer, pustrName->MaximumLength, 1);
+            Captured = *pustrName;
+            ProbeForWrite(Captured.Buffer, Captured.MaximumLength, 1);
 
             /* Check if we have enough space to write the NULL termination */
-            if (pustrName->MaximumLength >= sizeof(UNICODE_NULL))
+            if (Captured.MaximumLength >= sizeof(UNICODE_NULL))
             {
                 /* Limit the length to the buffer size */
-                cjLength = min(pustrName->MaximumLength - sizeof(UNICODE_NULL),
+                cjLength = min(Captured.MaximumLength - sizeof(UNICODE_NULL),
                                cjLength);
 
                 /* Copy the string and NULL terminate it */
-                RtlCopyMemory(pustrName->Buffer, awcBuffer, cjLength);
-                pustrName->Buffer[cjLength / sizeof(WCHAR)] = L'\0';
+                RtlCopyMemory(Captured.Buffer, awcBuffer, cjLength);
+                Captured.Buffer[cjLength / sizeof(WCHAR)] = L'\0';
             }
             else
             {

@@ -743,6 +743,8 @@ NtUserGetIconInfo(
     NTSTATUS Status = STATUS_SUCCESS;
     BOOL Ret = FALSE;
     DWORD colorBpp = 0;
+    UNICODE_STRING Captured;
+    WCHAR awcModule[256];
 
     TRACE("Enter NtUserGetIconInfo\n");
 
@@ -857,17 +859,19 @@ NtUserGetIconInfo(
             _SEH2_TRY
             {
                 ProbeForWrite(lpModule, sizeof(UNICODE_STRING), 1);
+                Captured = *lpModule;
                 BufLen += sizeof(WCHAR);
-                if (BufLen > (lpModule->MaximumLength))
+                if (BufLen > Captured.MaximumLength)
                 {
                     lpModule->Length = 0;
                     lpModule->MaximumLength = BufLen;
                 }
                 else
                 {
-                    ProbeForWrite(lpModule->Buffer, lpModule->MaximumLength, 1);
-                    BufLen = lpModule->MaximumLength;
-                    RtlQueryAtomInAtomTable(gAtomTable, CurIcon->atomModName, NULL, NULL, lpModule->Buffer, &BufLen);
+                    ProbeForWrite(Captured.Buffer, Captured.MaximumLength, 1);
+                    BufLen = min(Captured.MaximumLength, sizeof(awcModule));
+                    if (NT_SUCCESS(RtlQueryAtomInAtomTable(gAtomTable, CurIcon->atomModName, NULL, NULL, awcModule, &BufLen)))
+                        RtlCopyMemory(Captured.Buffer, awcModule, BufLen + sizeof(WCHAR));
                     lpModule->Length = BufLen;
                 }
             }
@@ -908,21 +912,22 @@ NtUserGetIconInfo(
             _SEH2_TRY
             {
                 ProbeForWrite(lpResName, sizeof(UNICODE_STRING), 1);
+                Captured = *lpResName;
                 if (IS_INTRESOURCE(CurIcon->strName.Buffer))
                 {
                     lpResName->Buffer = CurIcon->strName.Buffer;
                     lpResName->Length = 0;
                     lpResName->MaximumLength = 0;
                 }
-                else if (lpResName->MaximumLength < CurIcon->strName.MaximumLength)
+                else if (Captured.MaximumLength < CurIcon->strName.MaximumLength)
                 {
                     lpResName->Length = 0;
                     lpResName->MaximumLength = CurIcon->strName.MaximumLength;
                 }
                 else
                 {
-                    ProbeForWrite(lpResName->Buffer, lpResName->MaximumLength, 1);
-                    RtlCopyMemory(lpResName->Buffer, CurIcon->strName.Buffer, CurIcon->strName.Length);
+                    ProbeForWrite(Captured.Buffer, Captured.MaximumLength, 1);
+                    RtlCopyMemory(Captured.Buffer, CurIcon->strName.Buffer, CurIcon->strName.Length);
                     lpResName->Length = CurIcon->strName.Length;
                 }
             }
