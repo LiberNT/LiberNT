@@ -39,6 +39,7 @@ include(msvcrtex.cmake)
 
 add_library(libernt_anyhost OBJECT startup/anyhost.c)
 add_library(libernt_hostcheck OBJECT startup/hostcheck.c)
+add_dependencies(libernt_hostcheck psdk)
 include(oldnames.cmake)
 
 add_library(user32_wsprintf
