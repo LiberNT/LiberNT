@@ -416,6 +416,11 @@ typedef struct _DWM_WIN
     ULONG DxDrawHeight;
     ULONG DxSourceWidth; /* top-left texels shown over the draw size */
     ULONG DxSourceHeight;
+    LONG  ResizeBorderLeft;
+    LONG  ResizeBorderRight;
+    LONG  ResizeBorderBottom;
+    LONG  SourceX;
+    LONG  SourceY;
 } DWM_WIN, *PDWM_WIN;
 
 typedef struct _DWM_FRAME_HEADER

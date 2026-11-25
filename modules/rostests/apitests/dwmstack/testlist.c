@@ -19,6 +19,7 @@ extern void func_idle_cost(void);
 extern void func_idle_update(void);
 extern void func_mode_switch(void);
 extern void func_monitor_power(void);
+extern void func_own_caption_bounds(void);
 extern void func_pointer_image(void);
 extern void func_scene_cache(void);
 
@@ -33,6 +34,7 @@ const struct test winetest_testlist[] =
     { "idle_update", func_idle_update },
     { "mode_switch", func_mode_switch },
     { "monitor_power", func_monitor_power },
+    { "own_caption_bounds", func_own_caption_bounds },
     { "pointer_image", func_pointer_image },
     { "scene_cache", func_scene_cache },
     { "dwm_restart", func_dwm_restart },

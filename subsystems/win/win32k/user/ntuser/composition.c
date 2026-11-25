@@ -3552,6 +3552,24 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
             g_DwmFrameWindows[count].ClientWidth = Client->right - Client->left;
             g_DwmFrameWindows[count].ClientHeight = Client->bottom - Client->top;
         }
+        g_DwmFrameWindows[count].ResizeBorderLeft = 0;
+        g_DwmFrameWindows[count].ResizeBorderRight = 0;
+        g_DwmFrameWindows[count].ResizeBorderBottom = 0;
+        g_DwmFrameWindows[count].SourceX = 0;
+        g_DwmFrameWindows[count].SourceY = 0;
+        if (!(w->style & (WS_CHILD | WS_MINIMIZE)) && g_DwmFrameWindows[count].ClientY == 0 &&
+            ((w->style & WS_THICKFRAME) || (w->style & WS_CAPTION) == WS_CAPTION))
+        {
+            PDWM_WIN Frame = &g_DwmFrameWindows[count];
+            SIZE Border;
+
+            UserGetWindowBorders(w, w->style, w->ExStyle, &Border, FALSE);
+            Frame->ResizeBorderLeft = max(0, min(Border.cx, Frame->ClientX) - UserGetSystemMetrics(SM_CXBORDER));
+            Frame->ResizeBorderRight = max(0, min(Border.cx, Frame->cx - Frame->ClientX - Frame->ClientWidth) -
+                                              UserGetSystemMetrics(SM_CXBORDER));
+            Frame->ResizeBorderBottom = max(0, min(Border.cy, Frame->cy - Frame->ClientY - Frame->ClientHeight) -
+                                               UserGetSystemMetrics(SM_CYBORDER));
+        }
         if (AtomDwmTransition != 0)
         {
             ULONG_PTR Request = (ULONG_PTR)UserGetProp(w, AtomDwmTransition, FALSE);
