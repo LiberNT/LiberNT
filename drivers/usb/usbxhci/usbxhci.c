@@ -753,8 +753,14 @@ static VOID NTAPI XHCI_Ep0BringupCallback(IN PVOID MiniportExtension,
 static VOID NTAPI XHCI_Ep0BringupWorker(IN PVOID Context);
 static VOID XHCI_DrainDeferredTransferCompletions(PXHCI_EXTENSION Extension);
 static VOID XHCI_FlushDeferredCompletionsForSlot(PXHCI_EXTENSION Extension, UCHAR SlotId);
+static VOID XHCI_CompleteDeferredTransfer(PXHCI_EXTENSION Extension, PXHCI_TRANSFER Transfer,
+                                          USBD_STATUS TransferStatus);
 static VOID XHCI_CompleteDeferredTransferLocked(PXHCI_EXTENSION Extension, PXHCI_TRANSFER Transfer,
                                                 USBD_STATUS TransferStatus);
+static VOID NTAPI XHCI_DeferredDrainDpc(PKDPC Dpc,
+                                        PVOID DeferredContext,
+                                        PVOID SystemArg1,
+                                        PVOID SystemArg2);
 #define XHCI_EP0_STALL_HELD 1
 #define XHCI_EP0_STALL_HELD_SUBMIT_REFUSED 2
 typedef struct _XHCI_EP0_RESET_LIST
@@ -7803,7 +7809,7 @@ XHCI_QueueDeferredTransferCompletion(
 
 static
 VOID
-XHCI_CompleteDeferredTransferLocked(
+XHCI_CompleteDeferredTransfer(
     _Inout_ PXHCI_EXTENSION Extension,
     _Inout_ PXHCI_TRANSFER Transfer,
     _In_ USBD_STATUS TransferStatus)
@@ -7816,14 +7822,11 @@ XHCI_CompleteDeferredTransferLocked(
 
     ASSERT(Extension != NULL);
     ASSERT(Transfer != NULL);
-    ASSERT(XHCI_IsLockIrql());
 
     Endpoint = Transfer->Endpoint;
     TransferParameters = Transfer->TransferParameters;
     BytesTransferred = Transfer->BytesTransferred;
     IsIsochronous = Transfer->IsIsochronous;
-
-    ASSERT(XHCI_IsLockIrql());
 
     if (!Endpoint || !TransferParameters)
         return;
@@ -7834,6 +7837,10 @@ XHCI_CompleteDeferredTransferLocked(
         return;
     }
 
+    /* The usbport completion callback re-enters the miniport submit path, which
+     * acquires DeferredTransferLock; it must therefore run with that lock NOT
+     * held. Every caller detaches Transfer from the deferred list first, so the
+     * transfer is owned by us here and needs no lock. */
     if (IsIsochronous && XhciRegPacket.UsbPortCompleteIsoTransfer)
     {
         XhciRegPacket.UsbPortCompleteIsoTransfer(Extension, Endpoint, TransferParameters, BytesTransferred);
@@ -7842,6 +7849,21 @@ XHCI_CompleteDeferredTransferLocked(
     {
         XhciRegPacket.UsbPortCompleteTransfer(Extension, Endpoint, TransferParameters, TransferStatus, BytesTransferred);
     }
+}
+
+static
+VOID
+XHCI_CompleteDeferredTransferLocked(
+    _Inout_ PXHCI_EXTENSION Extension,
+    _Inout_ PXHCI_TRANSFER Transfer,
+    _In_ USBD_STATUS TransferStatus)
+{
+    /* FIXME: callers here still invoke the usbport completion callback with
+     * DeferredTransferLock held; these are the cold cancel/flush/teardown paths.
+     * The hot drain path uses XHCI_CompleteDeferredTransfer with the lock
+     * released. */
+    ASSERT(XHCI_IsLockIrql());
+    XHCI_CompleteDeferredTransfer(Extension, Transfer, TransferStatus);
 }
 
 static
@@ -7899,6 +7921,16 @@ XHCI_DrainDeferredTransferCompletions(
     if (!Extension || Extension->FatalError || Extension->StoppingOrRemoved)
         return;
 
+    /* Run the completion callbacks non-re-entrantly. A usbport completion
+     * callback below resubmits the next transfer, whose submit path can call
+     * back into this drain; only the outermost drain runs, and its loop re-reads
+     * the list so any completion queued by a callback is still processed. This
+     * bounds the kernel stack: on a USB-backed boot volume an NtCreateFile drives
+     * a synchronous FS -> storage -> USB submit chain, and completing+resubmitting
+     * inline on top of it overflows the 24 KB kernel stack (bugcheck 0x7F). */
+    if (InterlockedCompareExchange(&Extension->DeferredDrainActive, 1, 0) != 0)
+        return;
+
     for (;;)
     {
         PXHCI_TRANSFER Transfer;
@@ -7914,9 +7946,33 @@ XHCI_DrainDeferredTransferCompletions(
         Transfer = CONTAINING_RECORD(RemoveHeadList(&Extension->DeferredTransferList), XHCI_TRANSFER, ListEntry);
         TransferStatus = Transfer->UsbdStatus;
         InitializeListHead(&Transfer->ListEntry);
-        XHCI_CompleteDeferredTransferLocked(Extension, Transfer, TransferStatus);
         KeReleaseSpinLock(&Extension->DeferredTransferLock, OldIrql);
+
+        /* Lock released: the callback re-enters the submit path (same lock). */
+        XHCI_CompleteDeferredTransfer(Extension, Transfer, TransferStatus);
     }
+
+    InterlockedExchange(&Extension->DeferredDrainActive, 0);
+}
+
+static
+VOID
+NTAPI
+XHCI_DeferredDrainDpc(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID DeferredContext,
+    _In_opt_ PVOID SystemArg1,
+    _In_opt_ PVOID SystemArg2)
+{
+    PXHCI_EXTENSION Extension = (PXHCI_EXTENSION)DeferredContext;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArg1);
+    UNREFERENCED_PARAMETER(SystemArg2);
+
+    /* Transfer completions deferred by XHCI_PollEndpoint run here, on the DPC
+     * stack, instead of inline on usbport's deep transfer-submit stack. */
+    XHCI_DrainDeferredTransferCompletions(Extension);
 }
 
 static
@@ -14477,6 +14533,8 @@ XHCI_StartController(PVOID MiniPortExtension,
     InitializeListHead(&Extension->CommandContextList);
     KeInitializeSpinLock(&Extension->DeferredTransferLock);
     InitializeListHead(&Extension->DeferredTransferList);
+    KeInitializeDpc(&Extension->DeferredDrainDpc, XHCI_DeferredDrainDpc, Extension);
+    Extension->DeferredDrainActive = 0;
 
     HcsParams1 = XHCI_READ_REGISTER_ULONG(&Extension->CapabilityRegisters->HcsParams1);
     HcsParams2 = XHCI_READ_REGISTER_ULONG(&Extension->CapabilityRegisters->HcsParams2);
@@ -14860,6 +14918,12 @@ XHCI_StopController(PVOID MiniPortExtension,
     KeAcquireSpinLock(&Extension->WorkerRundownLock, &OldIrql);
     InterlockedExchange(&Extension->StoppingOrRemoved, 1);
     KeReleaseSpinLock(&Extension->WorkerRundownLock, OldIrql);
+
+    /* The deferred-completion drain DPC may be queued; remove it and flush so it
+     * cannot run against a torn-down extension. StoppingOrRemoved is set, so any
+     * drain still in flight returns without touching the controller. */
+    KeRemoveQueueDpc(&Extension->DeferredDrainDpc);
+    KeFlushQueuedDpcs();
 
     KeAcquireSpinLock(&Extension->TransferPollLock, &OldIrql);
     if (Extension->TransferPollScheduled != 0 &&
@@ -16199,13 +16263,19 @@ XHCI_PollEndpoint(PVOID MiniPortExtension,
     PXHCI_EXTENSION Extension = (PXHCI_EXTENSION)MiniPortExtension;
     UNREFERENCED_PARAMETER(EndpointHandle);
 
-    if (!Extension || Extension->FatalError)
+    if (!Extension || Extension->FatalError || Extension->StoppingOrRemoved)
         return;
 
+    /* usbport calls PollEndpoint from inside its transfer-submit path. Running
+     * transfer-completion callbacks inline here resubmits the next transfer
+     * deeper on an already-deep FS -> storage -> USB submit stack and overflows
+     * the 24 KB kernel stack (bugcheck 0x7F) on a USB-backed boot volume.
+     * Discover and queue completions, then drain them on the DPC (shallow
+     * stack) rather than on this caller's stack. */
     if (XHCI_EventRingHasPendingTrb(Extension))
-        XHCI_ServiceEventRing(Extension, FALSE, TRUE);
-    else
-        XHCI_DrainDeferredTransferCompletions(Extension);
+        XHCI_ServiceEventRing(Extension, FALSE, FALSE);
+
+    KeInsertQueueDpc(&Extension->DeferredDrainDpc, NULL, NULL);
 }
 
 static VOID NTAPI

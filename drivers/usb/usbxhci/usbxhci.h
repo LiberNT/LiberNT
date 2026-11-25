@@ -219,6 +219,8 @@ typedef struct _XHCI_EXTENSION {
   ULONG EventTicketCpuCount;
   LIST_ENTRY DeferredTransferList;
   KSPIN_LOCK DeferredTransferLock;
+  KDPC DeferredDrainDpc;
+  volatile LONG DeferredDrainActive;
     PHYSICAL_ADDRESS DeviceContextsPhysical;
     PHYSICAL_ADDRESS InputContextsPhysical;
     PHYSICAL_ADDRESS Ep0RingArrayPhysical;
