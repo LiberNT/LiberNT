@@ -41,6 +41,7 @@ jobs:
             arch: ppc
       fail-fast: false
     runs-on: ubuntu-24.04
+    environment: ${{ (matrix.arch == 'amd64' && github.event_name == 'push' && github.ref == 'refs/heads/master') && 'release-signing' || '' }}
     env:
       BUILD_TYPE: ${{ matrix.build || (github.event_name == 'push' && 'release' || 'debug') }}
       LIVE_CD: ${{ matrix.arch == 'i386' || matrix.arch == 'amd64' }}
@@ -69,6 +70,21 @@ jobs:
           fi
           sleep $((30 * attempt))
         done
+
+    - name: Prepare code signing
+      if: ${{ matrix.arch == 'amd64' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+      env:
+        CODESIGN_KEY: ${{ secrets.LIBERNT_CODESIGN_KEY }}
+        CODESIGN_CERT: ${{ secrets.LIBERNT_CODESIGN_CERT }}
+      run: |
+        if [ -z "$CODESIGN_KEY" ] || [ -z "$CODESIGN_CERT" ]; then
+          echo "No code-signing secrets: images stay unsigned."
+          exit 0
+        fi
+        sudo apt-get install -y osslsigncode
+        DIR="$RUNNER_TEMP/codesign"
+        (umask 077 && mkdir -p "$DIR" && printf '%s\n' "$CODESIGN_KEY" > "$DIR/libernt-codesign.key" && printf '%s\n' "$CODESIGN_CERT" > "$DIR/libernt-codesign.crt")
+        echo "CODESIGN_FLAGS=-DLIBERNT_CODESIGN_CERT=$DIR/libernt-codesign.crt -DLIBERNT_CODESIGN_KEY=$DIR/libernt-codesign.key" >> "$GITHUB_ENV"
 
     - name: Compute RosBE bootstrap SHA
       id: rosbe_spec
@@ -140,7 +156,7 @@ jobs:
         ./configure.sh $FLAGS -a ${{matrix.arch}} \
           -DREACTOS_TARGET_NT=0xA00 \
           -DENABLE_REMOTE_ASSISTANCE=OFF \
-          -DENABLE_CCACHE=1
+          -DENABLE_CCACHE=1 $CODESIGN_FLAGS
         ENV_NAME=$([ "${{matrix.compiler}}" = "clang" ] && echo Clang || echo GCC)
         echo "outdir=output-$ENV_NAME-${{matrix.arch}}-$BUILD_TYPE" >> "$GITHUB_OUTPUT"
 
@@ -211,6 +227,10 @@ jobs:
 
     - name: Check build dependencies
       run: python3 sdk/tools/depcheck.py ${{steps.configure.outputs.outdir}} --mode depfiles --nested --fail-on-gaps
+
+    - name: Remove the code-signing key
+      if: ${{ always() && matrix.arch == 'amd64' }}
+      run: rm -rf "$RUNNER_TEMP/codesign"
 
   build-msvc:
     if: ${{ github.event_name != 'schedule' && github.event_name != 'workflow_dispatch' }}
