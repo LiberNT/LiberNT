@@ -36,6 +36,7 @@ typedef struct _NWIFI_SUPPLICANT
     ULONG     Generation;           /* invalidates queued work across sessions */
     UCHAR     RandomPool[NWIFI_RANDOM_POOL];
     ULONG     RandomAvailable;
+    BOOLEAN   RefillQueued;
     ULONG     InstalledGroupSerial;
     BOOLEAN   GroupInstallQueued;
     BOOLEAN   SaePending;
@@ -79,29 +80,58 @@ NwifiSupplicantRandom(
 
 static
 VOID
-NwifiSupplicantRefillRandom(
-    _In_ PNWIFI_MSM Msm,
-    _In_ NWIFI_SUPPLICANT *Expected,
-    _In_ ULONG Generation)
+NTAPI
+NwifiSupplicantRefillRandomWorker(
+    _In_opt_ PVOID WorkItemContext,
+    _In_     NDIS_HANDLE NdisIoWorkItemHandle)
 {
+    PNWIFI_MSM Msm = (PNWIFI_MSM)WorkItemContext;
     UCHAR Pool[NWIFI_RANDOM_POOL];
     NWIFI_SUPPLICANT *Sup;
+    NTSTATUS Status;
 
-    if (!NT_SUCCESS(BCryptGenRandom(NULL, Pool, sizeof(Pool), BCRYPT_USE_SYSTEM_PREFERRED_RNG)))
-    {
-        DPRINT1("NWIFI: random source unavailable\n");
+    if (Msm == NULL)
         return;
-    }
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    Status = BCryptGenRandom(NULL, Pool, sizeof(Pool), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
 
     NdisAcquireSpinLock(&Msm->Lock);
     Sup = Msm->Supplicant;
-    if (Sup != NULL && Sup == Expected && Sup->Generation == Generation)
+    ASSERT(Sup != NULL);
+    if (Sup != NULL)
     {
-        RtlCopyMemory(Sup->RandomPool, Pool, sizeof(Pool));
-        Sup->RandomAvailable = sizeof(Pool);
+        ASSERT(Sup->RefillQueued);
+        if (NT_SUCCESS(Status))
+        {
+            RtlCopyMemory(Sup->RandomPool, Pool, sizeof(Pool));
+            Sup->RandomAvailable = sizeof(Pool);
+        }
+        Sup->RefillQueued = FALSE;
     }
     NdisReleaseSpinLock(&Msm->Lock);
     RtlSecureZeroMemory(Pool, sizeof(Pool));
+
+    if (!NT_SUCCESS(Status))
+        DPRINT1("NWIFI: random source unavailable 0x%08lX\n", Status);
+    NwifiMsmCompleteWorkItem(Msm, NdisIoWorkItemHandle);
+}
+
+static
+VOID
+NwifiSupplicantQueueRefill(
+    _In_ PNWIFI_MSM Msm)
+{
+    if (NwifiMsmQueueWorkItem(Msm, NwifiSupplicantRefillRandomWorker, Msm))
+        return;
+
+    NdisAcquireSpinLock(&Msm->Lock);
+    if (Msm->Supplicant != NULL)
+    {
+        ASSERT(Msm->Supplicant->RefillQueued);
+        Msm->Supplicant->RefillQueued = FALSE;
+    }
+    NdisReleaseSpinLock(&Msm->Lock);
 }
 
 static
@@ -1320,7 +1350,6 @@ NwifiSupplicantInstallKeysWorker(
     }
 
     NwifiMsmLinkUp(Msm, TRUE);
-    NwifiSupplicantRefillRandom(Msm, Sup, Context->Generation);
     DPRINT1("NWIFI: WPA2 4-way handshake complete; secure link up\n");
 
 Exit:
@@ -1377,7 +1406,6 @@ NwifiSupplicantInstallGroupKeysWorker(
     }
     NdisReleaseSpinLock(&Msm->Lock);
 
-    NwifiSupplicantRefillRandom(Msm, Sup, Context->Generation);
     DPRINT1("NWIFI: group key rekey installed -> 0x%08X\n", Status);
 
 Exit:
@@ -1437,6 +1465,7 @@ NwifiSupplicantRxEapol(
     BOOLEAN QueueGroupInstall = FALSE;
     BOOLEAN DeferReply = FALSE;
     BOOLEAN ReplyUnencrypted = TRUE;
+    BOOLEAN QueueRefill = FALSE;
     NDIS_STATUS SendStatus;
 
     UNREFERENCED_PARAMETER(DstMac);
@@ -1471,6 +1500,12 @@ NwifiSupplicantRxEapol(
 
     NewState = RsnaRxEapol(&Sup->Ctx, Eapol, Length, OutFrame, &OutLen);
     Error = RsnaLastError(&Sup->Ctx);
+    ASSERT(Sup->RandomAvailable <= NWIFI_RANDOM_POOL);
+    if (Sup->RandomAvailable < NWIFI_RANDOM_POOL && !Sup->RefillQueued)
+    {
+        Sup->RefillQueued = TRUE;
+        QueueRefill = TRUE;
+    }
     if (NewState == RSNA_STATE_COMPLETED &&
         !Sup->KeysInstalled && Sup->InstallQueued == 0)
     {
@@ -1495,6 +1530,8 @@ NwifiSupplicantRxEapol(
 
     DPRINT1("NWIFI: sup eapol in %lu out %lu state %d err %d\n",
             Length, (ULONG)OutLen, NewState, Error);
+    if (QueueRefill)
+        NwifiSupplicantQueueRefill(Msm);
     if (OutLen != 0 && !DeferReply)
     {
         SendStatus = NwifiInjectL2Frame(Msm->Adapter,
