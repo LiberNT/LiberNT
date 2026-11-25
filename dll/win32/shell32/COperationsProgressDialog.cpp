@@ -71,14 +71,51 @@ HICON FluentIcon(UINT id, int box)
                              IMAGE_ICON, box, box, LR_SHARED);
 }
 
-BOOL DrawFluentGlyph(HDC dc, RECT rect, UINT id, int box)
+BOOL DrawFluentGlyph(HDC dc, RECT rect, UINT id, int box, BYTE opacity = 255)
 {
     int size = FluentSize(box);
+    int x = (rect.left + rect.right - size) / 2, y = (rect.top + rect.bottom - size) / 2;
     HICON icon = FluentIcon(id, size);
     if (!icon) return FALSE;
-    DrawIconEx(dc, (rect.left + rect.right - size) / 2, (rect.top + rect.bottom - size) / 2,
-               icon, size, size, 0, NULL, DI_NORMAL);
-    return TRUE;
+    if (opacity == 255) return DrawIconEx(dc, x, y, icon, size, size, 0, NULL, DI_NORMAL);
+
+    BITMAPINFO format = {};
+    format.bmiHeader.biSize = sizeof(format.bmiHeader);
+    format.bmiHeader.biWidth = size;
+    format.bmiHeader.biHeight = -size;
+    format.bmiHeader.biPlanes = 1;
+    format.bmiHeader.biBitCount = 32;
+    format.bmiHeader.biCompression = BI_RGB;
+    BYTE *black = NULL, *white = NULL;
+    HBITMAP onBlack = CreateDIBSection(dc, &format, DIB_RGB_COLORS, reinterpret_cast<void **>(&black), NULL, 0);
+    HBITMAP onWhite = CreateDIBSection(dc, &format, DIB_RGB_COLORS, reinterpret_cast<void **>(&white), NULL, 0);
+    HDC memory = CreateCompatibleDC(dc);
+    BOOL drawn = FALSE;
+    if (onBlack && onWhite && memory)
+    {
+        ZeroMemory(black, size * size * 4);
+        FillMemory(white, size * size * 4, 0xFF);
+        HGDIOBJ old = SelectObject(memory, onWhite);
+        DrawIconEx(memory, 0, 0, icon, size, size, 0, NULL, DI_NORMAL);
+        SelectObject(memory, onBlack);
+        DrawIconEx(memory, 0, 0, icon, size, size, 0, NULL, DI_NORMAL);
+        GdiFlush();
+        for (int i = 0; i < size * size * 4; i += 4)
+        {
+            UINT cover = 255 - min(255, max(0, white[i + 1] - black[i + 1]));
+            black[i] = (BYTE)(min((UINT)black[i], cover) * opacity / 255);
+            black[i + 1] = (BYTE)(min((UINT)black[i + 1], cover) * opacity / 255);
+            black[i + 2] = (BYTE)(min((UINT)black[i + 2], cover) * opacity / 255);
+            black[i + 3] = (BYTE)(cover * opacity / 255);
+        }
+        BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+        drawn = GdiAlphaBlend(dc, x, y, size, size, memory, 0, 0, size, size, blend);
+        SelectObject(memory, old);
+    }
+    if (memory) DeleteDC(memory);
+    if (onWhite) DeleteObject(onWhite);
+    if (onBlack) DeleteObject(onBlack);
+    return drawn;
 }
 class ProgressLock
 {
@@ -610,7 +647,7 @@ void COperationsProgressDialog::Layout()
     SetWindowPos(m_Window, NULL, 0, 0, bounds.right - bounds.left, bounds.bottom - bounds.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     struct Placement { int id, x, y, width, height; } controls[] =
     {
-        {IDC_OP_LOCATION, 32, 18, 496, 23},
+        {IDC_OP_LOCATION, 32, 18, 496, 22},
         {IDC_OP_PERCENT, 32, 43, 370, 29},
         {IDC_OP_PAUSE, 438, 40, 40, 32},
         {IDCANCEL, 496, 40, 32, 32},
@@ -695,7 +732,7 @@ void COperationsProgressDialog::LayoutLocations(const CStringW &prefix, BOOL sou
     BOOL visible = !(m_Flags & OPPROGDLG_DONTDISPLAYLOCATIONS);
     HDC dc = GetDC(m_Window);
     HGDIOBJ previous = SelectObject(dc, m_Font);
-    int width = Scale(496), x = Scale(32), y = Scale(18), height = Scale(23);
+    int width = Scale(496), x = Scale(32), y = Scale(18), height = Scale(22);
     int prefixWidth = source || target ? min(width, TextWidth(dc, prefix)) : width;
     CStringW connector = source && target ? Text(IDS_OP_CONNECT) : L"";
     int connectorWidth = min(width - prefixWidth, TextWidth(dc, connector));
@@ -829,14 +866,15 @@ void COperationsProgressDialog::PaintButton(DRAWITEMSTRUCT *draw)
     COLORREF color = IsWindowEnabled(draw->hwndItem) ? m_Palette.Text : m_Palette.Dim;
     Fill(dc, rect, (draw->itemState & ODS_SELECTED) ? m_Palette.Press : m_Palette.Back);
     int cx = (rect.left + rect.right) / 2, cy = (rect.top + rect.bottom) / 2, radius = Scale(5);
-    BOOL glyphs = !HighContrast() && IsWindowEnabled(draw->hwndItem);
+    BOOL glyphs = !HighContrast();
+    BYTE opacity = IsWindowEnabled(draw->hwndItem) ? 255 : 155;
     HPEN pen = CreatePen(PS_SOLID, max(1, Scale(2)), color);
     HGDIOBJ oldPen = SelectObject(dc, pen), oldBrush = SelectObject(dc, GetStockObject(NULL_BRUSH));
     if (draw->CtlID == IDC_OP_DETAILS)
     {
         cx = rect.left + Scale(20);
         RECT glyph = {cx - Scale(10), cy - Scale(10), cx + Scale(10), cy + Scale(10)};
-        if (!glyphs || !DrawFluentGlyph(dc, glyph, Glyph(m_Expanded ? IDI_OP_FEWER : IDI_OP_MORE), Scale(20)))
+        if (!glyphs || !DrawFluentGlyph(dc, glyph, Glyph(m_Expanded ? IDI_OP_FEWER : IDI_OP_MORE), Scale(20), opacity))
         {
             Ellipse(dc, cx - Scale(10), cy - Scale(10), cx + Scale(10), cy + Scale(10));
             int direction = m_Expanded ? -1 : 1;
@@ -853,7 +891,7 @@ void COperationsProgressDialog::PaintButton(DRAWITEMSTRUCT *draw)
     }
     else if (draw->CtlID == IDC_OP_PAUSE)
     {
-        if (glyphs && DrawFluentGlyph(dc, rect, Glyph(m_Status == PDOPS_PAUSED ? IDI_OP_RESUME : IDI_OP_PAUSE), Scale(16)))
+        if (glyphs && DrawFluentGlyph(dc, rect, Glyph(m_Status == PDOPS_PAUSED ? IDI_OP_RESUME : IDI_OP_PAUSE), Scale(16), opacity))
         {
         }
         else if (m_Status == PDOPS_PAUSED)
@@ -873,17 +911,25 @@ void COperationsProgressDialog::PaintButton(DRAWITEMSTRUCT *draw)
             LineTo(dc, cx + Scale(3), cy + radius);
         }
     }
-    else if (!glyphs || !DrawFluentGlyph(dc, rect, Glyph(IDI_OP_CANCEL), Scale(16)))
+    else if (!glyphs || !DrawFluentGlyph(dc, rect, Glyph(IDI_OP_CANCEL), Scale(16), opacity))
     {
         MoveToEx(dc, cx - radius, cy - radius, NULL);
         LineTo(dc, cx + radius, cy + radius);
         MoveToEx(dc, cx + radius, cy - radius, NULL);
         LineTo(dc, cx - radius, cy + radius);
     }
+    if ((draw->itemState & ODS_FOCUS) && !(draw->itemState & ODS_NOFOCUSRECT))
+    {
+        HPEN focus = CreatePen(PS_INSIDEFRAME, max(1, Scale(2)), m_Palette.Text);
+        SelectObject(dc, focus);
+        SelectObject(dc, GetStockObject(NULL_BRUSH));
+        RoundRect(dc, draw->rcItem.left, draw->rcItem.top, draw->rcItem.right, draw->rcItem.bottom, Scale(8), Scale(8));
+        SelectObject(dc, pen);
+        DeleteObject(focus);
+    }
     SelectObject(dc, oldBrush);
     SelectObject(dc, oldPen);
     DeleteObject(pen);
-    if ((draw->itemState & ODS_FOCUS) && !(draw->itemState & ODS_NOFOCUSRECT)) DrawFocusRect(dc, &draw->rcItem);
 }
 
 DWORD WINAPI COperationsProgressDialog::ThreadProc(void *parameter)

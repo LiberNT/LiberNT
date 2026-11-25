@@ -4,6 +4,19 @@
 
 LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
+IDI_OP_PAUSE ICON "res/icons/op_pause.ico"
+IDI_OP_RESUME ICON "res/icons/op_resume.ico"
+IDI_OP_CANCEL ICON "res/icons/op_cancel.ico"
+IDI_OP_MORE ICON "res/icons/op_more.ico"
+IDI_OP_FEWER ICON "res/icons/op_fewer.ico"
+IDI_OP_COPY ICON "res/icons/op_copy.ico"
+IDI_OP_PAUSE_LIGHT ICON "res/icons/op_pause_light.ico"
+IDI_OP_RESUME_LIGHT ICON "res/icons/op_resume_light.ico"
+IDI_OP_CANCEL_LIGHT ICON "res/icons/op_cancel_light.ico"
+IDI_OP_MORE_LIGHT ICON "res/icons/op_more_light.ico"
+IDI_OP_FEWER_LIGHT ICON "res/icons/op_fewer_light.ico"
+IDI_OP_COPY_LIGHT ICON "res/icons/op_copy_light.ico"
+
 IDD_OPERATIONS_PROGRESS DIALOGEX 0, 0, 350, 110
 STYLE DS_SHELLFONT | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
 EXSTYLE WS_EX_CONTROLPARENT
