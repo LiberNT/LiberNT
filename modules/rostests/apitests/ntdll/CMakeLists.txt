@@ -145,6 +145,7 @@ list(APPEND SOURCE
     NtQuerySecurityObject.c
     NtSetSecurityObjectStatus.c
     NtQuerySystemEnvironmentValue.c
+    NtQueryLicenseValue.c
     NtQuerySystemInformation.c
     NtQuerySystemMemoryInformation.c
     NtQueryValueKey.c

@@ -1674,6 +1674,9 @@ HKLM,"SYSTEM\CurrentControlSet\Control\ProductOptions","ProductType",2,"WinNT"
 HKLM,"SYSTEM\CurrentControlSet\Control\ProductOptions","ProductSuite",0x00010002,"Terminal Server"
 HKLM,"SYSTEM\CurrentControlSet\Control\ProductOptions\LicenseInformation","Kernel-MUI-Language-Allowed",2,"EMPTY"
 HKLM,"SYSTEM\CurrentControlSet\Control\ProductOptions\LicenseInformation","Kernel-MUI-Number-Allowed",0x00010001,1
+HKLM,"SYSTEM\CurrentControlSet\Control\ProductOptions\LicenseInformation","Kernel-OneCore-DeviceFamilyID",0x00010001,3
+HKLM,"SYSTEM\CurrentControlSet\Control\ProductOptions\LicenseInformation","Kernel-ProductInfo",0x00010001,0x00000030
+HKLM,"SYSTEM\CurrentControlSet\Control\ProductOptions\LicenseInformation","Microsoft-Windows-Core-AllowMultiMon",0x00010001,1
 ; ReactOS specific - by default we report ourselves as Workstation for the user,
 ; but we can also report as Server if some application needs it.
 HKLM,"SYSTEM\CurrentControlSet\Control\ReactOS\Settings\Version","ReportAsWorkstation",0x00010001,0x00000001

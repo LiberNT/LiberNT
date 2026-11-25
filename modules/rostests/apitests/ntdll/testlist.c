@@ -131,6 +131,7 @@ extern void func_NtQuerySection(void);
 extern void func_NtQuerySecurityObject(void);
 extern void func_NtSetSecurityObjectStatus(void);
 extern void func_NtQuerySystemEnvironmentValue(void);
+extern void func_NtQueryLicenseValue(void);
 extern void func_NtQuerySystemInformation(void);
 extern void func_NtQuerySystemMemoryInformation(void);
 extern void func_NtQueryValueKey(void);
@@ -394,6 +395,7 @@ const struct test winetest_testlist[] =
     { "NtQuerySecurityObject",          func_NtQuerySecurityObject },
     { "NtSetSecurityObjectStatus",      func_NtSetSecurityObjectStatus },
     { "NtQuerySystemEnvironmentValue",  func_NtQuerySystemEnvironmentValue },
+    { "NtQueryLicenseValue",            func_NtQueryLicenseValue },
     { "NtQuerySystemInformation",       func_NtQuerySystemInformation },
     { "NtQuerySystemMemoryInformation", func_NtQuerySystemMemoryInformation },
     { "NtQueryValueKey",                func_NtQueryValueKey },
