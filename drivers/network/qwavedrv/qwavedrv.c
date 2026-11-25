@@ -1710,7 +1710,7 @@ static
 NTSTATUS
 QwaveCreateSds(VOID)
 {
-    static SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
+    static SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
     UCHAR OperatorsBuffer[SECURITY_MAX_SID_SIZE];
     PSID OperatorsSid = (PSID)OperatorsBuffer;
     PSID Sids[2];
