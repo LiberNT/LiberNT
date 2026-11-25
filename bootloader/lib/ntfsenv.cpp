@@ -9,9 +9,18 @@
 #include <ntfslib_new.h>
 #include <ntfslib_new_internal.h>
 #include <ntfsbl.h>
+#include <ntfsformat.h>
 
 #define NTFS_BL_PATH_CHARS 520
 #define NTFS_BL_WRITE_CHUNK 0x100000
+#define NTFS_BL_SECTOR_SIZE 512
+#define NTFS_BL_CLUSTER_SIZE 4096
+
+typedef struct _NTFS_BL_FORMAT_TARGET
+{
+    PUCHAR Base;
+    ULONGLONG Size;
+} NTFS_BL_FORMAT_TARGET, *PNTFS_BL_FORMAT_TARGET;
 
 extern "C" {
 
@@ -34,11 +43,11 @@ DkFlush(
     _In_ struct _DK_DEVICE* Device);
 
 PVOID
-BlAllocate(
+FwAllocate(
     _In_ SIZE_T Size);
 
 VOID
-BlFree(
+FwFree(
     _In_ PVOID Memory);
 
 BOOLEAN
@@ -64,14 +73,14 @@ NtfsAllocatePoolWithTag(POOL_TYPE PoolType, size_t Size, ULONG Tag)
 {
     UNREFERENCED_PARAMETER(PoolType);
     UNREFERENCED_PARAMETER(Tag);
-    return BlAllocate(Size);
+    return FwAllocate(Size);
 }
 
 void
 NtfsFreePool(void* pObject)
 {
     if (pObject)
-        BlFree(pObject);
+        FwFree(pObject);
 }
 
 void
@@ -522,6 +531,140 @@ NtfsBlDeleteFile(
     return NT_SUCCESS(Status)
         ? NtfsMasterFileTableDeleteFile(NtfsVolumeGetMft(NtfsBlVolume), Name, Chars, IsDirectory)
         : Status;
+}
+
+static
+NTSTATUS
+NtfsBlFormatWrite(
+    _In_ void* Context,
+    _In_ ULONGLONG Offset,
+    _In_ ULONG Length,
+    _In_ const void* Buffer)
+{
+    PNTFS_BL_FORMAT_TARGET Target = static_cast<PNTFS_BL_FORMAT_TARGET>(Context);
+
+    if (Offset > Target->Size || Length > Target->Size - Offset)
+        return STATUS_INVALID_PARAMETER;
+
+    RtlCopyMemory(Target->Base + Offset, Buffer, Length);
+    return STATUS_SUCCESS;
+}
+
+static
+void*
+NtfsBlFormatAllocate(
+    _In_ void* Context,
+    _In_ ULONG Length)
+{
+    UNREFERENCED_PARAMETER(Context);
+    return FwAllocate(Length);
+}
+
+static
+void
+NtfsBlFormatFree(
+    _In_ void* Context,
+    _In_ void* Buffer)
+{
+    UNREFERENCED_PARAMETER(Context);
+    FwFree(Buffer);
+}
+
+NTSTATUS
+NtfsBlFormatMemory(
+    _Out_writes_bytes_all_(Size) PVOID Volume,
+    _In_ ULONGLONG Size,
+    _In_ ULONG HiddenSectors,
+    _In_ PCWSTR Label)
+{
+    NtfsFormatParameters Parameters;
+    NTFS_BL_FORMAT_TARGET Target;
+    NTSTATUS Status;
+
+    if (Size == 0 || Size % NTFS_BL_CLUSTER_SIZE != 0)
+        return STATUS_INVALID_PARAMETER;
+
+    Target.Base = static_cast<PUCHAR>(Volume);
+    Target.Size = Size;
+    RtlZeroMemory(&Parameters, sizeof(Parameters));
+    Status = NtfsQuerySystemTime(&Parameters.CurrentTime);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Parameters.TotalSectors = Size / NTFS_BL_SECTOR_SIZE;
+    Parameters.BytesPerSector = NTFS_BL_SECTOR_SIZE;
+    Parameters.SectorsPerCluster = NTFS_BL_CLUSTER_SIZE / NTFS_BL_SECTOR_SIZE;
+    Parameters.SectorsPerTrack = 63;
+    Parameters.NumberOfHeads = 255;
+    Parameters.HiddenSectors = HiddenSectors;
+    Parameters.MediaDescriptor = 0xF8;
+    Parameters.VolumeLabel = Label;
+    Parameters.QuickFormat = TRUE;
+    Parameters.IoContext = &Target;
+    Parameters.Write = NtfsBlFormatWrite;
+    Parameters.Allocate = NtfsBlFormatAllocate;
+    Parameters.Free = NtfsBlFormatFree;
+    return NtfsVolumeFormat(&Parameters);
+}
+
+NTSTATUS
+NtfsBlWriteFileAt(
+    _In_ PVOID Handle,
+    _In_ ULONGLONG Offset,
+    _In_reads_bytes_(Length) const VOID* Buffer,
+    _In_ ULONG Length)
+{
+    LARGE_INTEGER Position;
+    ULONG Written = Length;
+    NTSTATUS Status;
+
+    Position.QuadPart = static_cast<LONGLONG>(Offset);
+    Status = NtfsFileRecordWriteFileData(static_cast<PNtfsFileRecord>(Handle),
+                                         TypeData,
+                                         NULL,
+                                         const_cast<PUCHAR>(static_cast<const UCHAR*>(Buffer)),
+                                         &Written,
+                                         &Position);
+    if (NT_SUCCESS(Status) && Written != Length)
+        Status = STATUS_END_OF_FILE;
+    return Status;
+}
+
+NTSTATUS
+NtfsBlCreateWimFile(
+    _In_ PCSTR Path,
+    _In_ ULONG FileAttributes,
+    _In_ ULONGLONG Size,
+    _In_reads_bytes_opt_(ReparseLength) const UCHAR* Reparse,
+    _In_ ULONG ReparseLength)
+{
+    WCHAR Name[NTFS_BL_PATH_CHARS];
+    PNtfsFileRecord File = NULL;
+    NTSTATUS Status;
+    ULONG Chars;
+
+    if (!NtfsBlVolume)
+        return STATUS_DEVICE_NOT_READY;
+
+    FileAttributes &= FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM;
+    Status = NtfsBlPath(Path, Name, &Chars);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (Size != 0)
+    {
+        return NtfsMasterFileTableCreateWofFile(NtfsVolumeGetMft(NtfsBlVolume),
+                                                Name,
+                                                Chars,
+                                                FileAttributes,
+                                                Size,
+                                                Reparse,
+                                                ReparseLength);
+    }
+
+    Status = NtfsMasterFileTableCreateFile(NtfsVolumeGetMft(NtfsBlVolume), Name, Chars, FALSE, FileAttributes, &File);
+    NtfsFileRecordDestroy(File);
+    return Status;
 }
 
 NTSTATUS

@@ -62,6 +62,28 @@ NtfsBlDeleteFile(
     _In_ BOOLEAN IsDirectory);
 
 NTSTATUS
+NtfsBlFormatMemory(
+    _Out_writes_bytes_all_(Size) PVOID Volume,
+    _In_ ULONGLONG Size,
+    _In_ ULONG HiddenSectors,
+    _In_ PCWSTR Label);
+
+NTSTATUS
+NtfsBlWriteFileAt(
+    _In_ PVOID File,
+    _In_ ULONGLONG Offset,
+    _In_reads_bytes_(Length) const VOID* Buffer,
+    _In_ ULONG Length);
+
+NTSTATUS
+NtfsBlCreateWimFile(
+    _In_ PCSTR Path,
+    _In_ ULONG FileAttributes,
+    _In_ ULONGLONG Size,
+    _In_reads_bytes_opt_(ReparseLength) const UCHAR* Reparse,
+    _In_ ULONG ReparseLength);
+
+NTSTATUS
 NtfsBlSetDirty(
     _In_ BOOLEAN Dirty);
 

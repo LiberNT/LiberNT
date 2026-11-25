@@ -14,6 +14,7 @@ static BOOLEAN FsMountedExFat;
 static BOOLEAN FsMountedCdfs;
 
 PVOID (*FsMemoryReader)(PCSTR Path, PULONG Size);
+PCWSTR FsMemoryDriverName;
 
 static
 BOOLEAN
@@ -114,7 +115,7 @@ FsGetDriverName(
     _In_ PDK_DEVICE Device)
 {
     if (Device->Memory && FsMemoryReader)
-        return L"fastfat";
+        return FsMemoryDriverName;
 
     if (FsMountedExFat)
         return ExFatIsExFat() ? L"exfat" : L"fastfat";
