@@ -21,6 +21,7 @@ typedef struct _GDI_POOL_SECTION
 
     ULONG ulCommitBitmap;
     ULONG cAllocCount;
+    HANDLE ahSecure[sizeof(ULONG) * 8];
 
     RTL_BITMAP bitmap;
     ULONG aulBits[1];
@@ -81,6 +82,7 @@ GdiPoolAllocateSection(PGDI_POOL pPool)
     pSection->pvBaseAddress = pvBaseAddress;
     pSection->ulCommitBitmap = 0;
     pSection->cAllocCount = 0;
+    RtlZeroMemory(pSection->ahSecure, sizeof(pSection->ahSecure));
     RtlInitializeBitMap(&pSection->bitmap,
                         pSection->aulBits,
                         pPool->cSlotsPerSection);
@@ -96,6 +98,7 @@ GdiPoolDeleteSection(PGDI_POOL pPool, PGDI_POOL_SECTION pSection)
 {
     NTSTATUS status;
     SIZE_T cjSize = 0;
+    ULONG i;
 
     /* Should not have any allocations */
     if (pSection->cAllocCount != 0)
@@ -104,6 +107,12 @@ GdiPoolDeleteSection(PGDI_POOL pPool, PGDI_POOL_SECTION pSection)
                 pSection->cAllocCount, pSection, pPool);
         DBG_DUMP_EVENT_LIST(&pPool->slhLog);
         ASSERT(FALSE);
+    }
+
+    for (i = 0; i < RTL_NUMBER_OF(pSection->ahSecure); i++)
+    {
+        if (pSection->ahSecure[i])
+            MmUnsecureVirtualMemory(pSection->ahSecure[i]);
     }
 
     /* Release the virtual memory */
@@ -123,7 +132,7 @@ GdiPoolAllocate(
     PGDI_POOL pPool)
 {
     PGDI_POOL_SECTION pSection;
-    ULONG ulIndex, cjOffset, ulPageBit;
+    ULONG ulIndex, cjOffset, ulPageBit, ulPage;
     PLIST_ENTRY ple;
     PVOID pvAlloc, pvBaseAddress;
     SIZE_T cjSize;
@@ -200,11 +209,29 @@ GdiPoolAllocate(
                                          PAGE_READWRITE);
         if (!NT_SUCCESS(status))
         {
+            RtlClearBits(&pSection->bitmap, ulIndex, 1);
             pvAlloc = NULL;
             goto done;
         }
 
-        pSection->ulCommitBitmap |= ulPageBit;
+        for (ulPage = cjOffset / PAGE_SIZE; ulPage <= (cjOffset + pPool->cjAllocSize - 1) / PAGE_SIZE; ulPage++)
+        {
+            ASSERT(ulPage < RTL_NUMBER_OF(pSection->ahSecure));
+            if (pSection->ulCommitBitmap & (1UL << ulPage))
+                continue;
+
+            ASSERT(pSection->ahSecure[ulPage] == NULL);
+            pSection->ahSecure[ulPage] = MmSecureVirtualMemory((PUCHAR)pSection->pvBaseAddress + ulPage * PAGE_SIZE,
+                                                               PAGE_SIZE,
+                                                               PAGE_READWRITE);
+            if (!pSection->ahSecure[ulPage])
+            {
+                RtlClearBits(&pSection->bitmap, ulIndex, 1);
+                pvAlloc = NULL;
+                goto done;
+            }
+            pSection->ulCommitBitmap |= 1UL << ulPage;
+        }
     }
 
     /* Increase alloc count */
