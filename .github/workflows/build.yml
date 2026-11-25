@@ -169,8 +169,7 @@ jobs:
       run: |
         . "$HOME/.local/opt/rosbe/rosbe-env.sh"
         TARGETS=liberntimg
-        [ "$LIVE_CD" = "true" ] && TARGETS=liberntiso
-        [ "$LIVE_CD" = "true" ] && [ "$BUILD_TYPE" = "debug" ] && TARGETS="$TARGETS liberntimg"
+        [ "$LIVE_CD" = "true" ] && [ "$BUILD_TYPE" != "debug" ] && TARGETS=liberntiso
         ninja -C ${{steps.configure.outputs.outdir}} $TARGETS -k0
 
     - name: Print ccache statistics
@@ -207,11 +206,11 @@ jobs:
         echo "tag=${{matrix.compiler}}-${{matrix.arch}}${{matrix.variant}}$TYPE-${GITHUB_SHA::11}" >> "$GITHUB_OUTPUT"
 
     - name: Name the CD image
-      if: ${{ env.LIVE_CD == 'true' }}
+      if: ${{ env.LIVE_CD == 'true' && env.BUILD_TYPE != 'debug' }}
       run: ln -f ${{steps.configure.outputs.outdir}}/LiberNT.iso ${{steps.configure.outputs.outdir}}/LiberNT-${{steps.images.outputs.tag}}.iso
 
     - name: Upload the CD image
-      if: ${{ env.LIVE_CD == 'true' && env.CCACHE_SEED != 'true' }}
+      if: ${{ env.LIVE_CD == 'true' && env.BUILD_TYPE != 'debug' && env.CCACHE_SEED != 'true' }}
       uses: actions/upload-artifact@v7
       with:
         path: ${{steps.configure.outputs.outdir}}/LiberNT-${{steps.images.outputs.tag}}.iso
