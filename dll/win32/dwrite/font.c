@@ -4426,6 +4426,13 @@ static HRESULT init_font_data(const struct fontface_desc *desc, DWRITE_FONT_FAMI
     opentype_get_font_properties(&stream_desc, &props);
     opentype_get_font_metrics(&stream_desc, &data->metrics, NULL);
     opentype_get_font_facename(&stream_desc, props.lf.lfFaceName, &data->names);
+#ifdef __REACTOS__
+    if (!data->names && FAILED(hr = create_localizedstrings(&data->names)))
+    {
+        release_font_data(data);
+        return hr;
+    }
+#endif
 
     if (FAILED(hr = opentype_get_font_familyname(&stream_desc, family_model, &data->family_names)))
     {
@@ -5272,6 +5279,9 @@ static UINT64 dwrite_fontface_get_font_object(struct dwrite_fontface *fontface)
             create_params.size = size;
             create_params.index = fontface->index;
             create_params.object = &font_object;
+#ifdef __REACTOS__
+            font_object = 0;
+#endif
 
             UNIX_CALL(create_font_object, &create_params);
 
@@ -5387,6 +5397,14 @@ HRESULT create_fontface(const struct fontface_desc *desc, struct list *cached_li
     IDWriteFontFileStream_AddRef(fontface->cmap.stream);
     release_font_data(font_data);
 
+#ifdef __REACTOS__
+    fontface->get_font_object = dwrite_fontface_get_font_object;
+    if (!fontface->get_font_object(fontface))
+    {
+        IDWriteFontFace5_Release(&fontface->IDWriteFontFace5_iface);
+        return DWRITE_E_FILEFORMAT;
+    }
+#endif
     fontface->cached = factory_cache_fontface(fontface->factory, cached_list, &fontface->IDWriteFontFace5_iface);
     fontface->get_font_object = dwrite_fontface_get_font_object;
 

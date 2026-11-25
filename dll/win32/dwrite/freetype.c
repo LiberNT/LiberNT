@@ -159,9 +159,16 @@ MAKE_FUNCPTR(FT_Set_Pixel_Sizes);
 /* A face keeps the size it was last scaled to: a hinted size runs the font's prep program on its first glyph only. */
 static FT_Size freetype_set_face_size(FT_Face face, float emsize)
 {
-    ULONG_PTR key = FT_IS_SCALABLE(face) ? (ULONG_PTR)(FT_F26Dot6)(emsize * 64.0f + 0.5f) : (ULONG_PTR)(FT_UInt)emsize;
-    FT_Size size = face->generic.data;
+    ULONG_PTR key;
+    FT_Size size;
     FT_Error error;
+
+#ifdef __REACTOS__
+    if (!face)
+        return NULL;
+#endif
+    key = FT_IS_SCALABLE(face) ? (ULONG_PTR)(FT_F26Dot6)(emsize * 64.0f + 0.5f) : (ULONG_PTR)(FT_UInt)emsize;
+    size = face->generic.data;
 
     if (size && (ULONG_PTR)size->generic.data == key)
     {
