@@ -62,7 +62,6 @@ BEGIN
     CONTROL "", IDC_APPLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 88
     LTEXT "", IDC_APPSPACE, 0, 92, 290, 10, SS_NOPREFIX
     LTEXT "ألغِ تحديد مربع لتخطي مكون. تستخدم التنزيلات اتصالك بالإنترنت، ويتم التحقق من كل حزمة بتوقيع ناشرها أو المجموع الاختباري قبل تثبيتها.", IDC_STATIC, 0, 106, 290, 34
-    LTEXT "", IDC_APPDRIVERS, 0, 142, 290, 18
 END
 
 IDD_STORAGEPAGE DIALOGEX 0, 0, 290, 160
@@ -266,8 +265,6 @@ BEGIN
     IDS_APPS_COL_NAME "المكوّن"
     IDS_APPS_COL_SOURCE "مصدر التنزيل"
     IDS_APPS_INSTALLED "%s (مثبت)"
-    IDS_APPS_DRIVERS "Drivers for your devices"
-    IDS_APPS_DRIVERS_NOTE "To find drivers, Setup sends the hardware IDs of the devices that have none to the Microsoft Update Catalog."
     IDS_OOBE_FINISHTITLE "جارٍ تجهيز LiberNT"
     IDS_OOBE_FINISHSUBTITLE "قد يستغرق ذلك بضع دقائق. أبقِ الكمبيوتر قيد التشغيل."
     IDS_OOBE_APPLY_REGION "جارٍ تطبيق اللغة ولوحة المفاتيح..."
@@ -287,7 +284,6 @@ BEGIN
     IDS_OOBE_APPS_SPACE "تحتاج المكونات المحددة إلى نحو %lu ميغابايت. يحتوي محرك الأقراص C: على %I64u ميغابايت حرة."
     IDS_OOBE_APPS_NOSPACE "لا توجد مساحة حرة كافية للمكونات المحددة"
     IDS_OOBE_APPS_NOSPACE_TEXT "تحتاج إلى نحو %lu ميغابايت، ويحتوي محرك الأقراص C: على %I64u ميغابايت حرة. ألغِ تحديد بعض المربعات للمتابعة. لتثبيتها لاحقًا، وسّع محرك الأقراص C: باستخدام lntexpandstorage في موجه الأوامر، ثم شغّل %%SystemRoot%%\\system32\\oobe\\oobe.exe /components."
-    IDS_OOBE_INSTALL_DRIVERS "جارٍ تثبيت برامج التشغيل لأجهزتك..."
 END
 
 /* Progress Strings */

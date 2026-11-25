@@ -62,7 +62,6 @@ BEGIN
     CONTROL "", IDC_APPLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 88
     LTEXT "", IDC_APPSPACE, 0, 92, 290, 10, SS_NOPREFIX
     LTEXT "インストールしないコンポーネントはチェックを外してください。ダウンロードにはインターネット接続を使います。各パッケージは、インストールの前に発行元の署名またはチェックサムで検証されます。", IDC_STATIC, 0, 106, 290, 34
-    LTEXT "", IDC_APPDRIVERS, 0, 142, 290, 18
 END
 
 IDD_STORAGEPAGE DIALOGEX 0, 0, 290, 160
@@ -266,8 +265,6 @@ BEGIN
     IDS_APPS_COL_NAME "コンポーネント"
     IDS_APPS_COL_SOURCE "ダウンロード元"
     IDS_APPS_INSTALLED "%s (インストール済み)"
-    IDS_APPS_DRIVERS "デバイスのドライバー"
-    IDS_APPS_DRIVERS_NOTE "ドライバーを探すため、セットアップはドライバーのないデバイスのハードウェア ID を Microsoft Update カタログに送信します。"
     IDS_OOBE_FINISHTITLE "LiberNT の準備をしています"
     IDS_OOBE_FINISHSUBTITLE "数分かかることがあります。コンピューターの電源を切らないでください。"
     IDS_OOBE_APPLY_REGION "言語とキーボードを適用しています..."
@@ -287,7 +284,6 @@ BEGIN
     IDS_OOBE_APPS_SPACE "選んだコンポーネントには約 %lu MB 必要です。ドライブ C: の空きは %I64u MB です。"
     IDS_OOBE_APPS_NOSPACE "選んだコンポーネントに必要な空き領域が足りません"
     IDS_OOBE_APPS_NOSPACE_TEXT "約 %lu MB 必要ですが、ドライブ C: の空きは %I64u MB です。続行するには、いくつかのチェックを外してください。後でインストールするには、コマンド プロンプトで lntexpandstorage を実行してドライブ C: を拡張してから、%%SystemRoot%%\\system32\\oobe\\oobe.exe /components を実行してください。"
-    IDS_OOBE_INSTALL_DRIVERS "デバイスのドライバーをインストールしています..."
 END
 
 /* Progress Strings */

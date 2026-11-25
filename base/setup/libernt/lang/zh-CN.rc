@@ -62,7 +62,6 @@ BEGIN
     CONTROL "", IDC_APPLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 88
     LTEXT "", IDC_APPSPACE, 0, 92, 290, 10, SS_NOPREFIX
     LTEXT "取消勾选某个组件即可跳过它。下载会使用你的 Internet 连接，每个包在安装前都会根据其发布者的签名或校验和进行检查。", IDC_STATIC, 0, 106, 290, 34
-    LTEXT "", IDC_APPDRIVERS, 0, 142, 290, 18
 END
 
 IDD_STORAGEPAGE DIALOGEX 0, 0, 290, 160
@@ -266,8 +265,6 @@ BEGIN
     IDS_APPS_COL_NAME "组件"
     IDS_APPS_COL_SOURCE "下载来源"
     IDS_APPS_INSTALLED "%s (已安装)"
-    IDS_APPS_DRIVERS "Drivers for your devices"
-    IDS_APPS_DRIVERS_NOTE "To find drivers, Setup sends the hardware IDs of the devices that have none to the Microsoft Update Catalog."
     IDS_OOBE_FINISHTITLE "正在准备 LiberNT"
     IDS_OOBE_FINISHSUBTITLE "这可能需要几分钟。请保持计算机开机。"
     IDS_OOBE_APPLY_REGION "正在应用你的语言和键盘..."
@@ -287,7 +284,6 @@ BEGIN
     IDS_OOBE_APPS_SPACE "所选组件大约需要 %lu MB。驱动器 C: 有 %I64u MB 可用空间。"
     IDS_OOBE_APPS_NOSPACE "可用空间不足，无法安装所选组件"
     IDS_OOBE_APPS_NOSPACE_TEXT "它们大约需要 %lu MB，而驱动器 C: 有 %I64u MB 可用空间。请取消勾选部分组件以继续。若要稍后安装，请在命令提示符中使用 lntexpandstorage 扩展驱动器 C:，然后运行 %%SystemRoot%%\\system32\\oobe\\oobe.exe /components。"
-    IDS_OOBE_INSTALL_DRIVERS "正在为你的设备安装驱动程序..."
 END
 
 /* Progress Strings */

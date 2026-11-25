@@ -74,7 +74,6 @@
 #define IDD_APPSPAGE         2260
 #define IDC_APPLIST          2261
 #define IDC_APPSPACE         2262
-#define IDC_APPDRIVERS       2263
 
 #define IDD_STORAGEPAGE      2270
 #define IDC_STORAGEINFO      2271
@@ -331,10 +330,7 @@
 #define IDS_OOBE_APPS_SPACE         5624
 #define IDS_OOBE_APPS_NOSPACE       5625
 #define IDS_OOBE_APPS_NOSPACE_TEXT  5626
-#define IDS_OOBE_INSTALL_DRIVERS    5627
 #define IDS_APPS_INSTALLED          5628
-#define IDS_APPS_DRIVERS            5629
-#define IDS_APPS_DRIVERS_NOTE       5630
 
 #define IDS_TYPETITLE               5700
 #define IDS_TYPESUBTITLE            5701

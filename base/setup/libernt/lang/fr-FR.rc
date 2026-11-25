@@ -62,7 +62,6 @@ BEGIN
     CONTROL "", IDC_APPLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 88
     LTEXT "", IDC_APPSPACE, 0, 92, 290, 10, SS_NOPREFIX
     LTEXT "Décochez une case pour ignorer un composant. Les téléchargements utilisent votre connexion Internet, et chaque paquet est vérifié avec la signature ou la somme de contrôle de son éditeur avant d'être installé.", IDC_STATIC, 0, 106, 290, 34
-    LTEXT "", IDC_APPDRIVERS, 0, 142, 290, 18
 END
 
 IDD_STORAGEPAGE DIALOGEX 0, 0, 290, 160
@@ -266,8 +265,6 @@ BEGIN
     IDS_APPS_COL_NAME "Composant"
     IDS_APPS_COL_SOURCE "Téléchargé depuis"
     IDS_APPS_INSTALLED "%s (installé)"
-    IDS_APPS_DRIVERS "Pilotes de vos périphériques"
-    IDS_APPS_DRIVERS_NOTE "Pour trouver des pilotes, l'installation envoie au catalogue Microsoft Update les identifiants matériels des périphériques qui n'en ont pas."
     IDS_OOBE_FINISHTITLE "Préparation de LiberNT"
     IDS_OOBE_FINISHSUBTITLE "Cela peut prendre quelques minutes. Laissez votre ordinateur allumé."
     IDS_OOBE_APPLY_REGION "Application de votre langue et de votre clavier..."
@@ -287,7 +284,6 @@ BEGIN
     IDS_OOBE_APPS_SPACE "Les composants sélectionnés nécessitent environ %lu Mo ; %I64u Mo libres sur C:."
     IDS_OOBE_APPS_NOSPACE "Espace libre insuffisant pour les composants sélectionnés"
     IDS_OOBE_APPS_NOSPACE_TEXT "Ils nécessitent environ %lu Mo, et le lecteur C: dispose de %I64u Mo libres. Décochez des cases pour continuer. Pour les installer plus tard, agrandissez le lecteur C: avec lntexpandstorage dans l'invite de commandes, puis exécutez %%SystemRoot%%\\system32\\oobe\\oobe.exe /components."
-    IDS_OOBE_INSTALL_DRIVERS "Installation des pilotes de vos périphériques..."
 END
 
 /* Progress Strings */

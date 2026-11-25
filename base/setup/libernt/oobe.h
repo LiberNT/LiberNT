@@ -66,4 +66,3 @@ OobeResultText(
 
 extern POOBE_APP OobeApps;
 extern ULONG OobeAppCount;
-extern BOOL OobeInstallDrivers;

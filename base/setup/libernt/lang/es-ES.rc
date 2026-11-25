@@ -62,7 +62,6 @@ BEGIN
     CONTROL "", IDC_APPLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 88
     LTEXT "", IDC_APPSPACE, 0, 92, 290, 10, SS_NOPREFIX
     LTEXT "Desactive una casilla para omitir un componente. Las descargas usan su conexión a Internet, y cada paquete se comprueba con la firma o la suma de comprobación de su editor antes de instalarlo.", IDC_STATIC, 0, 106, 290, 34
-    LTEXT "", IDC_APPDRIVERS, 0, 142, 290, 18
 END
 
 IDD_STORAGEPAGE DIALOGEX 0, 0, 290, 160
@@ -266,8 +265,6 @@ BEGIN
     IDS_APPS_COL_NAME "Componente"
     IDS_APPS_COL_SOURCE "Descargado de"
     IDS_APPS_INSTALLED "%s (instalado)"
-    IDS_APPS_DRIVERS "Drivers for your devices"
-    IDS_APPS_DRIVERS_NOTE "To find drivers, Setup sends the hardware IDs of the devices that have none to the Microsoft Update Catalog."
     IDS_OOBE_FINISHTITLE "Preparando LiberNT"
     IDS_OOBE_FINISHSUBTITLE "Puede tardar unos minutos. Mantenga el equipo encendido."
     IDS_OOBE_APPLY_REGION "Aplicando su idioma y su teclado..."
@@ -287,7 +284,6 @@ BEGIN
     IDS_OOBE_APPS_SPACE "Los componentes seleccionados necesitan unos %lu MB. La unidad C: tiene %I64u MB libres."
     IDS_OOBE_APPS_NOSPACE "No hay espacio libre suficiente para los componentes seleccionados"
     IDS_OOBE_APPS_NOSPACE_TEXT "Necesitan unos %lu MB y la unidad C: tiene %I64u MB libres. Desactive algunas casillas para continuar. Para instalarlos más tarde, amplíe la unidad C: con lntexpandstorage en el Símbolo del sistema y luego ejecute %%SystemRoot%%\\system32\\oobe\\oobe.exe /components."
-    IDS_OOBE_INSTALL_DRIVERS "Instalando los controladores de sus dispositivos..."
 END
 
 /* Progress Strings */
