@@ -1212,6 +1212,10 @@ PrepareUpgrade(VOID)
         {
             Error = ERROR_BUFFER_OVERFLOW;
         }
+        else if (Host.InstallImage)
+        {
+            Error = HostExtractImageFile(Host.SourceRoot, "Windows/system32/winload.efi", Loader);
+        }
         else
         {
             Error = HostCopyFileVerified(Source, Loader);
