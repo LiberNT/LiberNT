@@ -184,6 +184,7 @@ typedef struct _THREADINFO
     ULONG cCritDispositionDepth;
     SINGLE_LIST_ENTRY DeferredFreeList;
     ULONG cSharedCrit;
+    HANDLE hSecureTeb;
 #if DBG
     USHORT acExclusiveLockCount[GDIObjTypeTotal + 1];
     UINT cRefObjectCo;

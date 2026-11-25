@@ -633,6 +633,7 @@ InitThreadCallback(PETHREAD Thread)
     int i;
     NTSTATUS Status = STATUS_SUCCESS;
     PTEB pTeb;
+    HANDLE hSecureTeb = NULL;
     PPEB Peb;
     PRTL_USER_PROCESS_PARAMETERS ProcessParams = NULL;
     struct
@@ -685,14 +686,28 @@ InitThreadCallback(PETHREAD Thread)
         _SEH2_END;
     }
 
+    if (pTeb)
+    {
+        hSecureTeb = MmSecureVirtualMemory(pTeb, sizeof(*pTeb), PAGE_READWRITE);
+        if (!hSecureTeb)
+        {
+            ERR_CH(UserThread, "The TEB of TID:0x%lx is not writable\n",
+                   HandleToUlong(Thread->Cid.UniqueThread));
+            return STATUS_ACCESS_VIOLATION;
+        }
+    }
+
     /* Allocate a new Win32 thread info */
     Status = AllocW32Thread(Thread, &ptiCurrent);
     if (!NT_SUCCESS(Status))
     {
         ERR_CH(UserThread, "Failed to allocate pti for TID:0x%lx\n",
                HandleToUlong(Thread->Cid.UniqueThread));
+        if (hSecureTeb)
+            MmUnsecureVirtualMemory(hSecureTeb);
         return Status;
     }
+    ptiCurrent->hSecureTeb = hSecureTeb;
 
     /* Initialize the THREADINFO */
     ptiCurrent->pEThread = Thread;
@@ -1132,6 +1147,12 @@ ExitThreadCallback(PETHREAD Thread)
     TRACE_CH(UserThread, "Freeing pti 0x%p\n", ptiCurrent);
 
     IntSetThreadDesktop(NULL, TRUE);
+
+    if (ptiCurrent->hSecureTeb)
+    {
+        MmUnsecureVirtualMemory(ptiCurrent->hSecureTeb);
+        ptiCurrent->hSecureTeb = NULL;
+    }
 
     if (ptiCurrent->hEventQueueClient != NULL)
     {
