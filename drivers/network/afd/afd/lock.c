@@ -668,7 +668,7 @@ PAFD_HANDLE LockHandles( PAFD_HANDLE HandleArray, UINT HandleCount, PDEVICE_OBJE
     NTSTATUS Status = STATUS_SUCCESS;
 
     PAFD_HANDLE FileObjects = ExAllocatePoolWithTag(NonPagedPool,
-                                                    HandleCount * sizeof(AFD_HANDLE),
+                                                    max(HandleCount, 1) * sizeof(AFD_HANDLE),
                                                     TAG_AFD_POLL_HANDLE);
 
     for( i = 0; FileObjects && i < HandleCount; i++ ) {
