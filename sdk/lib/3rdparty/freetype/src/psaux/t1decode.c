@@ -4,7 +4,7 @@
  *
  *   PostScript Type 1 decoding routines (body).
  *
- * Copyright (C) 2000-2020 by
+ * Copyright (C) 2000-2026 by
  * David Turner, Robert Wilhelm, and Werner Lemberg.
  *
  * This file is part of the FreeType project, and may only be used,
@@ -27,8 +27,11 @@
 
 #include "psauxerr.h"
 
+
 /* ensure proper sign extension */
-#define Fix2Int( f )  ( (FT_Int)(FT_Short)( (f) >> 16 ) )
+#define Fix2Int( f )   ( (FT_Int) (FT_Short)( (f) >> 16 ) )
+#define Fix2UInt( f )  ( (FT_UInt)(FT_Short)( (f) >> 16 ) )
+
 
   /**************************************************************************
    *
@@ -455,6 +458,7 @@
     FT_Bool          large_int;
     FT_Fixed         seed;
 
+    FT_UInt          len_buildchar;
     T1_Hints_Funcs   hinter;
 
 #ifdef FT_DEBUG_LEVEL_TRACE
@@ -480,13 +484,16 @@
 
     hinter = (T1_Hints_Funcs)builder->hints_funcs;
 
-    /* a font that reads BuildCharArray without setting */
-    /* its values first is buggy, but ...               */
-    FT_ASSERT( ( decoder->len_buildchar == 0 ) ==
-               ( decoder->buildchar == NULL )  );
+    /* Cache `len_buildchar` locally so that a stray write to the   */
+    /* decoder structure during charstring processing cannot bypass */
+    /* the bounds checks in callothersubr 19/24/25 handlers.        */
+    len_buildchar = decoder->len_buildchar;
 
-    if ( decoder->buildchar && decoder->len_buildchar > 0 )
-      FT_ARRAY_ZERO( decoder->buildchar, decoder->len_buildchar );
+    FT_ASSERT( ( len_buildchar == 0 ) ==
+               ( decoder->buildchar == NULL ) );
+
+    if ( decoder->buildchar && len_buildchar > 0 )
+      FT_ARRAY_ZERO( decoder->buildchar, len_buildchar );
 
     zone->base           = charstring_base;
     limit = zone->limit  = charstring_base + charstring_len;
@@ -517,7 +524,7 @@
 #ifdef FT_DEBUG_LEVEL_TRACE
       if ( bol )
       {
-        FT_TRACE5(( " (%d)", decoder->top - decoder->stack ));
+        FT_TRACE5(( " (%td)", decoder->top - decoder->stack ));
         bol = FALSE;
       }
 #endif
@@ -966,8 +973,8 @@
 
             idx = Fix2Int( top[0] );
 
-            if ( idx < 0                                                    ||
-                 (FT_UInt)idx + blend->num_designs > decoder->len_buildchar )
+            if ( idx < 0                                           ||
+                 (FT_UInt)idx + blend->num_designs > len_buildchar )
               goto Unexpected_OtherSubr;
 
             ft_memcpy( &decoder->buildchar[idx],
@@ -1025,16 +1032,16 @@
           /* <val> <idx> 2 24 callothersubr               */
           /* ==> set BuildCharArray[cvi( <idx> )] = <val> */
           {
-            FT_Int    idx;
+            FT_UInt   idx;
             PS_Blend  blend = decoder->blend;
 
 
             if ( arg_cnt != 2 || !blend )
               goto Unexpected_OtherSubr;
 
-            idx = Fix2Int( top[1] );
+            idx = Fix2UInt( top[1] );
 
-            if ( idx < 0 || (FT_UInt) idx >= decoder->len_buildchar )
+            if ( idx >= len_buildchar )
               goto Unexpected_OtherSubr;
 
             decoder->buildchar[idx] = top[0];
@@ -1046,16 +1053,16 @@
           /* ==> push BuildCharArray[cvi( idx )] */
           /*     onto T1 stack                   */
           {
-            FT_Int    idx;
+            FT_UInt   idx;
             PS_Blend  blend = decoder->blend;
 
 
             if ( arg_cnt != 1 || !blend )
               goto Unexpected_OtherSubr;
 
-            idx = Fix2Int( top[0] );
+            idx = Fix2UInt( top[0] );
 
-            if ( idx < 0 || (FT_UInt) idx >= decoder->len_buildchar )
+            if ( idx >= len_buildchar )
               goto Unexpected_OtherSubr;
 
             top[0] = decoder->buildchar[idx];
@@ -1162,9 +1169,9 @@
           if ( top - decoder->stack != num_args )
             FT_TRACE0(( "t1_decoder_parse_charstrings:"
                         " too much operands on the stack"
-                        " (seen %d, expected %d)\n",
+                        " (seen %td, expected %d)\n",
                         top - decoder->stack, num_args ));
-            break;
+          break;
         }
 
 #endif /* FT_DEBUG_LEVEL_TRACE */
@@ -1201,15 +1208,15 @@
 
 #ifdef FT_DEBUG_LEVEL_TRACE
 
-          if ( decoder->len_buildchar > 0 )
+          if ( len_buildchar > 0 )
           {
             FT_UInt  i;
 
 
             FT_TRACE4(( "BuildCharArray = [ " ));
 
-            for ( i = 0; i < decoder->len_buildchar; i++ )
-              FT_TRACE4(( "%d ", decoder->buildchar[i] ));
+            for ( i = 0; i < len_buildchar; i++ )
+              FT_TRACE4(( "%ld ", decoder->buildchar[i] ));
 
             FT_TRACE4(( "]\n" ));
           }
@@ -1520,6 +1527,15 @@
             goto Syntax_Error;
           }
 
+          /* Ensure that popping an unknown 'othersubr' result does not */
+          /* push the stack pointer past the end of the stack array.    */
+          if ( top - decoder->stack >= T1_MAX_CHARSTRINGS_OPERANDS )
+          {
+            FT_ERROR(( "t1_decoder_parse_charstrings:"
+                       " stack overflow in pop\n" ));
+            goto Syntax_Error;
+          }
+
           unknown_othersubr_result_cnt--;
           top++;   /* `push' the operand to callothersubr onto the stack */
           break;
@@ -1630,7 +1646,7 @@
 
         default:
           FT_ERROR(( "t1_decoder_parse_charstrings:"
-                     " unhandled opcode %d\n", op ));
+                     " unhandled opcode %u\n", op ));
           goto Syntax_Error;
         }
 
@@ -1650,7 +1666,8 @@
 
     } /* while ip < limit */
 
-    FT_TRACE4(( "..end..\n\n" ));
+    FT_TRACE4(( "..end..\n" ));
+    FT_TRACE4(( "\n" ));
 
   Fail:
     return error;
@@ -2070,7 +2087,8 @@
 
     } /* while ip < limit */
 
-    FT_TRACE4(( "..end..\n\n" ));
+    FT_TRACE4(( "..end..\n" ));
+    FT_TRACE4(( "\n" ));
 
   No_Width:
     FT_ERROR(( "t1_decoder_parse_metrics:"

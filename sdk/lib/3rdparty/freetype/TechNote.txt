@@ -7,6 +7,12 @@ ReactOS FreeType is a slightly hacked version of FreeType. See also the original
 - https://freetype.org/
 - https://sourceforge.net/projects/freetype/files/freetype2/
 
+## LiberNT FreeType 2.15.0
+
+- The hvf, sdf and svg modules and the VARC table support are not built.
+- Both rasterizers always take their render pool from the heap.
+- rm -fr sdk/lib/3rdparty/freetype/src/{dlg,gxvalid,hvf,otvalid,sdf,svg,tools}
+
 ## ReactOS FreeType 2.10.4
 
 - Now woff/woff2 formats are supported (not handled yet).
