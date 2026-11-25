@@ -1902,6 +1902,19 @@ SoftGpuDdiQueryAdapterInfo(
     }
 #endif
 
+#if (REACTOS_WDDM_TARGET_LEVEL >= 2600)
+    case DXGKQAITYPE_WDDMDEVICECAPS:
+        if (pQueryAdapterInfo->pOutputData == NULL)
+            return STATUS_INVALID_PARAMETER;
+        if (pQueryAdapterInfo->OutputDataSize < sizeof(DXGK_WDDMDEVICECAPS))
+            return STATUS_BUFFER_TOO_SMALL;
+
+        /* Asked between AddDevice and StartDevice, so only the static caps are known */
+        RtlZeroMemory(pQueryAdapterInfo->pOutputData, sizeof(DXGK_WDDMDEVICECAPS));
+        ((DXGK_WDDMDEVICECAPS *)pQueryAdapterInfo->pOutputData)->WDDMVersion = SOFTGPU_DRIVER_CAPS.WDDMVersion;
+        return STATUS_SUCCESS;
+#endif
+
     case DXGKQAITYPE_DRIVERCAPS:
         /*
          * Copy the statically-initialised capability record.
