@@ -575,6 +575,36 @@ LoopCreateAdapter(
 #endif
 
 #ifdef NETCXLOOP_WIFI
+typedef struct _LOOP_WIFI_DEVICE
+{
+    WDFDMAENABLER DmaEnabler;
+} LOOP_WIFI_DEVICE;
+
+WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(LOOP_WIFI_DEVICE, LoopGetWifiDevice);
+
+static
+NTSTATUS
+LoopWifiD0EntryPostInterruptsEnabled(
+    _In_ WDFDEVICE Device,
+    _In_ WDF_POWER_DEVICE_STATE PreviousState)
+{
+    LOOP_WIFI_DEVICE *Context = LoopGetWifiDevice(Device);
+    WDF_DMA_ENABLER_CONFIG Config;
+    NTSTATUS Status;
+
+    UNREFERENCED_PARAMETER(PreviousState);
+
+    if (Context->DmaEnabler != NULL)
+        return STATUS_SUCCESS;
+
+    WDF_DMA_ENABLER_CONFIG_INIT(&Config, WdfDmaProfileScatterGather64, LOOP_MAX_FRAME);
+    Config.WdmDmaVersionOverride = 3;
+    Status = WdfDmaEnablerCreate(Device, &Config, WDF_NO_OBJECT_ATTRIBUTES, &Context->DmaEnabler);
+    if (!NT_SUCCESS(Status))
+        DbgPrint("WIFILOOP: WdfDmaEnablerCreate failed 0x%08lx\n", Status);
+    return Status;
+}
+
 static
 NTSTATUS
 LoopWifiPrepareHardware(
@@ -605,7 +635,11 @@ LoopWifiCreateAdapter(
     NETADAPTER NetAdapter;
     NTSTATUS Status;
 
-    UNREFERENCED_PARAMETER(Device);
+    if (LoopGetWifiDevice(Device)->DmaEnabler == NULL)
+    {
+        DbgPrint("WIFILOOP: the station adapter was requested before the device entered D0\n");
+        return STATUS_DEVICE_NOT_READY;
+    }
 
     Status = LoopCreateNetAdapter(AdapterInit, &NetAdapter);
     if (!NT_SUCCESS(Status))
@@ -679,6 +713,7 @@ LoopDeviceAdd(
     WDFDEVICE Device;
 #ifdef NETCXLOOP_WIFI
     WDF_PNPPOWER_EVENT_CALLBACKS PnpPower;
+    WDF_OBJECT_ATTRIBUTES Attributes;
     WIFI_DEVICE_CONFIG WifiConfig;
 #else
     NETADAPTER_INIT *AdapterInit;
@@ -698,10 +733,14 @@ LoopDeviceAdd(
 
     WDF_PNPPOWER_EVENT_CALLBACKS_INIT(&PnpPower);
     PnpPower.EvtDevicePrepareHardware = LoopWifiPrepareHardware;
+    PnpPower.EvtDeviceD0EntryPostInterruptsEnabled = LoopWifiD0EntryPostInterruptsEnabled;
     WdfDeviceInitSetPnpPowerEventCallbacks(DeviceInit, &PnpPower);
-#endif
 
+    WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&Attributes, LOOP_WIFI_DEVICE);
+    Status = WdfDeviceCreate(&DeviceInit, &Attributes, &Device);
+#else
     Status = WdfDeviceCreate(&DeviceInit, WDF_NO_OBJECT_ATTRIBUTES, &Device);
+#endif
     if (!NT_SUCCESS(Status))
         return Status;
 

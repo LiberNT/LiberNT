@@ -279,6 +279,28 @@ PingPeer(const char *Ip, int Count)
 
 static
 BOOL
+IsDeviceStarted(const WCHAR *InstanceId)
+{
+    DEVINST DevInst;
+    CONFIGRET Result;
+    ULONG Status = 0, Problem = 0;
+    int i;
+
+    for (i = 0; i < 50; i++)
+    {
+        Result = CM_Locate_DevNodeW(&DevInst, (DEVINSTID_W)InstanceId, CM_LOCATE_DEVNODE_NORMAL);
+        if (Result == CR_SUCCESS)
+            Result = CM_Get_DevNode_Status(&Status, &Problem, DevInst, 0);
+        if (Result == CR_SUCCESS && ((Status & DN_STARTED) || (Status & DN_HAS_PROBLEM)))
+            break;
+        Sleep(100);
+    }
+    Report("NETCXTEST: '%ls' result %lu status 0x%08lx problem %lu", InstanceId, Result, Status, Problem);
+    return Result == CR_SUCCESS && (Status & DN_STARTED) && !(Status & DN_HAS_PROBLEM);
+}
+
+static
+BOOL
 SetDeviceEnabled(BOOL Enable)
 {
     DEVINST DevInst;
@@ -316,6 +338,7 @@ TestWifi(const WCHAR *WifiInfPath)
     MIB_IF_ROW2 Row;
 
     Check(InstallDevice(WifiInfPath, L"ROOT\\WIFILOOP\0", WifiDeviceInstanceId), "wifi install");
+    Check(IsDeviceStarted(WifiDeviceInstanceId), "wifi device started");
     if (WaitForInterface(WifiAddress, TRUE, &Row))
     {
         Check(TRUE, "wifi interface up");
