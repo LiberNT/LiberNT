@@ -3198,6 +3198,18 @@ NtUserDispatchMessage(PMSG UnsafeMsgInfo)
 
     UserEnterExclusive();
 
+    if (SafeMsg.hwnd && SafeMsg.lParam && is_pointer_message(SafeMsg.message, SafeMsg.wParam))
+    {
+        PWND Window = UserGetWindowObject(SafeMsg.hwnd);
+
+        if (Window && (Window->state & WNDS_SERVERSIDEWINDOWPROC))
+        {
+            EngSetLastError(ERROR_MESSAGE_SYNC_ONLY);
+            UserLeave();
+            return 0;
+        }
+    }
+
     Res = IntDispatchMessage(&SafeMsg);
 
     UserLeave();
