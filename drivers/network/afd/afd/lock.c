@@ -752,9 +752,10 @@ NTSTATUS NTAPI UnlockAndMaybeComplete
   UINT Information ) {
     Irp->IoStatus.Status = Status;
     Irp->IoStatus.Information = Information;
-    if ( Irp->MdlAddress ) UnlockRequest( Irp, IoGetCurrentIrpStackLocation( Irp ) );
     (void)IoSetCancelRoutine(Irp, NULL);
     SocketStateUnlock( FCB );
+    /* MDL unlock and completion do not need the socket state lock */
+    if ( Irp->MdlAddress ) UnlockRequest( Irp, IoGetCurrentIrpStackLocation( Irp ) );
     IoCompleteRequest( Irp, IO_NETWORK_INCREMENT );
     return Status;
 }
