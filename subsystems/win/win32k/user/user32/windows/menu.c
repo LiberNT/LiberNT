@@ -591,7 +591,7 @@ PopupMenuWndProcW(HWND Wnd, UINT Message, WPARAM wParam, LPARAM lParam)
     case WM_SHOWWINDOW: // Not sure what this does....
       if (0 != wParam)
         {
-          if (0 == GetWindowLongPtrW(Wnd, 0))
+          if (0 == SendMessageW(Wnd, MN_GETHMENU, 0, 0))
             {
               OutputDebugStringA("no menu to display\n");
             }

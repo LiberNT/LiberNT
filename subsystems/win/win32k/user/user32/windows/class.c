@@ -1183,7 +1183,7 @@ LONG_PTR IntGetWindowLong( HWND hwnd, INT offset, UINT size, BOOL unicode )
 
     if (offset >= 0 && wndPtr->fnid != FNID_DESKTOP)
     {
-        if (offset > (int)(wndPtr->cbwndExtra - size))
+        if (FNID_HAS_PRIVATE_EXTRA(wndPtr->fnid) || offset > (int)(wndPtr->cbwndExtra - size))
         {
             WARN("Invalid offset %d\n", offset );
             SetLastError( ERROR_INVALID_INDEX );

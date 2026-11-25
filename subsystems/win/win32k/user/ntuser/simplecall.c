@@ -1542,7 +1542,8 @@ NtUserCallHwndParam(
 
             if (Index >= 0)
             {
-                if ((ULONG)Index > Window->cbwndExtra || Window->cbwndExtra - (ULONG)Index < Size)
+                if (FNID_HAS_PRIVATE_EXTRA(Window->fnid) ||
+                    (ULONG)Index > Window->cbwndExtra || Window->cbwndExtra - (ULONG)Index < Size)
                 {
                     EngSetLastError(ERROR_INVALID_INDEX);
                     goto GetWindowLongExit;
