@@ -52,6 +52,7 @@
 #include "vidsch.h"
 #include "present.h"
 #include "present_queue_core.h"
+#include "present_list_core.h"
 #include "display_core.h"
 #include <libernt/dwmframe.h>
 
@@ -4009,8 +4010,6 @@ DxgkpPresentAcquireDmaPass(
 
     if (VirtualPresent)
     {
-        /* GPUVA Present uses a different union member and entry stride from
-         * the legacy patch allocation list retained by the scheduler. */
         RtlZeroMemory(PresentAllocationInfo,
                       sizeof(DXGK_PRESENTALLOCATIONINFO) * (DXGK_PRESENT_MAX_INDEX + 1));
         PresentAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation = SourceDeviceSpecificHandle;
@@ -4036,11 +4035,20 @@ DxgkpPresentAcquireDmaPass(
             PresentAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].PhysicalAddress = PresentAllocationList[DXGK_PRESENT_SOURCE_INDEX].PhysicalAddress;
             PresentAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].SegmentId = PresentAllocationList[DXGK_PRESENT_SOURCE_INDEX].SegmentId;
         }
-        PresentArgs->pAllocationInfo = PresentAllocationInfo;
+        DxgkPresentListCoreBindVirtualAddresses(PresentAllocationList,
+                                                Entry->Type == DxgkPresentTypeFlip,
+                                                SourcePresentBinding != NULL,
+                                                PresentAllocationInfo[DXGK_PRESENT_SOURCE_INDEX].AllocationVirtualAddress,
+                                                DestinationPresentBinding != NULL,
+                                                PresentAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX].AllocationVirtualAddress);
         PresentArgs->pPatchLocationListOut = NULL;
         PresentArgs->PatchLocationListOutSize = 0;
         PresentArgs->DmaBufferGpuVirtualAddress = DmaBuffer->GpuVirtualAddress;
     }
+    ASSERT(PresentArgs->pAllocationList == PresentAllocationList);
+    ASSERT(PresentAllocationList[0].hDeviceSpecificAllocation == NULL);
+    ASSERT(PresentAllocationList[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation == SourceDeviceSpecificHandle);
+    ASSERT(PresentAllocationList[DXGK_PRESENT_DESTINATION_INDEX].hDeviceSpecificAllocation == DestinationDeviceSpecificHandle);
     return STATUS_SUCCESS;
 }
 
