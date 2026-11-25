@@ -445,6 +445,7 @@ typedef struct
     BOOL no_headers;
     DWORD net_received;
     BOOL request_sent;
+    DWORD redirect_count;
 #endif
 
     CRITICAL_SECTION headers_section;  /* section to protect the headers array */
