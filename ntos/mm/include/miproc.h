@@ -29,6 +29,7 @@ typedef struct _MI_PROCESS
     BOOLEAN HardWorkingSetMaximum;
     BOOLEAN SessionLeader;
     volatile LONG SecureRangeCount;
+    LIST_ENTRY SecureRanges;
 } MI_PROCESS, *PMI_PROCESS;
 
 typedef struct _MI_PROCESS_COUNTERS

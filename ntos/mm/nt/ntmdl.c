@@ -810,6 +810,7 @@ MmMapMemoryDumpMdl(
 typedef struct _MI_SECURE_RANGE
 {
     LIST_ENTRY Link;
+    LIST_ENTRY ProcessLink;
     PEPROCESS Process;
     ULONG64 Start;
     ULONG64 End;
@@ -828,23 +829,25 @@ MiSecureRangeConflict(
     _In_ ULONG NewProtection)
 {
     BOOLEAN Conflict = FALSE;
+    PMI_PROCESS Native;
     PLIST_ENTRY Entry;
     KIRQL OldIrql;
 
     if (!MiProcessHasSecureRanges(Process))
         return FALSE;
 
+    Native = MI_PROCESS_OF(Process);
     KeAcquireSpinLock(&MiSecureRangeLock, &OldIrql);
 
-    for (Entry = MiSecureRanges.Flink; Entry != &MiSecureRanges && !Conflict; Entry = Entry->Flink)
+    for (Entry = Native->SecureRanges.Flink; Entry != &Native->SecureRanges && !Conflict; Entry = Entry->Flink)
     {
-        PMI_SECURE_RANGE Range = CONTAINING_RECORD(Entry, MI_SECURE_RANGE, Link);
+        PMI_SECURE_RANGE Range = CONTAINING_RECORD(Entry, MI_SECURE_RANGE, ProcessLink);
 
         ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
-        ASSERT(Range->Process != NULL && MI_PROCESS_OF(Range->Process) != NULL);
-        ASSERT(MI_PROCESS_OF(Range->Process)->SecureRangeCount > 0);
+        ASSERT(Range->Process == Process);
+        ASSERT(Native->SecureRangeCount > 0);
         ASSERT(Range->Mode == PAGE_READONLY || Range->Mode == PAGE_READWRITE);
-        if (Range->Process != Process || End <= Range->Start || Start >= Range->End)
+        if (End <= Range->Start || Start >= Range->End)
             continue;
 
         if (Release || MI_PROT_IS_GUARD(NewProtection))
@@ -864,29 +867,29 @@ MiSecureRangePurgeProcess(
     _In_ PEPROCESS Process)
 {
     LIST_ENTRY Purged;
-    PLIST_ENTRY Entry;
+    PMI_PROCESS Native;
     KIRQL OldIrql;
 
     if (!MiProcessHasSecureRanges(Process))
         return;
 
+    Native = MI_PROCESS_OF(Process);
     InitializeListHead(&Purged);
     KeAcquireSpinLock(&MiSecureRangeLock, &OldIrql);
 
-    for (Entry = MiSecureRanges.Flink; Entry != &MiSecureRanges;)
+    while (!IsListEmpty(&Native->SecureRanges))
     {
-        PMI_SECURE_RANGE Range = CONTAINING_RECORD(Entry, MI_SECURE_RANGE, Link);
+        PMI_SECURE_RANGE Range = CONTAINING_RECORD(Native->SecureRanges.Flink, MI_SECURE_RANGE, ProcessLink);
 
-        Entry = Entry->Flink;
-        if (Range->Process == Process)
-        {
-            ASSERT(Range->Link.Flink->Blink == &Range->Link && Range->Link.Blink->Flink == &Range->Link);
-            ASSERT(MI_PROCESS_OF(Process)->SecureRangeCount > 0);
-            RemoveEntryList(&Range->Link);
-            InsertTailList(&Purged, &Range->Link);
-            InterlockedDecrement(&MI_PROCESS_OF(Process)->SecureRangeCount);
-        }
+        ASSERT(Range->Process == Process);
+        ASSERT(Range->Link.Flink->Blink == &Range->Link && Range->Link.Blink->Flink == &Range->Link);
+        ASSERT(Native->SecureRangeCount > 0);
+        RemoveEntryList(&Range->ProcessLink);
+        RemoveEntryList(&Range->Link);
+        InsertTailList(&Purged, &Range->Link);
+        InterlockedDecrement(&Native->SecureRangeCount);
     }
+    ASSERT(Native->SecureRangeCount == 0);
 
     KeReleaseSpinLock(&MiSecureRangeLock, OldIrql);
 
@@ -900,23 +903,47 @@ MiSecureRangeRemove(
     _In_ PMI_SECURE_RANGE Target)
 {
     BOOLEAN Found = FALSE;
+    PMI_PROCESS Current = MI_PROCESS_OF(PsGetCurrentProcess());
     PLIST_ENTRY Entry;
     KIRQL OldIrql;
 
     KeAcquireSpinLock(&MiSecureRangeLock, &OldIrql);
 
-    for (Entry = MiSecureRanges.Flink; Entry != &MiSecureRanges; Entry = Entry->Flink)
+    if (Current != NULL)
     {
-        if (Entry == &Target->Link)
+        ASSERT(Current->SecureRanges.Flink != NULL);
+        for (Entry = Current->SecureRanges.Flink; Entry != &Current->SecureRanges; Entry = Entry->Flink)
         {
-            ASSERT(Entry->Flink->Blink == Entry && Entry->Blink->Flink == Entry);
-            ASSERT(Target->Process != NULL && MI_PROCESS_OF(Target->Process) != NULL);
-            ASSERT(MI_PROCESS_OF(Target->Process)->SecureRangeCount > 0);
-            RemoveEntryList(Entry);
-            InterlockedDecrement(&MI_PROCESS_OF(Target->Process)->SecureRangeCount);
-            Found = TRUE;
-            break;
+            if (Entry == &Target->ProcessLink)
+            {
+                Found = TRUE;
+                break;
+            }
         }
+    }
+
+    if (!Found)
+    {
+        for (Entry = MiSecureRanges.Flink; Entry != &MiSecureRanges; Entry = Entry->Flink)
+        {
+            if (Entry == &Target->Link)
+            {
+                Found = TRUE;
+                break;
+            }
+        }
+    }
+
+    if (Found)
+    {
+        ASSERT(Target->Link.Flink->Blink == &Target->Link && Target->Link.Blink->Flink == &Target->Link);
+        ASSERT(Target->ProcessLink.Flink->Blink == &Target->ProcessLink &&
+               Target->ProcessLink.Blink->Flink == &Target->ProcessLink);
+        ASSERT(Target->Process != NULL && MI_PROCESS_OF(Target->Process) != NULL);
+        ASSERT(MI_PROCESS_OF(Target->Process)->SecureRangeCount > 0);
+        RemoveEntryList(&Target->Link);
+        RemoveEntryList(&Target->ProcessLink);
+        InterlockedDecrement(&MI_PROCESS_OF(Target->Process)->SecureRangeCount);
     }
 
     KeReleaseSpinLock(&MiSecureRangeLock, OldIrql);
@@ -953,6 +980,7 @@ MmSecureVirtualMemory(
     ASSERT(MI_PROCESS_OF(Range->Process)->SecureRangeCount >= 0);
     ASSERT(MI_PROCESS_OF(Range->Process)->SecureRangeCount < MAXLONG);
     InsertTailList(&MiSecureRanges, &Range->Link);
+    InsertTailList(&MI_PROCESS_OF(Range->Process)->SecureRanges, &Range->ProcessLink);
     InterlockedIncrement(&MI_PROCESS_OF(Range->Process)->SecureRangeCount);
     KeReleaseSpinLock(&MiSecureRangeLock, OldIrql);
 
