@@ -984,7 +984,7 @@ IntCreateWindowStation(
     {
         Status = IntInheritWinstaSecurity(WindowStation, Session->WinStaDir);
         if (!NT_SUCCESS(Status))
-            ERR("Failed to give window station '%wZ' its inherited security, Status 0x%08lx\n", ObjectAttributes->ObjectName, Status);
+            ERR("Failed to give window station %p its inherited security, Status 0x%08lx\n", ObjectAttributes->ObjectName, Status);
     }
 
     // FIXME! TODO: Add this new window station to a linked list
@@ -1301,14 +1301,14 @@ NtUserCreateWindowStation(
 
     if (NT_SUCCESS(Status))
     {
-        TRACE("NtUserCreateWindowStation created window station '%wZ' with handle 0x%p\n",
-              ObjectAttributes->ObjectName, hWinSta);
+        TRACE("NtUserCreateWindowStation created window station %p with handle 0x%p\n",
+              LocalObjectAttributes.ObjectName, hWinSta);
     }
     else
     {
         ASSERT(hWinSta == NULL);
-        ERR("NtUserCreateWindowStation failed to create window station '%wZ', Status 0x%08lx\n",
-            ObjectAttributes->ObjectName, Status);
+        ERR("NtUserCreateWindowStation failed to create window station %p, Status 0x%08lx\n",
+            LocalObjectAttributes.ObjectName, Status);
     }
 
     /* Try to restore the user's ObjectAttributes and release the window station name */
@@ -1459,14 +1459,14 @@ NtUserOpenWindowStation(
                                 (PVOID*)&hWinSta);
     if (NT_SUCCESS(Status))
     {
-        TRACE("NtUserOpenWindowStation opened window station '%wZ' with handle 0x%p\n",
-              ObjectAttributes->ObjectName, hWinSta);
+        TRACE("NtUserOpenWindowStation opened window station %p with handle 0x%p\n",
+              LocalObjectAttributes.ObjectName, hWinSta);
     }
     else
     {
         ASSERT(hWinSta == NULL);
-        ERR("NtUserOpenWindowStation failed to open window station '%wZ', Status 0x%08lx\n",
-            ObjectAttributes->ObjectName, Status);
+        ERR("NtUserOpenWindowStation failed to open window station %p, Status 0x%08lx\n",
+            LocalObjectAttributes.ObjectName, Status);
     }
 
     /* Try to restore the user's ObjectAttributes and release the window station name */

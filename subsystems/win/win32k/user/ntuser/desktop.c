@@ -2618,7 +2618,7 @@ IntCreateDesktop(
     /* In case the object was not created (eg if it existed), return now */
     if (Context == FALSE)
     {
-        TRACE("IntCreateDesktop opened desktop '%wZ'\n", ObjectAttributes->ObjectName);
+        TRACE("IntCreateDesktop opened desktop %p\n", ObjectAttributes->ObjectName);
         Status = STATUS_SUCCESS;
         goto Quit;
     }
