@@ -619,6 +619,13 @@ static
 VOID
 TestDeviceAddressSpace(VOID)
 {
+    UNICODE_STRING RoutineName = RTL_CONSTANT_STRING(L"ExShareAddressSpaceWithDevice");
+
+    if (sizeof(PVOID) == sizeof(ULONGLONG))
+    {
+        ok(MmGetSystemRoutineAddress(&RoutineName) != NULL,
+           "ExShareAddressSpaceWithDevice is not exported\n");
+    }
 #ifdef _M_ARM64
     PDEVICE_OBJECT DeviceObject;
     ULONG FirstAsid = 0;

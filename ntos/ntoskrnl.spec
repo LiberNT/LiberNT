@@ -2195,7 +2195,7 @@
 @ stub -arch=win64 ExSetLicenseTamperState
 @ stdcall ExSetResourceOwnerPointerEx(ptr ptr long)
 @ stdcall -version=0x603+ ExSetTimer(ptr int64 int64 ptr)
-@ stdcall -version=0x603+ -arch=arm64 ExShareAddressSpaceWithDevice(ptr ptr)
+@ stdcall -version=0x603+ -arch=win64 ExShareAddressSpaceWithDevice(ptr ptr)
 @ stub -arch=arm64 ExShareSystemAddressSpaceWithDevice
 @ stub -arch=win64 ExSizeOfAutoExpandPushLock
 @ stub -arch=arm64 ExStopSharingAddressSpaceWithDevice
