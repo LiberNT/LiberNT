@@ -537,7 +537,7 @@ NtfsMountVolume(IN PDEVICE_OBJECT TargetDeviceObject,
     InitializeListHead(&VolCB->NotifyList);
     FsRtlNotifyInitializeSync(&VolCB->NotifySync);
     FsRtlInitializeTunnelCache(&VolCB->Tunnel);
-    FSDeviceObject->Vpb = TargetDeviceObject->Vpb;
+    FSDeviceObject->Vpb = Vpb;
 
     // Give VolCB access to Ntfs Partition object
     VolCB->DiskVolume = DiskVolume;
@@ -548,9 +548,9 @@ NtfsMountVolume(IN PDEVICE_OBJECT TargetDeviceObject,
 
     // Set up storage device in VolCB.
     VolCB->StorageDevice = TargetDeviceObject;
-    VolCB->StorageDevice->Vpb->DeviceObject = FSDeviceObject;
-    VolCB->StorageDevice->Vpb->RealDevice = VolCB->StorageDevice;
-    VolCB->StorageDevice->Vpb->Flags |= VPB_MOUNTED;
+    ASSERT(Vpb->RealDevice != NULL);
+    Vpb->DeviceObject = FSDeviceObject;
+    Vpb->Flags |= VPB_MOUNTED;
     FSDeviceObject->StackSize = VolCB->StorageDevice->StackSize + 1;
 
     // Tell IO manager we are done initializing.
