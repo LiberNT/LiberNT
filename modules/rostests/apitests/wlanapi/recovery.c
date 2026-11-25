@@ -277,7 +277,7 @@ START_TEST(WlanConnectionRecovery)
     EventSignal = CreateEventW(NULL, FALSE, FALSE, NULL);
     if (InstallVwifi(&Devices, &Device))
     {
-        if (WaitInterface(Client, &Interface))
+        if (WaitInterface(Client, Devices, &Device, &Interface))
         {
             Error = WlanRegisterNotification(Client, WLAN_NOTIFICATION_SOURCE_ACM | WLAN_NOTIFICATION_SOURCE_MSM,
                                              FALSE, NotificationCallback, NULL, NULL, NULL);

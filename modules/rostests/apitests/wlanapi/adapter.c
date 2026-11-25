@@ -211,7 +211,7 @@ START_TEST(WlanAdapterIdentity)
 
     if (InstallVwifi(&Devices, &Device))
     {
-        if (WaitInterface(Client, &Interface))
+        if (WaitInterface(Client, Devices, &Device, &Interface))
             TestAdapterIdentity(Client, &Interface, Devices, &Device);
         else
             ok(FALSE, "No wireless interface appeared for the vwifi adapter\n");

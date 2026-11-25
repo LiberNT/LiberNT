@@ -7,6 +7,8 @@
 
 #include <apitest.h>
 
+#include <stdio.h>
+
 #include <winreg.h>
 #include <winuser.h>
 #include <wlanapi.h>
@@ -18,25 +20,56 @@
 static const GUID NetClass = {0x4d36e972, 0xe325, 0x11ce, {0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18}};
 static const WCHAR VwifiHardwareIds[] = L"ROOT\\VWIFI\0";
 
+static BOOL
+GetVwifiInstanceId(HDEVINFO Devices, SP_DEVINFO_DATA *Device, PSTR Text, DWORD Count)
+{
+    HKEY Key;
+    DWORD Type;
+    DWORD Size = Count;
+    LONG Error;
+
+    Key = SetupDiOpenDevRegKey(Devices, Device, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_READ);
+    if (Key == INVALID_HANDLE_VALUE)
+        return FALSE;
+    Error = RegQueryValueExA(Key, "NetCfgInstanceId", NULL, &Type, (PBYTE)Text, &Size);
+    RegCloseKey(Key);
+    return Error == ERROR_SUCCESS && Type == REG_SZ;
+}
+
 BOOL
-WaitInterface(HANDLE Client, GUID *Interface)
+WaitInterface(HANDLE Client, HDEVINFO Devices, SP_DEVINFO_DATA *Device, GUID *Interface)
 {
     ULONGLONG Deadline = GetTickCount64() + 10000;
     PWLAN_INTERFACE_INFO_LIST List;
+    CHAR InstanceId[64];
+    CHAR Name[64];
     BOOL Found = FALSE;
+    DWORD Index;
 
     while (!Found && GetTickCount64() < Deadline)
     {
         List = NULL;
-        if (WlanEnumInterfaces(Client, NULL, &List) == ERROR_SUCCESS && List != NULL)
+        if (GetVwifiInstanceId(Devices, Device, InstanceId, sizeof(InstanceId)) &&
+            WlanEnumInterfaces(Client, NULL, &List) == ERROR_SUCCESS && List != NULL)
         {
-            if (List->dwNumberOfItems != 0)
+            for (Index = 0; Index < List->dwNumberOfItems && !Found; Index++)
             {
-                *Interface = List->InterfaceInfo[0].InterfaceGuid;
-                Found = TRUE;
+                const GUID *Guid = &List->InterfaceInfo[Index].InterfaceGuid;
+
+                _snprintf(Name, sizeof(Name), "{%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
+                          Guid->Data1, Guid->Data2, Guid->Data3,
+                          Guid->Data4[0], Guid->Data4[1], Guid->Data4[2], Guid->Data4[3],
+                          Guid->Data4[4], Guid->Data4[5], Guid->Data4[6], Guid->Data4[7]);
+                Name[sizeof(Name) - 1] = 0;
+                if (_stricmp(Name, InstanceId) == 0)
+                {
+                    *Interface = *Guid;
+                    Found = TRUE;
+                }
             }
-            WlanFreeMemory(List);
         }
+        if (List != NULL)
+            WlanFreeMemory(List);
         if (!Found)
             Sleep(200);
     }
