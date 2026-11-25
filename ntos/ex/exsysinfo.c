@@ -1324,6 +1324,36 @@ NtQuerySystemInformation(
                 break;
             }
 
+            case SystemCodeIntegrityInformation:
+            {
+                ResultLength = sizeof(SYSTEM_CODEINTEGRITY_INFORMATION);
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                /* TODO: kernel-mode code integrity is not enforced, so no option is reported */
+                ((PSYSTEM_CODEINTEGRITY_INFORMATION)SystemInformation)->CodeIntegrityOptions = 0;
+                Status = STATUS_SUCCESS;
+                break;
+            }
+
+            case SystemEdidInformation:
+            {
+                ResultLength = SYSTEM_EDID_INFORMATION_SIZE;
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                /* TODO: the firmware's EDID block is not handed to the kernel, so the block is reported empty */
+                RtlZeroMemory(SystemInformation, SYSTEM_EDID_INFORMATION_SIZE);
+                Status = STATUS_SUCCESS;
+                break;
+            }
+
             case SystemRegistryQuotaInformation:
             {
                 ResultLength = sizeof(SYSTEM_REGISTRY_QUOTA_INFORMATION);

@@ -184,9 +184,45 @@ TestBootGraphics(VOID)
     ok(Large[0] == 0xA5, "a refused query wrote the buffer\n");
 }
 
+static
+void
+TestCodeIntegrityAndEdid(void)
+{
+    SYSTEM_CODEINTEGRITY_INFORMATION Integrity;
+    UCHAR Edid[SYSTEM_EDID_INFORMATION_SIZE + 16];
+    ULONG Length;
+    NTSTATUS Status;
+
+    Integrity.Length = sizeof(Integrity);
+    Integrity.CodeIntegrityOptions = 0xA5A5A5A5;
+    Length = 0;
+    Status = NtQuerySystemInformation(SystemCodeIntegrityInformation, &Integrity, sizeof(Integrity), &Length);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok_long(Length, sizeof(Integrity));
+    ok(Integrity.CodeIntegrityOptions != 0xA5A5A5A5, "the code integrity options were not written\n");
+
+    /* Windows 11 takes exactly one 128-byte EDID block and names that size when given another */
+    RtlFillMemory(Edid, sizeof(Edid), 0xA5);
+    Length = 0;
+    Status = NtQuerySystemInformation(SystemEdidInformation, Edid, SYSTEM_EDID_INFORMATION_SIZE, &Length);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok_long(Length, SYSTEM_EDID_INFORMATION_SIZE);
+
+    Length = 0;
+    Status = NtQuerySystemInformation(SystemEdidInformation, NULL, 0, &Length);
+    ok_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+    ok_long(Length, SYSTEM_EDID_INFORMATION_SIZE);
+
+    Length = 0;
+    Status = NtQuerySystemInformation(SystemEdidInformation, Edid, sizeof(Edid), &Length);
+    ok_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+    ok_long(Length, SYSTEM_EDID_INFORMATION_SIZE);
+}
+
 START_TEST(NtQuerySystemInformation)
 {
     TestBootGraphics();
+    TestCodeIntegrityAndEdid();
     NTSTATUS Status;
     ULONG Length = 0;
     PRTL_PROCESS_MODULES Modules;
