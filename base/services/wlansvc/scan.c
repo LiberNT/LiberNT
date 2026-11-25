@@ -642,7 +642,7 @@ WlanSvcTryAutoConnect(PWLANSVC_INTERFACE Iface)
             CONTAINING_RECORD(entry, WLANSVC_BSS_ENTRY, ListEntry);
         PWLANSVC_PROFILE prof = WlanSvcMatchProfileForBss(Iface, bss);
 
-        if (prof == NULL || !prof->AutoConnect)
+        if (prof == NULL || !prof->AutoConnect || prof->KeyRejected)
             continue;
         if (best == NULL || bss->Rssi > best->Rssi)
         {

@@ -51,6 +51,9 @@
 #define WLAN_REASON_CODE_MSMSEC_KEY_START_TIMEOUT   0x00048004
 #define WLAN_REASON_CODE_MSMSEC_KEY_SUCCESS_TIMEOUT 0x00048005
 #endif
+#ifndef WLAN_REASON_CODE_MSMSEC_PSK_MISMATCH_SUSPECTED
+#define WLAN_REASON_CODE_MSMSEC_PSK_MISMATCH_SUSPECTED 0x00048014
+#endif
 #ifndef NDIS_STATUS_DOT11_ASSOCIATION_COMPLETION
 #define NDIS_STATUS_DOT11_ASSOCIATION_COMPLETION ((NDIS_STATUS)0x40030003L)
 #define NDIS_STATUS_DOT11_CONNECTION_COMPLETION  ((NDIS_STATUS)0x40030005L)
@@ -268,6 +271,7 @@ typedef struct _WLANSVC_PROFILE
     ULONG                   KeyLength;          /* bytes, 0 for open */
     UCHAR                   Key[NWIFI_MAX_PSK_BYTES];
     DWORD                   Flags;              /* WLAN_PROFILE_* */
+    BOOL                    KeyRejected;
     /* The original XML, returned verbatim by WlanGetProfile. */
     LPWSTR                  Xml;
     WCHAR                   FileName[48];

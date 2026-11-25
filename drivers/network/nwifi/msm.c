@@ -251,6 +251,60 @@ NwifiMsmHandshakeWorker(
     NwifiMsmCompleteWorkItem(Msm, NdisIoWorkItemHandle);
 }
 
+typedef struct _NWIFI_KEY_FAILURE_CONTEXT
+{
+    PNWIFI_MSM Msm;
+    NWIFI_NOTIFICATION_CODE Code;
+} NWIFI_KEY_FAILURE_CONTEXT, *PNWIFI_KEY_FAILURE_CONTEXT;
+
+static
+VOID
+NTAPI
+NwifiMsmKeyFailureWorker(
+    _In_opt_ PVOID WorkItemContext,
+    _In_     NDIS_HANDLE NdisIoWorkItemHandle)
+{
+    PNWIFI_KEY_FAILURE_CONTEXT Context = (PNWIFI_KEY_FAILURE_CONTEXT)WorkItemContext;
+    PNWIFI_MSM Msm;
+    NWIFI_NOTIFICATION_CODE Code;
+
+    ASSERT(Context != NULL);
+    ASSERT(Context->Msm != NULL);
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    Msm = Context->Msm;
+    Code = Context->Code;
+    NwifiFree(Context);
+
+    NwifiMsmDisconnectLower(Msm, Code, NWIFI_STATUS_PSK_MISMATCH);
+    NwifiMsmCompleteWorkItem(Msm, NdisIoWorkItemHandle);
+}
+
+static
+VOID
+NwifiMsmQueueKeyFailure(
+    _In_ PNWIFI_MSM Msm,
+    _In_ NWIFI_NOTIFICATION_CODE Code)
+{
+    PNWIFI_KEY_FAILURE_CONTEXT Context;
+
+    ASSERT(Code == NwifiNotifyConnectComplete || Code == NwifiNotifyDisconnected);
+    Context = (PNWIFI_KEY_FAILURE_CONTEXT)NwifiAllocate(sizeof(*Context));
+    if (Context != NULL)
+    {
+        Context->Msm = Msm;
+        Context->Code = Code;
+        if (NwifiMsmQueueWorkItem(Msm, NwifiMsmKeyFailureWorker, Context))
+            return;
+        NwifiFree(Context);
+    }
+
+    DPRINT1("NWIFI: cannot defer the disconnect after a PSK mismatch\n");
+    NdisAcquireSpinLock(&Msm->Lock);
+    Msm->State = NwifiMsmIdle;
+    NdisReleaseSpinLock(&Msm->Lock);
+    NwifiQueueNotification(Msm->Adapter->InterfaceIndex, Code, NWIFI_STATUS_PSK_MISMATCH);
+}
+
 static
 VOID
 NTAPI
@@ -1128,12 +1182,38 @@ NwifiMsmIndicateStatus(
         case NDIS_STATUS_DOT11_DISASSOCIATION:
         {
             DOT11_ASSOC_STATUS Reason = DOT11_ASSOC_STATUS_UNREACHABLE;
+            BOOLEAN KeyStarted;
+            BOOLEAN PskMismatch;
+            BOOLEAN Reassociated = FALSE;
             if (Buffer != NULL &&
                 BufferSize >= sizeof(DOT11_DISASSOCIATION_PARAMETERS))
             {
                 Reason = ((PDOT11_DISASSOCIATION_PARAMETERS)Buffer)->uReason;
             }
             DPRINT1("NWIFI: disassociation reason 0x%08X\n", Reason);
+
+            KeyStarted = NwifiSupplicantKeyExchangeStarted(Msm);
+            NdisAcquireSpinLock(&Msm->Lock);
+            PskMismatch = KeyStarted && Msm->State == NwifiMsmHandshaking &&
+                          (Msm->Connect.AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK ||
+                           Msm->Connect.AuthAlgorithm == DOT11_AUTH_ALGO_WPA_PSK);
+            if (PskMismatch)
+            {
+                Msm->HandshakeDeadline = 0;
+                Msm->Roaming = FALSE;
+                Reassociated = Msm->Reassociating;
+                Msm->Reassociating = FALSE;
+            }
+            NdisReleaseSpinLock(&Msm->Lock);
+
+            if (PskMismatch)
+            {
+                KeCancelTimer(&Msm->HandshakeTimer);
+                DPRINT1("NWIFI: AP dropped the station during the 4-way handshake, PSK mismatch suspected\n");
+                NwifiSupplicantStop(Msm);
+                NwifiMsmQueueKeyFailure(Msm, Reassociated ? NwifiNotifyDisconnected : NwifiNotifyConnectComplete);
+                break;
+            }
 
             NwifiSupplicantResetSession(Msm);
             NdisAcquireSpinLock(&Msm->Lock);
