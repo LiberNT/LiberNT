@@ -119,7 +119,7 @@ VOID
 KiDisplayAndLogBugCheckString(
     _In_z_ PCSTR String)
 {
-    DbgPrint("%s", String);
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%s", String);
 }
 
 /*
@@ -179,7 +179,7 @@ KeGetBugMessageText(
         return;
     }
 
-    DbgPrint("%.*s\n", Length, Text);
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%.*s\n", Length, Text);
 }
 
 /*
@@ -401,11 +401,11 @@ KiDumpParameterImages(
             Any = TRUE;
         }
 
-        DbgPrint("%s%s", (Index > 0) ? ", " : "", AnsiName);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%s%s", (Index > 0) ? ", " : "", AnsiName);
     }
 
     if (Any)
-        DbgPrint("\n");
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "\n");
 }
 
 /*
@@ -536,14 +536,14 @@ KeRosDumpStackFrameArray(
             KeBugCheckUnicodeToAnsi(&LdrEntry->BaseDllName,
                                     AnsiName,
                                     sizeof(AnsiName));
-            DbgPrint("    %p  %s+0x%Ix\n",
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "    %p  %s+0x%Ix\n",
                      (PVOID)Frames[Index],
                      AnsiName,
                      Frames[Index] - (ULONG_PTR)Base);
         }
         else
         {
-            DbgPrint("    %p\n", (PVOID)Frames[Index]);
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "    %p\n", (PVOID)Frames[Index]);
         }
     }
 }
@@ -698,7 +698,7 @@ KiReportBugCheckBackTrace(
     if (Display)
         KiDisplayAndLogBugCheckString(Title);
     else
-        DbgPrint("%s", Title);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%s", Title);
 
     for (Index = 0; Index < KI_BUGCHECK_FRAMES; Index++)
     {
@@ -720,7 +720,7 @@ KiReportBugCheckBackTrace(
         if (Display)
             KiDisplayAndLogBugCheckString(Line);
         else
-            DbgPrint("%s", Line);
+            DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%s", Line);
     }
 }
 
@@ -767,7 +767,7 @@ KiReportBugCheck(
 
     KeGetBugMessageText(BugCheckCode, &Message);
     if (Message.Length != 0)
-        DbgPrint("%.*s\r\n", Message.Length, Message.Buffer);
+        DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%.*s\r\n", Message.Length, Message.Buffer);
 
     _snprintf(Line,
               sizeof(Line),

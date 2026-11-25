@@ -394,7 +394,7 @@ KdBugCheckDebuggerRequested(VOID)
     if (KdPitchDebugger || !KdDebuggerEnabled || KdDebuggerNotPresent)
         return FALSE;
 
-    DbgPrint("\nPress Ctrl+Alt+B+K within %lu seconds to enter the debugger.\n",
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "\nPress Ctrl+Alt+B+K within %lu seconds to enter the debugger.\n",
              (ULONG)KDP_BUGCHECK_DEBUGGER_SECONDS);
 
     for (Tick = 0; Tick < KDP_BUGCHECK_DEBUGGER_SECONDS * KDP_BUGCHECK_POLLS_PER_SECOND; Tick++)
