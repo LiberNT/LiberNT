@@ -420,6 +420,15 @@ Replace:
         DiskVolume->MFT->MFTDataAttr = GetAttribute(TypeData, NULL);
     Committed = TRUE;
     Status = DiskVolume->ReleaseClusters(ReleasedRuns);
+    if (AttrType == TypeData &&
+        (!StreamName || StreamName[0] == 0) &&
+        Header->BaseFileRecord == 0)
+    {
+        NTSTATUS RemapStatus = DiskVolume->RemapWimDataSource(this);
+
+        if (NT_SUCCESS(Status))
+            Status = RemapStatus;
+    }
 
 Done:
     if (Claimed && !Committed)

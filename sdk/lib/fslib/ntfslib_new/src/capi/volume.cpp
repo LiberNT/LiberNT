@@ -228,6 +228,15 @@ NtfsVolumeGetMft(
         reinterpret_cast<PVolume>(DiskVolume)->MFT);
 }
 
+BOOLEAN
+NtfsVolumeIsWimDataSource(
+    _In_ PNtfsVolume DiskVolume,
+    _In_ ULONG RecordNumber)
+{
+    return DiskVolume &&
+           reinterpret_cast<PVolume>(DiskVolume)->IsWimDataSource(RecordNumber);
+}
+
 USHORT
 NtfsVolumeGetMajorVersion(
     _In_ PNtfsVolume DiskVolume)

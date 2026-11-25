@@ -142,6 +142,7 @@ typedef NtfsVolume* PNtfsVolume;
 #define NTFS_IO_REPARSE_TAG_SYMLINK ((UINT32)0xA000000C)
 #define NTFS_IO_REPARSE_TAG_WOF ((UINT32)0x80000017)
 #define NTFS_SYMLINK_FLAG_RELATIVE ((UINT32)0x00000001)
+#define NTFS_WOF_PROVIDER_WIM ((UINT32)1)
 #define NTFS_WOF_PROVIDER_FILE ((UINT32)2)
 #define NTFS_WOF_HIDDEN_ATTRIBUTES ((ULONG)(FILE_PERM_SPARSE | FILE_PERM_REPARSE_PT | FILE_PERM_RECALL_ON_OPEN))
 #define NTFS_WOF_COMPRESSION_XPRESS4K ((UINT32)0)
@@ -904,6 +905,20 @@ NtfsMasterFileTableCreateFile(
     _Out_ PNtfsFileRecord* File);
 
 /*
+ * Creates a file whose unnamed data stream is a sparse placeholder of Size
+ * bytes backed externally through the given WOF reparse point.
+ */
+NTSTATUS
+NtfsMasterFileTableCreateWofFile(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_reads_(QueryLength) PWCHAR Query,
+    _In_ ULONG QueryLength,
+    _In_ ULONG FileAttributes,
+    _In_ ULONGLONG Size,
+    _In_reads_bytes_(ReparseLength) const UCHAR* Reparse,
+    _In_ ULONG ReparseLength);
+
+/*
  * As NtfsMasterFileTableCreateFile, with the new file's security descriptor
  * applied while its record is built instead of inherited from the parent.
  */
@@ -1215,6 +1230,11 @@ NtfsVolumeGetLFS(
 PNtfsMasterFileTable
 NtfsVolumeGetMft(
     _In_ PNtfsVolume DiskVolume);
+
+BOOLEAN
+NtfsVolumeIsWimDataSource(
+    _In_ PNtfsVolume DiskVolume,
+    _In_ ULONG RecordNumber);
 
 USHORT
 NtfsVolumeGetMajorVersion(
