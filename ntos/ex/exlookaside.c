@@ -95,6 +95,42 @@ ExpLookasideFree(
 }
 
 static
+BOOLEAN
+ExpIsLookasidePoolType(
+    _In_ POOL_TYPE PoolType,
+    _Out_ PBOOLEAN Paged)
+{
+    switch (PoolType)
+    {
+        case PagedPool:
+        case PagedPoolCacheAligned:
+        case PagedPoolSession:
+        case PagedPoolCacheAlignedSession:
+            *Paged = TRUE;
+            return TRUE;
+
+        case NonPagedPool:
+        case NonPagedPoolMustSucceed:
+        case NonPagedPoolCacheAligned:
+        case NonPagedPoolCacheAlignedMustS:
+        case NonPagedPoolSession:
+        case NonPagedPoolMustSucceedSession:
+        case NonPagedPoolCacheAlignedSession:
+        case NonPagedPoolCacheAlignedMustSSession:
+        case NonPagedPoolNx:
+        case NonPagedPoolNxCacheAligned:
+        case NonPagedPoolSessionNx:
+            *Paged = FALSE;
+            return TRUE;
+
+        /* TODO: INFO_NEEDED whether Windows 11 accepts DontUseThisType here; it is refused as an invalid pool type */
+        default:
+            *Paged = FALSE;
+            return FALSE;
+    }
+}
+
+static
 VOID
 ExpInitializeLookasideCommon(
     _Out_ PGENERAL_LOOKASIDE_POOL Lookaside,
@@ -373,29 +409,40 @@ ExInitializeLookasideListEx(
     PLIST_ENTRY ListHead;
     PKSPIN_LOCK Lock;
     KIRQL OldIrql;
+    BOOLEAN Paged;
+    POOL_TYPE ListPoolType;
 
-    if ((Flags & ~POOL_RAISE_IF_ALLOCATION_FAILURE) != 0)
+    if ((Flags != 0) &&
+        (Flags != EX_LOOKASIDE_LIST_EX_FLAGS_RAISE_ON_FAIL) &&
+        (Flags != EX_LOOKASIDE_LIST_EX_FLAGS_FAIL_NO_RAISE))
     {
         return STATUS_INVALID_PARAMETER_5;
     }
 
-    if ((PoolType != NonPagedPool) && (PoolType != PagedPool))
+    if (!ExpIsLookasidePoolType(PoolType, &Paged))
     {
         return STATUS_INVALID_PARAMETER_4;
     }
 
+    ListPoolType = PoolType;
+    if (Flags == EX_LOOKASIDE_LIST_EX_FLAGS_RAISE_ON_FAIL)
+        ListPoolType |= POOL_RAISE_IF_ALLOCATION_FAILURE;
+    else if (Flags == EX_LOOKASIDE_LIST_EX_FLAGS_FAIL_NO_RAISE)
+        ListPoolType |= POOL_QUOTA_FAIL_INSTEAD_OF_RAISE;
+
     ExpInitializeLookasideCommon(&Lookaside->L,
-                                 PoolType,
-                                 Flags,
+                                 ListPoolType,
+                                 0,
                                  Size,
                                  Tag,
                                  Depth);
+    ASSERT(Lookaside->L.Type == ListPoolType);
 
     Lookaside->L.AllocateEx = (Allocate != NULL) ? Allocate :
                                                    ExpLookasideAllocateEx;
     Lookaside->L.FreeEx = (Free != NULL) ? Free : ExpLookasideFreeEx;
 
-    if (PoolType == PagedPool)
+    if (Paged)
     {
         ListHead = &ExpPagedLookasideListHead;
         Lock = &ExpPagedLookasideListLock;

@@ -140,10 +140,104 @@ TestLookasideEx(VOID)
     ExFreePoolWithTag(List, TAG_TEST);
 }
 
+static POOL_TYPE ContractPoolType;
+
+static
+PVOID
+NTAPI
+ContractAllocate(
+    _In_ POOL_TYPE PoolType,
+    _In_ SIZE_T NumberOfBytes,
+    _In_ ULONG Tag,
+    _Inout_ PLOOKASIDE_LIST_EX Lookaside)
+{
+    UNREFERENCED_PARAMETER(Lookaside);
+
+    ContractPoolType = PoolType;
+    return ExAllocatePoolWithTag(PoolType & ~(POOL_RAISE_IF_ALLOCATION_FAILURE | POOL_QUOTA_FAIL_INSTEAD_OF_RAISE),
+                                 NumberOfBytes,
+                                 Tag);
+}
+
+static
+VOID
+NTAPI
+ContractFree(
+    _In_ PVOID Buffer,
+    _Inout_ PLOOKASIDE_LIST_EX Lookaside)
+{
+    UNREFERENCED_PARAMETER(Lookaside);
+
+    ExFreePoolWithTag(Buffer, TAG_TEST);
+}
+
+static
+VOID
+CheckLookasideExPoolType(
+    _Inout_ PLOOKASIDE_LIST_EX List,
+    _In_opt_ PALLOCATE_FUNCTION_EX Allocate,
+    _In_ POOL_TYPE PoolType,
+    _In_ ULONG Flags,
+    _In_ ULONG ExpectedPoolType)
+{
+    PVOID Block;
+    NTSTATUS Status;
+
+    ContractPoolType = MaxPoolType;
+    Status = ExInitializeLookasideListEx(List, Allocate, Allocate ? ContractFree : NULL, PoolType, Flags, 64, TAG_TEST, 0);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+    Block = ExAllocateFromLookasideListEx(List);
+    ok(Block != NULL, "allocation from a pool type 0x%x list failed\n", PoolType);
+    if (Allocate)
+        ok_eq_ulong((ULONG)ContractPoolType, ExpectedPoolType);
+    if (Block)
+        ExFreeToLookasideListEx(List, Block);
+    ExDeleteLookasideListEx(List);
+}
+
+static
+VOID
+TestLookasideExContract(VOID)
+{
+    PLOOKASIDE_LIST_EX List;
+    NTSTATUS Status;
+
+    List = ExAllocatePoolWithTag(NonPagedPool, sizeof(*List), TAG_TEST);
+    ok(List != NULL, "no pool for LOOKASIDE_LIST_EX\n");
+    if (List == NULL) return;
+
+    CheckLookasideExPoolType(List, NULL, NonPagedPoolNx, 0, NonPagedPoolNx);
+    CheckLookasideExPoolType(List, ContractAllocate, NonPagedPoolNx, 0, NonPagedPoolNx);
+    CheckLookasideExPoolType(List, ContractAllocate, PagedPool, EX_LOOKASIDE_LIST_EX_FLAGS_RAISE_ON_FAIL,
+                             PagedPool | POOL_RAISE_IF_ALLOCATION_FAILURE);
+    CheckLookasideExPoolType(List, ContractAllocate, NonPagedPool, EX_LOOKASIDE_LIST_EX_FLAGS_FAIL_NO_RAISE,
+                             NonPagedPool | POOL_QUOTA_FAIL_INSTEAD_OF_RAISE);
+
+    Status = ExInitializeLookasideListEx(List, NULL, NULL, NonPagedPool,
+                                         EX_LOOKASIDE_LIST_EX_FLAGS_RAISE_ON_FAIL | EX_LOOKASIDE_LIST_EX_FLAGS_FAIL_NO_RAISE,
+                                         64, TAG_TEST, 0);
+    ok_eq_hex(Status, STATUS_INVALID_PARAMETER_5);
+    if (NT_SUCCESS(Status))
+        ExDeleteLookasideListEx(List);
+    Status = ExInitializeLookasideListEx(List, NULL, NULL, NonPagedPool, POOL_RAISE_IF_ALLOCATION_FAILURE, 64, TAG_TEST, 0);
+    ok_eq_hex(Status, STATUS_INVALID_PARAMETER_5);
+    if (NT_SUCCESS(Status))
+        ExDeleteLookasideListEx(List);
+    Status = ExInitializeLookasideListEx(List, NULL, NULL, MaxPoolType, 0, 64, TAG_TEST, 0);
+    ok_eq_hex(Status, STATUS_INVALID_PARAMETER_4);
+    if (NT_SUCCESS(Status))
+        ExDeleteLookasideListEx(List);
+
+    ExFreePoolWithTag(List, TAG_TEST);
+}
+
 START_TEST(ExLookaside)
 {
     TestNPagedLookaside();
     TestPagedLookaside();
     TestCustomRoutines();
     TestLookasideEx();
+    TestLookasideExContract();
 }
