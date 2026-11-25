@@ -7,7 +7,7 @@ add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/dnsrslvr.idl)
 list(APPEND SOURCE
     cache.c
     dnsrslvr.c
-    hostsfile.c
+    hosts.c
     llmnr.c
     rpcserver.c
     wskname.c

@@ -83,10 +83,10 @@ DnsIntCacheGetEntries(
     _Out_ DNS_CACHE_ENTRY **ppCacheEntries);
 
 
-/* hostsfile.c */
+/* hosts.c */
 
-BOOL
-ReadHostsFile(VOID);
+VOID HostsStart(VOID);
+VOID HostsStop(VOID);
 
 
 /* llmnr.c */

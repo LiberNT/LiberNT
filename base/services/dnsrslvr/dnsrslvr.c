@@ -57,6 +57,7 @@ ServiceControlHandler(
             RpcMgmtStopServerListening(NULL);
             LlmnrStop();
             WskNameStop();
+            HostsStop();
             DnsIntCacheFree();
             UpdateServiceStatus(ServiceStatusHandle, SERVICE_STOPPED, 0);
             break;
@@ -107,7 +108,7 @@ ServiceMain(
 
     DnsIntCacheInitialize();
 
-    ReadHostsFile();
+    HostsStart();
 
     LlmnrStart();
 
@@ -123,9 +124,13 @@ ServiceMain(
 
     if (!hThread)
     {
+        LlmnrStop();
+        WskNameStop();
+        HostsStop();
         DnsIntCacheFree();
         DPRINT("Can't create RpcThread\n");
         UpdateServiceStatus(ServiceStatusHandle, SERVICE_STOPPED, 0);
+        return;
     }
     else
     {
