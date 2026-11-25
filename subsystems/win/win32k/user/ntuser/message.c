@@ -3094,7 +3094,7 @@ NtUserGetMessage(PMSG pMsg,
     }
 
     if ((INT)Ret != -1)
-       Ret = Ret ? (WM_QUIT != pMsg->message) : FALSE;
+       Ret = Ret ? (WM_QUIT != Msg.message) : FALSE;
 
     return Ret;
 }
