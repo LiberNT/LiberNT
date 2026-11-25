@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT WIM library
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Files of a WIM image as WOF pointer files: tree walk, pointer reparse data and overlay registration
+ * PURPOSE:     Files of a WIM image as WOF pointer files or extracted files: tree walk, pointer reparse data, overlay registration and extraction
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -37,12 +37,21 @@ typedef struct _WIMBOOT_ENTRY
     uint64_t Size;
     uint64_t StoredSize;
     uint64_t Offset;
+    uint64_t CreationTime;
+    uint64_t LastAccessTime;
+    uint64_t LastWriteTime;
     uint8_t Hash[20];
 } WIMBOOT_ENTRY;
 
 typedef int (*WIMBOOT_VISIT)(void* Context, const WIMBOOT_ENTRY* Entry);
 
+typedef int (*WIMBOOT_WRITE)(void* Context, const WIMBOOT_ENTRY* Entry, const uint8_t* Data);
+
 int WimBootOpen(WimCoreCtx* Wim, WIMBOOT_IMAGE* Image);
+
+int WimBootOpenImage(WimCoreCtx* Wim, uint32_t Index, WIMBOOT_IMAGE* Image);
+
+int WimBootExtract(WimCoreCtx* Wim, const WIMBOOT_IMAGE* Image, WIMBOOT_WRITE Write, void* Context);
 
 int WimBootWalk(WimCoreCtx* Wim, const WIMBOOT_IMAGE* Image, WIMBOOT_VISIT Visit, void* Context);
 
