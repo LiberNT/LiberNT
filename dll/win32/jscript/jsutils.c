@@ -19,6 +19,12 @@
 
 #include <math.h>
 #include <assert.h>
+#ifdef __REACTOS__
+#include <locale.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#endif
 
 #include "jscript.h"
 #include "engine.h"
@@ -561,6 +567,45 @@ static HRESULT str_to_number(jsstr_t *str, double *ret)
         return S_OK;
     }
 
+#ifdef __REACTOS__
+    {
+        const WCHAR *start = ptr;
+        BOOL has_digits = FALSE;
+        HRESULT hres;
+
+        while(is_digit(*ptr)) {
+            ptr++;
+            has_digits = TRUE;
+        }
+        if(*ptr == '.') {
+            ptr++;
+            while(is_digit(*ptr)) {
+                ptr++;
+                has_digits = TRUE;
+            }
+        }
+        if(!has_digits && ptr != start) {
+            *ret = NAN;
+            return S_OK;
+        }
+        if(has_digits && (*ptr == 'e' || *ptr == 'E')) {
+            const WCHAR *exp = ptr + 1;
+
+            if(*exp == '+' || *exp == '-')
+                exp++;
+            if(is_digit(*exp)) {
+                while(is_digit(*exp))
+                    exp++;
+                ptr = exp;
+            }
+        }
+        if(has_digits) {
+            hres = decimal_to_double(start, ptr - start, &d);
+            if(FAILED(hres))
+                return hres;
+        }
+    }
+#else
     while(is_digit(*ptr))
         d = d*10 + (*ptr++ - '0');
 
@@ -591,6 +636,7 @@ static HRESULT str_to_number(jsstr_t *str, double *ret)
             dec *= 0.1;
         }
     }
+#endif
 
     while(iswspace(*ptr))
         ptr++;
@@ -762,6 +808,318 @@ HRESULT to_uint32(script_ctx_t *ctx, jsval_t val, UINT32 *ret)
     return S_OK;
 }
 
+#ifdef __REACTOS__
+HRESULT decimal_to_double(const WCHAR *str, size_t len, double *ret)
+{
+    static const double exact_pow10[] = {
+        1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11,
+        1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22
+    };
+    char stackbuf[64], *text = stackbuf;
+    char dec;
+    UINT64 mantissa = 0;
+    int significant = 0, exp10 = 0;
+    BOOL fraction = FALSE, fast = TRUE;
+    size_t i;
+
+    for(i = 0; i < len && str[i] != 'e' && str[i] != 'E'; i++) {
+        if(str[i] == '.') {
+            fraction = TRUE;
+            continue;
+        }
+        assert(str[i] >= '0' && str[i] <= '9');
+        if(mantissa || str[i] != '0') {
+            if(++significant > 19) {
+                fast = FALSE;
+                break;
+            }
+            mantissa = mantissa * 10 + (str[i] - '0');
+        }
+        if(fraction)
+            exp10--;
+    }
+    if(fast && i < len) {
+        BOOL negative = FALSE;
+        int e = 0;
+
+        i++;
+        if(i < len && (str[i] == '+' || str[i] == '-'))
+            negative = str[i++] == '-';
+        for(; i < len && fast; i++) {
+            assert(str[i] >= '0' && str[i] <= '9');
+            e = e * 10 + (str[i] - '0');
+            if(e > 400)
+                fast = FALSE;
+        }
+        exp10 += negative ? -e : e;
+    }
+    if(fast && !mantissa) {
+        *ret = 0;
+        return S_OK;
+    }
+    if(fast && mantissa < ((UINT64)1 << 53) && exp10 >= -22 && exp10 <= 22) {
+        *ret = exp10 >= 0 ? (double)mantissa * exact_pow10[exp10] : (double)mantissa / exact_pow10[-exp10];
+        return S_OK;
+    }
+
+    dec = *localeconv()->decimal_point;
+
+    if(len >= ARRAY_SIZE(stackbuf) && !(text = malloc(len + 1)))
+        return E_OUTOFMEMORY;
+    for(i = 0; i < len; i++) {
+        assert(str[i] < 0x80);
+        text[i] = str[i] == '.' ? dec : (char)str[i];
+    }
+    text[len] = 0;
+    *ret = strtod(text, NULL);
+    if(text != stackbuf)
+        free(text);
+    return S_OK;
+}
+
+typedef struct {
+    UINT32 w[48];
+    int len;
+} bigint_t;
+
+static void big_set(bigint_t *b, UINT64 v)
+{
+    b->len = 0;
+    while(v) {
+        b->w[b->len++] = (UINT32)v;
+        v >>= 32;
+    }
+}
+
+static void big_mul_small(bigint_t *b, UINT32 mul)
+{
+    UINT64 carry = 0;
+    int i;
+
+    for(i = 0; i < b->len; i++) {
+        carry += (UINT64)b->w[i] * mul;
+        b->w[i] = (UINT32)carry;
+        carry >>= 32;
+    }
+    if(carry) {
+        assert(b->len < ARRAY_SIZE(b->w));
+        b->w[b->len++] = (UINT32)carry;
+    }
+}
+
+static void big_shl(bigint_t *b, int bits)
+{
+    assert(bits >= 0);
+    for(; bits >= 31; bits -= 31)
+        big_mul_small(b, 1u << 31);
+    big_mul_small(b, 1u << bits);
+}
+
+static void big_mul_pow10(bigint_t *b, int n)
+{
+    assert(n >= 0);
+    for(; n >= 9; n -= 9)
+        big_mul_small(b, 1000000000);
+    for(; n; n--)
+        big_mul_small(b, 10);
+}
+
+static void big_mul_pow5(bigint_t *b, int n)
+{
+    assert(n >= 0);
+    for(; n >= 13; n -= 13)
+        big_mul_small(b, 1220703125);
+    for(; n; n--)
+        big_mul_small(b, 5);
+}
+
+static int big_cmp(const bigint_t *a, const bigint_t *b)
+{
+    int i;
+
+    if(a->len != b->len)
+        return a->len < b->len ? -1 : 1;
+    for(i = a->len - 1; i >= 0; i--) {
+        if(a->w[i] != b->w[i])
+            return a->w[i] < b->w[i] ? -1 : 1;
+    }
+    return 0;
+}
+
+static void big_add(const bigint_t *a, const bigint_t *b, bigint_t *out)
+{
+    UINT64 carry = 0;
+    int i, len = max(a->len, b->len);
+
+    for(i = 0; i < len; i++) {
+        carry += (UINT64)(i < a->len ? a->w[i] : 0) + (i < b->len ? b->w[i] : 0);
+        out->w[i] = (UINT32)carry;
+        carry >>= 32;
+    }
+    out->len = len;
+    if(carry) {
+        assert(len < ARRAY_SIZE(out->w));
+        out->w[out->len++] = (UINT32)carry;
+    }
+}
+
+static void big_sub(bigint_t *a, const bigint_t *b)
+{
+    INT64 borrow = 0;
+    int i;
+
+    assert(big_cmp(a, b) >= 0);
+    for(i = 0; i < a->len; i++) {
+        borrow += (INT64)a->w[i] - (i < b->len ? b->w[i] : 0);
+        a->w[i] = (UINT32)borrow;
+        borrow >>= 32;
+    }
+    assert(!borrow);
+    while(a->len && !a->w[a->len - 1])
+        a->len--;
+}
+
+static int big_cmp_sum(const bigint_t *a, const bigint_t *b, const bigint_t *c)
+{
+    bigint_t sum;
+
+    big_add(a, b, &sum);
+    return big_cmp(&sum, c);
+}
+
+static int shortest_digits(double a, char *digits)
+{
+    bigint_t r, s, mp, mm, twice;
+    UINT64 f;
+    int e, k, count = 0, cmp, sexp;
+    BOOL even, low, high;
+
+    assert(isfinite(a) && a > 0);
+    f = (UINT64)ldexp(frexp(a, &e), 53);
+    e -= 53;
+    if(e < -1074) {
+        f >>= -1074 - e;
+        e = -1074;
+    }
+    even = !(f & 1);
+    k = (int)ceil(log10(a) - 1e-10);
+
+    if(e >= 0) {
+        BOOL edge = f == ((UINT64)1 << 52);
+
+        big_set(&r, f);
+        big_shl(&r, e + (edge ? 2 : 1));
+        big_set(&s, edge ? 4 : 2);
+        big_set(&mp, 1);
+        big_shl(&mp, e + (edge ? 1 : 0));
+        big_set(&mm, 1);
+        big_shl(&mm, e);
+        assert(k >= 0);
+        big_mul_pow10(&s, k);
+    }else {
+        BOOL edge = e != -1074 && f == ((UINT64)1 << 52);
+
+        big_set(&r, f * (edge ? 4 : 2));
+        big_set(&mp, edge ? 2 : 1);
+        big_set(&mm, 1);
+        sexp = (edge ? 2 : 1) - e + k;
+        assert(sexp >= 0);
+        big_set(&s, 1);
+        if(k >= 0) {
+            big_mul_pow5(&s, k);
+        }else {
+            big_mul_pow5(&r, -k);
+            big_mul_pow5(&mp, -k);
+            big_mul_pow5(&mm, -k);
+        }
+        big_shl(&s, sexp);
+    }
+
+    cmp = big_cmp_sum(&r, &mp, &s);
+    if(even ? cmp >= 0 : cmp > 0) {
+        big_mul_small(&s, 10);
+        k++;
+    }
+
+    for(;;) {
+        int d = 0;
+
+        big_mul_small(&r, 10);
+        big_mul_small(&mp, 10);
+        big_mul_small(&mm, 10);
+        while(big_cmp(&r, &s) >= 0) {
+            big_sub(&r, &s);
+            d++;
+        }
+        assert(d < 10);
+
+        cmp = big_cmp(&r, &mm);
+        low = even ? cmp <= 0 : cmp < 0;
+        cmp = big_cmp_sum(&r, &mp, &s);
+        high = even ? cmp >= 0 : cmp > 0;
+
+        if(!low && !high) {
+            assert(count < 17);
+            digits[count++] = '0' + d;
+            continue;
+        }
+        if(low && high) {
+            big_add(&r, &r, &twice);
+            cmp = big_cmp(&twice, &s);
+            if(cmp > 0 || (cmp == 0 && (d & 1)))
+                d++;
+        }else if(high) {
+            d++;
+        }
+        assert(d < 10 && count < 17);
+        digits[count++] = '0' + d;
+        break;
+    }
+
+    digits[count] = 0;
+    return k;
+}
+
+static void format_number(double n, WCHAR *out)
+{
+    char digits[18];
+    double a = fabs(n);
+    int k, point, i;
+
+    point = shortest_digits(a, digits);
+    k = strlen(digits);
+    while(k > 1 && digits[k - 1] == '0')
+        k--;
+
+    if(n < 0)
+        *out++ = '-';
+
+    if(k <= point && point <= 21) {
+        for(i = 0; i < k; i++) *out++ = digits[i];
+        for(; i < point; i++) *out++ = '0';
+    }else if(0 < point && point <= 21) {
+        for(i = 0; i < point; i++) *out++ = digits[i];
+        *out++ = '.';
+        for(; i < k; i++) *out++ = digits[i];
+    }else if(-6 < point && point <= 0) {
+        *out++ = '0';
+        *out++ = '.';
+        for(i = point; i < 0; i++) *out++ = '0';
+        for(i = 0; i < k; i++) *out++ = digits[i];
+    }else {
+        *out++ = digits[0];
+        if(k > 1) {
+            *out++ = '.';
+            for(i = 1; i < k; i++) *out++ = digits[i];
+        }
+        *out++ = 'e';
+        *out++ = point - 1 < 0 ? '-' : '+';
+        out += swprintf(out, 8, L"%d", abs(point - 1));
+    }
+    *out = 0;
+}
+
+#endif
 HRESULT double_to_string(double n, jsstr_t **str)
 {
     if(isnan(n)) {
@@ -772,6 +1130,14 @@ HRESULT double_to_string(double n, jsstr_t **str)
         WCHAR buf[12];
         _ltow_s(n, buf, ARRAY_SIZE(buf), 10);
         *str = jsstr_alloc(buf);
+#ifdef __REACTOS__
+    }else {
+        WCHAR buf[40];
+
+        format_number(n, buf);
+        *str = jsstr_alloc(buf);
+    }
+#else
     }else {
         VARIANT strv, v;
         HRESULT hres;
@@ -787,6 +1153,7 @@ HRESULT double_to_string(double n, jsstr_t **str)
         *str = jsstr_alloc(V_BSTR(&strv));
         SysFreeString(V_BSTR(&strv));
     }
+#endif
 
     return *str ? S_OK : E_OUTOFMEMORY;
 }

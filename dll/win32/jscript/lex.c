@@ -474,7 +474,16 @@ HRESULT parse_decimal(const WCHAR **iter, const WCHAR *end, double *ret)
         return JS_E_MISSING_SEMICOLON;
     }
 
+#ifdef __REACTOS__
+    {
+        HRESULT hres = decimal_to_double(*iter, ptr - *iter, ret);
+
+        if(FAILED(hres))
+            return hres;
+    }
+#else
     *ret = exp>=0 ? d*pow(10, exp) : d/pow(10, -exp);
+#endif
     *iter = ptr;
     return S_OK;
 }

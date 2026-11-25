@@ -352,6 +352,9 @@ HRESULT variant_date_to_string(script_ctx_t*,double,jsstr_t**);
 HRESULT decode_source(WCHAR*);
 
 HRESULT double_to_string(double,jsstr_t**);
+#ifdef __REACTOS__
+HRESULT decimal_to_double(const WCHAR*,size_t,double*);
+#endif
 WCHAR *idx_to_str(DWORD,WCHAR*);
 int hex_to_int(WCHAR);
 
