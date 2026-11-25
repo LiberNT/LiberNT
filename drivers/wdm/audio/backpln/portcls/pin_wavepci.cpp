@@ -783,8 +783,7 @@ CPortPinWavePci::Init(
     else
     {
         DPRINT("Unexpected Communication %u DataFlow %u\n", KsPinDescriptor->Communication, KsPinDescriptor->DataFlow);
-        DbgBreakPoint();
-        while(TRUE);
+        return STATUS_INVALID_PARAMETER;
     }
 
     // add port / filter reference

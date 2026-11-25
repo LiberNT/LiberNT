@@ -440,7 +440,6 @@ WdmAudControlOpenMixer(
         if (!NT_SUCCESS(Status))
         {
             DPRINT1("Invalid notify event passed %p from client %p\n", DeviceInfo->u.hNotifyEvent, ClientInfo);
-            DbgBreakPoint();
             return SetIrpIoStatus(Irp, STATUS_UNSUCCESSFUL, 0);
         }
     }

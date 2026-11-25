@@ -20,7 +20,6 @@ Dispatch_fnDeviceIoControl(
     PIRP Irp)
 {
     UNIMPLEMENTED;
-    DbgBreakPoint();
 
     Irp->IoStatus.Status = STATUS_UNSUCCESSFUL;
     Irp->IoStatus.Information = 0;

@@ -1206,8 +1206,7 @@ CPortPinWaveCyclic::Init(
     else
     {
         DPRINT("Unexpected Communication %u DataFlow %u\n", KsPinDescriptor->Communication, KsPinDescriptor->DataFlow);
-        DbgBreakPoint();
-        while(TRUE);
+        return STATUS_INVALID_PARAMETER;
     }
 
     Status = m_Miniport->NewStream(&m_Stream,
