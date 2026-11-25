@@ -1464,6 +1464,14 @@ LogonUserExExW(
             LogonType = Service;
             break;
 
+        case LOGON32_LOGON_NETWORK_CLEARTEXT:
+            LogonType = NetworkCleartext;
+            break;
+
+        case LOGON32_LOGON_NEW_CREDENTIALS:
+            LogonType = NewCredentials;
+            break;
+
        default:
             ERR("Invalid logon type: %ul\n", dwLogonType);
             Status = STATUS_INVALID_PARAMETER;
