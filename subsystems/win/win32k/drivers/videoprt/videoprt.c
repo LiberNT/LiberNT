@@ -513,15 +513,22 @@ IntVideoPortEnumBuses(
     // to locate any video adapter.
     // Otherwise, fall back to the usual method done below.
 
+    NTSTATUS Status;
+
     /* Find the next bus of the given type */
-    return IoQueryDeviceDescription(&AdapterInterfaceType,
-                                    BusNumber,
-                                    NULL,
-                                    NULL,
-                                    NULL,
-                                    NULL,
-                                    IntVideoPortEnumBusCallback,
-                                    NULL);
+    Status = IoQueryDeviceDescription(&AdapterInterfaceType,
+                                      BusNumber,
+                                      NULL,
+                                      NULL,
+                                      NULL,
+                                      NULL,
+                                      IntVideoPortEnumBusCallback,
+                                      NULL);
+
+    /* The HAL's internal bus 0 exists whether or not the firmware described it, as on a UEFI boot */
+    if (!NT_SUCCESS(Status) && AdapterInterfaceType == Internal && *BusNumber == 0)
+        return STATUS_SUCCESS;
+    return Status;
 }
 
 static
