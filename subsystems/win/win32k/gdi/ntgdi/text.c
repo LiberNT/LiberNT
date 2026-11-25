@@ -558,23 +558,31 @@ NtGdiGetTextFaceW(
     DC_UnlockDc(Dc);
 
     TextObj = RealizeFontInit(hFont);
-    ASSERT(TextObj != NULL);
-    fLen = wcslen(TextObj->TextFace) + 1;
+    if (TextObj == NULL)
+    {
+        EngSetLastError(ERROR_INVALID_HANDLE);
+        return 0;
+    }
+    fLen = wcsnlen(TextObj->TextFace, LF_FACESIZE - 1) + 1;
 
     if (FaceName != NULL)
     {
+        WCHAR Face[LF_FACESIZE];
+
         Count = min(Count, fLen);
-        Status = MmCopyToCaller(FaceName, TextObj->TextFace, Count * sizeof(WCHAR));
+        RtlCopyMemory(Face, TextObj->TextFace, fLen * sizeof(WCHAR));
+        Face[fLen - 1] = UNICODE_NULL;
+        /* Terminate if we copied only part of the font name */
+        if (Count > 0 && Count < fLen)
+        {
+            Face[Count - 1] = UNICODE_NULL;
+        }
+        Status = MmCopyToCaller(FaceName, Face, Count * sizeof(WCHAR));
         if (!NT_SUCCESS(Status))
         {
             TEXTOBJ_UnlockText(TextObj);
             SetLastNtError(Status);
             return 0;
-        }
-        /* Terminate if we copied only part of the font name */
-        if (Count > 0 && Count < fLen)
-        {
-            FaceName[Count - 1] = '\0';
         }
         ret = Count;
     }
