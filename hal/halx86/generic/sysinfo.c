@@ -121,7 +121,18 @@ HaliQuerySystemInformation(IN HAL_QUERY_INFORMATION_CLASS InformationClass,
         REPORT_THIS_CASE(HalMcaLogInformation);
         case HalFrameBufferCachingInformation:
             return STATUS_INVALID_LEVEL;
-        REPORT_THIS_CASE(HalDisplayBiosInformation);
+        case HalDisplayBiosInformation:
+        {
+            /* FIXME: the value Windows reports after a legacy BIOS boot is not measured; it is reported as after a UEFI boot */
+            HAL_DISPLAY_BIOS_INFORMATION Information = HalDisplayNoBios;
+            ULONG Length = min(BufferSize, (ULONG)sizeof(Information));
+
+            ASSERT(Length == 0 || Buffer != NULL);
+            RtlCopyMemory(Buffer, &Information, Length);
+            if (ReturnedLength)
+                *ReturnedLength = Length;
+            return STATUS_SUCCESS;
+        }
         REPORT_THIS_CASE(HalProcessorFeatureInformation);
         REPORT_THIS_CASE(HalNumaTopologyInterface);
         REPORT_THIS_CASE(HalErrorInformation);

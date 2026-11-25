@@ -189,8 +189,49 @@ TestNativeSystemInformation(void)
 }
 #endif
 
+#ifdef _M_AMD64
+NTKERNELAPI
+FIRMWARE_TYPE
+NTAPI
+ExGetFirmwareType(VOID);
+
+static
+void
+CheckDisplayBiosInformation(
+    _In_ ULONG BufferSize,
+    _In_ ULONG ExpectedLength,
+    _In_ ULONG ExpectedValue)
+{
+    ULONG Output[2] = { 0xA5A5A5A5, 0xA5A5A5A5 };
+    ULONG ReturnedLength = 0xA5A5A5A5;
+    NTSTATUS Status;
+
+    Status = HalQuerySystemInformation(HalDisplayBiosInformation, BufferSize, Output, &ReturnedLength);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(ReturnedLength, ExpectedLength);
+    ok_eq_hex(Output[0], ExpectedValue);
+    ok_eq_hex(Output[1], 0xA5A5A5A5);
+}
+
+static
+void
+TestDisplayBiosInformation(void)
+{
+    if (skip(ExGetFirmwareType() == FirmwareTypeUefi, "display BIOS information is measured on UEFI firmware only\n"))
+        return;
+
+    CheckDisplayBiosInformation(sizeof(ULONG), sizeof(ULONG), HalDisplayNoBios);
+    CheckDisplayBiosInformation(2 * sizeof(ULONG), sizeof(ULONG), HalDisplayNoBios);
+    CheckDisplayBiosInformation(sizeof(USHORT), sizeof(USHORT), 0xA5A50000 | HalDisplayNoBios);
+    CheckDisplayBiosInformation(0, 0, 0xA5A5A5A5);
+}
+#endif
+
 START_TEST(HalSystemInfo)
 {
+#ifdef _M_AMD64
+    TestDisplayBiosInformation();
+#endif
 #if defined(_M_IX86) || defined(_M_AMD64)
     TestAMLIllegalIOPortAddresses();
 #endif
