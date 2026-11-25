@@ -190,11 +190,6 @@ TestNativeSystemInformation(void)
 #endif
 
 #ifdef _M_AMD64
-NTKERNELAPI
-FIRMWARE_TYPE
-NTAPI
-ExGetFirmwareType(VOID);
-
 static
 void
 CheckDisplayBiosInformation(
