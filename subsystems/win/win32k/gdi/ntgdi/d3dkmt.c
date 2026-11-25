@@ -1783,7 +1783,7 @@ NtGdiDdDDISubmitSignalSyncObjectsToHwQueue(
 
 NTSTATUS
 APIENTRY
-NtGdiDdDDISubmitPresentBltToHwQueue(
+NtDxgkSubmitPresentBltToHwQueue(
     _In_ const struct _D3DKMT_SUBMITPRESENTBLTTOHWQUEUE* unnamedParam1)
 {
     NTSTATUS Status = D3dkmtValidateWddmThunk(unnamedParam1);
@@ -1795,7 +1795,7 @@ NtGdiDdDDISubmitPresentBltToHwQueue(
 
 NTSTATUS
 APIENTRY
-NtGdiDdDDISubmitPresentToHwQueue(
+NtDxgkSubmitPresentToHwQueue(
     _Inout_ struct _D3DKMT_SUBMITPRESENTTOHWQUEUE* unnamedParam1)
 {
     NTSTATUS Status = D3dkmtValidateWddmThunk(unnamedParam1);
@@ -2635,7 +2635,7 @@ Cleanup:
 
 NTSTATUS
 APIENTRY
-NtGdiDdDDIEnumAdapters3(_Inout_ struct _D3DKMT_ENUMADAPTERS3* unnamedParam1)
+NtDxgkEnumAdapters3(_Inout_ struct _D3DKMT_ENUMADAPTERS3* unnamedParam1)
 {
     NTSTATUS Status = D3dkmtValidateWddmThunk(unnamedParam1);
     if (!NT_SUCCESS(Status))
@@ -3366,7 +3366,7 @@ NtGdiDdDDIPresentMultiPlaneOverlay3(_In_ const struct _D3DKMT_PRESENT_MULTIPLANE
 
 NTSTATUS
 APIENTRY
-NtGdiDdDDIIsFeatureEnabled(
+NtDxgkIsFeatureEnabled(
     _Inout_ struct _D3DKMT_ISFEATUREENABLED* unnamedParam1)
 {
     NTSTATUS Status = D3dkmtValidateWddmThunk(unnamedParam1);
@@ -3560,7 +3560,7 @@ NtGdiDdDDIDestroyDoorbell(_In_ D3DKMT_DESTROY_DOORBELL *unnamedParam1)
 
 NTSTATUS
 APIENTRY
-NtGdiDdDDIGetNativeFenceLogDetail(_Inout_ D3DKMT_GETNATIVEFENCELOGDETAIL *unnamedParam1)
+NtDxgkGetNativeFenceLogDetail(_Inout_ D3DKMT_GETNATIVEFENCELOGDETAIL *unnamedParam1)
 {
     return D3DKMTGetNativeFenceLogDetail(unnamedParam1);
 }
@@ -3588,7 +3588,7 @@ NtGdiDdDDIOutputDuplPresentToHwQueue(_In_ const D3DKMT_OUTPUTDUPLPRESENTTOHWQUEU
 
 NTSTATUS
 APIENTRY
-NtGdiDdDDIRegisterVailProcess(_In_ GUID *unnamedParam1)
+NtDxgkRegisterVailProcess(_In_ GUID *unnamedParam1)
 {
     return D3DKMTRegisterVailProcess(unnamedParam1);
 }

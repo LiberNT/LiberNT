@@ -687,7 +687,7 @@
 @ stdcall -version=0x600+ D3DKMTGetDeviceState(ptr) NtGdiDdDDIGetDeviceState
 @ stdcall -version=0x600+ D3DKMTGetDisplayModeList(ptr) NtGdiDdDDIGetDisplayModeList
 @ stdcall -version=0x600+ D3DKMTGetMultisampleMethodList(ptr) NtGdiDdDDIGetMultisampleMethodList
-@ stdcall -version=0xA00+ D3DKMTGetNativeFenceLogDetail(ptr) NtGdiDdDDIGetNativeFenceLogDetail
+@ stdcall -version=0xA00+ D3DKMTGetNativeFenceLogDetail(ptr) NtDxgkGetNativeFenceLogDetail
 @ stdcall -version=0xA00+ D3DKMTGetPostCompositionCaps(ptr) NtGdiDdDDIGetPostCompositionCaps
 @ stdcall -version=0x600+ D3DKMTGetPresentHistory(ptr) NtGdiDdDDIGetPresentHistory
 @ stdcall -version=0xA00+ D3DKMTGetProcessDeviceRemovalSupport(ptr) NtGdiDdDDIGetProcessDeviceRemovalSupport
@@ -720,7 +720,7 @@
 @ stdcall -version=0x600+ D3DKMTQueryResourceInfo(ptr) NtGdiDdDDIQueryResourceInfo
 @ stdcall -version=0x600+ D3DKMTQueryStatistics(ptr) NtGdiDdDDIQueryStatistics
 @ stdcall -version=0x600+ D3DKMTReleaseProcessVidPnSourceOwners(ptr) NtGdiDdDDIReleaseProcessVidPnSourceOwners
-@ stdcall -version=0xA00+ D3DKMTRegisterVailProcess(ptr) NtGdiDdDDIRegisterVailProcess
+@ stdcall -version=0xA00+ D3DKMTRegisterVailProcess(ptr) NtDxgkRegisterVailProcess
 @ stdcall -version=0x600+ D3DKMTRender(ptr) NtGdiDdDDIRender
 @ stdcall -version=0x600+ D3DKMTSetAllocationPriority(ptr) NtGdiDdDDISetAllocationPriority
 @ stdcall -version=0x600+ D3DKMTSetContextSchedulingPriority(ptr) NtGdiDdDDISetContextSchedulingPriority
@@ -785,8 +785,8 @@
 @ stdcall -version=0x600+ D3DKMTSubmitCommandToHwQueue(ptr) NtGdiDdDDISubmitCommandToHwQueue
 @ stdcall -version=0xA00+ D3DKMTSubmitWaitForSyncObjectsToHwQueue(ptr) NtGdiDdDDISubmitWaitForSyncObjectsToHwQueue
 @ stdcall -version=0xA00+ D3DKMTSubmitSignalSyncObjectsToHwQueue(ptr) NtGdiDdDDISubmitSignalSyncObjectsToHwQueue
-@ stdcall -version=0xA00+ D3DKMTSubmitPresentBltToHwQueue(ptr) NtGdiDdDDISubmitPresentBltToHwQueue
-@ stdcall -version=0xA00+ D3DKMTSubmitPresentToHwQueue(ptr) NtGdiDdDDISubmitPresentToHwQueue
+@ stdcall -version=0xA00+ D3DKMTSubmitPresentBltToHwQueue(ptr) NtDxgkSubmitPresentBltToHwQueue
+@ stdcall -version=0xA00+ D3DKMTSubmitPresentToHwQueue(ptr) NtDxgkSubmitPresentToHwQueue
 @ stdcall -version=0x600+ D3DKMTSubmitCommand(ptr) NtGdiDdDDISubmitCommand
 @ stdcall -version=0x600+ D3DKMTGetAllocationPriority(ptr) NtGdiDdDDIGetAllocationPriority
 @ stdcall -version=0x600+ D3DKMTUpdateAllocationProperty(ptr) NtGdiDdDDIUpdateAllocationProperty
@@ -814,7 +814,7 @@
 @ stdcall -version=0x600+ D3DKMTOutputDuplReleaseFrame(ptr) NtGdiDdDDIOutputDuplReleaseFrame
 @ stdcall -version=0x600+ D3DKMTPresentMultiPlaneOverlay(ptr) NtGdiDdDDIPresentMultiPlaneOverlay
 @ stdcall -version=0x600+ D3DKMTCheckMultiPlaneOverlaySupport(ptr) NtGdiDdDDICheckMultiPlaneOverlaySupport
-@ stdcall -version=0x600+ D3DKMTEnumAdapters3(ptr) NtGdiDdDDIEnumAdapters3
+@ stdcall -version=0x600+ D3DKMTEnumAdapters3(ptr) NtDxgkEnumAdapters3
 @ stdcall -version=0x600+ D3DKMTAcquireKeyedMutex2(ptr) NtGdiDdDDIAcquireKeyedMutex2
 @ stdcall -version=0x600+ D3DKMTCreateKeyedMutex2(ptr) NtGdiDdDDICreateKeyedMutex2
 @ stdcall -version=0x600+ D3DKMTOpenKeyedMutex2(ptr) NtGdiDdDDIOpenKeyedMutex2
@@ -829,7 +829,7 @@
 @ stdcall -version=0x600+ D3DKMTSignalSynchronizationObjectFromGpu(ptr) NtGdiDdDDISignalSynchronizationObjectFromGpu
 @ stdcall -version=0x600+ D3DKMTWaitForSynchronizationObjectFromGpu(ptr) NtGdiDdDDIWaitForSynchronizationObjectFromGpu
 @ stdcall -version=0x600+ D3DKMTSignalSynchronizationObjectFromGpu2(ptr) NtGdiDdDDISignalSynchronizationObjectFromGpu2
-@ stdcall -version=0xA00+ D3DKMTIsFeatureEnabled(ptr) NtGdiDdDDIIsFeatureEnabled
+@ stdcall -version=0xA00+ D3DKMTIsFeatureEnabled(ptr) NtDxgkIsFeatureEnabled
 @ stdcall -version=0x600+ D3DKMTCheckMultiPlaneOverlaySupport2(ptr) NtGdiDdDDICheckMultiPlaneOverlaySupport2
 @ stdcall -version=0x600+ D3DKMTCheckMultiPlaneOverlaySupport3(ptr) NtGdiDdDDICheckMultiPlaneOverlaySupport3
 @ stdcall -version=0x600+ D3DKMTPresentMultiPlaneOverlay2(ptr) NtGdiDdDDIPresentMultiPlaneOverlay2

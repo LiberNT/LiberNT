@@ -4745,14 +4745,14 @@ __kernel_entry
 W32KAPI
 NTSTATUS
 APIENTRY
-NtGdiDdDDISubmitPresentBltToHwQueue(
+NtDxgkSubmitPresentBltToHwQueue(
     _In_ const struct _D3DKMT_SUBMITPRESENTBLTTOHWQUEUE* unnamedParam1);
 
 __kernel_entry
 W32KAPI
 NTSTATUS
 APIENTRY
-NtGdiDdDDISubmitPresentToHwQueue(
+NtDxgkSubmitPresentToHwQueue(
     _Inout_ struct _D3DKMT_SUBMITPRESENTTOHWQUEUE* unnamedParam1);
 
 __kernel_entry
@@ -5067,7 +5067,7 @@ __kernel_entry
 W32KAPI
 NTSTATUS
 APIENTRY
-NtGdiDdDDIEnumAdapters3(
+NtDxgkEnumAdapters3(
     _Inout_ struct _D3DKMT_ENUMADAPTERS3* unnamedParam1);
 
 __kernel_entry
@@ -5200,7 +5200,7 @@ __kernel_entry
 W32KAPI
 NTSTATUS
 APIENTRY
-NtGdiDdDDIIsFeatureEnabled(
+NtDxgkIsFeatureEnabled(
     _Inout_ struct _D3DKMT_ISFEATUREENABLED* unnamedParam1);
 
 __kernel_entry
@@ -5260,11 +5260,11 @@ __kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDIConnectDoorbell(_In_ struct _
 __kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDICreateDoorbell(_In_ struct _D3DKMT_CREATE_DOORBELL* unnamedParam1);
 __kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDICreateNativeFence(_Inout_ struct _D3DKMT_CREATENATIVEFENCE* unnamedParam1);
 __kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDIDestroyDoorbell(_In_ struct _D3DKMT_DESTROY_DOORBELL* unnamedParam1);
-__kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDIGetNativeFenceLogDetail(_Inout_ struct _D3DKMT_GETNATIVEFENCELOGDETAIL* unnamedParam1);
+__kernel_entry W32KAPI NTSTATUS APIENTRY NtDxgkGetNativeFenceLogDetail(_Inout_ struct _D3DKMT_GETNATIVEFENCELOGDETAIL* unnamedParam1);
 __kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDINotifyWorkSubmission(_In_ struct _D3DKMT_NOTIFY_WORK_SUBMISSION* unnamedParam1);
 __kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDIOpenNativeFenceFromNtHandle(_Inout_ struct _D3DKMT_OPENNATIVEFENCEFROMNTHANDLE* unnamedParam1);
 __kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDIOutputDuplPresentToHwQueue(_In_ const struct _D3DKMT_OUTPUTDUPLPRESENTTOHWQUEUE* unnamedParam1);
-__kernel_entry W32KAPI NTSTATUS APIENTRY NtGdiDdDDIRegisterVailProcess(_In_ GUID* unnamedParam1);
+__kernel_entry W32KAPI NTSTATUS APIENTRY NtDxgkRegisterVailProcess(_In_ GUID* unnamedParam1);
 
 /* Multi-argument D3DKMT entry points (non-single-struct signatures). */
 __kernel_entry

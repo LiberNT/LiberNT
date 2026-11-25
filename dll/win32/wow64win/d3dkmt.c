@@ -80,8 +80,8 @@ W32KAPI NTSTATUS WINAPI NtGdiDdDDICreateHwQueue(D3DKMT_CREATEHWQUEUE *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDISubmitCommandToHwQueue(const D3DKMT_SUBMITCOMMANDTOHWQUEUE *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDISubmitWaitForSyncObjectsToHwQueue(const D3DKMT_SUBMITWAITFORSYNCOBJECTSTOHWQUEUE *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDISubmitSignalSyncObjectsToHwQueue(const D3DKMT_SUBMITSIGNALSYNCOBJECTSTOHWQUEUE *desc);
-W32KAPI NTSTATUS WINAPI NtGdiDdDDISubmitPresentToHwQueue(D3DKMT_SUBMITPRESENTTOHWQUEUE *desc);
-W32KAPI NTSTATUS WINAPI NtGdiDdDDISubmitPresentBltToHwQueue(const D3DKMT_SUBMITPRESENTBLTTOHWQUEUE *desc);
+W32KAPI NTSTATUS WINAPI NtDxgkSubmitPresentToHwQueue(D3DKMT_SUBMITPRESENTTOHWQUEUE *desc);
+W32KAPI NTSTATUS WINAPI NtDxgkSubmitPresentBltToHwQueue(const D3DKMT_SUBMITPRESENTBLTTOHWQUEUE *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDICreateOverlay(D3DKMT_CREATEOVERLAY *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIUpdateOverlay(const D3DKMT_UPDATEOVERLAY *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIFlipOverlay(const D3DKMT_FLIPOVERLAY *desc);
@@ -118,7 +118,8 @@ W32KAPI NTSTATUS WINAPI NtGdiDdDDISetStablePowerState(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDISetContextInProcessSchedulingPriority(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIGetContextInProcessSchedulingPriority(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDISetSyncRefreshCountWaitTarget(void *desc);
-W32KAPI NTSTATUS WINAPI NtGdiDdDDIIsFeatureEnabled(void *desc);
+W32KAPI NTSTATUS WINAPI NtDxgkEnumAdapters3(D3DKMT_ENUMADAPTERS3 *desc);
+W32KAPI NTSTATUS WINAPI NtDxgkIsFeatureEnabled(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDISetFSEBlock(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIQueryFSEBlock(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIAdjustFullscreenGamma(void *desc);
@@ -129,8 +130,8 @@ W32KAPI NTSTATUS WINAPI NtGdiDdDDIQueryProtectedSessionStatus(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIQueryRemoteVidPnSourceFromGdiDisplayName(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDISetHwProtectionTeardownRecovery(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDISetVidPnSourceHwProtection(void *desc);
-W32KAPI NTSTATUS WINAPI NtGdiDdDDIGetNativeFenceLogDetail(void *desc);
-W32KAPI NTSTATUS WINAPI NtGdiDdDDIRegisterVailProcess(void *desc);
+W32KAPI NTSTATUS WINAPI NtDxgkGetNativeFenceLogDetail(void *desc);
+W32KAPI NTSTATUS WINAPI NtDxgkRegisterVailProcess(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDICreateSwapChain(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIOpenSwapChain(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIAddSurfaceToSwapChain(void *desc);
@@ -1312,9 +1313,29 @@ NTSTATUS WINAPI wow64_NtGdiDdDDISetSyncRefreshCountWaitTarget(UINT *args)
     return NtGdiDdDDISetSyncRefreshCountWaitTarget(get_ptr(&args));
 }
 
-NTSTATUS WINAPI wow64_NtGdiDdDDIIsFeatureEnabled(UINT *args)
+NTSTATUS WINAPI wow64_NtDxgkEnumAdapters3(UINT *args)
 {
-    return NtGdiDdDDIIsFeatureEnabled(get_ptr(&args));
+    struct
+    {
+        ULONGLONG Filter;
+        ULONG NumAdapters;
+        ULONG pAdapters;
+    } *desc32 = get_ptr(&args);
+    D3DKMT_ENUMADAPTERS3 desc;
+    NTSTATUS status;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+    desc.Filter.Value = desc32->Filter;
+    desc.NumAdapters = desc32->NumAdapters;
+    desc.pAdapters = ULongToPtr(desc32->pAdapters);
+    status = NtDxgkEnumAdapters3(&desc);
+    desc32->NumAdapters = desc.NumAdapters;
+    return status;
+}
+
+NTSTATUS WINAPI wow64_NtDxgkIsFeatureEnabled(UINT *args)
+{
+    return NtDxgkIsFeatureEnabled(get_ptr(&args));
 }
 
 NTSTATUS WINAPI wow64_NtGdiDdDDISetFSEBlock(UINT *args)
@@ -1367,14 +1388,14 @@ NTSTATUS WINAPI wow64_NtGdiDdDDISetVidPnSourceHwProtection(UINT *args)
     return NtGdiDdDDISetVidPnSourceHwProtection(get_ptr(&args));
 }
 
-NTSTATUS WINAPI wow64_NtGdiDdDDIGetNativeFenceLogDetail(UINT *args)
+NTSTATUS WINAPI wow64_NtDxgkGetNativeFenceLogDetail(UINT *args)
 {
-    return NtGdiDdDDIGetNativeFenceLogDetail(get_ptr(&args));
+    return NtDxgkGetNativeFenceLogDetail(get_ptr(&args));
 }
 
-NTSTATUS WINAPI wow64_NtGdiDdDDIRegisterVailProcess(UINT *args)
+NTSTATUS WINAPI wow64_NtDxgkRegisterVailProcess(UINT *args)
 {
-    return NtGdiDdDDIRegisterVailProcess(get_ptr(&args));
+    return NtDxgkRegisterVailProcess(get_ptr(&args));
 }
 
 NTSTATUS WINAPI wow64_NtGdiDdDDICreateAllocation(UINT *args)
@@ -2107,7 +2128,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDISubmitSignalSyncObjectsToHwQueue(UINT *args)
     return NtGdiDdDDISubmitSignalSyncObjectsToHwQueue(&desc);
 }
 
-NTSTATUS WINAPI wow64_NtGdiDdDDISubmitPresentToHwQueue(UINT *args)
+NTSTATUS WINAPI wow64_NtDxgkSubmitPresentToHwQueue(UINT *args)
 {
     D3DKMT_SUBMITPRESENTTOHWQUEUE32 *desc32 = get_ptr(&args);
     D3DKMT_SUBMITPRESENTTOHWQUEUE desc;
@@ -2120,12 +2141,12 @@ NTSTATUS WINAPI wow64_NtGdiDdDDISubmitPresentToHwQueue(UINT *args)
     status = present_32to64(&desc32->PrivatePresentData, &desc.PrivatePresentData, &regions);
     if (status) return status;
 
-    status = NtGdiDdDDISubmitPresentToHwQueue(&desc);
+    status = NtDxgkSubmitPresentToHwQueue(&desc);
     desc32->PrivatePresentData.bOptimizeForComposition = desc.PrivatePresentData.bOptimizeForComposition;
     return status;
 }
 
-NTSTATUS WINAPI wow64_NtGdiDdDDISubmitPresentBltToHwQueue(UINT *args)
+NTSTATUS WINAPI wow64_NtDxgkSubmitPresentBltToHwQueue(UINT *args)
 {
     const D3DKMT_SUBMITPRESENTBLTTOHWQUEUE32 *desc32 = get_ptr(&args);
     D3DKMT_SUBMITPRESENTBLTTOHWQUEUE desc;
@@ -2138,7 +2159,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDISubmitPresentBltToHwQueue(UINT *args)
     desc.HwQueueProgressFenceId = desc32->HwQueueProgressFenceId;
     status = present_32to64(&desc32->PrivatePresentData, &desc.PrivatePresentData, &regions);
     if (status) return status;
-    return NtGdiDdDDISubmitPresentBltToHwQueue(&desc);
+    return NtDxgkSubmitPresentBltToHwQueue(&desc);
 }
 
 NTSTATUS WINAPI wow64_NtGdiDdDDICreateOverlay(UINT *args)
