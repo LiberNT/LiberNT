@@ -764,8 +764,6 @@
     SVC_(UserGetWindowDpiAwarenessContext, 1)
     SVC_(UserSetThreadDpiAwarenessContext, 1)
     /* WDDM 2.0 D3DKMT additions (ReactOS) */
-    SVC_(GdiDdDDIWaitForSynchronizationObject2, 1)
-    SVC_(GdiDdDDISignalSynchronizationObject2, 1)
     SVC_(GdiDdDDIMakeResident, 1)
     SVC_(GdiDdDDIEvict, 1)
     SVC_(GdiDdDDIQueryVideoMemoryInfo, 1)

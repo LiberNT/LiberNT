@@ -17,6 +17,7 @@ extern void func_softgpu_occlusion(void);
 extern void func_softgpu_tdr(void);
 extern void func_hwqueue(void);
 extern void func_sync2(void);
+extern void func_syncver(void);
 extern void func_fencestorage(void);
 extern void func_videomem(void);
 extern void func_enum2(void);
@@ -114,6 +115,7 @@ const struct test winetest_testlist[] =
     { "softgpu_tdr", func_softgpu_tdr },
     { "hwqueue",       func_hwqueue },
     { "sync2",         func_sync2 },
+    { "syncver",       func_syncver },
     { "fencestorage",  func_fencestorage },
     { "videomem",      func_videomem },
     { "enum2",         func_enum2 },

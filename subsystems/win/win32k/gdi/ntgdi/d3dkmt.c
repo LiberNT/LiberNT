@@ -1403,24 +1403,6 @@ NtGdiDdDDIOpenSynchronizationObject(_Inout_ D3DKMT_OPENSYNCHRONIZATIONOBJECT* un
 
 NTSTATUS
 APIENTRY
-NtGdiDdDDIWaitForSynchronizationObject2(_In_ const D3DKMT_WAITFORSYNCHRONIZATIONOBJECT2* unnamedParam1)
-{
-    RETURN_STATUS_IF_NULL(unnamedParam1);
-    /* The bridge owns top-level capture and all field validation. */
-    D3DKMT_CALL_CALLBACK(RxgkIntPfnWaitForSynchronizationObject2, unnamedParam1);
-}
-
-NTSTATUS
-APIENTRY
-NtGdiDdDDISignalSynchronizationObject2(_In_ const D3DKMT_SIGNALSYNCHRONIZATIONOBJECT2* unnamedParam1)
-{
-    RETURN_STATUS_IF_NULL(unnamedParam1);
-    /* The bridge owns top-level capture and all field validation. */
-    D3DKMT_CALL_CALLBACK(RxgkIntPfnSignalSynchronizationObject2, unnamedParam1);
-}
-
-NTSTATUS
-APIENTRY
 NtGdiDdDDICreateKeyedMutex(_Inout_ D3DKMT_CREATEKEYEDMUTEX* unnamedParam1)
 {
     NTSTATUS Status = D3dkmtValidateWddmThunk(unnamedParam1);
@@ -1528,10 +1510,11 @@ NtGdiDdDDIWaitForIdle(_In_ const D3DKMT_WAITFORIDLE* unnamedParam1)
 
 NTSTATUS
 APIENTRY
-NtGdiDdDDIWaitForSynchronizationObject(_In_ const D3DKMT_WAITFORSYNCHRONIZATIONOBJECT* unnamedParam1)
+NtGdiDdDDIWaitForSynchronizationObject(_In_ const D3DKMT_WAITFORSYNCHRONIZATIONOBJECT2* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    D3DKMT_CALL_CALLBACK(RxgkIntPfnWaitForSynchronizationObject, unnamedParam1);
+    /* The bridge owns top-level capture and all field validation. */
+    D3DKMT_CALL_CALLBACK(RxgkIntPfnWaitForSynchronizationObject2, unnamedParam1);
 }
 
 NTSTATUS
@@ -1544,10 +1527,11 @@ NtGdiDdDDIWaitForVerticalBlankEvent(_In_ const D3DKMT_WAITFORVERTICALBLANKEVENT*
 
 NTSTATUS
 APIENTRY
-NtGdiDdDDISignalSynchronizationObject(_In_ const D3DKMT_SIGNALSYNCHRONIZATIONOBJECT* unnamedParam1)
+NtGdiDdDDISignalSynchronizationObject(_In_ const D3DKMT_SIGNALSYNCHRONIZATIONOBJECT2* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    D3DKMT_CALL_CALLBACK(RxgkIntPfnSignalSynchronizationObject, unnamedParam1);
+    /* The bridge owns top-level capture and all field validation. */
+    D3DKMT_CALL_CALLBACK(RxgkIntPfnSignalSynchronizationObject2, unnamedParam1);
 }
 
 /* ---- WDDM 1.2 additions ------------------------------------------------ */

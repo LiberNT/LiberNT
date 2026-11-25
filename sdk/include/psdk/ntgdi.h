@@ -4302,29 +4302,16 @@ W32KAPI
 NTSTATUS
 APIENTRY
 NtGdiDdDDISignalSynchronizationObject(
-    _In_ const D3DKMT_SIGNALSYNCHRONIZATIONOBJECT* unnamedParam1);
+    _In_ const D3DKMT_SIGNALSYNCHRONIZATIONOBJECT2* unnamedParam1);
 
 __kernel_entry
 W32KAPI
 NTSTATUS
 APIENTRY
 NtGdiDdDDIWaitForSynchronizationObject(
-    _In_ const D3DKMT_WAITFORSYNCHRONIZATIONOBJECT* unnamedParam1);
-
-/* WDDM 2.0 D3DKMT additions (ReactOS) */
-__kernel_entry
-W32KAPI
-NTSTATUS
-APIENTRY
-NtGdiDdDDIWaitForSynchronizationObject2(
     _In_ const D3DKMT_WAITFORSYNCHRONIZATIONOBJECT2* unnamedParam1);
 
-__kernel_entry
-W32KAPI
-NTSTATUS
-APIENTRY
-NtGdiDdDDISignalSynchronizationObject2(
-    _In_ const D3DKMT_SIGNALSYNCHRONIZATIONOBJECT2* unnamedParam1);
+/* WDDM 2.0 D3DKMT additions (ReactOS) */
 
 /*
  * The WDDM 2.0 residency / paging-queue / video-memory structures are gated

@@ -40,3 +40,40 @@ D3DKMTCreateSynchronizationObject(
         pData->hSyncObject = Create.hSyncObject;
     return Status;
 }
+
+NTSTATUS
+APIENTRY
+D3DKMTSignalSynchronizationObject(
+    _In_ CONST D3DKMT_SIGNALSYNCHRONIZATIONOBJECT *pData)
+{
+    D3DKMT_SIGNALSYNCHRONIZATIONOBJECT2 Signal;
+
+    C_ASSERT(sizeof(Signal.ObjectHandleArray) == sizeof(pData->ObjectHandleArray));
+
+    if (pData == NULL)
+        return STATUS_INVALID_PARAMETER;
+    RtlZeroMemory(&Signal, sizeof(Signal));
+    Signal.hContext = pData->hContext;
+    Signal.ObjectCount = pData->ObjectCount;
+    RtlCopyMemory(Signal.ObjectHandleArray, pData->ObjectHandleArray, sizeof(Signal.ObjectHandleArray));
+    Signal.Flags = pData->Flags;
+    return NtGdiDdDDISignalSynchronizationObject(&Signal);
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTWaitForSynchronizationObject(
+    _In_ CONST D3DKMT_WAITFORSYNCHRONIZATIONOBJECT *pData)
+{
+    D3DKMT_WAITFORSYNCHRONIZATIONOBJECT2 Wait;
+
+    C_ASSERT(sizeof(Wait.ObjectHandleArray) == sizeof(pData->ObjectHandleArray));
+
+    if (pData == NULL)
+        return STATUS_INVALID_PARAMETER;
+    RtlZeroMemory(&Wait, sizeof(Wait));
+    Wait.hContext = pData->hContext;
+    Wait.ObjectCount = pData->ObjectCount;
+    RtlCopyMemory(Wait.ObjectHandleArray, pData->ObjectHandleArray, sizeof(Wait.ObjectHandleArray));
+    return NtGdiDdDDIWaitForSynchronizationObject(&Wait);
+}

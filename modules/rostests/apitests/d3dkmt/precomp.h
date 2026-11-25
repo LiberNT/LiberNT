@@ -130,7 +130,9 @@ LoadD3DKMTProc(const char *Name)
     if (Proc || strncmp(Name, "D3DKMT", 6) != 0)
         return Proc;
     /* The Windows 11 service takes the version 2 structure; the version 1 entry point converts in user mode */
-    if (strcmp(Name, "D3DKMTCreateSynchronizationObject") == 0)
+    if (strcmp(Name, "D3DKMTCreateSynchronizationObject") == 0 ||
+        strcmp(Name, "D3DKMTSignalSynchronizationObject") == 0 ||
+        strcmp(Name, "D3DKMTWaitForSynchronizationObject") == 0)
         return NULL;
 
     /* Windows PE forwards the gdi32 entry points to an API set it does not ship: reach the win32u services */

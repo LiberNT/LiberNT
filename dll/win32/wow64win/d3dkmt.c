@@ -72,7 +72,6 @@ W32KAPI NTSTATUS WINAPI NtGdiDdDDIReclaimAllocations2(D3DKMT_RECLAIMALLOCATIONS2
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIGetResourcePresentPrivateDriverData(D3DDDI_GETRESOURCEPRESENTPRIVATEDRIVERDATA *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIRegisterTrimNotification(D3DKMT_REGISTERTRIMNOTIFICATION *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIUnregisterTrimNotification(D3DKMT_UNREGISTERTRIMNOTIFICATION *desc);
-W32KAPI NTSTATUS WINAPI NtGdiDdDDISignalSynchronizationObject2(const D3DKMT_SIGNALSYNCHRONIZATIONOBJECT2 *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDISignalSynchronizationObjectFromGpu(const D3DKMT_SIGNALSYNCHRONIZATIONOBJECTFROMGPU *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDISignalSynchronizationObjectFromGpu2(const D3DKMT_SIGNALSYNCHRONIZATIONOBJECTFROMGPU2 *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDICreateHwContext(D3DKMT_CREATEHWCONTEXT *desc);
@@ -104,9 +103,8 @@ W32KAPI NTSTATUS WINAPI NtGdiDdDDISetDisplayMode(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDISetDisplayPrivateDriverFormat(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDISharedPrimaryLockNotification(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDISharedPrimaryUnLockNotification(void *desc);
-W32KAPI NTSTATUS WINAPI NtGdiDdDDISignalSynchronizationObject(void *desc);
+W32KAPI NTSTATUS WINAPI NtGdiDdDDISignalSynchronizationObject(const D3DKMT_SIGNALSYNCHRONIZATIONOBJECT2 *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIWaitForSynchronizationObject(void *desc);
-W32KAPI NTSTATUS WINAPI NtGdiDdDDIWaitForSynchronizationObject2(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIReserveGpuVirtualAddress(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIGetOverlayState(void *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDICheckSharedResourceAccess(void *desc);
@@ -1243,19 +1241,9 @@ NTSTATUS WINAPI wow64_NtGdiDdDDISharedPrimaryUnLockNotification(UINT *args)
     return NtGdiDdDDISharedPrimaryUnLockNotification(get_ptr(&args));
 }
 
-NTSTATUS WINAPI wow64_NtGdiDdDDISignalSynchronizationObject(UINT *args)
-{
-    return NtGdiDdDDISignalSynchronizationObject(get_ptr(&args));
-}
-
 NTSTATUS WINAPI wow64_NtGdiDdDDIWaitForSynchronizationObject(UINT *args)
 {
     return NtGdiDdDDIWaitForSynchronizationObject(get_ptr(&args));
-}
-
-NTSTATUS WINAPI wow64_NtGdiDdDDIWaitForSynchronizationObject2(UINT *args)
-{
-    return NtGdiDdDDIWaitForSynchronizationObject2(get_ptr(&args));
 }
 
 NTSTATUS WINAPI wow64_NtGdiDdDDIReserveGpuVirtualAddress(UINT *args)
@@ -1994,7 +1982,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIUnregisterTrimNotification(UINT *args)
     return status;
 }
 
-NTSTATUS WINAPI wow64_NtGdiDdDDISignalSynchronizationObject2(UINT *args)
+NTSTATUS WINAPI wow64_NtGdiDdDDISignalSynchronizationObject(UINT *args)
 {
     const D3DKMT_SIGNALSYNCHRONIZATIONOBJECT2_32 *desc32 = get_ptr(&args);
     D3DKMT_SIGNALSYNCHRONIZATIONOBJECT2 desc;
@@ -2003,7 +1991,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDISignalSynchronizationObject2(UINT *args)
     memcpy(&desc, desc32, sizeof(desc));
     if (desc32->Flags.EnqueueCpuEvent)
         desc.CpuEventHandle = LongToHandle(desc32->CpuEventHandle);
-    return NtGdiDdDDISignalSynchronizationObject2(&desc);
+    return NtGdiDdDDISignalSynchronizationObject(&desc);
 }
 
 NTSTATUS WINAPI wow64_NtGdiDdDDISignalSynchronizationObjectFromGpu(UINT *args)
