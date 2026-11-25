@@ -117,6 +117,97 @@ TestAllocatePagesForMdl(VOID)
 }
 
 static
+PMDL
+AllocateInHighestRange(
+    _Out_ PPHYSICAL_ADDRESS Low,
+    _Out_ PPHYSICAL_ADDRESS High)
+{
+    PPHYSICAL_MEMORY_RANGE Ranges;
+    PHYSICAL_ADDRESS Skip, Below;
+    PMDL Mdl = NULL;
+    ULONG Index, Best;
+
+    Ranges = MmGetPhysicalMemoryRanges();
+    ok(Ranges != NULL, "MmGetPhysicalMemoryRanges failed\n");
+    if (Ranges == NULL)
+        return NULL;
+
+    Skip.QuadPart = 0;
+    Below.QuadPart = -1;
+    for (;;)
+    {
+        Best = MAXULONG;
+        for (Index = 0; Ranges[Index].BaseAddress.QuadPart != 0 || Ranges[Index].NumberOfBytes.QuadPart != 0; Index++)
+        {
+            if ((ULONGLONG)Ranges[Index].BaseAddress.QuadPart < (ULONGLONG)Below.QuadPart &&
+                (Best == MAXULONG || Ranges[Index].BaseAddress.QuadPart > Ranges[Best].BaseAddress.QuadPart))
+            {
+                Best = Index;
+            }
+        }
+        if (Best == MAXULONG)
+            break;
+
+        *Low = Ranges[Best].BaseAddress;
+        High->QuadPart = Ranges[Best].BaseAddress.QuadPart + Ranges[Best].NumberOfBytes.QuadPart - 1;
+        Below = Ranges[Best].BaseAddress;
+        Mdl = MmAllocatePagesForMdlEx(*Low, *High, Skip, 16 * PAGE_SIZE, MmCached, MM_DONT_ZERO_ALLOCATION);
+        if (Mdl != NULL && MmGetMdlByteCount(Mdl) != 0)
+            break;
+        if (Mdl != NULL)
+        {
+            ExFreePool(Mdl);
+            Mdl = NULL;
+        }
+    }
+
+    ExFreePool(Ranges);
+    return Mdl;
+}
+
+static
+VOID
+TestHighestRangeMappable(VOID)
+{
+    PHYSICAL_ADDRESS Low, High;
+    PFN_NUMBER *Pages;
+    PMDL Mdl;
+    PUCHAR Mapped;
+    ULONG Index, Count;
+
+    Mdl = AllocateInHighestRange(&Low, &High);
+    if (skip(Mdl != NULL, "no physical range has a free page\n"))
+        return;
+    trace("highest physical range with free pages %I64x-%I64x\n", Low.QuadPart, High.QuadPart);
+
+    Pages = MmGetMdlPfnArray(Mdl);
+    Count = MmGetMdlByteCount(Mdl) >> PAGE_SHIFT;
+    for (Index = 0; Index < Count; Index++)
+    {
+        ok(((ULONG64)Pages[Index] << PAGE_SHIFT) >= (ULONG64)Low.QuadPart &&
+           ((ULONG64)Pages[Index] << PAGE_SHIFT) <= (ULONG64)High.QuadPart,
+           "page %Ix is outside %I64x-%I64x\n", Pages[Index], Low.QuadPart, High.QuadPart);
+    }
+
+    Mapped = MmMapLockedPagesSpecifyCache(Mdl, KernelMode, MmCached, NULL, FALSE, NormalPagePriority);
+    ok(Mapped != NULL, "pages of the highest physical range could not be mapped\n");
+    if (Mapped != NULL)
+    {
+        for (Index = 0; Index < Count; Index++)
+            Mapped[Index << PAGE_SHIFT] = (UCHAR)(0x5A ^ Index);
+        for (Index = 0; Index < Count; Index++)
+        {
+            ok(Mapped[Index << PAGE_SHIFT] == (UCHAR)(0x5A ^ Index), "page %lu read back %02x\n", Index,
+               Mapped[Index << PAGE_SHIFT]);
+        }
+        MmUnmapLockedPages(Mapped, Mdl);
+    }
+
+    MmFreePagesFromMdl(Mdl);
+    ExFreePool(Mdl);
+}
+
+static
 VOID
 TestCopyMemory(VOID)
 {
@@ -171,5 +262,6 @@ START_TEST(MmPhysical)
     TestAddressValidity();
     TestMdlForNonPagedPool();
     TestAllocatePagesForMdl();
+    TestHighestRangeMappable();
     TestCopyMemory();
 }
