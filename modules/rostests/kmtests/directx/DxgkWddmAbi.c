@@ -17,6 +17,7 @@
 #include "adapter_map_core.h"
 #include "adapter_start_core.h"
 #include "present_list_core.h"
+#include "init_data_core.h"
 
 typedef struct _DXGK_TEST_RESOURCE_LIST
 {
@@ -328,6 +329,80 @@ TestPresentAllocationListBinding(VOID)
     ok_eq_longlong(List[DXGK_PRESENT_DESTINATION_INDEX].PhysicalAddress.QuadPart, 0x6000LL);
 }
 
+static
+VOID
+NTAPI
+InitDataDummy(VOID)
+{
+}
+
+static
+VOID
+FillInitData(
+    _Out_ PDRIVER_INITIALIZATION_DATA Data)
+{
+    PULONG_PTR Slots = (PULONG_PTR)Data;
+    ULONG Index;
+
+    for (Index = 0; Index < sizeof(*Data) / sizeof(ULONG_PTR); Index++)
+        Slots[Index] = (ULONG_PTR)InitDataDummy;
+    Data->Version = DXGKDDI_INTERFACE_VERSION_WDDM3_1;
+}
+
+static
+VOID
+TestInitDataRequiredMembers(VOID)
+{
+    static const SIZE_T Required[] =
+    {
+        FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiAddDevice),
+        FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiStartDevice),
+        FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiStopDevice),
+        FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiRemoveDevice),
+        FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiDispatchIoRequest),
+        FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiInterruptRoutine),
+        FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiDpcRoutine),
+        FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiQueryChildRelations),
+        FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiQueryDeviceDescriptor),
+        FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiSetPowerState),
+        FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiResetDevice),
+        FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiUnload),
+    };
+    static const SIZE_T Measured64[] = { 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38, 0x40, 0x50, 0x58, 0x68, 0x70 };
+    DRIVER_INITIALIZATION_DATA Data;
+    ULONG Index;
+
+    if (sizeof(PVOID) == sizeof(ULONGLONG))
+    {
+        for (Index = 0; Index < RTL_NUMBER_OF(Required); Index++)
+            ok_eq_size(Required[Index], Measured64[Index]);
+        ok_eq_size(FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiQueryChildStatus), (SIZE_T)0x48);
+        ok_eq_size(FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiQueryConnectionChange), (SIZE_T)0x3E8);
+    }
+
+    FillInitData(&Data);
+    ok(DxgkInitDataCoreHasRequiredMembers(&Data, sizeof(Data)), "a complete table was refused\n");
+    for (Index = 0; Index < RTL_NUMBER_OF(Required); Index++)
+    {
+        FillInitData(&Data);
+        *(PULONG_PTR)((PUCHAR)&Data + Required[Index]) = 0;
+        ok(!DxgkInitDataCoreHasRequiredMembers(&Data, sizeof(Data)),
+           "a table without the member at offset 0x%Ix was accepted\n", Required[Index]);
+    }
+
+    FillInitData(&Data);
+    Data.DxgkDdiNotifyAcpiEvent = NULL;
+    ok(DxgkInitDataCoreHasRequiredMembers(&Data, sizeof(Data)), "DxgkDdiNotifyAcpiEvent was required\n");
+
+    FillInitData(&Data);
+    Data.DxgkDdiQueryChildStatus = NULL;
+    ok(DxgkInitDataCoreHasRequiredMembers(&Data, sizeof(Data)), "DxgkDdiQueryConnectionChange did not stand in for DxgkDdiQueryChildStatus\n");
+    ok(!DxgkInitDataCoreHasRequiredMembers(&Data, FIELD_OFFSET(DRIVER_INITIALIZATION_DATA, DxgkDdiQueryConnectionChange)),
+       "a table too short for DxgkDdiQueryConnectionChange was accepted without DxgkDdiQueryChildStatus\n");
+    Data.DxgkDdiQueryConnectionChange = NULL;
+    ok(!DxgkInitDataCoreHasRequiredMembers(&Data, sizeof(Data)), "a table without both child status members was accepted\n");
+}
+
 START_TEST(DxgkWddmAbi)
 {
     TestPresentAllocationListBinding();
@@ -337,6 +412,7 @@ START_TEST(DxgkWddmAbi)
     TestVsyncControlDdiSelection();
     TestVsyncControlStatus();
     TestNativeFenceStatus();
+    TestInitDataRequiredMembers();
 
     ok_eq_ulong(DXGKDDI_INTERFACE_VERSION_WDDM2_4, 0x9006);
     ok_eq_ulong(DXGKDDI_INTERFACE_VERSION_WDDM2_5, 0xA00B);

@@ -52,6 +52,7 @@
 /* dxgkrnl_private.h includes NDEBUG, <debug.h>, and "debug.h" via PCH. */
 #include "dxgkrnl_private.h"
 #include "vidmm.h"
+#include "init_data_core.h"
 #include "vidsch.h"
 #include "present.h"
 #include "pnp.h"
@@ -18767,18 +18768,25 @@ DxgkpInitializeMiniport(
         return STATUS_INVALID_PARAMETER;
     }
 
-    /* The four PnP lifecycle callbacks are required as one transaction. */
-    if (DriverInitializationData->DxgkDdiAddDevice == NULL ||
-        DriverInitializationData->DxgkDdiStartDevice == NULL ||
-        DriverInitializationData->DxgkDdiStopDevice == NULL ||
-        DriverInitializationData->DxgkDdiRemoveDevice == NULL)
+    if (UseDodLayout)
     {
-        DXGKRNL_ERR("DxgkpInitializeMiniport: mandatory lifecycle callback missing (AddDevice=%p StartDevice=%p StopDevice=%p RemoveDevice=%p)\n",
-                    DriverInitializationData->DxgkDdiAddDevice,
-                    DriverInitializationData->DxgkDdiStartDevice,
-                    DriverInitializationData->DxgkDdiStopDevice,
-                    DriverInitializationData->DxgkDdiRemoveDevice);
-        return STATUS_INVALID_PARAMETER;
+        if (DriverInitializationData->DxgkDdiAddDevice == NULL ||
+            DriverInitializationData->DxgkDdiStartDevice == NULL ||
+            DriverInitializationData->DxgkDdiStopDevice == NULL ||
+            DriverInitializationData->DxgkDdiRemoveDevice == NULL)
+        {
+            DXGKRNL_ERR("DxgkpInitializeMiniport: mandatory lifecycle callback missing (AddDevice=%p StartDevice=%p StopDevice=%p RemoveDevice=%p)\n",
+                        DriverInitializationData->DxgkDdiAddDevice,
+                        DriverInitializationData->DxgkDdiStartDevice,
+                        DriverInitializationData->DxgkDdiStopDevice,
+                        DriverInitializationData->DxgkDdiRemoveDevice);
+            return STATUS_INVALID_PARAMETER;
+        }
+    }
+    else if (!DxgkInitDataCoreHasRequiredMembers(DriverInitializationData, DriverInitDataSize))
+    {
+        DXGKRNL_ERR("DxgkpInitializeMiniport: a member every full miniport must supply is missing\n");
+        return STATUS_REVISION_MISMATCH;
     }
 
     /*
