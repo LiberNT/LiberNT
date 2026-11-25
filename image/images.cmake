@@ -1029,6 +1029,11 @@ if(DEFINED EFI_PLATFORM_ID)
         add_cd_file(TARGET bootloader${_uefi_media_store}bcd
                     FILE ${REACTOS_BINARY_DIR}/bootloader/image/${_uefi_media_store}/BCD
                     DESTINATION loader NO_CAB NAME_ON_CD media.bcd FOR bootcd)
+        # A USB drive holding a file copy of this medium starts efi/boot with no access to efisys.bin.
+        add_cd_file(TARGET bootloader${_uefi_media_store}bcd
+                    FILE ${REACTOS_BINARY_DIR}/bootloader/image/${_uefi_media_store}/BCD
+                    DESTINATION efi/LiberNT/Boot NO_CAB NAME_ON_CD BCD FOR bootcd)
+        add_cd_file(TARGET winload DESTINATION efi/LiberNT/Boot NO_CAB NAME_ON_CD winload.efi FOR bootcd)
     endif()
     if(BOOTLOADER_UEFI AND (ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64") AND NOT MSVC)
         add_cd_file(TARGET bootmgrbios FILE ${REACTOS_BINARY_DIR}/bootloader/bootmgr DESTINATION root NO_CAB FOR bootcd)
