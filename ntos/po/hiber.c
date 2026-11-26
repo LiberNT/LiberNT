@@ -1077,6 +1077,8 @@ PopReserveHiberFileFromCaller(
     _In_ ULONG OutputBufferLength)
 {
     BOOLEAN Enable;
+    NTSTATUS Status;
+    ULONG Value;
 
     PAGED_CODE();
 
@@ -1093,7 +1095,14 @@ PopReserveHiberFileFromCaller(
     }
 
     Enable = *(volatile BOOLEAN *)InputBuffer;
-    return PopHiberReserve(Enable != FALSE);
+    Status = PopHiberReserve(Enable != FALSE);
+    if (NT_SUCCESS(Status))
+    {
+        Value = Enable ? 1 : 0;
+        Status = RtlWriteRegistryValue(RTL_REGISTRY_CONTROL, L"Power", L"HibernateEnabled",
+                                       REG_DWORD, &Value, sizeof(Value));
+    }
+    return Status;
 }
 
 VOID
