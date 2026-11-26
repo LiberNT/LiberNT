@@ -152,6 +152,7 @@ jobs:
         [ -n "${{matrix.profile}}" ] && FLAGS="$FLAGS -DROSCONFIG_PROFILE=${{matrix.profile}}"
         [ "${{matrix.compiler}}" = "clang" ] && case "${{matrix.arch}}" in amd64|arm64|riscv64) FLAGS="$FLAGS -DENABLE_MESA_LLVMPIPE=ON" ;; esac
         [ "$BUILD_TYPE" = "release" ] && case "${{matrix.arch}}" in i386|amd64) FLAGS="$FLAGS -DBOOTLOADER_WIM_RAMDISK=ON" ;; esac
+        [ "$BUILD_TYPE" = "release" ] && [ "${{matrix.compiler}}" = "clang" ] && FLAGS="$FLAGS -DENABLE_LNTWEB=ON"
         [ "$LIVE_CD" = "true" ] || FLAGS="$FLAGS -DPREINSTALL_IMAGE_SIZE_MB=4096"
         ./configure.sh $FLAGS -a ${{matrix.arch}} \
           -DREACTOS_TARGET_NT=0xA00 \
