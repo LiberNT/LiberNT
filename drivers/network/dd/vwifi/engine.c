@@ -88,6 +88,21 @@ VWifiInitFakeBssList(
     Bss->CapabilityInformation = VWIFI_CAP_ESS | VWIFI_CAP_SHORT_PREAMBLE;
     Bss->AuthAlgorithm = DOT11_AUTH_ALGO_80211_OPEN;
     Bss->RoamAfterConnect = TRUE;
+
+    /* "ReactOS-Rejoin": associates again on its own once the OS has disconnected it. */
+    Bss = &Adapter->Bss[Adapter->BssCount++];
+    Bss->Bssid[0] = 0x02; Bss->Bssid[1] = 0x11; Bss->Bssid[2] = 0x22;
+    Bss->Bssid[3] = 0x33; Bss->Bssid[4] = 0x44; Bss->Bssid[5] = 0x88;
+    Bss->BssType = dot11_BSS_type_infrastructure;
+    RtlCopyMemory(Bss->Ssid, "ReactOS-Rejoin", sizeof("ReactOS-Rejoin") - 1);
+    Bss->SsidLength = sizeof("ReactOS-Rejoin") - 1;
+    Bss->ChannelNumber = 1;
+    Bss->ChCenterFrequency = VWifiChannelToFrequency(1);    /* 2412 MHz */
+    Bss->Rssi = -45;
+    Bss->LinkQuality = 85;
+    Bss->CapabilityInformation = VWIFI_CAP_ESS | VWIFI_CAP_SHORT_PREAMBLE;
+    Bss->AuthAlgorithm = DOT11_AUTH_ALGO_80211_OPEN;
+    Bss->RejoinAfterDisconnect = TRUE;
 }
 
 /* Build the minimal beacon-IE blob (SSID, supported rates, DS parameters) for
@@ -658,6 +673,7 @@ VWifiEngineWorker(
                 NdisAcquireSpinLock(&Adapter->Lock);
                 Adapter->ConnState = VWifiConnected;
                 Adapter->ConnectedBssIndex = (ULONG)BssIndex;
+                Adapter->Rejoined = FALSE;
                 Adapter->Dot11.CurrentChannel = Bss->ChannelNumber;
                 NdisReleaseSpinLock(&Adapter->Lock);
 
@@ -707,15 +723,49 @@ VWifiEngineWorker(
 
         case VWifiJobDisconnect:
         {
+            BOOLEAN Rejoin = FALSE;
+
             DPRINT1("VWIFI: disconnect -> DISASSOCIATION + link down\n");
             VWifiIndicateDisassociation(Adapter,
                                         DOT11_DISASSOC_REASON_OS);
 
             NdisAcquireSpinLock(&Adapter->Lock);
+            if (Adapter->ConnState != VWifiDisconnected &&
+                Adapter->ConnectedBssIndex < Adapter->BssCount &&
+                Adapter->Bss[Adapter->ConnectedBssIndex].RejoinAfterDisconnect &&
+                !Adapter->Rejoined)
+            {
+                Adapter->Rejoined = TRUE;
+                Rejoin = TRUE;
+            }
             Adapter->ConnState = VWifiDisconnected;
             NdisReleaseSpinLock(&Adapter->Lock);
 
             VWifiIndicateLinkState(Adapter, FALSE);
+            if (Rejoin)
+                VWifiScheduleJob(Adapter, VWifiJobRejoin, 300);
+            break;
+        }
+
+        case VWifiJobRejoin:
+        {
+            PVWIFI_FAKE_BSS Bss = NULL;
+
+            NdisAcquireSpinLock(&Adapter->Lock);
+            if (Adapter->ConnState == VWifiDisconnected &&
+                Adapter->ConnectedBssIndex < Adapter->BssCount)
+            {
+                Bss = &Adapter->Bss[Adapter->ConnectedBssIndex];
+                Adapter->ConnState = VWifiConnected;
+            }
+            NdisReleaseSpinLock(&Adapter->Lock);
+
+            if (Bss == NULL)
+                break;
+
+            DPRINT1("VWIFI: associating again without a connect request\n");
+            VWifiIndicateAssocStart(Adapter, Bss);
+            VWifiIndicateAssocComplete(Adapter, Bss, DOT11_ASSOC_STATUS_SUCCESS);
             break;
         }
 

@@ -47,6 +47,16 @@ static const WCHAR RoamProfileXml[] =
     L"<encryption>none</encryption><useOneX>false</useOneX></authEncryption></security></MSM>"
     L"</WLANProfile>";
 
+static const WCHAR RejoinProfileXml[] =
+    L"<?xml version=\"1.0\"?>"
+    L"<WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\">"
+    L"<name>ReactOS-Rejoin</name>"
+    L"<SSIDConfig><SSID><name>ReactOS-Rejoin</name></SSID></SSIDConfig>"
+    L"<connectionType>ESS</connectionType><connectionMode>manual</connectionMode>"
+    L"<MSM><security><authEncryption><authentication>open</authentication>"
+    L"<encryption>none</encryption><useOneX>false</useOneX></authEncryption></security></MSM>"
+    L"</WLANProfile>";
+
 static CRITICAL_SECTION EventLock;
 static HANDLE EventSignal;
 static TEST_EVENT Events[MAX_EVENTS];
@@ -253,6 +263,35 @@ TestRoamAfterFailedAttempt(HANDLE Client, const GUID *Interface)
     WlanDeleteProfile(Client, Interface, L"ReactOS-Roam", NULL);
 }
 
+static VOID
+TestUnrequestedAssociation(HANDLE Client, const GUID *Interface)
+{
+    WLAN_REASON_CODE Reason = 0;
+    LONG Mark;
+
+    Mark = EventMark();
+    if (ConnectProfile(Client, Interface, RejoinProfileXml, L"ReactOS-Rejoin") != ERROR_SUCCESS)
+        return;
+
+    ok(WaitEvent(Mark, WLAN_NOTIFICATION_SOURCE_ACM, wlan_notification_acm_connection_complete, 5000, &Reason),
+       "ReactOS-Rejoin did not connect\n");
+    ok(Reason == WLAN_REASON_CODE_SUCCESS, "Connection completed with reason 0x%lx\n", Reason);
+
+    ok(WlanDisconnect(Client, Interface, NULL) == ERROR_SUCCESS, "WlanDisconnect failed\n");
+    ok(WaitState(Client, Interface, wlan_interface_state_disconnected, 3000),
+       "Interface state is %d after the disconnect, expected disconnected\n", QueryState(Client, Interface));
+
+    Mark = EventMark();
+    ok(!WaitState(Client, Interface, wlan_interface_state_connected, 1500),
+       "The interface connected again after an association it did not request\n");
+    ok(QueryState(Client, Interface) == wlan_interface_state_disconnected,
+       "Interface state is %d, expected disconnected\n", QueryState(Client, Interface));
+    ok(!FindEvent(Mark, WLAN_NOTIFICATION_SOURCE_ACM, wlan_notification_acm_connection_complete, NULL),
+       "A connection completed after the disconnect\n");
+
+    WlanDeleteProfile(Client, Interface, L"ReactOS-Rejoin", NULL);
+}
+
 START_TEST(WlanConnectionRecovery)
 {
     SP_DEVINFO_DATA Device;
@@ -291,6 +330,7 @@ START_TEST(WlanConnectionRecovery)
 
             TestRoamAfterFailedAttempt(Client, &Interface);
             TestStalledHandshake(Client, &Interface);
+            TestUnrequestedAssociation(Client, &Interface);
 
             WlanRegisterNotification(Client, WLAN_NOTIFICATION_SOURCE_NONE, FALSE, NULL, NULL, NULL, NULL);
         }
