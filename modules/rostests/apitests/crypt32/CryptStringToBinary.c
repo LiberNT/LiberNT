@@ -3,54 +3,52 @@
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Tests CryptStringToBinary modifier flags
  * COPYRIGHT:   Copyright 2026 xor2003
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <apitest.h>
+#include <winnls.h>
 #include <wincrypt.h>
 
 static void
-TestStrictBase64(void)
+TestDecode(PCSTR String, DWORD Flags, BOOL Expected, DWORD ExpectedError)
 {
-    static const char Plain[] = "QQ==";
-    BYTE Buf[16];
-    DWORD Size, Skip;
+    WCHAR WideString[32];
+    BYTE Buffer[16];
+    DWORD Size;
+    BOOL Result;
 
-    /* Plain base64 decodes with and without the STRICT modifier */
-    Size = sizeof(Buf);
-    ok(CryptStringToBinaryA(Plain, 0, CRYPT_STRING_BASE64, Buf, &Size, &Skip, NULL),
-       "CryptStringToBinaryA(BASE64) failed, error %lu\n", GetLastError());
-    ok(Size == 1 && Buf[0] == 'A', "BASE64 decoded %lu bytes, first 0x%02x\n", Size, Buf[0]);
-
-    Size = sizeof(Buf);
+    Size = sizeof(Buffer);
     SetLastError(0xdeadbeef);
-    ok(CryptStringToBinaryA(Plain, 0, CRYPT_STRING_BASE64 | CRYPT_STRING_STRICT,
-                            Buf, &Size, &Skip, NULL),
-       "CryptStringToBinaryA(BASE64|STRICT) failed, error %lu\n", GetLastError());
-    ok(Size == 1 && Buf[0] == 'A', "BASE64|STRICT decoded %lu bytes, first 0x%02x\n", Size, Buf[0]);
+    Result = CryptStringToBinaryA(String, 0, Flags, Buffer, &Size, NULL, NULL);
+    ok(Result == Expected, "A '%s' %08lx returned %d, error %lu\n", String, Flags, Result, GetLastError());
+    if (Result)
+        ok(Size == 1 && Buffer[0] == 'A', "A '%s' %08lx decoded %lu bytes, first 0x%02x\n", String, Flags, Size, Buffer[0]);
+    else
+        ok(GetLastError() == ExpectedError, "A '%s' %08lx error %lu\n", String, Flags, GetLastError());
 
-}
-
-static void
-TestModifierFlagsAccepted(void)
-{
-    static const char Plain[] = "QQ==";
-    BYTE Buf[16];
-    DWORD Size, Skip;
-
-    /* NOCR and NOCRLF are documented CryptStringToBinary modifiers and must
-       not be reported as an invalid dwFlags value */
-    Size = sizeof(Buf);
-    ok(CryptStringToBinaryA(Plain, 0, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCR,
-                            Buf, &Size, &Skip, NULL),
-       "CryptStringToBinaryA(BASE64|NOCR) failed, error %lu\n", GetLastError());
-    Size = sizeof(Buf);
-    ok(CryptStringToBinaryA(Plain, 0, CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF,
-                            Buf, &Size, &Skip, NULL),
-       "CryptStringToBinaryA(BASE64|NOCRLF) failed, error %lu\n", GetLastError());
+    MultiByteToWideChar(CP_ACP, 0, String, -1, WideString, _countof(WideString));
+    Size = sizeof(Buffer);
+    SetLastError(0xdeadbeef);
+    Result = CryptStringToBinaryW(WideString, 0, Flags, Buffer, &Size, NULL, NULL);
+    ok(Result == Expected, "W '%s' %08lx returned %d, error %lu\n", String, Flags, Result, GetLastError());
+    if (Result)
+        ok(Size == 1 && Buffer[0] == 'A', "W '%s' %08lx decoded %lu bytes, first 0x%02x\n", String, Flags, Size, Buffer[0]);
+    else
+        ok(GetLastError() == ExpectedError, "W '%s' %08lx error %lu\n", String, Flags, GetLastError());
 }
 
 START_TEST(CryptStringToBinary)
 {
-    TestStrictBase64();
-    TestModifierFlagsAccepted();
+    TestDecode("QQ==", CRYPT_STRING_BASE64, TRUE, 0);
+    TestDecode("QQ==", CRYPT_STRING_BASE64 | CRYPT_STRING_STRICT, TRUE, 0);
+    TestDecode("QQ", CRYPT_STRING_BASE64 | CRYPT_STRING_STRICT, TRUE, 0);
+    TestDecode("Q Q==", CRYPT_STRING_BASE64 | CRYPT_STRING_STRICT, TRUE, 0);
+    TestDecode("QQ==\r\n", CRYPT_STRING_BASE64 | CRYPT_STRING_STRICT, TRUE, 0);
+    TestDecode("QQ==x", CRYPT_STRING_BASE64, TRUE, 0);
+    TestDecode("QQ==x", CRYPT_STRING_BASE64 | CRYPT_STRING_STRICT, FALSE, ERROR_INVALID_DATA);
+
+    /* NOCR and NOCRLF only apply to encoding */
+    TestDecode("QQ==", CRYPT_STRING_BASE64 | CRYPT_STRING_NOCR, FALSE, ERROR_INVALID_DATA);
+    TestDecode("QQ==", CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, FALSE, ERROR_INVALID_DATA);
 }

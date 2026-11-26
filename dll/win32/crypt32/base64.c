@@ -802,6 +802,26 @@ invalid:
     return ERROR_INVALID_DATA;
 }
 
+#ifdef __REACTOS__
+static BOOL Base64StrictTail(const void *pszString, BOOL wide, DWORD cchString)
+{
+    BOOL padding = FALSE;
+    DWORD i;
+
+    for (i = 0; i < cchString; i++)
+    {
+        int c = wide ? (int)((const WCHAR *)pszString)[i] : (int)((const char *)pszString)[i];
+        int d = decodeBase64Byte(c);
+
+        if (d == BASE64_DECODE_PADDING)
+            padding = TRUE;
+        else if (padding && d != BASE64_DECODE_WHITESPACE)
+            return FALSE;
+    }
+    return TRUE;
+}
+#endif
+
 static LONG Base64ToBinaryA(LPCSTR pszString, DWORD cchString,
  BYTE *pbBinary, DWORD *pcbBinary, DWORD *pdwSkip, DWORD *pdwFlags)
 {
@@ -1075,12 +1095,20 @@ BOOL WINAPI CryptStringToBinaryA(LPCSTR pszString,
         return FALSE;
     }
     /* Only the bottom byte contains valid types */
-    if (dwFlags & ~(CRYPT_STRING_STRICT | CRYPT_STRING_NOCRLF | CRYPT_STRING_NOCR | 0xf))
+#ifdef __REACTOS__
+    if (dwFlags & ~(CRYPT_STRING_STRICT | 0xf))
+#else
+    if (dwFlags & 0xfffffff0)
+#endif
     {
         SetLastError(ERROR_INVALID_DATA);
         return FALSE;
     }
+#ifdef __REACTOS__
     switch (dwFlags & 0xf)
+#else
+    switch (dwFlags)
+#endif
     {
     case CRYPT_STRING_BASE64_ANY:
         decoder = Base64AnyToBinaryA;
@@ -1117,6 +1145,14 @@ BOOL WINAPI CryptStringToBinaryA(LPCSTR pszString,
     }
     if (!cchString)
         cchString = strlen(pszString);
+#ifdef __REACTOS__
+    if ((dwFlags & CRYPT_STRING_STRICT) && (dwFlags & 0xf) == CRYPT_STRING_BASE64 &&
+        !Base64StrictTail(pszString, FALSE, cchString))
+    {
+        SetLastError(ERROR_INVALID_DATA);
+        return FALSE;
+    }
+#endif
     ret = decoder(pszString, cchString, pbBinary, pcbBinary, pdwSkip, pdwFlags);
     if (ret)
         SetLastError(ret);
@@ -1293,12 +1329,20 @@ BOOL WINAPI CryptStringToBinaryW(LPCWSTR pszString,
         return FALSE;
     }
     /* Only the bottom byte contains valid types */
-    if (dwFlags & ~(CRYPT_STRING_STRICT | CRYPT_STRING_NOCRLF | CRYPT_STRING_NOCR | 0xf))
+#ifdef __REACTOS__
+    if (dwFlags & ~(CRYPT_STRING_STRICT | 0xf))
+#else
+    if (dwFlags & 0xfffffff0)
+#endif
     {
         SetLastError(ERROR_INVALID_DATA);
         return FALSE;
     }
+#ifdef __REACTOS__
     switch (dwFlags & 0xf)
+#else
+    switch (dwFlags)
+#endif
     {
     case CRYPT_STRING_BASE64_ANY:
         decoder = Base64AnyToBinaryW;
@@ -1335,6 +1379,14 @@ BOOL WINAPI CryptStringToBinaryW(LPCWSTR pszString,
     }
     if (!cchString)
         cchString = lstrlenW(pszString);
+#ifdef __REACTOS__
+    if ((dwFlags & CRYPT_STRING_STRICT) && (dwFlags & 0xf) == CRYPT_STRING_BASE64 &&
+        !Base64StrictTail(pszString, TRUE, cchString))
+    {
+        SetLastError(ERROR_INVALID_DATA);
+        return FALSE;
+    }
+#endif
     ret = decoder(pszString, cchString, pbBinary, pcbBinary, pdwSkip, pdwFlags);
     if (ret)
         SetLastError(ret);
