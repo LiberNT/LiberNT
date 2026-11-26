@@ -113,7 +113,7 @@ InbvGetGopFrameBufferInfo(
 NTSTATUS
 NTAPI
 InbvSetVirtualFrameBuffer(
-    _In_opt_ PVOID VirtualFrameBuffer);
+    _In_opt_ PINBV_VIRTUAL_FRAME_BUFFER VirtualFrameBuffer);
 
 NTSTATUS
 NTAPI
@@ -150,6 +150,7 @@ DxgkDetachBootScreen(
     _In_ ULONG PageCount)
 {
     LOADER_PARAMETER_FRAMEBUFFER Fb;
+    INBV_VIRTUAL_FRAME_BUFFER Shadow;
     PVOID Copy;
     PVOID Installed;
     NTSTATUS Status;
@@ -185,7 +186,9 @@ DxgkDetachBootScreen(
         Copy = Installed;
     }
 
-    Status = InbvSetVirtualFrameBuffer(Copy);
+    Shadow.Buffer = Copy;
+    Shadow.Size = Fb.FrameBufferSize;
+    Status = InbvSetVirtualFrameBuffer(&Shadow);
     if (!NT_SUCCESS(Status))
     {
         DXGKRNL_ERR("DxgkDetachBootScreen: the boot video driver keeps the window at 0x%I64x, status 0x%08lX\n",

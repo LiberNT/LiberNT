@@ -7,6 +7,7 @@
 #include "softgpu.h"
 #include "softgpu_2d_core.h"
 #include <loader_framebuffer.h>
+#include <ndk/inbvtypes.h>
 
 #define SOFTGPU_ROOT_WORKING_SURFACE_COUNT 12UL
 
@@ -93,6 +94,7 @@ static PVOID
 SoftGpuDetachBootScreen(VOID)
 {
     PSOFTGPU_SET_VIRTUAL_FRAMEBUFFER SetVirtualFrameBuffer;
+    INBV_VIRTUAL_FRAME_BUFFER Descriptor;
     PVOID Shadow;
 
     if (SoftGpuBootScreenSize == 0 || SoftGpuBootScreenSize > MAXULONG_PTR)
@@ -106,7 +108,9 @@ SoftGpuDetachBootScreen(VOID)
     if (Shadow == NULL)
         return NULL;
 
-    if (!NT_SUCCESS(SetVirtualFrameBuffer(Shadow)))
+    Descriptor.Buffer = Shadow;
+    Descriptor.Size = (SIZE_T)SoftGpuBootScreenSize;
+    if (!NT_SUCCESS(SetVirtualFrameBuffer(&Descriptor)))
     {
         ExFreePoolWithTag(Shadow, SOFTGPU_POOL_TAG);
         return NULL;

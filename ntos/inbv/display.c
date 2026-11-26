@@ -664,15 +664,28 @@ InbvQueryBgrtInfo(
 NTSTATUS
 NTAPI
 InbvSetVirtualFrameBuffer(
-    _In_opt_ PVOID VirtualFrameBuffer)
+    _In_opt_ PINBV_VIRTUAL_FRAME_BUFFER VirtualFrameBuffer)
 {
+    LOADER_PARAMETER_FRAMEBUFFER FrameBufferInfo;
+    PVOID Buffer = NULL;
     NTSTATUS Status;
 
     if (!InbvBootDriverInstalled) return STATUS_DEVICE_NOT_READY;
 
+    if (VirtualFrameBuffer != NULL)
+    {
+        Buffer = VirtualFrameBuffer->Buffer;
+        if (Buffer == NULL) return STATUS_INVALID_PARAMETER;
+        if (InbvGetGopFrameBufferInfo(&FrameBufferInfo) &&
+            VirtualFrameBuffer->Size < FrameBufferInfo.FrameBufferSize)
+        {
+            return STATUS_BUFFER_TOO_SMALL;
+        }
+    }
+
     /* Drawing holds this lock, so none is still going to the previous frame buffer once this returns */
     InbvAcquireLock();
-    Status = VidSetVirtualFrameBuffer(VirtualFrameBuffer);
+    Status = VidSetVirtualFrameBuffer(Buffer);
     InbvReleaseLock();
 
     return Status;

@@ -124,10 +124,38 @@ ZwOpenPartition(
 
 extern NTKERNELAPI POBJECT_TYPE PsPartitionType;
 
+typedef struct _TEST_VIRTUAL_FRAME_BUFFER
+{
+    PVOID Buffer;
+    SIZE_T Size;
+} TEST_VIRTUAL_FRAME_BUFFER, *PTEST_VIRTUAL_FRAME_BUFFER;
+
 NTSTATUS
 NTAPI
 InbvSetVirtualFrameBuffer(
-    _In_opt_ PVOID VirtualFrameBuffer);
+    _In_opt_ PTEST_VIRTUAL_FRAME_BUFFER VirtualFrameBuffer);
+
+BOOLEAN
+NTAPI
+InbvCheckDisplayOwnership(VOID);
+
+VOID
+NTAPI
+InbvAcquireDisplayOwnership(VOID);
+
+VOID
+NTAPI
+InbvNotifyDisplayOwnershipLost(
+    _In_opt_ PVOID Callback);
+
+VOID
+NTAPI
+InbvSolidColorFill(
+    _In_ ULONG Left,
+    _In_ ULONG Top,
+    _In_ ULONG Right,
+    _In_ ULONG Bottom,
+    _In_ ULONG Color);
 
 VOID
 NTAPI
@@ -1448,6 +1476,55 @@ TestModernInbvState(VOID)
     ok_eq_hex(Status, STATUS_SUCCESS);
 }
 
+static
+VOID
+TestVirtualFrameBuffer(VOID)
+{
+    SYSTEM_BOOT_GRAPHICS_INFORMATION Graphics;
+    TEST_VIRTUAL_FRAME_BUFFER Descriptor;
+    PUCHAR Buffer;
+    SIZE_T Size;
+    SIZE_T Index;
+    BOOLEAN Owned;
+    BOOLEAN Drawn = FALSE;
+    ULONG Length = 0;
+    NTSTATUS Status;
+
+    Status = ZwQuerySystemInformation(SystemBootGraphicsInformation, &Graphics, sizeof(Graphics), &Length);
+    if (skip(NT_SUCCESS(Status) && Graphics.Height != 0 && Graphics.PixelStride != 0, "no boot frame buffer\n"))
+        return;
+
+    Size = (SIZE_T)Graphics.Height * Graphics.PixelStride * sizeof(ULONG);
+    Buffer = ExAllocatePoolZero(NonPagedPoolNx, Size, 'bVtK');
+    if (skip(Buffer != NULL, "no memory for a %Iu-byte frame buffer\n", Size))
+        return;
+
+    Descriptor.Buffer = Buffer;
+    Descriptor.Size = Size;
+    Status = InbvSetVirtualFrameBuffer(&Descriptor);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        Owned = InbvCheckDisplayOwnership();
+        if (!Owned)
+            InbvAcquireDisplayOwnership();
+        InbvSolidColorFill(0, 0, 7, 7, 15);
+        if (!Owned)
+            InbvNotifyDisplayOwnershipLost(NULL);
+
+        ok_eq_pointer(Descriptor.Buffer, (PVOID)Buffer);
+        ok_eq_size(Descriptor.Size, Size);
+        for (Index = 0; Index < Size && !Drawn; Index++)
+            Drawn = (Buffer[Index] != 0);
+        ok(Drawn, "the boot video driver did not draw to the virtual frame buffer\n");
+
+        Status = InbvSetVirtualFrameBuffer(NULL);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+    }
+
+    ExFreePoolWithTag(Buffer, 'bVtK');
+}
+
 typedef struct _TEST_MEMORY_PARTITION_INFORMATION
 {
     ULONG Flags;
@@ -1846,6 +1923,7 @@ START_TEST(ExWddmPoFx)
 START_TEST(ExWddmInbv)
 {
     TestModernInbvState();
+    TestVirtualFrameBuffer();
 }
 
 START_TEST(ExWddmRotate)

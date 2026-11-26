@@ -36,6 +36,16 @@ typedef enum _INBV_DISPLAY_STATE
 } INBV_DISPLAY_STATE;
 
 //
+// Virtual frame buffer the boot video driver draws to instead of the firmware frame buffer
+// FIXME: only the first two fields are known; the rest of the descriptor is INFO_NEEDED
+//
+typedef struct _INBV_VIRTUAL_FRAME_BUFFER
+{
+    PVOID Buffer;
+    SIZE_T Size;
+} INBV_VIRTUAL_FRAME_BUFFER, *PINBV_VIRTUAL_FRAME_BUFFER;
+
+//
 // Function Callbacks
 //
 typedef
