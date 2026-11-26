@@ -88,6 +88,7 @@ list(APPEND SOURCE
     LoadImageGCC.c
     LookupIconIdFromDirectoryEx.c
     MaximizedCaptionClick.c
+    MaximizedCaptionDrag.c
     MenuUI.c
     MenuItemData.c
     MenuBarBackground.c

@@ -89,6 +89,7 @@ extern void func_LoadImage(void);
 extern void func_LoadImageGCC(void);
 extern void func_LookupIconIdFromDirectoryEx(void);
 extern void func_MaximizedCaptionClick(void);
+extern void func_MaximizedCaptionDrag(void);
 extern void func_MenuUI(void);
 extern void func_MenuItemData(void);
 extern void func_MenuBarBackground(void);
@@ -253,6 +254,7 @@ const struct test winetest_testlist[] =
     { "LoadImageGCC", func_LoadImageGCC },
     { "LookupIconIdFromDirectoryEx", func_LookupIconIdFromDirectoryEx },
     { "MaximizedCaptionClick", func_MaximizedCaptionClick },
+    { "MaximizedCaptionDrag", func_MaximizedCaptionDrag },
     { "MenuUI", func_MenuUI },
     { "MenuItemData", func_MenuItemData },
     { "MenuBarBackground", func_MenuBarBackground },

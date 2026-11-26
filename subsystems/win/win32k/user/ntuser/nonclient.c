@@ -549,11 +549,12 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
                   dx = dy = 0; /* Don't offset this move */
                   if (DragFullWindows)
                   {
-                      IntSetStyle(pwnd, 0, WS_MAXIMIZE);
+                      UINT restore = (IntSetStyle(pwnd, 0, WS_MAXIMIZE) & WS_MAXIMIZE) ?
+                                     SWP_FRAMECHANGED | SWP_STATECHANGED : SWP_NOACTIVATE;
                       IntSetSnapEdge(pwnd, HTNOWHERE);
 
                       /* Have to move and size it now because we don't want SWP_NOSIZE */
-                      co_WinPosSetWindowPos(pwnd, HWND_TOP, pr->left, pr->top, width, height, SWP_NOACTIVATE);
+                      co_WinPosSetWindowPos(pwnd, HWND_TOP, pr->left, pr->top, width, height, restore);
                   }
               }
               else if (!snap && syscommand == SC_MOVE && !iconic)
@@ -752,7 +753,8 @@ DefWndDoSizeMove(PWND pwnd, WORD wParam)
             {
                if (orgSnap && !snap)
                {
-                  IntSetStyle(pwnd, 0, WS_MAXIMIZE);
+                  if (IntSetStyle(pwnd, 0, WS_MAXIMIZE) & WS_MAXIMIZE)
+                     swp |= SWP_FRAMECHANGED | SWP_STATECHANGED;
                   IntSetSnapInfo(pwnd, HTNOWHERE, NULL);
                }
                co_WinPosSetWindowPos(pwnd, HWND_TOP, sizingRect.left, sizingRect.top,
