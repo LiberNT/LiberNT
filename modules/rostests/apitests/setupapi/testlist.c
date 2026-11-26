@@ -33,6 +33,7 @@ extern void func_PciDeviceIds(void);
 extern void func_DisableableParents(void);
 extern void func_HalDeviceIds(void);
 extern void func_ProcessorDeviceIds(void);
+extern void func_SoftwareBusRestart(void);
 extern void func_SetupInstallServicesFromInfSectionEx(void);
 extern void func_ReenumerateFlags(void);
 extern void func_ServiceFilterNoLegacyNode(void);
@@ -80,6 +81,7 @@ const struct test winetest_testlist[] =
     { "DisableableParents", func_DisableableParents },
     { "HalDeviceIds", func_HalDeviceIds },
     { "ProcessorDeviceIds", func_ProcessorDeviceIds },
+    { "SoftwareBusRestart", func_SoftwareBusRestart },
     { "SetupInstallServicesFromInfSectionEx", func_SetupInstallServicesFromInfSectionEx},
     { "ReenumerateFlags", func_ReenumerateFlags },
     { "ServiceFilterNoLegacyNode", func_ServiceFilterNoLegacyNode },

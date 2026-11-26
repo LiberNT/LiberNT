@@ -30,6 +30,7 @@ list(APPEND SOURCE
     PciDebuggerDevice.c
     PciDeviceIds.c
     ProcessorDeviceIds.c
+    SoftwareBusRestart.c
     SetupCommitFileQueue.c
     SetupDiInstallClassExA.c
     SetupDiOpenDeviceInterface.c

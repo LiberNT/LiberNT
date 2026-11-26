@@ -157,8 +157,13 @@ SwDispatchPnp(
 
     if (IoStack->MinorFunction == IRP_MN_REMOVE_DEVICE)
     {
-        /* delete the device */
+        Irp->IoStatus.Status = STATUS_SUCCESS;
+        IoSkipCurrentIrpStackLocation(Irp);
+        Status = IoCallDriver(PnpDeviceObject, Irp);
+
+        IoDetachDevice(PnpDeviceObject);
         IoDeleteDevice(DeviceObject);
+        return Status;
     }
     else
     {
