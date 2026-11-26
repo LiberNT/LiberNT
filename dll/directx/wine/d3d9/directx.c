@@ -531,6 +531,9 @@ static UINT WINAPI d3d9_GetAdapterModeCountEx(IDirect3D9Ex *iface,
     if (output_idx >= d3d9->wined3d_output_count)
         return 0;
 
+    if (!filter || filter->Size != sizeof(*filter))
+        return 0;
+
     if (filter->Format != D3DFMT_X8R8G8B8 && filter->Format != D3DFMT_R5G6B5)
         return 0;
 
@@ -555,6 +558,12 @@ static HRESULT WINAPI d3d9_EnumAdapterModesEx(IDirect3D9Ex *iface,
 
     output_idx = adapter;
     if (output_idx >= d3d9->wined3d_output_count)
+        return D3DERR_INVALIDCALL;
+
+    if (!filter || filter->Size != sizeof(*filter))
+        return D3DERR_INVALIDCALL;
+
+    if (!mode || mode->Size != sizeof(*mode))
         return D3DERR_INVALIDCALL;
 
     if (filter->Format != D3DFMT_X8R8G8B8 && filter->Format != D3DFMT_R5G6B5)
