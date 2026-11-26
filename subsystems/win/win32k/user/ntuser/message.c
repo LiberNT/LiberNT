@@ -420,7 +420,7 @@ PackParam(LPARAM *lParamPacked, UINT Msg, WPARAM wParam, LPARAM lParam, BOOL Non
         }
         RtlCopyMemory(PackedCs, UnpackedCs, sizeof(CREATESTRUCTW));
         CsData = (PCHAR) (PackedCs + 1);
-        PackedCs->lpszName = (LPCWSTR) (CsData - (PCHAR) PackedCs);
+        PackedCs->lpszName = WindowName->Buffer ? (LPCWSTR) (CsData - (PCHAR) PackedCs) : NULL;
         RtlCopyMemory(CsData, WindowName->Buffer, WindowName->Length);
         CsData += WindowName->Length;
         *((WCHAR *) CsData) = L'\0';
@@ -611,7 +611,7 @@ IntCaptureCreateStruct(MSG *KernelModeMsg, MSG *UserModeMsg, PUINT CapturedSize)
     Name->Length = (ULONG)NameBytes;
     Name->MaximumLength = (ULONG)(NameBytes + sizeof(WCHAR));
     Name->bAnsi = FALSE;
-    Name->Buffer = Chars;
+    Name->Buffer = Cs.lpszName ? Chars : NULL;
     if (NameBytes != 0)
         Status = MmCopyFromCaller(Chars, (PVOID)Cs.lpszName, NameBytes);
     Chars += NameBytes / sizeof(WCHAR) + 1;
@@ -997,7 +997,7 @@ IntMsgCreateStructW(
     {
         pCsw->lpszClass = ClassName->Buffer;
     }
-    if (WindowName->Length)
+    if (WindowName->Buffer)
     {
         UNICODE_STRING Name;
         Name.Buffer = WindowName->Buffer;
