@@ -96,6 +96,98 @@ cleanup:
     CloseHandle(process_info.hThread);
 }
 
+static BOOL process_object_gone(DWORD pid, const FILETIME *created)
+{
+    FILETIME creation, exit_time, kernel, user;
+    HANDLE process;
+    ULONG waited;
+    BOOL same;
+
+    for (waited = 0; waited <= 2000; waited += 10)
+    {
+        process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (!process) return TRUE;
+        same = GetProcessTimes(process, &creation, &exit_time, &kernel, &user) &&
+               !memcmp(&creation, created, sizeof(creation));
+        CloseHandle(process);
+        if (!same) return TRUE;
+        Sleep(10);
+    }
+    return FALSE;
+}
+
+/* A job's port closed before its process exits must not keep the process object alive */
+static VOID test_port_closed_before_exit(PCWSTR application, BOOL kill_on_close)
+{
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limit_info;
+    JOBOBJECT_ASSOCIATE_COMPLETION_PORT port_info;
+    PROCESS_INFORMATION process_info;
+    STARTUPINFOW startup_info;
+    WCHAR command_line[MAX_PATH * 2];
+    FILETIME created, exit_time, kernel, user;
+    HANDLE job, port;
+    DWORD pid;
+    BOOL ret;
+
+    RtlZeroMemory(&limit_info, sizeof(limit_info));
+    RtlZeroMemory(&process_info, sizeof(process_info));
+    RtlZeroMemory(&startup_info, sizeof(startup_info));
+    startup_info.cb = sizeof(startup_info);
+    StringCchPrintfW(command_line, _countof(command_line), L"\"%s\" JobObject child", application);
+
+    job = CreateJobObjectW(NULL, NULL);
+    port = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 1);
+    ok(job != NULL && port != NULL, "Creating the job and its port failed with %lu\n", GetLastError());
+    if (!job || !port)
+    {
+        if (job) CloseHandle(job);
+        if (port) CloseHandle(port);
+        return;
+    }
+    port_info.CompletionKey = job;
+    port_info.CompletionPort = port;
+    ret = SetInformationJobObject(job, JobObjectAssociateCompletionPortInformation, &port_info, sizeof(port_info));
+    ok(ret, "SetInformationJobObject(port) failed with %lu\n", GetLastError());
+    if (kill_on_close)
+    {
+        limit_info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        ret = SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limit_info, sizeof(limit_info));
+        ok(ret, "SetInformationJobObject(limits) failed with %lu\n", GetLastError());
+    }
+
+    ret = CreateProcessW(application, command_line, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, NULL, &startup_info, &process_info);
+    ok(ret, "CreateProcessW failed with %lu\n", GetLastError());
+    if (!ret)
+    {
+        CloseHandle(port);
+        CloseHandle(job);
+        return;
+    }
+    ret = AssignProcessToJobObject(job, process_info.hProcess);
+    ok(ret, "AssignProcessToJobObject failed with %lu\n", GetLastError());
+    ResumeThread(process_info.hThread);
+    pid = process_info.dwProcessId;
+    ok(GetProcessTimes(process_info.hProcess, &created, &exit_time, &kernel, &user), "GetProcessTimes failed with %lu\n", GetLastError());
+
+    CloseHandle(port);
+    if (kill_on_close)
+    {
+        CloseHandle(job);
+        job = NULL;
+    }
+    else
+    {
+        ret = TerminateProcess(process_info.hProcess, 0);
+        ok(ret, "TerminateProcess failed with %lu\n", GetLastError());
+    }
+    ok(WaitForSingleObject(process_info.hProcess, 5000) == WAIT_OBJECT_0, "The child did not exit\n");
+
+    if (job) CloseHandle(job);
+    CloseHandle(process_info.hThread);
+    CloseHandle(process_info.hProcess);
+    ok(process_object_gone(pid, &created), "The process of a job whose port was closed first was never deleted\n");
+}
+
 static VOID test_self_job_close_on_exit(PCWSTR application)
 {
     PROCESS_INFORMATION process_info;
@@ -225,4 +317,6 @@ cleanup:
     if (job) CloseHandle(job);
     test_kill_on_close(application);
     test_self_job_close_on_exit(application);
+    test_port_closed_before_exit(application, FALSE);
+    test_port_closed_before_exit(application, TRUE);
 }

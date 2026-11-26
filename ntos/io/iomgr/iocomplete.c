@@ -523,6 +523,28 @@ IopFinishPortIrp(
     IopFreeCompletedIrp(Irp);
 }
 
+static
+VOID
+IopDropPortIrp(
+    _In_ PIRP Irp)
+{
+    PFILE_OBJECT FileObject = Irp->Tail.Overlay.OriginalFileObject;
+    PETHREAD Thread = Irp->Tail.Overlay.Thread;
+
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+    ASSERT(FileObject != NULL);
+    ASSERT(Thread != NULL);
+    ASSERT(IsListEmpty(&Irp->ThreadListEntry));
+
+    IopReturnRequestBuffers(Irp, FALSE);
+    FileObject->FinalStatus = Irp->IoStatus.Status;
+
+    /* The completing driver may hold its own locks: a last reference must not close the file or delete the thread here */
+    ObDereferenceObjectDeferDelete(FileObject);
+    ObDereferenceObjectDeferDelete(Thread);
+    IopFreeCompletedIrp(Irp);
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 VOID
@@ -671,8 +693,13 @@ IofCompleteRequest(
         {
             Irp->Tail.CompletionKey = FileObject->CompletionContext->Key;
             Irp->Tail.Overlay.PacketType = IopCompletionPacketIrp;
-            KeInsertQueue((PKQUEUE)FileObject->CompletionContext->Port,
-                          &Irp->Tail.Overlay.ListEntry);
+
+            /* A port whose last handle is closed hands nothing back; queued there, the request would keep its file, the port and its thread alive */
+            if (!IopInsertPortEntry((PKQUEUE)FileObject->CompletionContext->Port,
+                                    &Irp->Tail.Overlay.ListEntry))
+            {
+                IopDropPortIrp(Irp);
+            }
             return;
         }
 

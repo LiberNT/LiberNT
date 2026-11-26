@@ -230,6 +230,7 @@ NTSTATUS IopPerformSynchronousRequest(_In_ PDEVICE_OBJECT DeviceObject,
                                       _In_ BOOLEAN SynchIo,
                                       _In_ IOP_TRANSFER_TYPE TransferType);
 VOID IopFreeMiniPacket(_In_ PIOP_MINI_COMPLETION_PACKET Packet);
+BOOLEAN IopInsertPortEntry(_Inout_ PKQUEUE Port, _Inout_ PLIST_ENTRY Entry);
 
 /* iocancel.c */
 

@@ -120,6 +120,27 @@ IopDeleteIoCompletion(
     }
 }
 
+BOOLEAN
+IopInsertPortEntry(
+    _Inout_ PKQUEUE Port,
+    _Inout_ PLIST_ENTRY Entry)
+{
+    KIRQL OldIrql;
+    BOOLEAN Inserted;
+
+    ASSERT_QUEUE(Port);
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+
+    OldIrql = KeRaiseIrqlToSynchLevel();
+    KiAcquireDispatcherObject(&Port->Header);
+    Inserted = !Port->Header.Abandoned;
+    if (Inserted) KiInsertQueue(Port, Entry, FALSE);
+    KiReleaseDispatcherObject(&Port->Header);
+    KiExitDispatcher(OldIrql);
+
+    return Inserted;
+}
+
 VOID
 NTAPI
 IopCloseIoCompletion(
@@ -158,7 +179,11 @@ IoSetIoCompletion(
     Packet->IoStatus = IoStatus;
     Packet->IoStatusInformation = IoStatusInformation;
 
-    KeInsertQueue((PKQUEUE)IoCompletion, &Packet->ListEntry);
+    /* A packet charged to a process and left on a port nobody can read would keep that process alive */
+    if (!IopInsertPortEntry((PKQUEUE)IoCompletion, &Packet->ListEntry))
+    {
+        IopFreeMiniPacket(Packet);
+    }
 
     return STATUS_SUCCESS;
 }

@@ -58,8 +58,6 @@ PspSendJobMessageLocked(
     PAGED_CODE();
     ASSERT(ExIsResourceAcquiredSharedLite(&Job->JobLock));
 
-    UNREFERENCED_PARAMETER(Quota);
-
     if (Job->CompletionPort == NULL) return STATUS_SUCCESS;
 
     return IoSetIoCompletion(Job->CompletionPort,
@@ -67,7 +65,7 @@ PspSendJobMessageLocked(
                              CompletionValue,
                              STATUS_SUCCESS,
                              Message,
-                             TRUE);
+                             Quota);
 }
 
 /*

@@ -604,6 +604,87 @@ TestPortReadOutlivesThread(BOOL Cancel)
     CloseHandle(Port);
 }
 
+static BOOL
+ThreadObjectGone(DWORD ThreadId, const FILETIME *Created)
+{
+    FILETIME Creation, Exit, Kernel, User;
+    HANDLE Opened;
+    ULONG Waited;
+    BOOL Same;
+
+    for (Waited = 0; Waited <= 2000; Waited += 10)
+    {
+        Opened = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, ThreadId);
+        if (Opened == NULL)
+            return TRUE;
+        Same = GetThreadTimes(Opened, &Creation, &Exit, &Kernel, &User) &&
+               !memcmp(&Creation, Created, sizeof(Creation));
+        CloseHandle(Opened);
+        if (!Same)
+            return TRUE;
+        Sleep(10);
+    }
+    return FALSE;
+}
+
+/* A port-bound read that ends after the port's last handle is closed is not reported and keeps neither its file nor its thread */
+static VOID
+TestReadEndsAfterPortClosed(BOOL BreakPipe)
+{
+    static const WCHAR PipeName[] = L"\\\\.\\pipe\\IoCompletionPortClosed";
+    PORT_READ_CONTEXT Context;
+    FILETIME Created, Exit, Kernel, User;
+    HANDLE Server, Client, Port, Thread;
+    DWORD ThreadId = 0, Result;
+
+    Server = CreateNamedPipeW(PipeName, PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
+                              PIPE_TYPE_BYTE | PIPE_WAIT, 1, 64, 64, 0, NULL);
+    ok(Server != INVALID_HANDLE_VALUE, "CreateNamedPipeW failed with %lu\n", GetLastError());
+    if (Server == INVALID_HANDLE_VALUE)
+        return;
+
+    Client = CreateFileW(PipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    ok(Client != INVALID_HANDLE_VALUE, "CreateFileW failed with %lu\n", GetLastError());
+    Port = CreateIoCompletionPort(Server, NULL, 0x5432, 0);
+    ok(Port != NULL, "CreateIoCompletionPort failed with %lu\n", GetLastError());
+    ZeroMemory(&Context, sizeof(Context));
+    Context.Pipe = Server;
+    Thread = (Client != INVALID_HANDLE_VALUE && Port != NULL) ?
+             CreateThread(NULL, 0, PortReadThread, &Context, 0, &ThreadId) : NULL;
+    ok(Thread != NULL, "CreateThread failed with %lu\n", GetLastError());
+    if (Thread == NULL)
+    {
+        if (Client != INVALID_HANDLE_VALUE) CloseHandle(Client);
+        if (Port != NULL) CloseHandle(Port);
+        CloseHandle(Server);
+        return;
+    }
+
+    Result = WaitForSingleObject(Thread, 5000);
+    ok(Result == WAIT_OBJECT_0, "The reading thread did not exit (%lu)\n", Result);
+    ok(GetThreadTimes(Thread, &Created, &Exit, &Kernel, &User), "GetThreadTimes failed with %lu\n", GetLastError());
+    CloseHandle(Thread);
+    ok(!Context.Result && Context.Error == ERROR_IO_PENDING,
+       "ReadFile returned %d with %lu instead of a pending read\n", Context.Result, Context.Error);
+
+    ok(CloseHandle(Port), "Closing the port failed with %lu\n", GetLastError());
+    if (BreakPipe)
+    {
+        CloseHandle(Client);
+        Result = WaitForSingleObject(Server, 200);
+        ok(Result == WAIT_TIMEOUT, "The file of a read that ended on a closed port was signalled (%lu)\n", Result);
+        ok((NTSTATUS)Context.Overlapped.Internal == STATUS_PENDING, "Internal is %#Ix\n", (size_t)Context.Overlapped.Internal);
+        CloseHandle(Server);
+    }
+    else
+    {
+        CloseHandle(Server);
+        CloseHandle(Client);
+    }
+
+    ok(ThreadObjectGone(ThreadId, &Created), "The thread of a read that ended on a closed port was never deleted\n");
+}
+
 START_TEST(IoCompletion)
 {
     DEQUEUE_WAIT_CONTEXT DequeueContext;
@@ -864,4 +945,6 @@ START_TEST(IoCompletion)
     TestWorkerBlockActivatesQueue(BlockInterruptedAlertable);
     TestPortReadOutlivesThread(FALSE);
     TestPortReadOutlivesThread(TRUE);
+    TestReadEndsAfterPortClosed(FALSE);
+    TestReadEndsAfterPortClosed(TRUE);
 }
