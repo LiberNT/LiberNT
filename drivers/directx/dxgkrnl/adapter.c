@@ -519,6 +519,32 @@ DxgkpReferencePostDisplayOwner(
     return Owner;
 }
 
+BOOLEAN
+DxgkpIsPostDisplayOwner(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    BOOLEAN Owner;
+    KIRQL OldIrql;
+
+    ASSERT(Adapter != NULL);
+    KeAcquireSpinLock(&g_PostDisplayOwnerLock, &OldIrql);
+    Owner = (g_PostDisplayOwnerAdapter == Adapter);
+    KeReleaseSpinLock(&g_PostDisplayOwnerLock, OldIrql);
+    return Owner;
+}
+
+DXGK_POST_DISPLAY_ROLE
+DxgkpPostDisplayRole(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    ASSERT(Adapter != NULL);
+    ASSERT(!Adapter->IsBasicDisplayFallback || Adapter->MiniportContext != NULL);
+    return DxgkPostDisplayCoreRole(Adapter->MiniportContext != NULL,
+                                   Adapter->MiniportContext != NULL &&
+                                       Adapter->MiniportContext->IsBasicDisplayFallback,
+                                   Adapter->IsBasicDisplayFallback);
+}
+
 static VOID
 DxgkpSetPostDisplayOwner(
     _In_ PDXGKRNL_ADAPTER Adapter)
@@ -608,7 +634,10 @@ DxgkpSetBasicDisplayUiSuppressed(
 
     ASSERT(Adapter != NULL);
     ASSERT(Adapter->MiniportContext != NULL);
-    ASSERT(Adapter->IsBasicDisplayFallback);
+    ASSERT(Adapter->MiniportContext->IsBasicDisplayFallback);
+
+    if (!Adapter->IsBasicDisplayFallback)
+        return;
 
     Previous = InterlockedExchange(&Adapter->BasicDisplayUiSuppressed,
                                    Suppressed ? 1 : 0);
@@ -644,10 +673,11 @@ DxgkpRetainAndStopBasicDisplayFallback(
 
     ASSERT(Claimant != NULL);
     ASSERT(Claimant->MiniportContext != NULL);
-    ASSERT(!Claimant->IsBasicDisplayFallback);
     ASSERT(Owner != NULL);
     ASSERT(Owner->MiniportContext != NULL);
-    ASSERT(Owner->IsBasicDisplayFallback);
+    ASSERT(Owner->MiniportContext->IsBasicDisplayFallback);
+    ASSERT(DxgkPostDisplayCoreOutranks(DxgkpPostDisplayRole(Claimant),
+                                       DxgkpPostDisplayRole(Owner)));
     ASSERT(OwnerDeviceObject != NULL);
     ASSERT(*OwnerDeviceObject != NULL);
 
@@ -791,8 +821,8 @@ DxgkpShouldRegisterDisplayBridge(
      */
     TakeOverFromFallback = !RegisterDisplayBridge &&
                            Owner != NULL &&
-                           Owner->MiniportContext != NULL &&
-                           Owner->IsBasicDisplayFallback;
+                           DxgkPostDisplayCoreOutranks(DxgkpPostDisplayRole(Claimant),
+                                                       DxgkpPostDisplayRole(Owner));
 
     if (OwnerDeviceObject != NULL)
         ObDereferenceObject(OwnerDeviceObject);
@@ -12844,6 +12874,8 @@ DxgkpAcquirePostDisplayOwnership(
     ULONGLONG                    GopQueryUs = 0;
     ULONGLONG                    StepStart100ns;
     BOOLEAN                      ReleasedByDriver = FALSE;
+    BOOLEAN                      ClaimantOwnsFramebuffer;
+    DXGK_POST_DISPLAY_CLAIM      Claim;
     NTSTATUS                     Status = STATUS_SUCCESS;
 
     PAGED_CODE();
@@ -12866,17 +12898,35 @@ DxgkpAcquirePostDisplayOwnership(
     RtlZeroMemory(&ReleasedDisplayInformation,
                   sizeof(ReleasedDisplayInformation));
 
-    if (!DxgkpIsPostDisplayDevice(Claimant))
+    ClaimantOwnsFramebuffer = DxgkpIsPostDisplayDevice(Claimant);
+
+    (VOID)KeWaitForSingleObject(&g_PostDisplayOwnershipMutex, Executive, KernelMode, FALSE, NULL);
+
+    {
+        PDEVICE_OBJECT OwnerDeviceObject;
+        PDXGKRNL_ADAPTER Owner = DxgkpReferencePostDisplayOwner(&OwnerDeviceObject);
+
+        Claim = DxgkPostDisplayCoreClaim(ClaimantOwnsFramebuffer,
+                                         DxgkpPostDisplayRole(Claimant),
+                                         Owner != NULL,
+                                         Owner == Claimant,
+                                         Owner != NULL ? DxgkpPostDisplayRole(Owner) :
+                                                         DxgkPostDisplayRoleNone);
+        if (OwnerDeviceObject != NULL)
+            ObDereferenceObject(OwnerDeviceObject);
+    }
+    if (Claim == DxgkPostDisplayClaimEmpty)
     {
         DXGKRNL_INFO("DxgkCbAcquirePostDisplayOwnership: adapter %p is not the "
                      "POST device; it gets an empty descriptor\n",
                      Claimant);
         DisplayInformation->TargetId = D3DDDI_ID_UNINITIALIZED;
+        KeReleaseMutex(&g_PostDisplayOwnershipMutex, FALSE);
         ExReleaseRundownProtection(&Claimant->ReverseCallbackRundownRef);
         return STATUS_SUCCESS;
     }
-
-    (VOID)KeWaitForSingleObject(&g_PostDisplayOwnershipMutex, Executive, KernelMode, FALSE, NULL);
+    ASSERT(Claim == DxgkPostDisplayClaimFramebuffer ||
+           Claim == DxgkPostDisplayClaimTakeOver);
 
     /*
      * Boot display ownership policy (the MSBDD handover, see
@@ -12896,9 +12946,10 @@ DxgkpAcquirePostDisplayOwnership(
         {
             RetainFallback =
                 Claimant->MiniportContext != NULL &&
-                !Claimant->IsBasicDisplayFallback &&
                 Owner->MiniportContext != NULL &&
-                Owner->IsBasicDisplayFallback;
+                Owner->MiniportContext->IsBasicDisplayFallback &&
+                DxgkPostDisplayCoreOutranks(DxgkpPostDisplayRole(Claimant),
+                                            DxgkpPostDisplayRole(Owner));
             if (!RetainFallback)
             {
                 DXGKRNL_TRACE("DxgkCbAcquirePostDisplayOwnership: boot display "
@@ -12937,7 +12988,8 @@ DxgkpAcquirePostDisplayOwnership(
             ObDereferenceObject(OwnerDeviceObject);
     }
 
-    if (ReleasedByDriver)
+    /* The firmware framebuffer of a taken-over holder lives in that holder's device, so the new owner cold-starts. */
+    if (ReleasedByDriver && Claim == DxgkPostDisplayClaimFramebuffer)
     {
         if (!DxgkpValidatePostDisplayInformation(
                  &ReleasedDisplayInformation))
@@ -12960,10 +13012,10 @@ DxgkpAcquirePostDisplayOwnership(
      * miniport must initialise its pipeline from scratch.  Return a
      * zeroed structure with STATUS_SUCCESS.
      */
-    if (!InbvHasValidGopFrameBuffer())
+    if (Claim != DxgkPostDisplayClaimFramebuffer || !InbvHasValidGopFrameBuffer())
     {
         DXGKRNL_TRACE("DxgkCbAcquirePostDisplayOwnership: "
-                      "no firmware framebuffer; miniport must cold-start\n");
+                      "no firmware framebuffer on this device; miniport must cold-start\n");
         goto TransferOwnership;
     }
 

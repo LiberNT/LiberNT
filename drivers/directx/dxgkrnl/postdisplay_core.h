@@ -61,6 +61,87 @@ DxgkPostDisplayCoreFirmwareScanout(
     return DisplayOnlyDriver || !VidPnCommitted;
 }
 
+/* Who may hold the boot display, weakest first: a holder gives way to a stronger claimant. */
+typedef enum _DXGK_POST_DISPLAY_ROLE
+{
+    DxgkPostDisplayRoleNone = 0,
+    DxgkPostDisplayRoleFallback,
+    DxgkPostDisplayRoleBasicDisplay,
+    DxgkPostDisplayRoleMiniport
+} DXGK_POST_DISPLAY_ROLE;
+
+typedef enum _DXGK_POST_DISPLAY_CLAIM
+{
+    DxgkPostDisplayClaimEmpty = 0,
+    DxgkPostDisplayClaimTakeOver,
+    DxgkPostDisplayClaimFramebuffer
+} DXGK_POST_DISPLAY_CLAIM;
+
+FORCEINLINE
+DXGK_POST_DISPLAY_ROLE
+DxgkPostDisplayCoreRole(
+    _In_ BOOLEAN HasMiniport,
+    _In_ BOOLEAN BasicDisplayDriver,
+    _In_ BOOLEAN RootFallback)
+{
+    ASSERT(!BasicDisplayDriver || HasMiniport);
+    ASSERT(!RootFallback || BasicDisplayDriver);
+
+    if (!HasMiniport)
+        return DxgkPostDisplayRoleNone;
+    if (!BasicDisplayDriver)
+        return DxgkPostDisplayRoleMiniport;
+    if (RootFallback)
+        return DxgkPostDisplayRoleFallback;
+    return DxgkPostDisplayRoleBasicDisplay;
+}
+
+FORCEINLINE
+BOOLEAN
+DxgkPostDisplayCoreOutranks(
+    _In_ DXGK_POST_DISPLAY_ROLE Claimant,
+    _In_ DXGK_POST_DISPLAY_ROLE Owner)
+{
+    ASSERT(Claimant <= DxgkPostDisplayRoleMiniport);
+    ASSERT(Owner <= DxgkPostDisplayRoleMiniport);
+    return Claimant != DxgkPostDisplayRoleNone &&
+           Owner != DxgkPostDisplayRoleNone &&
+           Claimant > Owner;
+}
+
+FORCEINLINE
+DXGK_POST_DISPLAY_CLAIM
+DxgkPostDisplayCoreClaim(
+    _In_ BOOLEAN ClaimantOwnsFramebuffer,
+    _In_ DXGK_POST_DISPLAY_ROLE ClaimantRole,
+    _In_ BOOLEAN OwnerExists,
+    _In_ BOOLEAN OwnerIsClaimant,
+    _In_ DXGK_POST_DISPLAY_ROLE OwnerRole)
+{
+    ASSERT(!OwnerIsClaimant || OwnerExists);
+    ASSERT(OwnerExists || OwnerRole == DxgkPostDisplayRoleNone);
+
+    if (ClaimantOwnsFramebuffer)
+        return DxgkPostDisplayClaimFramebuffer;
+    if (ClaimantRole == DxgkPostDisplayRoleMiniport &&
+        OwnerExists &&
+        !OwnerIsClaimant &&
+        DxgkPostDisplayCoreOutranks(ClaimantRole, OwnerRole))
+    {
+        return DxgkPostDisplayClaimTakeOver;
+    }
+    return DxgkPostDisplayClaimEmpty;
+}
+
+FORCEINLINE
+BOOLEAN
+DxgkPostDisplayCoreReportsPostDevice(
+    _In_ BOOLEAN AdapterOwnsBootDisplay,
+    _In_ DXGK_POST_DISPLAY_ROLE Role)
+{
+    return AdapterOwnsBootDisplay && Role == DxgkPostDisplayRoleMiniport;
+}
+
 /* A CPU host aperture run inside the window the firmware framebuffer is seen through makes that window show other memory. */
 FORCEINLINE
 BOOLEAN

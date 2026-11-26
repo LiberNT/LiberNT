@@ -968,6 +968,59 @@ static void Test_DisplayNamesAndCaps(PFND3DKMT_QUERYADAPTERINFO pfn, D3DKMT_HAND
  * START_TEST: exhaustive selector sweep
  * -------------------------------------------------------------------------- */
 
+/* A full display adapter takes the boot display over from the software fallback and alone reports PostDevice. */
+static void Test_PostDevice(PFND3DKMT_QUERYADAPTERINFO pfn)
+{
+    PFND3DKMT_ENUMADAPTERS2 pfnEnum = (PFND3DKMT_ENUMADAPTERS2)LoadD3DKMTProc("D3DKMTEnumAdapters2");
+    PFND3DKMT_CLOSEADAPTER pfnClose = (PFND3DKMT_CLOSEADAPTER)LoadD3DKMTProc("D3DKMTCloseAdapter");
+    D3DKMT_ADAPTERINFO Adapters[16];
+    D3DKMT_ENUMADAPTERS2 Enum;
+    ULONG i, PostCount = 0, FullDisplayCount = 0, SoftwarePostCount = 0;
+
+    if (!pfnEnum || !pfnClose)
+    {
+        skip("D3DKMTEnumAdapters2 or D3DKMTCloseAdapter not exported by gdi32.dll\n");
+        return;
+    }
+    memset(&Enum, 0, sizeof(Enum));
+    Enum.NumAdapters = ARRAYSIZE(Adapters);
+    Enum.pAdapters = Adapters;
+    if (!NT_SUCCESS(pfnEnum(&Enum)))
+    {
+        skip("D3DKMTEnumAdapters2 failed\n");
+        return;
+    }
+    for (i = 0; i < Enum.NumAdapters; i++)
+    {
+        D3DKMT_ADAPTERTYPE Type;
+        D3DKMT_CLOSEADAPTER Close;
+        NTSTATUS st;
+
+        memset(&Type, 0, sizeof(Type));
+        st = QueryAI(pfn, Adapters[i].hAdapter, KMTQAITYPE_ADAPTERTYPE, &Type, sizeof(Type));
+        trace("adapter %lu luid %08lx:%08lx type 0x%x (0x%lx)\n", i, Adapters[i].AdapterLuid.HighPart,
+              Adapters[i].AdapterLuid.LowPart, Type.Value, st);
+        if (NT_SUCCESS(st))
+        {
+            if (Type.DisplaySupported && !Type.SoftwareDevice)
+                FullDisplayCount++;
+            if (Type.PostDevice)
+                PostCount++;
+            if (Type.PostDevice && Type.SoftwareDevice)
+                SoftwarePostCount++;
+        }
+        Close.hAdapter = Adapters[i].hAdapter;
+        pfnClose(&Close);
+    }
+    ok(SoftwarePostCount == 0, "%lu software adapters report PostDevice\n", SoftwarePostCount);
+    if (FullDisplayCount == 0)
+    {
+        ok(PostCount == 0, "no full display adapter, yet %lu adapters report PostDevice\n", PostCount);
+        return;
+    }
+    ok(PostCount == 1, "%lu full display adapters, %lu report PostDevice\n", FullDisplayCount, PostCount);
+}
+
 START_TEST(D3dkmtAdapterInfo)
 {
     PFND3DKMT_QUERYADAPTERINFO pfn;
@@ -982,6 +1035,8 @@ START_TEST(D3dkmtAdapterInfo)
         skip("D3DKMTQueryAdapterInfo not exported by gdi32.dll\n");
         return;
     }
+
+    Test_PostDevice(pfn);
 
     hAdapter = OpenAdapterFromDisplay1();
     if (!hAdapter)

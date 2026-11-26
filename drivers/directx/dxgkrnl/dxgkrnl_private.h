@@ -2364,6 +2364,14 @@ extern LIST_ENTRY   DxgkAdapterGlobalListHead;
 VOID
 DxgkStartDeferredAdapters(VOID);
 
+BOOLEAN
+DxgkpIsPostDisplayOwner(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+DXGK_POST_DISPLAY_ROLE
+DxgkpPostDisplayRole(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
 /*
  * GDxgControlDeviceObject
  *

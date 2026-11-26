@@ -259,12 +259,52 @@ DxgkPostDisplayTestFirmwareWireFormat(VOID)
     ok_bool_false(DxgkPostDisplayCoreFirmwareWireFormatUsable(Format, Supported), "no firmware wire format");
 }
 
+static
+VOID
+DxgkPostDisplayTestClaim(VOID)
+{
+    const DXGK_POST_DISPLAY_ROLE None = DxgkPostDisplayRoleNone;
+    const DXGK_POST_DISPLAY_ROLE Fallback = DxgkPostDisplayRoleFallback;
+    const DXGK_POST_DISPLAY_ROLE Basic = DxgkPostDisplayRoleBasicDisplay;
+    const DXGK_POST_DISPLAY_ROLE Miniport = DxgkPostDisplayRoleMiniport;
+
+    ok_eq_int(DxgkPostDisplayCoreRole(FALSE, FALSE, FALSE), None);
+    ok_eq_int(DxgkPostDisplayCoreRole(TRUE, FALSE, FALSE), Miniport);
+    ok_eq_int(DxgkPostDisplayCoreRole(TRUE, TRUE, FALSE), Basic);
+    ok_eq_int(DxgkPostDisplayCoreRole(TRUE, TRUE, TRUE), Fallback);
+
+    ok_bool_true(DxgkPostDisplayCoreOutranks(Miniport, Basic), "a full miniport replaces Basic Display bound to a display controller");
+    ok_bool_true(DxgkPostDisplayCoreOutranks(Miniport, Fallback), "a full miniport replaces the root fallback");
+    ok_bool_true(DxgkPostDisplayCoreOutranks(Basic, Fallback), "Basic Display bound to a display controller replaces the root fallback");
+    ok_bool_false(DxgkPostDisplayCoreOutranks(Miniport, Miniport), "a full miniport never replaces another one");
+    ok_bool_false(DxgkPostDisplayCoreOutranks(Basic, Basic), "Basic Display never replaces another Basic Display controller");
+    ok_bool_false(DxgkPostDisplayCoreOutranks(Fallback, Basic), "the root fallback never replaces a bound Basic Display");
+    ok_bool_false(DxgkPostDisplayCoreOutranks(Basic, Miniport), "Basic Display never replaces a full miniport");
+    ok_bool_false(DxgkPostDisplayCoreOutranks(Miniport, None), "an owner without a miniport is never replaced");
+    ok_bool_false(DxgkPostDisplayCoreOutranks(None, Fallback), "a claimant without a miniport replaces nothing");
+
+    ok_eq_int(DxgkPostDisplayCoreClaim(TRUE, Miniport, FALSE, FALSE, None), DxgkPostDisplayClaimFramebuffer);
+    ok_eq_int(DxgkPostDisplayCoreClaim(TRUE, Basic, TRUE, FALSE, Fallback), DxgkPostDisplayClaimFramebuffer);
+    ok_eq_int(DxgkPostDisplayCoreClaim(FALSE, Miniport, TRUE, FALSE, Basic), DxgkPostDisplayClaimTakeOver);
+    ok_eq_int(DxgkPostDisplayCoreClaim(FALSE, Miniport, TRUE, FALSE, Fallback), DxgkPostDisplayClaimTakeOver);
+    ok_eq_int(DxgkPostDisplayCoreClaim(FALSE, Miniport, TRUE, FALSE, Miniport), DxgkPostDisplayClaimEmpty);
+    ok_eq_int(DxgkPostDisplayCoreClaim(FALSE, Miniport, FALSE, FALSE, None), DxgkPostDisplayClaimEmpty);
+    ok_eq_int(DxgkPostDisplayCoreClaim(FALSE, Basic, TRUE, FALSE, Fallback), DxgkPostDisplayClaimEmpty);
+    ok_eq_int(DxgkPostDisplayCoreClaim(FALSE, Miniport, TRUE, TRUE, Miniport), DxgkPostDisplayClaimEmpty);
+
+    ok_bool_true(DxgkPostDisplayCoreReportsPostDevice(TRUE, Miniport), "a full adapter that owns the boot display is the POST device");
+    ok_bool_false(DxgkPostDisplayCoreReportsPostDevice(TRUE, Basic), "Basic Display is not reported as the POST device even while it owns the boot display");
+    ok_bool_false(DxgkPostDisplayCoreReportsPostDevice(TRUE, Fallback), "the root fallback is never reported as the POST device");
+    ok_bool_false(DxgkPostDisplayCoreReportsPostDevice(FALSE, Miniport), "an adapter that does not own the boot display is not the POST device");
+}
+
 START_TEST(DxgkPostDisplayHandoff)
 {
     DxgkPostDisplayTestRestartableFailure();
     DxgkPostDisplayTestSuccessfulClaimant();
     DxgkPostDisplayTestNonRestartableFailure();
     DxgkPostDisplayTestPostDevice();
+    DxgkPostDisplayTestClaim();
     DxgkPostDisplayTestFirmwareScanout();
     DxgkPostDisplayTestApertureRunTakesBootWindow();
     DxgkPostDisplayTestUefiRangeSegment();
