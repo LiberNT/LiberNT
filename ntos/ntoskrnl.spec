@@ -3110,7 +3110,7 @@
 @ stub -arch=win64 RtlRbReplaceNode
 @ stdcall RtlRecordFeatureUsage(long long long ptr)
 @ stdcall RtlRegisterFeatureConfigurationChangeNotification(ptr ptr ptr ptr)
-@ stdcall RtlRegisterFeatureUsageProvider(ptr ptr)
+@ stdcall RtlRegisterFeatureUsageProvider(ptr ptr ptr long)
 @ stub -arch=win64 RtlRemovePointerMapping
 @ stub -arch=win64 RtlRemovePropertyStore
 @ stub -arch=win64 RtlReplaceSidInSd

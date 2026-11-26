@@ -389,13 +389,18 @@ RtlRecordFeatureUsage(
     return STATUS_SUCCESS;
 }
 
+/* FIXME: the meaning of the first, second and fourth parameters is INFO_NEEDED */
 NTSTATUS
 NTAPI
 RtlRegisterFeatureUsageProvider(
-    _In_ PVOID Registration,
-    _Out_ PHANDLE ProviderHandle)
+    _In_ PVOID Parameter1,
+    _In_opt_ PVOID Parameter2,
+    _Out_ PHANDLE ProviderHandle,
+    _In_ ULONG Parameter4)
 {
-    UNREFERENCED_PARAMETER(Registration);
+    UNREFERENCED_PARAMETER(Parameter1);
+    UNREFERENCED_PARAMETER(Parameter2);
+    UNREFERENCED_PARAMETER(Parameter4);
     if (!ProviderHandle)
         return STATUS_INVALID_PARAMETER;
     *ProviderHandle = (HANDLE)1;

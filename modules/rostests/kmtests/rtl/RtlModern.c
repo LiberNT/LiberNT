@@ -737,8 +737,44 @@ START_TEST(ExWddmAvl)
     TestModernAvlChurn();
 }
 
+/* FIXME: the meaning of the first, second and fourth parameters is INFO_NEEDED */
+NTSTATUS
+NTAPI
+RtlRegisterFeatureUsageProvider(
+    _In_ PVOID Parameter1,
+    _In_opt_ PVOID Parameter2,
+    _Out_ PHANDLE ProviderHandle,
+    _In_ ULONG Parameter4);
+
+NTSTATUS
+NTAPI
+RtlUnregisterFeatureUsageProvider(
+    _In_ HANDLE ProviderHandle);
+
+static
+VOID
+NTAPI
+TestFeatureUsageCallback(VOID)
+{
+}
+
+static
+VOID
+TestFeatureUsageProvider(VOID)
+{
+    HANDLE Handle = NULL;
+    NTSTATUS Status;
+
+    Status = RtlRegisterFeatureUsageProvider((PVOID)TestFeatureUsageCallback, NULL, &Handle, 0x40);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok(Handle != NULL, "no provider handle was returned\n");
+    if (NT_SUCCESS(Status))
+        ok_eq_hex(RtlUnregisterFeatureUsageProvider(Handle), STATUS_SUCCESS);
+}
+
 START_TEST(ExWddmRtl)
 {
+    TestFeatureUsageProvider();
     TestModernBitmaps();
     TestIntegerAtoms();
     TestModernRtlState();
