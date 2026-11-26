@@ -544,6 +544,24 @@ VWifiCompletePendingScan(
 }
 
 VOID
+VWifiCompletePendingDisconnect(
+    IN PVWIFI_ADAPTER Adapter,
+    IN NDIS_STATUS Status)
+{
+    PNDIS_OID_REQUEST DisconnectOid;
+
+    NdisAcquireSpinLock(&Adapter->Lock);
+    DisconnectOid = Adapter->PendingDisconnectOid;
+    Adapter->PendingDisconnectOid = NULL;
+    NdisReleaseSpinLock(&Adapter->Lock);
+
+    if (DisconnectOid != NULL && Adapter->MiniportAdapterHandle != NULL)
+    {
+        NdisMOidRequestComplete(Adapter->MiniportAdapterHandle, DisconnectOid, Status);
+    }
+}
+
+VOID
 NTAPI
 VWifiEngineTimerDpc(
     IN PVOID SystemSpecific1,
@@ -724,10 +742,17 @@ VWifiEngineWorker(
         case VWifiJobDisconnect:
         {
             BOOLEAN Rejoin = FALSE;
+            BOOLEAN Associated;
 
-            DPRINT1("VWIFI: disconnect -> DISASSOCIATION + link down\n");
-            VWifiIndicateDisassociation(Adapter,
-                                        DOT11_DISASSOC_REASON_OS);
+            NdisAcquireSpinLock(&Adapter->Lock);
+            Associated = (Adapter->ConnState != VWifiDisconnected);
+            NdisReleaseSpinLock(&Adapter->Lock);
+            if (Associated)
+            {
+                DPRINT1("VWIFI: disconnect -> DISASSOCIATION + link down\n");
+                VWifiIndicateDisassociation(Adapter,
+                                            DOT11_DISASSOC_REASON_OS);
+            }
 
             NdisAcquireSpinLock(&Adapter->Lock);
             if (Adapter->ConnState != VWifiDisconnected &&
@@ -742,6 +767,7 @@ VWifiEngineWorker(
             NdisReleaseSpinLock(&Adapter->Lock);
 
             VWifiIndicateLinkState(Adapter, FALSE);
+            VWifiCompletePendingDisconnect(Adapter, NDIS_STATUS_SUCCESS);
             if (Rejoin)
                 VWifiScheduleJob(Adapter, VWifiJobRejoin, 300);
             break;

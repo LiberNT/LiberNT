@@ -585,13 +585,30 @@ VWifiDot11SetDisconnectRequest(
     IN PVWIFI_ADAPTER Adapter,
     IN PNDIS_OID_REQUEST Request)
 {
-    DPRINT1("VWIFI: OID_DOT11_DISCONNECT_REQUEST -> scheduling disassociation\n");
-
-    VWifiScheduleJob(Adapter, VWifiJobDisconnect, 50);
+    NdisAcquireSpinLock(&Adapter->Lock);
+    if (Adapter->ConnState != VWifiConnected || Adapter->PendingDisconnectOid != NULL ||
+        Adapter->MiniportAdapterHandle == NULL)
+    {
+        NdisReleaseSpinLock(&Adapter->Lock);
+        DPRINT1("VWIFI: OID_DOT11_DISCONNECT_REQUEST while not connected\n");
+        return NDIS_STATUS_INVALID_STATE;
+    }
+    Adapter->PendingDisconnectOid = Request;
+    NdisReleaseSpinLock(&Adapter->Lock);
 
     Request->DATA.SET_INFORMATION.BytesRead =
         Request->DATA.SET_INFORMATION.InformationBufferLength;
-    return NDIS_STATUS_SUCCESS;
+    if (VWifiScheduleJob(Adapter, VWifiJobDisconnect, 50))
+    {
+        DPRINT1("VWIFI: OID_DOT11_DISCONNECT_REQUEST -> PENDING, scheduling disassociation\n");
+        return NDIS_STATUS_PENDING;
+    }
+
+    NdisAcquireSpinLock(&Adapter->Lock);
+    ASSERT(Adapter->PendingDisconnectOid == Request);
+    Adapter->PendingDisconnectOid = NULL;
+    NdisReleaseSpinLock(&Adapter->Lock);
+    return NDIS_STATUS_RESOURCES;
 }
 
 static
@@ -943,6 +960,7 @@ VWifiMiniportCancelOidRequest(
 {
     PVWIFI_ADAPTER Adapter = (PVWIFI_ADAPTER)MiniportAdapterContext;
     PNDIS_OID_REQUEST ScanOid = NULL;
+    PNDIS_OID_REQUEST DisconnectOid = NULL;
 
     NdisAcquireSpinLock(&Adapter->Lock);
     if (Adapter->PendingScanOid != NULL &&
@@ -951,7 +969,18 @@ VWifiMiniportCancelOidRequest(
         ScanOid = Adapter->PendingScanOid;
         Adapter->PendingScanOid = NULL;
     }
+    if (Adapter->PendingDisconnectOid != NULL &&
+        Adapter->PendingDisconnectOid->RequestId == RequestId)
+    {
+        DisconnectOid = Adapter->PendingDisconnectOid;
+        Adapter->PendingDisconnectOid = NULL;
+    }
     NdisReleaseSpinLock(&Adapter->Lock);
+
+    if (DisconnectOid != NULL && Adapter->MiniportAdapterHandle != NULL)
+    {
+        NdisMOidRequestComplete(Adapter->MiniportAdapterHandle, DisconnectOid, NDIS_STATUS_REQUEST_ABORTED);
+    }
 
     if (ScanOid != NULL && Adapter->MiniportAdapterHandle != NULL)
     {
