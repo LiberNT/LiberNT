@@ -104,6 +104,9 @@ typedef struct
     // stop reading flag
     //
     UCHAR StopReadReport;
+    BOOLEAN DeviceStarted;
+    BOOLEAN RepeatWanted;
+    BOOLEAN RepeatEnabled;
 
     //
     // keyboard attributes

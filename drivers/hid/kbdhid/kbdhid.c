@@ -144,7 +144,7 @@ KbdHid_RepeatDpc(
 
     KeAcquireSpinLockAtDpcLevel(&DeviceExtension->InputLock);
     Usage = DeviceExtension->RepeatUsage;
-    if (Usage.Usage && !DeviceExtension->StopReadReport &&
+    if (Usage.Usage && DeviceExtension->RepeatEnabled &&
         HidP_TranslateUsageAndPagesToI8042ScanCodes(&Usage, 1, HidP_Keyboard_Make, &DeviceExtension->ModifierState,
                                                     KbdHid_InsertScanCodes, DeviceExtension) == HIDP_STATUS_SUCCESS)
     {
@@ -160,6 +160,9 @@ KbdHid_UpdateRepeat(
 {
     ULONG Index;
     PUSAGE_AND_PAGE Last = NULL;
+
+    if (!DeviceExtension->RepeatEnabled)
+        return;
 
     for (Index = 0; Index < DeviceExtension->UsageListLength && DeviceExtension->BreakUsageList[Index].Usage; Index++)
     {
@@ -384,11 +387,17 @@ KbdHid_CreateCompletion(
 static
 VOID
 KbdHid_StopRead(
-    IN PKBDHID_DEVICE_EXTENSION DeviceExtension)
+    IN PKBDHID_DEVICE_EXTENSION DeviceExtension,
+    IN BOOLEAN StopDevice)
 {
     KIRQL OldIrql;
 
     KeAcquireSpinLock(&DeviceExtension->InputLock, &OldIrql);
+    if (StopDevice)
+        DeviceExtension->DeviceStarted = FALSE;
+    else
+        DeviceExtension->RepeatWanted = FALSE;
+    DeviceExtension->RepeatEnabled = FALSE;
     DeviceExtension->RepeatUsage.Usage = 0;
     KeCancelTimer(&DeviceExtension->RepeatTimer);
     KeReleaseSpinLock(&DeviceExtension->InputLock, OldIrql);
@@ -405,6 +414,32 @@ KbdHid_StopRead(
 
     /* wait until the read completion routine has stopped the report cycle */
     KeWaitForSingleObject(&DeviceExtension->ReadCompletionEvent, Executive, KernelMode, FALSE, NULL);
+}
+
+static
+VOID
+KbdHid_EnableRepeat(
+    IN PKBDHID_DEVICE_EXTENSION DeviceExtension)
+{
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&DeviceExtension->InputLock, &OldIrql);
+    DeviceExtension->RepeatWanted = TRUE;
+    DeviceExtension->RepeatEnabled = DeviceExtension->DeviceStarted;
+    KeReleaseSpinLock(&DeviceExtension->InputLock, OldIrql);
+}
+
+static
+VOID
+KbdHid_MarkStarted(
+    IN PKBDHID_DEVICE_EXTENSION DeviceExtension)
+{
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&DeviceExtension->InputLock, &OldIrql);
+    DeviceExtension->DeviceStarted = TRUE;
+    DeviceExtension->RepeatEnabled = DeviceExtension->RepeatWanted;
+    KeReleaseSpinLock(&DeviceExtension->InputLock, OldIrql);
 }
 
 NTSTATUS
@@ -463,6 +498,8 @@ KbdHid_Create(
              /* store file object */
              DeviceExtension->FileObject = IoStack->FileObject;
 
+             KbdHid_EnableRepeat(DeviceExtension);
+
              /* reset event */
              KeClearEvent(&DeviceExtension->ReadCompletionEvent);
 
@@ -501,7 +538,7 @@ KbdHid_Close(
 
     if (IoStack->FileObject == DeviceExtension->FileObject)
     {
-        KbdHid_StopRead(DeviceExtension);
+        KbdHid_StopRead(DeviceExtension, FALSE);
 
         /* remove file object */
         DeviceExtension->FileObject = NULL;
@@ -1041,7 +1078,7 @@ KbdHid_Pnp(
     case IRP_MN_STOP_DEVICE:
     case IRP_MN_SURPRISE_REMOVAL:
         /* stop pending reads before freeing report buffers */
-        KbdHid_StopRead(DeviceExtension);
+        KbdHid_StopRead(DeviceExtension, TRUE);
 
         /* free resources */
         KbdHid_FreeResources(DeviceObject);
@@ -1063,7 +1100,7 @@ KbdHid_Pnp(
         /* FIXME synchronization */
 
         /* stop pending reads before freeing report buffers */
-        KbdHid_StopRead(DeviceExtension);
+        KbdHid_StopRead(DeviceExtension, TRUE);
 
         /* free resources */
         KbdHid_FreeResources(DeviceObject);
@@ -1112,6 +1149,8 @@ KbdHid_Pnp(
         /* lets start the device */
         Status = KbdHid_StartDevice(DeviceObject);
         DPRINT("KbdHid_StartDevice %x\n", Status);
+        if (NT_SUCCESS(Status))
+            KbdHid_MarkStarted(DeviceExtension);
 
         /* complete request */
         Irp->IoStatus.Status = Status;
