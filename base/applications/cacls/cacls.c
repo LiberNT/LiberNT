@@ -377,9 +377,6 @@ GetPathOfFile(LPTSTR FilePath, LPCTSTR pszFiles)
     if (pch != NULL)
     {
         *pch = 0;
-        /* when only the drive letter remains, or nothing at all, the
-         * directory is the drive root: a bare drive letter would resolve
-         * to the current directory on that drive instead */
         if (FilePath[0] == 0 || FilePath[_tcslen(FilePath) - 1] == _T(':'))
             _tcscat(FilePath, _T("\\"));
         if (!GetFullPathName(FilePath, MAX_PATH, FullPath, NULL))
