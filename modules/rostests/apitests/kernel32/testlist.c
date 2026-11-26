@@ -96,7 +96,6 @@ extern void func_GetTempPath2(void);
 extern void func_GetThreadTimes(void);
 extern void func_GetUILanguageInfo(void);
 extern void func_GetVolumeInformation(void);
-extern void func_NulDevice(void);
 extern void func_GetWsChangesEx(void);
 extern void func_HeapLowFragmentation(void);
 extern void func_HighResolutionTimerClock(void);
@@ -145,6 +144,7 @@ extern void func_MuiResources(void);
 extern void func_MultiByteToWideChar(void);
 extern void func_NamedPipeClientComputerName(void);
 extern void func_NlsStringApis(void);
+extern void func_NulDevice(void);
 extern void func_NumaApis(void);
 extern void func_PerfConsumer(void);
 extern void func_PerfProvider(void);
@@ -337,7 +337,6 @@ const struct test winetest_testlist[] =
     { "GetThreadTimes",              func_GetThreadTimes },
     { "GetUILanguageInfo",           func_GetUILanguageInfo },
     { "GetVolumeInformation",        func_GetVolumeInformation },
-    { "NulDevice",                   func_NulDevice },
     { "GetWsChangesEx",              func_GetWsChangesEx },
     { "HeapLowFragmentation",        func_HeapLowFragmentation },
     { "HighResolutionTimerClock",    func_HighResolutionTimerClock },
@@ -386,6 +385,7 @@ const struct test winetest_testlist[] =
     { "MultiByteToWideChar",         func_MultiByteToWideChar },
     { "NamedPipeClientComputerName", func_NamedPipeClientComputerName },
     { "NlsStringApis",               func_NlsStringApis },
+    { "NulDevice",                   func_NulDevice },
     { "NumaApis",                    func_NumaApis },
     { "PerfConsumer",              func_PerfConsumer },
     { "PerfProvider",              func_PerfProvider },

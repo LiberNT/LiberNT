@@ -101,7 +101,6 @@ list(APPEND SOURCE
     GetThreadTimes.c
     GetUILanguageInfo.c
     GetVolumeInformation.c
-    NulDevice.c
     GetWsChangesEx.c
     HeapLowFragmentation.c
     HighResolutionTimerClock.c
@@ -153,6 +152,7 @@ list(APPEND SOURCE
     MultiByteToWideChar.c
     NamedPipeClientComputerName.c
     NlsStringApis.c
+    NulDevice.c
     NumaApis.c
     PerfConsumer.c
     PerfProvider.c

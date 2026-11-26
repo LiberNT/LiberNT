@@ -15,6 +15,7 @@
 
 FAST_IO_DISPATCH FastIoDispatch;
 
+static const UNICODE_STRING NullDeviceSddl = RTL_CONSTANT_STRING(L"D:P(A;;GRGWGX;;;WD)(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGX;;;RC)");
 
 /* FUNCTIONS *****************************************************************/
 
@@ -183,17 +184,14 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
     /* Page the driver */
     MmPageEntireDriver(DriverEntry);
 
-    /* Create the Null device. The bit bucket is world-writable on Windows:
-     * the default security of a named device grants Everyone only
-     * read/execute, and every user-mode redirect to NUL, whatever the
-     * user, has to open it for read and write. */
+    /* Create the Null device */
     Status = IoCreateDeviceSecure(DriverObject,
                                   0,
                                   &DeviceName,
                                   FILE_DEVICE_NULL,
                                   FILE_DEVICE_SECURE_OPEN,
                                   FALSE,
-                                  &SDDL_DEVOBJ_SYS_ALL_ADM_RWX_WORLD_RW_RES_R,
+                                  &NullDeviceSddl,
                                   NULL,
                                   &DeviceObject);
     if (!NT_SUCCESS(Status))
