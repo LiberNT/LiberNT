@@ -175,7 +175,9 @@ dll/win32/mssip32             # Synced to Wine-11.14
 dll/win32/mstask              # Synced to Wine-11.14
 dll/win32/msvcirt             # Synced to Wine-11.14
 dll/win32/msvcm90             # Synced to Wine-11.14
+dll/win32/msvcp140            # Synced to Wine-11.14
 dll/win32/msvcp90             # Synced to Wine-11.14
+dll/win32/msvcp_win           # Synced to Wine-11.14
 dll/win32/msvcr90             # Synced to Wine-11.14
 dll/win32/msvcrt              # Synced to Wine-11.14
 dll/win32/msvcrt20            # Synced to Wine-11.14
@@ -262,6 +264,7 @@ dll/win32/urlmon              # Synced to Wine-11.14
 dll/win32/usp10               # Synced to Wine-11.14
 dll/win32/uxtheme             # Synced to Wine-11.14 (ReactOS native theme hooks and rendering retained)
 dll/win32/vbscript            # Synced to Wine-11.14
+dll/win32/vcruntime140        # Synced to Wine-11.14
 dll/win32/version             # Synced to Wine-11.14
 dll/win32/vssapi              # Synced to Wine-11.14
 dll/win32/wbemdisp            # Synced to Wine-11.14
