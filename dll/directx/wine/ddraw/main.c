@@ -298,7 +298,8 @@ static HRESULT DDRAW_Create(const GUID *guid, void **out, IUnknown *outer_unknow
     TRACE("driver_guid %s, ddraw %p, outer_unknown %p, interface_iid %s.\n",
             debugstr_guid(guid), out, outer_unknown, debugstr_guid(iid));
 
-    *out = NULL;
+    if (!out)
+        return DDERR_INVALIDPARAMS;
 
     if (guid == (GUID *) DDCREATE_EMULATIONONLY)
     {
@@ -316,6 +317,8 @@ static HRESULT DDRAW_Create(const GUID *guid, void **out, IUnknown *outer_unknow
     /* DDraw doesn't support aggregation, according to msdn */
     if (outer_unknown != NULL)
         return CLASS_E_NOAGGREGATION;
+
+    *out = NULL;
 
     if (!IsEqualGUID(iid, &IID_IDirectDraw7))
         flags = WINED3D_LEGACY_FFP_LIGHTING;
