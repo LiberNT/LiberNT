@@ -410,7 +410,7 @@ HRESULT WINAPI D3D11CreateDeviceAndSwapChain(IDXGIAdapter *adapter, D3D_DRIVER_T
         return hr;
     }
 
-    if (swapchain)
+    if (swapchain && swapchain_desc)
     {
         if (FAILED(hr = ID3D11Device_QueryInterface(device, &IID_IDXGIDevice, (void **)&dxgi_device)))
         {

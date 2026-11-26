@@ -1,5 +1,5 @@
 
-add_executable(d3d11_apitest cb_offset.c clear_view.c hal_render.c hal_resource.c map_default.c testlist.c warp_device.c winrt_interop.c)
+add_executable(d3d11_apitest cb_offset.c clear_view.c hal_render.c hal_resource.c map_default.c null_swapchain_desc.c testlist.c warp_device.c winrt_interop.c)
 target_link_libraries(d3d11_apitest wine dxguid dx10guid uuid)
 set_module_type(d3d11_apitest win32cui)
 add_dependencies(d3d11_apitest d3d_idl_headers)

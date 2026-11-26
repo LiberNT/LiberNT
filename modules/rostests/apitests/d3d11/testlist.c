@@ -6,6 +6,7 @@ extern void func_clear_view(void);
 extern void func_hal_render(void);
 extern void func_hal_resource(void);
 extern void func_map_default(void);
+extern void func_null_swapchain_desc(void);
 extern void func_warp_device(void);
 extern void func_winrt_interop(void);
 
@@ -16,6 +17,7 @@ const struct test winetest_testlist[] =
     { "hal_render", func_hal_render },
     { "hal_resource", func_hal_resource },
     { "map_default", func_map_default },
+    { "null_swapchain_desc", func_null_swapchain_desc },
     { "warp_device", func_warp_device },
     { "winrt_interop", func_winrt_interop },
 
