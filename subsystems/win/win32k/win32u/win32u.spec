@@ -152,7 +152,6 @@
 @ stdcall NtGdiDdDDIMarkDeviceAsError(ptr)
 @ stdcall NtGdiDdDDIOfferAllocations(ptr)
 @ stdcall NtGdiDdDDIOpenAdapterFromDeviceName(ptr)
-@ stdcall NtGdiDdDDIOpenAdapterFromGdiDisplayName(ptr)
 @ stdcall NtGdiDdDDIOpenAdapterFromHdc(ptr)
 @ stdcall NtGdiDdDDIOpenAdapterFromLuid(ptr)
 @ stdcall NtGdiDdDDIOpenKeyedMutex(ptr)

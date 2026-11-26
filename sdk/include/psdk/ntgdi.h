@@ -4153,13 +4153,6 @@ __kernel_entry
 W32KAPI
 NTSTATUS
 APIENTRY
-NtGdiDdDDIOpenAdapterFromGdiDisplayName(
-    _Inout_ D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME* unnamedParam1);
-
-__kernel_entry
-W32KAPI
-NTSTATUS
-APIENTRY
 NtGdiDdDDIOpenAdapterFromHdc(
     _Inout_ D3DKMT_OPENADAPTERFROMHDC* unnamedParam1);
 
