@@ -194,6 +194,26 @@ WddmBridgeIsProviderBound(VOID)
     return FALSE;
 }
 
+struct _WDDM_BRIDGE_TRUSTED_BUFFER;
+
+VOID
+WddmBridgeTrustKernelBuffer(
+    _Out_ struct _WDDM_BRIDGE_TRUSTED_BUFFER *Trusted,
+    _In_reads_bytes_(Size) CONST VOID *Buffer,
+    _In_ SIZE_T Size)
+{
+    UNREFERENCED_PARAMETER(Trusted);
+    UNREFERENCED_PARAMETER(Buffer);
+    UNREFERENCED_PARAMETER(Size);
+}
+
+VOID
+WddmBridgeDistrustKernelBuffer(
+    _Inout_ struct _WDDM_BRIDGE_TRUSTED_BUFFER *Trusted)
+{
+    UNREFERENCED_PARAMETER(Trusted);
+}
+
 BOOLEAN
 WddmHandOverIsActive(VOID)
 {

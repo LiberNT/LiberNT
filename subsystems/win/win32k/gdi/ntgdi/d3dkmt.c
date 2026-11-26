@@ -479,6 +479,7 @@ D3dkmtCallCaptured(
 {
     UCHAR StackBuffer[2 * 512];
     PUCHAR Captured = StackBuffer;
+    WDDM_BRIDGE_TRUSTED_BUFFER Trusted;
     NTSTATUS Status;
 
     if (ExGetPreviousMode() == KernelMode)
@@ -492,11 +493,22 @@ D3dkmtCallCaptured(
     if (Argument == NULL || !NT_SUCCESS(D3dkmtCaptureUserStructure(Argument, Size, Captured)))
     {
         RtlZeroMemory(Captured, Size);
-        Status = ZeroOnBadArgument ? Callback(Captured) : STATUS_INVALID_PARAMETER;
+        if (ZeroOnBadArgument)
+        {
+            WddmBridgeTrustKernelBuffer(&Trusted, Captured, Size);
+            Status = Callback(Captured);
+            WddmBridgeDistrustKernelBuffer(&Trusted);
+        }
+        else
+        {
+            Status = STATUS_INVALID_PARAMETER;
+        }
         goto Done;
     }
     RtlCopyMemory(Captured + Size, Captured, Size);
+    WddmBridgeTrustKernelBuffer(&Trusted, Captured, Size);
     Status = Callback(Captured);
+    WddmBridgeDistrustKernelBuffer(&Trusted);
     if (RtlCompareMemory(Captured, Captured + Size, Size) != Size)
     {
         _SEH2_TRY
@@ -1150,7 +1162,9 @@ NtGdiDdDDIPresent(_In_ D3DKMT_PRESENT* unnamedParam1)
     const SIZE_T PresentSize = RXGK_D3DKMT_PRESENT_WIRE_SIZE;
     CONST RECT *UserSubRects;
     RECT *CapturedSubRects = NULL;
-    SIZE_T SubRectBytes;
+    SIZE_T SubRectBytes = 0;
+    WDDM_BRIDGE_TRUSTED_BUFFER TrustedPresent;
+    WDDM_BRIDGE_TRUSTED_BUFFER TrustedSubRects;
     NTSTATUS Status;
 
     RtlZeroMemory(&Captured, sizeof(Captured));
@@ -1237,7 +1251,13 @@ NtGdiDdDDIPresent(_In_ D3DKMT_PRESENT* unnamedParam1)
         }
     }
 
+    WddmBridgeTrustKernelBuffer(&TrustedPresent, &Captured, sizeof(Captured));
+    if (CapturedSubRects != NULL)
+        WddmBridgeTrustKernelBuffer(&TrustedSubRects, CapturedSubRects, SubRectBytes);
     Status = DxgAdapterCallbacks.RxgkIntPfnPresent(&Captured);
+    if (CapturedSubRects != NULL)
+        WddmBridgeDistrustKernelBuffer(&TrustedSubRects);
+    WddmBridgeDistrustKernelBuffer(&TrustedPresent);
     if (NT_SUCCESS(Status))
     {
         Captured.pSrcSubRects = UserSubRects;
@@ -2015,6 +2035,7 @@ NtGdiDdDDIOpenResourceFromNtHandle(_Inout_ struct _D3DKMT_OPENRESOURCEFROMNTHAND
     D3DKMT_OPENRESOURCEFROMNTHANDLE Captured;
     D3DKMT_OPENRESOURCE OpenResource;
     D3DKMT_HANDLE GlobalShareHandle;
+    WDDM_BRIDGE_TRUSTED_BUFFER Trusted;
     NTSTATUS Status;
 
     Status = D3dkmtValidateWddmThunk(unnamedParam1);
@@ -2065,7 +2086,9 @@ NtGdiDdDDIOpenResourceFromNtHandle(_Inout_ struct _D3DKMT_OPENRESOURCEFROMNTHAND
     OpenResource.TotalPrivateDriverDataBufferSize =
         Captured.TotalPrivateDriverDataBufferSize;
 
+    WddmBridgeTrustKernelBuffer(&Trusted, &OpenResource, sizeof(OpenResource));
     Status = D3dkmtBridgeOpenResourceEntries2(&OpenResource);
+    WddmBridgeDistrustKernelBuffer(&Trusted);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -2099,6 +2122,7 @@ NtGdiDdDDIQueryResourceInfoFromNtHandle(_Inout_ struct _D3DKMT_QUERYRESOURCEINFO
     D3DKMT_QUERYRESOURCEINFOFROMNTHANDLE Captured;
     D3DKMT_QUERYRESOURCEINFO QueryResourceInfo;
     D3DKMT_HANDLE GlobalShareHandle;
+    WDDM_BRIDGE_TRUSTED_BUFFER Trusted;
     NTSTATUS Status;
 
     Status = D3dkmtValidateWddmThunk(unnamedParam1);
@@ -2123,7 +2147,9 @@ NtGdiDdDDIQueryResourceInfoFromNtHandle(_Inout_ struct _D3DKMT_QUERYRESOURCEINFO
     QueryResourceInfo.PrivateRuntimeDataSize =
         Captured.PrivateRuntimeDataSize;
 
+    WddmBridgeTrustKernelBuffer(&Trusted, &QueryResourceInfo, sizeof(QueryResourceInfo));
     Status = D3DKMTQueryResourceInfo(&QueryResourceInfo);
+    WddmBridgeDistrustKernelBuffer(&Trusted);
     if (!NT_SUCCESS(Status))
         return Status;
 
