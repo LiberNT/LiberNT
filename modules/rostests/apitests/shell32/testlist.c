@@ -90,6 +90,7 @@ extern void func_StartMenuPin(void);
 
 extern void func_Win81Ordinals(void);
 
+extern void func_LargeFileSize(void);
 extern void func_ModernShell(void);
 extern void func_Thumbnails(void);
 extern void func_ShellItemProperties(void);
@@ -100,6 +101,7 @@ extern void func_PreviewHandler(void);
 
 const struct test winetest_testlist[] =
 {
+    { "LargeFileSize", func_LargeFileSize },
     { "ModernShell", func_ModernShell },
     { "Thumbnails", func_Thumbnails },
     { "ShellItemProperties", func_ShellItemProperties },

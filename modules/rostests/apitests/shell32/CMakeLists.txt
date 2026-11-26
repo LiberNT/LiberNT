@@ -91,6 +91,7 @@ list(APPEND SOURCE
     shelltest.cpp)
 
 list(APPEND PCH_SKIP_SOURCE
+    LargeFileSize.c
     ModernShell.c
     StartMenuPin.c
     Win81Ordinals.c

@@ -56,6 +56,7 @@ class CFSFolder :
             _Out_ LPITEMIDLIST *ppidl);
         BOOL _GetFindDataFromName(_In_ LPCWSTR pszName, _Out_ WIN32_FIND_DATAW *pFind);
         HRESULT _CreateIDListFromName(LPCWSTR pszName, DWORD attrs, IBindCtx *pbc, LPITEMIDLIST *ppidl);
+        ULONGLONG _GetItemSize(PCUITEMID_CHILD pidl);
 
     public:
         CFSFolder();
