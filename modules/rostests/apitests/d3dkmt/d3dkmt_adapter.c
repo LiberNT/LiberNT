@@ -10,6 +10,7 @@
  */
 
 #include "precomp.h"
+#include <winuser.h>
 
 static void Test_EnumAdapters(void)
 {
@@ -109,6 +110,46 @@ static void Test_OpenAdapterFromHdc(void)
        "Adapter LUID is zero\n");
 
     /* Close the adapter */
+    memset(&CloseData, 0, sizeof(CloseData));
+    CloseData.hAdapter = OpenData.hAdapter;
+    Status = pfnD3DKMTCloseAdapter(&CloseData);
+    ok_succeeded(Status, "CloseAdapter failed with 0x%lx\n", Status);
+}
+
+static void Test_OpenAdapterFromDisplayDeviceHdc(void)
+{
+    D3DKMT_OPENADAPTERFROMHDC OpenData;
+    D3DKMT_CLOSEADAPTER CloseData;
+    DISPLAY_DEVICEW Device;
+    NTSTATUS Status;
+    HDC hDC;
+
+    LOAD_D3DKMT(D3DKMTOpenAdapterFromHdc);
+    LOAD_D3DKMT(D3DKMTCloseAdapter);
+
+    memset(&Device, 0, sizeof(Device));
+    Device.cb = sizeof(Device);
+    if (!EnumDisplayDevicesW(NULL, 0, &Device, 0))
+    {
+        skip("no display device\n");
+        return;
+    }
+    hDC = CreateDCW(NULL, Device.DeviceName, NULL, NULL);
+    ok(hDC != NULL, "CreateDCW(%ls) failed with %lu\n", Device.DeviceName, GetLastError());
+    if (!hDC)
+        return;
+
+    memset(&OpenData, 0, sizeof(OpenData));
+    OpenData.hDc = hDC;
+    Status = pfnD3DKMTOpenAdapterFromHdc(&OpenData);
+    DeleteDC(hDC);
+    ok_succeeded(Status, "OpenAdapterFromHdc(%ls DC) failed with 0x%lx\n", Device.DeviceName, Status);
+    if (!NT_SUCCESS(Status))
+        return;
+    ok(OpenData.hAdapter != 0, "OpenAdapterFromHdc returned zero handle\n");
+    ok(OpenData.AdapterLuid.LowPart != 0 || OpenData.AdapterLuid.HighPart != 0, "Adapter LUID is zero\n");
+    ok(OpenData.VidPnSourceId == 0, "first display device has source %u\n", OpenData.VidPnSourceId);
+
     memset(&CloseData, 0, sizeof(CloseData));
     CloseData.hAdapter = OpenData.hAdapter;
     Status = pfnD3DKMTCloseAdapter(&CloseData);
@@ -362,6 +403,7 @@ START_TEST(D3dkmtAdapter)
 {
     Test_EnumAdapters();
     Test_OpenAdapterFromHdc();
+    Test_OpenAdapterFromDisplayDeviceHdc();
     Test_OpenAdapterFromGdiDisplayName();
     Test_OpenAdapterFromDeviceName();
     Test_CloseAdapter();

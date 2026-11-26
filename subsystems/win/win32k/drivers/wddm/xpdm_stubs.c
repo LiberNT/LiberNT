@@ -221,6 +221,28 @@ WddmHandOverIsActive(VOID)
 }
 
 NTSTATUS
+WddmHandOverOpenAdapter(
+    _In_ PDEVICE_OBJECT DisplayDevice,
+    _Out_ D3DKMT_HANDLE *hAdapter,
+    _Out_ LUID *AdapterLuid,
+    _Out_ D3DDDI_VIDEO_PRESENT_SOURCE_ID *VidPnSourceId)
+{
+    UNREFERENCED_PARAMETER(DisplayDevice);
+    *hAdapter = 0;
+    RtlZeroMemory(AdapterLuid, sizeof(*AdapterLuid));
+    *VidPnSourceId = D3DDDI_ID_UNINITIALIZED;
+    return STATUS_DEVICE_NOT_READY;
+}
+
+NTSTATUS
+WddmHandOverCloseAdapter(
+    _In_ D3DKMT_HANDLE hAdapter)
+{
+    UNREFERENCED_PARAMETER(hAdapter);
+    return STATUS_DEVICE_NOT_READY;
+}
+
+NTSTATUS
 WddmHandOverIsPresentSource(
     _In_ LUID AdapterLuid,
     _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
