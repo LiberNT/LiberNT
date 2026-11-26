@@ -26,6 +26,7 @@ extern PHAL_ACPI_PCI_ROUTE_QUERY HalpArm64PciRouteQueryCallback;
 
 static BOOLEAN HalpArm64ExtensionMatched;
 static PHAL_EXTENSION_PHASE1_INITIALIZE HalpArm64ExtensionPhase1Initialize;
+static PLDR_DATA_TABLE_ENTRY HalpArm64ExtensionLdrEntry;
 
 const HAL_ARM64_INTERRUPT_CONTROLLER *HalpArm64InterruptController = NULL;
 const HAL_ARM64_PCI_CONFIG_BACKEND *HalpArm64PciConfigBackend = NULL;
@@ -275,7 +276,7 @@ HalpArm64ProbePlatforms(
         {
             HalpArm64ExtensionMatched = TRUE;
             HalpArm64ExtensionPhase1Initialize = (PHAL_EXTENSION_PHASE1_INITIALIZE)Module->Phase1InitializeRoutine;
-            DPRINT1("[arm64][HALEXT] Platform: %wZ\n", &Module->LdrEntry->BaseDllName);
+            HalpArm64ExtensionLdrEntry = Module->LdrEntry;
             return;
         }
     }
@@ -284,6 +285,13 @@ HalpArm64ProbePlatforms(
 VOID
 HalpArm64Phase1PlatformInit(VOID)
 {
+    /* %wZ needs the NLS tables and PASSIVE_LEVEL, which the probe in HalInitializeProcessor runs before */
+    if (HalpArm64ExtensionLdrEntry)
+    {
+        ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+        DPRINT1("[arm64][HALEXT] Platform: %wZ\n", &HalpArm64ExtensionLdrEntry->BaseDllName);
+    }
+
     if (HalpArm64ExtensionPhase1Initialize)
         HalpArm64ExtensionPhase1Initialize();
 }
