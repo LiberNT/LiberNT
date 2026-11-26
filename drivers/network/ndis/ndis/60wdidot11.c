@@ -902,17 +902,15 @@ Ndis6WdiQuery(
             return Ndis6WdiQueryUlong(Request, (ULONG)Dot11->CurrentPhyType);
         case OID_DOT11_SUPPORTED_PHY_TYPES:
         {
-            UCHAR Buffer[FIELD_OFFSET(DOT11_PHY_TYPE_LIST, dot11PhyType) + NDIS6_WDI_MAX_PHY_TYPES * sizeof(DOT11_PHY_TYPE)];
-            PDOT11_PHY_TYPE_LIST List = (PDOT11_PHY_TYPE_LIST)Buffer;
+            UCHAR Buffer[FIELD_OFFSET(DOT11_SUPPORTED_PHY_TYPES, dot11PHYType) + NDIS6_WDI_MAX_PHY_TYPES * sizeof(DOT11_PHY_TYPE)];
+            PDOT11_SUPPORTED_PHY_TYPES List = (PDOT11_SUPPORTED_PHY_TYPES)Buffer;
 
+            ASSERT(Wdi->PhyTypeCount <= NDIS6_WDI_MAX_PHY_TYPES);
             RtlZeroMemory(Buffer, sizeof(Buffer));
-            List->Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
-            List->Header.Revision = DOT11_PHY_TYPE_LIST_REVISION_1;
-            List->Header.Size = sizeof(DOT11_PHY_TYPE_LIST);
             List->uNumOfEntries = Wdi->PhyTypeCount;
             List->uTotalNumOfEntries = Wdi->PhyTypeCount;
-            RtlCopyMemory(List->dot11PhyType, Wdi->PhyTypes, Wdi->PhyTypeCount * sizeof(DOT11_PHY_TYPE));
-            return Ndis6WdiQueryBuffer(Request, Buffer, FIELD_OFFSET(DOT11_PHY_TYPE_LIST, dot11PhyType) + Wdi->PhyTypeCount * sizeof(DOT11_PHY_TYPE));
+            RtlCopyMemory(List->dot11PHYType, Wdi->PhyTypes, Wdi->PhyTypeCount * sizeof(DOT11_PHY_TYPE));
+            return Ndis6WdiQueryBuffer(Request, Buffer, FIELD_OFFSET(DOT11_SUPPORTED_PHY_TYPES, dot11PHYType) + Wdi->PhyTypeCount * sizeof(DOT11_PHY_TYPE));
         }
         case OID_DOT11_CURRENT_PHY_ID:
             return Ndis6WdiQueryUlong(Request, 0);
