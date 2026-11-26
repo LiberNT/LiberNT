@@ -26,6 +26,7 @@ option(HOST_TEST_ACPI "Build native firmware table tests" ON)
 option(HOST_TEST_HALTIME "Build native HAL time arithmetic tests" ON)
 option(HOST_TEST_NDIS "Build native NDIS WDI tests" ON)
 option(HOST_TEST_DHCPCSVC "Build native DHCP client tests" ON)
+option(HOST_TEST_NLASVC "Build native network location awareness tests" ON)
 option(HOST_TEST_EXT4 "Build native ext4 driver core tests" ON)
 option(HOST_TEST_USB "Build native USB host controller tests" ON)
 option(HOST_TEST_STORPORT "Build native Storport tests" ON)
@@ -35,6 +36,10 @@ option(HOST_TEST_APPLEAGX "Build native Apple graphics firmware data tests" ON)
 
 if(BUILD_TESTING AND HOST_TEST_DHCPCSVC)
     add_subdirectory(dhcpcsvc)
+endif()
+
+if(BUILD_TESTING AND HOST_TEST_NLASVC)
+    add_subdirectory(nlasvc)
 endif()
 
 if(BUILD_TESTING AND HOST_TEST_EXT4)

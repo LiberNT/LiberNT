@@ -2583,6 +2583,16 @@ HKLM,"SYSTEM\CurrentControlSet\Services\WlanSvc","ObjectName",0x00000000,"LocalS
 HKLM,"SYSTEM\CurrentControlSet\Services\WlanSvc","Start",0x00010001,0x00000002
 HKLM,"SYSTEM\CurrentControlSet\Services\WlanSvc","Type",0x00010001,0x00000110
 
+; Network Location Awareness
+HKLM,"SYSTEM\CurrentControlSet\Services\NlaSvc","DisplayName",0x00000000,"Network Location Awareness"
+HKLM,"SYSTEM\CurrentControlSet\Services\NlaSvc","Description",0x00000000,"Checks whether each network connection reaches the Internet or stops at a sign-in page."
+HKLM,"SYSTEM\CurrentControlSet\Services\NlaSvc","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\NlaSvc","ImagePath",0x00020000,"%SystemRoot%\system32\nlasvc.exe"
+HKLM,"SYSTEM\CurrentControlSet\Services\NlaSvc","ObjectName",0x00000000,"LocalSystem"
+HKLM,"SYSTEM\CurrentControlSet\Services\NlaSvc","Start",0x00010001,0x00000002
+HKLM,"SYSTEM\CurrentControlSet\Services\NlaSvc","Type",0x00010001,0x00000010
+HKLM,"SYSTEM\CurrentControlSet\Services\NlaSvc\Parameters\Internet","",0x00000000,""
+
 HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","DependOnService",0x00010000,"RPCSS","PlugPlay"
 HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","DisplayName",0x00000000,"Smart Card"
 HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","Description",0x00000000,"Manages access to smart cards read by this computer."
