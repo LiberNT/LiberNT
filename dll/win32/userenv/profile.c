@@ -816,7 +816,6 @@ CopySystemProfile(
         goto done;
     }
 
-    /* The system profile carries the low integrity write area, as on Windows */
     CreateLocalLowDirectory(szProfilePath);
 
     cchSize = ExpandEnvironmentStringsW(L"%SystemRoot%\\SysWOW64", szProfilePath, ARRAYSIZE(szProfilePath));
