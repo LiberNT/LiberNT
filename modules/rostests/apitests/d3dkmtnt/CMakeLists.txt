@@ -13,6 +13,7 @@ list(APPEND SOURCE
     win32unames.c
     allocabi.c
     nestedptr.c
+    win32kserved.c
     testlist.c)
 add_executable(d3dkmtnt_apitest ${SOURCE})
 target_link_libraries(d3dkmtnt_apitest wine ${PSEH_LIB})
