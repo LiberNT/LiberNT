@@ -4679,6 +4679,13 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
                 ULONG Index;
 #if defined(REACTOS_GRAPHICS_DRIVER_MODEL_WDDM)
                 Status = WddmBridgeValidateSharedResourceOwner(&Request.AdapterLuid, Request.GlobalShare);
+                /* Without the bridge a global share handle exists only for legacy sharing, which any process may open */
+                /* TODO: validate the share owner through a graphics kernel that has no bridge */
+                if (Status == STATUS_INVALID_DEVICE_REQUEST &&
+                    WddmBridgeRequireReady() == STATUS_INVALID_DEVICE_REQUEST)
+                {
+                    Status = STATUS_SUCCESS;
+                }
 #else
                 Status = STATUS_NOT_SUPPORTED;
 #endif
