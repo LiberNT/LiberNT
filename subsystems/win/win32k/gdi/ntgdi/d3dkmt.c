@@ -685,6 +685,15 @@ NtGdiDdDDISharedPrimaryUnLockNotification(_In_ const D3DKMT_SHAREDPRIMARYUNLOCKN
     Process = PsGetCurrentProcessWin32Process();
     if (Process != NULL && D3dkmtFindSharedPrimaryLock(Process, Captured.AdapterLuid, Captured.VidPnSourceId, FALSE))
         return STATUS_SUCCESS;
+    if (WddmHandOverIsActive())
+    {
+        BOOLEAN IsSource;
+
+        Status = WddmHandOverIsPresentSource(Captured.AdapterLuid, Captured.VidPnSourceId, &IsSource);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        return IsSource ? STATUS_INVALID_PARAMETER : STATUS_SUCCESS;
+    }
     return D3DKMTSharedPrimaryUnLockNotification(unnamedParam1);
 }
 
