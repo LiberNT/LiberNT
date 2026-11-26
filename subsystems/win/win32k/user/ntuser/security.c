@@ -495,6 +495,85 @@ IntCheckParsedObjectAccess(
  * of a lack of needed pages to reserve for such allocation. A
  * failure NTSTATUS code is returned otherwise.
  */
+/*
+ * Query the group list of the current security context. The caller
+ * locates individual SIDs in it and frees the buffer with
+ * IntFreeSecurityBuffer. NULL when no token can be captured.
+ */
+static
+PTOKEN_GROUPS
+IntQueryTokenGroups(VOID)
+{
+    NTSTATUS Status;
+    PTOKEN_GROUPS Groups = NULL;
+    HANDLE Token;
+    ULONG BufferLength = 0;
+
+    Token = IntGetCurrentAccessToken();
+    if (!Token)
+    {
+        ERR("IntQueryTokenGroups(): Couldn't capture the token!\n");
+        return NULL;
+    }
+
+    Status = ZwQueryInformationToken(Token,
+                                     TokenGroups,
+                                     NULL,
+                                     0,
+                                     &BufferLength);
+    if (Status != STATUS_BUFFER_TOO_SMALL)
+    {
+        ERR("IntQueryTokenGroups(): Failed to query the necessary length for the buffer (Status 0x%08lx)!\n", Status);
+        ZwClose(Token);
+        return NULL;
+    }
+
+    Groups = IntAllocateSecurityBuffer(BufferLength);
+    if (!Groups)
+    {
+        ERR("IntQueryTokenGroups(): Couldn't allocate memory for the token groups!\n");
+        ZwClose(Token);
+        return NULL;
+    }
+
+    Status = ZwQueryInformationToken(Token,
+                                     TokenGroups,
+                                     Groups,
+                                     BufferLength,
+                                     &BufferLength);
+    ZwClose(Token);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("IntQueryTokenGroups(): Failed to query the token groups (Status 0x%08lx)!\n", Status);
+        IntFreeSecurityBuffer(Groups);
+        return NULL;
+    }
+
+    return Groups;
+}
+
+/*
+ * Find the logon session SID in a token groups buffer,
+ * or NULL when the token carries none.
+ */
+static
+PSID
+IntFindLogonSessionSid(
+    _In_ PTOKEN_GROUPS Groups)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Groups->GroupCount; Index++)
+    {
+        if (Groups->Groups[Index].Attributes & SE_GROUP_LOGON_ID)
+        {
+            return Groups->Groups[Index].Sid;
+        }
+    }
+
+    return NULL;
+}
+
 NTSTATUS
 NTAPI
 IntCreateServiceSecurity(
@@ -509,9 +588,14 @@ IntCreateServiceSecurity(
     SECURITY_DESCRIPTOR AbsSD;
     PSECURITY_DESCRIPTOR RelSD;
     PTOKEN_USER TokenUser;
+    PTOKEN_GROUPS TokenGroups;
+    PSID LogonSid;
+
     /* Initialize our local variables */
     RelSDSize = 0;
     TokenUser = NULL;
+    TokenGroups = NULL;
+    LogonSid = NULL;
     RelSD = NULL;
     ServiceDacl = NULL;
     ServiceSacl = NULL;
@@ -524,6 +608,18 @@ IntCreateServiceSecurity(
         return Status;
     }
 
+    /*
+     * Capture the logon session SID of this security context. On Windows the
+     * window station DACL names the logon session so that every process of
+     * the session can reach it; without it a restricted token of the same
+     * user fails the restricted access pass, because its restricting SIDs
+     * (Everyone, Users, the logon SID) never match the DACL.
+     */
+    TokenGroups = IntQueryTokenGroups();
+    if (TokenGroups)
+    {
+        LogonSid = IntFindLogonSessionSid(TokenGroups);
+    }
 
     /* Initialize the absolute security descriptor */
     Status = RtlCreateSecurityDescriptor(&AbsSD, SECURITY_DESCRIPTOR_REVISION);
@@ -567,6 +663,12 @@ IntCreateServiceSecurity(
                sizeof(ACCESS_ALLOWED_ACE) + RtlLengthSid(SeExports->SeAliasAdminsSid) +
                sizeof(ACCESS_ALLOWED_ACE) + RtlLengthSid(SeExports->SeAliasAdminsSid);
 
+    /* The logon session takes the same pair of entries when it exists */
+    if (LogonSid)
+    {
+        DaclSize += sizeof(ACCESS_ALLOWED_ACE) + RtlLengthSid(LogonSid) +
+                    sizeof(ACCESS_ALLOWED_ACE) + RtlLengthSid(LogonSid);
+    }
 
     /* Allocate memory for service DACL */
     ServiceDacl = IntAllocateSecurityBuffer(DaclSize);
@@ -618,6 +720,37 @@ IntCreateServiceSecurity(
     {
         ERR("IntCreateServiceSecurity(): Failed to set up desktop ACE for authenticated user (Status 0x%08lx)\n", Status);
         goto Quit;
+    }
+
+    /*
+     * Every process of this logon session may reach the window station.
+     * Besides matching Windows, this is what lets a restricted token of
+     * the session in: the restricted access pass evaluates the restricting
+     * SIDs, and the logon session SID is always one of them.
+     */
+    if (LogonSid)
+    {
+        Status = RtlAddAccessAllowedAceEx(ServiceDacl,
+                                          ACL_REVISION,
+                                          0,
+                                          WINSTA_ACCESS_ALL,
+                                          LogonSid);
+        if (!NT_SUCCESS(Status))
+        {
+            ERR("IntCreateServiceSecurity(): Failed to set up window station ACE for the logon session (Status 0x%08lx)\n", Status);
+            goto Quit;
+        }
+
+        Status = RtlAddAccessAllowedAceEx(ServiceDacl,
+                                          ACL_REVISION,
+                                          INHERIT_ONLY_ACE | NO_PROPAGATE_INHERIT_ACE | OBJECT_INHERIT_ACE,
+                                          DESKTOP_ALL_ACCESS,
+                                          LogonSid);
+        if (!NT_SUCCESS(Status))
+        {
+            ERR("IntCreateServiceSecurity(): Failed to set up desktop ACE for the logon session (Status 0x%08lx)\n", Status);
+            goto Quit;
+        }
     }
 
     /*
@@ -762,6 +895,11 @@ IntCreateServiceSecurity(
     *ServiceSd = RelSD;
 
 Quit:
+    if (TokenGroups)
+    {
+        IntFreeSecurityBuffer(TokenGroups);
+    }
+
     if (ServiceSacl)
     {
         IntFreeSecurityBuffer(ServiceSacl);
