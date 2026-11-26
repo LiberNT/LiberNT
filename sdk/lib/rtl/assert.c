@@ -86,16 +86,10 @@ RtlAssert(
         if (RtlGetNtGlobalFlags() & FLG_DISABLE_DEBUG_PROMPTS)
             RtlRaiseStatus(STATUS_ASSERTION_FAILURE);
 
-        if (!RtlpKernelDebuggerEnabled())
-            return;
-
-        Answer = RtlpAskAboutAssertion();
+        Answer = RtlpKernelDebuggerEnabled() ? RtlpAskAboutAssertion() : RtlpAssertUnanswered;
         switch (Answer)
         {
             case RtlpAssertUnanswered:
-                DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "*** No answer, the assertion is ignored\n");
-                break;
-
             case RtlpAssertBreakAndAsk:
             case RtlpAssertBreakOnce:
                 DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "Execute '.cxr %p' to dump context\n", &Context);
