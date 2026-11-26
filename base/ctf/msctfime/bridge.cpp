@@ -680,7 +680,7 @@ CicBridge::SetActiveContextAlways(TLS *pTLS, HIMC hIMC, BOOL fActive, HWND hWnd,
         return S_OK;
     }
 
-    if (hIMC && !IsEALang(LOWORD(hKL)))
+    if (hIMC)
     {
         CicIMCLock imcLock(hIMC);
         if (FAILED(imcLock.m_hr))

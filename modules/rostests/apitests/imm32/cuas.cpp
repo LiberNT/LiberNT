@@ -156,6 +156,28 @@ static DWORD WINAPI SecondThread(LPVOID pParam)
     return 0;
 }
 
+struct OTHER_WINDOW
+{
+    HANDLE hShown;
+    HANDLE hBack;
+};
+
+static DWORD WINAPI OtherWindowThread(LPVOID pParam)
+{
+    OTHER_WINDOW *pOther = (OTHER_WINDOW *)pParam;
+    HWND hwnd;
+
+    hwnd = CreateWindowW(L"MsctfCuasTest", L"other", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 400, 0, 300, 100, NULL, NULL,
+                         GetModuleHandleW(NULL), NULL);
+    SetForegroundWindow(hwnd);
+    SetFocus(hwnd);
+    Pump();
+    SetEvent(pOther->hShown);
+    WaitForSingleObject(pOther->hBack, 30000);
+    DestroyWindow(hwnd);
+    return 0;
+}
+
 static DWORD WINAPI AppFirstThread(LPVOID pParam)
 {
     ITfThreadMgrEx *pThreadMgr = NULL;
@@ -205,6 +227,7 @@ START_TEST(cuas)
     WCHAR sz[64];
     HANDLE hThread;
     HRESULT hr;
+    HKL hklPrevious;
 
     CoInitialize(NULL);
     if (!TestTip_Register())
@@ -223,6 +246,8 @@ START_TEST(cuas)
                          wc.hInstance, NULL);
     SetForegroundWindow(hwnd);
     SetFocus(hwnd);
+    Pump();
+    hklPrevious = ActivateKeyboardLayout(LoadKeyboardLayoutW(L"00000411", KLF_NOTELLSHELL), 0);
     Pump();
 
     CoCreateInstance(CLSID_TF_ThreadMgr, NULL, CLSCTX_INPROC_SERVER, IID_ITfThreadMgr, (void **)&pThreadMgr);
@@ -323,6 +348,69 @@ START_TEST(cuas)
     check_wstr(s_szResult, L"\x305f\x3061");
     ImmReleaseContext(hwnd, hIMC);
 
+    {
+        HWND hwnd2 = CreateWindowW(L"MsctfCuasTest", L"same", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 0, 200, 300, 100,
+                                   NULL, NULL, GetModuleHandleW(NULL), NULL);
+        SetForegroundWindow(hwnd);
+        SetFocus(hwnd);
+        Pump();
+        Reset();
+        ok_hr(g_pfnCompose(L"\x306c\x306d", TESTTIP_START), S_OK);
+        Pump();
+        check_messages("start,comp(C)");
+        Reset();
+        g_pTip->cTerminated = 0;
+        SetFocus(hwnd2);
+        Pump();
+        check_messages("comp(R),end");
+        check_wstr(s_szResult, L"\x306c\x306d");
+        ReadCompositionString(hwnd, GCS_COMPSTR, sz, _countof(sz));
+        check_wstr(sz, L"");
+        ok_long(g_pTip->cTerminated, 1);
+        Reset();
+        SetFocus(hwnd);
+        Pump();
+        check_messages("");
+        DestroyWindow(hwnd2);
+        Pump();
+    }
+
+    {
+        OTHER_WINDOW other;
+        HANDLE hOther;
+
+        SetForegroundWindow(hwnd);
+        SetFocus(hwnd);
+        Pump();
+        Reset();
+        ok_hr(g_pfnCompose(L"\x306a\x306b", TESTTIP_START), S_OK);
+        Pump();
+        check_messages("start,comp(C)");
+        Reset();
+        g_pTip->cTerminated = 0;
+        other.hShown = CreateEventW(NULL, TRUE, FALSE, NULL);
+        other.hBack = CreateEventW(NULL, TRUE, FALSE, NULL);
+        hOther = CreateThread(NULL, 0, OtherWindowThread, &other, 0, NULL);
+        ok(hOther != NULL, "CreateThread failed, error %lu\n", GetLastError());
+        ok_long(WaitForSingleObject(other.hShown, 30000), WAIT_OBJECT_0);
+        Pump();
+        check_messages("comp(R),end");
+        check_wstr(s_szResult, L"\x306a\x306b");
+        ReadCompositionString(hwnd, GCS_COMPSTR, sz, _countof(sz));
+        check_wstr(sz, L"");
+        ok_long(g_pTip->cTerminated, 1);
+        Reset();
+        SetEvent(other.hBack);
+        ok_long(WaitForSingleObject(hOther, 30000), WAIT_OBJECT_0);
+        SetForegroundWindow(hwnd);
+        SetFocus(hwnd);
+        Pump();
+        check_messages("");
+        CloseHandle(hOther);
+        CloseHandle(other.hShown);
+        CloseHandle(other.hBack);
+    }
+
     ok(GetKeyboardLayout(0) == (HKL)(ULONG_PTR)0x04110411, "layout %p\n", GetKeyboardLayout(0));
     ok_long(ImmGetProperty(GetKeyboardLayout(0), IGP_PROPERTY), 0x001D000A);
 
@@ -343,6 +431,10 @@ START_TEST(cuas)
     }
 
 done:
+    SetForegroundWindow(hwnd);
+    SetFocus(hwnd);
+    ActivateKeyboardLayout(hklPrevious, 0);
+    Pump();
     DestroyWindow(hwnd);
     TestTip_Deactivate();
     if (pThreadMgr)
