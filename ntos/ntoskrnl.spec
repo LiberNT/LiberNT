@@ -1183,6 +1183,7 @@
 @ stdcall RtlAddAccessAllowedAceEx(ptr long long long ptr)
 @ stdcall RtlAddAce(ptr long long ptr long)
 @ stdcall RtlAddAtomToAtomTable(ptr wstr ptr)
+@ stdcall RtlAddMandatoryAce(ptr long long long long ptr)
 @ stdcall RtlAddRange(ptr long long long long long long ptr ptr)
 @ stdcall RtlAllocateHeap(ptr long long)
 @ stdcall RtlAnsiCharToUnicodeChar(ptr)
