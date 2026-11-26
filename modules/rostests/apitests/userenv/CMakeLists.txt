@@ -5,6 +5,7 @@ list(APPEND SOURCE
     GetProfileDirs.c
     LoadUserProfile.c
     ProfileCreation.c
+    SystemProfileLocalLow.c
     testlist.c)
 
 add_executable(userenv_apitest ${SOURCE})
