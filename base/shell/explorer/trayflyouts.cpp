@@ -8178,6 +8178,8 @@ public:
                         yb += Sc(26);
                     }
                     SetRect(&row.rcButton, m_size.cx - Sc(20) - Sc(96), yb, m_size.cx - Sc(20), yb + Sc(26));
+                    if (row.bHasProfile)
+                        SetRect(&row.rcForget, Sc(42), yb, Sc(42) + Sc(26), yb + Sc(26));
                     yb += Sc(26) + Sc(10);
                 }
                 nRowH = yb - y;
@@ -9107,6 +9109,14 @@ public:
                     rcSsid.bottom = rcRow.top + nHeadH / 2 + Sc(3);
                     rcSsid.top = rcRow.top + Sc(2);
                 }
+                if (row.bHasProfile)
+                {
+                    int cySsid = (rcSsid.top + rcSsid.bottom) / 2;
+                    RECT rcSaved = { rcSsid.right - Sc(16), cySsid - Sc(8), rcSsid.right, cySsid + Sc(8) };
+
+                    DrawGlyph(hdcMem, &rcSaved, L"save_20_regular", Sc(16), m_Pal.DimText);
+                    rcSsid.right = rcSaved.left - Sc(6);
+                }
                 DrawTextW(hdcMem, row.szName, -1, &rcSsid,
                           DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
                 if (bExpanded)
@@ -9150,6 +9160,14 @@ public:
                             DrawCheck(hdcMem, &row.rcCheck, m_bAutoConnect, L"Connect automatically", m_iHotBtn == 3);
                         DrawButton(hdcMem, &row.rcButton, RowButtonText(row),
                                    m_iHotBtn == 1, !row.bConnected && !IsConnectingRow(row));
+                        if (!IsRectEmpty(&row.rcForget))
+                        {
+                            COLORREF crRow = TfyMix(m_Pal.PanelBg, m_Pal.HotFill, 90);
+
+                            if ((int)i == m_iHot && m_iHotBtn == 7)
+                                TfyFillRound(hdcMem, &row.rcForget, Sc(4), TfyMix(crRow, m_Pal.PanelText, 30), crRow);
+                            DrawGlyph(hdcMem, &row.rcForget, L"delete_20_regular", Sc(20), m_Pal.PanelText);
+                        }
                     }
                 }
             }
