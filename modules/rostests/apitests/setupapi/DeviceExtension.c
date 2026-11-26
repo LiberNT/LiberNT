@@ -23,6 +23,7 @@ static const char BaseInf[] =
     "ClassGuid={4d36e97d-e325-11ce-bfc1-08002be10318}\r\n"
     "Provider=%Lnt%\r\n"
     "DriverVer=11/15/2026,1.0.0.0\r\n"
+    "CatalogFile=lntextbase.cat\r\n"
     "\r\n"
     "[Manufacturer]\r\n"
     "%Lnt%=Lnt,NTamd64,NTarm64,NTx86\r\n"
@@ -58,7 +59,7 @@ static const char BaseInf[] =
     "Lnt=\"LiberNT tests\"\r\n"
     "Dev=\"LiberNT extension test device\"\r\n";
 
-#define EXTENSION_HEAD(guid, ver) \
+#define EXTENSION_HEAD(guid, ver, cat) \
     "[Version]\r\n" \
     "Signature=\"$WINDOWS NT$\"\r\n" \
     "Class=Extension\r\n" \
@@ -66,6 +67,7 @@ static const char BaseInf[] =
     "ExtensionId=" guid "\r\n" \
     "Provider=%Lnt%\r\n" \
     "DriverVer=" ver "\r\n" \
+    "CatalogFile=" cat "\r\n" \
     "\r\n" \
     "[Manufacturer]\r\n" \
     "%Lnt%=Lnt,NTamd64,NTarm64,NTx86\r\n" \
@@ -84,7 +86,7 @@ static const char BaseInf[] =
     "Ext=\"LiberNT test extension\"\r\n"
 
 static const char OldExtensionInf[] =
-    EXTENSION_HEAD("{6d3f0c1e-4a52-4f3b-9c1d-2b8e7a5f9e01}", "11/01/2026,1.0.0.0")
+    EXTENSION_HEAD("{6d3f0c1e-4a52-4f3b-9c1d-2b8e7a5f9e01}", "11/01/2026,1.0.0.0", "lntextold.cat")
     "[ExtInstall.NT]\r\n"
     "AddReg=Ext.AddReg\r\n"
     "\r\n"
@@ -94,7 +96,7 @@ static const char OldExtensionInf[] =
     EXTENSION_TAIL;
 
 static const char NewExtensionInf[] =
-    EXTENSION_HEAD("{6d3f0c1e-4a52-4f3b-9c1d-2b8e7a5f9e01}", "11/15/2026,2.0.0.0")
+    EXTENSION_HEAD("{6d3f0c1e-4a52-4f3b-9c1d-2b8e7a5f9e01}", "11/15/2026,2.0.0.0", "lntextnew.cat")
     "[ExtInstall.NT]\r\n"
     "AddReg=Ext.AddReg\r\n"
     "\r\n"
@@ -116,7 +118,7 @@ static const char NewExtensionInf[] =
     EXTENSION_TAIL;
 
 static const char LateExtensionInf[] =
-    EXTENSION_HEAD("{1b6f0d2a-93c4-4e8b-a7f5-6c2d9e3b8a14}", "11/15/2026,1.0.0.0")
+    EXTENSION_HEAD("{1b6f0d2a-93c4-4e8b-a7f5-6c2d9e3b8a14}", "11/15/2026,1.0.0.0", "lntextlate.cat")
     "[ExtInstall.NT]\r\n"
     "AddReg=Ext.AddReg\r\n"
     "\r\n"
