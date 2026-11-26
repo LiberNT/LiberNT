@@ -105,6 +105,7 @@ list(APPEND SOURCE
     NextDlgItem.c
     NonClientPaint.c
     NonClientUpdate.c
+    OccludedPageSwitch.c
     OwnedZOrder.c
     OwnerDestroy.c
     OwnerDrawButtonCues.c

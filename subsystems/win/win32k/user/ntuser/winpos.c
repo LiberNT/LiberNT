@@ -2383,8 +2383,8 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
             (SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER))
       {
          VisBefore = CompositionSurfaceBefore ? VIS_ComputeRedirectedRegion(Window, FALSE) :
-                     VIS_ComputeVisibleRegion(Window, FALSE, FALSE,
-                                              (Window->style & WS_CLIPSIBLINGS) ? TRUE : FALSE);
+                     IntCompositionComputeVisibleRegion(Window, FALSE, FALSE,
+                                                        (Window->style & WS_CLIPSIBLINGS) ? TRUE : FALSE);
 
          if ( VisBefore != NULL &&
               REGION_Complexity(VisBefore) == NULLREGION )
@@ -2401,7 +2401,7 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
          if ((WinPos.flags & (SWP_NOSIZE | SWP_FRAMECHANGED)) != SWP_NOSIZE)
          {
              VisBeforeJustClient = CompositionSurfaceBefore ? VIS_ComputeRedirectedRegion(Window, TRUE) :
-                 VIS_ComputeVisibleRegion(Window, TRUE, FALSE,
+                 IntCompositionComputeVisibleRegion(Window, TRUE, FALSE,
                  (Window->style & WS_CLIPSIBLINGS) ? TRUE : FALSE);
 
              if ( VisBeforeJustClient != NULL &&
@@ -2605,8 +2605,8 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
    {
       /* Determine the new visible region */
       VisAfter = bComposited ? VIS_ComputeRedirectedRegion(Window, FALSE) :
-                 VIS_ComputeVisibleRegion(Window, FALSE, FALSE,
-                                          (Window->style & WS_CLIPSIBLINGS) ? TRUE : FALSE);
+                 IntCompositionComputeVisibleRegion(Window, FALSE, FALSE,
+                                                    (Window->style & WS_CLIPSIBLINGS) ? TRUE : FALSE);
 
       if ( VisAfter != NULL &&
            REGION_Complexity(VisAfter) == NULLREGION )
