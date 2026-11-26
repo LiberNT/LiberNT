@@ -6,6 +6,7 @@ extern void func_BcdStoreAccess(void);
 extern void func_AddMandatoryAce(void);
 extern void func_ControlServiceEx(void);
 extern void func_CopySid(void);
+extern void func_FileSecurityOwner(void);
 extern void func_RedistributableFileOwner(void);
 extern void func_CreateProcessWithToken(void);
 extern void func_CreateProcessWithTokenChild(void);
@@ -79,6 +80,7 @@ const struct test winetest_testlist[] =
     { "AddMandatoryAce", func_AddMandatoryAce },
     { "ControlServiceEx", func_ControlServiceEx },
     { "CopySid", func_CopySid },
+    { "FileSecurityOwner", func_FileSecurityOwner },
     { "RedistributableFileOwner", func_RedistributableFileOwner },
     { "CreateProcessWithToken", func_CreateProcessWithToken },
     { "CreateProcessWithTokenChild", func_CreateProcessWithTokenChild },
