@@ -638,6 +638,12 @@ TestVBlankWaitResult(VOID)
     ok_eq_ulonglong(DXGK_VBLANK_WAIT_TIMEOUT_100NS, 800000ULL);
     ok_eq_hex(DxgkPresentVBlankWaitResult(TRUE), STATUS_SUCCESS);
     ok_eq_hex(DxgkPresentVBlankWaitResult(FALSE), STATUS_TIMEOUT);
+    ok_eq_hex(DxgkPresentVBlankSourceStatus(TRUE, TRUE, TRUE), STATUS_SUCCESS);
+    ok_eq_hex(DxgkPresentVBlankSourceStatus(TRUE, TRUE, FALSE), STATUS_GRAPHICS_PRESENT_OCCLUDED);
+    ok_eq_hex(DxgkPresentVBlankSourceStatus(TRUE, FALSE, TRUE), STATUS_GRAPHICS_PRESENT_OCCLUDED);
+    ok_eq_hex(DxgkPresentVBlankSourceStatus(TRUE, FALSE, FALSE), STATUS_GRAPHICS_PRESENT_OCCLUDED);
+    ok_eq_hex(DxgkPresentVBlankSourceStatus(FALSE, TRUE, TRUE), STATUS_NOT_SUPPORTED);
+    ok_eq_hex(DxgkPresentVBlankSourceStatus(FALSE, FALSE, FALSE), STATUS_NOT_SUPPORTED);
 }
 
 static VOID

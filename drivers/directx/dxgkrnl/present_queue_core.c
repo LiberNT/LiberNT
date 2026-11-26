@@ -181,3 +181,17 @@ NTSTATUS DxgkPresentVBlankWaitResult(_In_ BOOLEAN VBlankArrived)
 {
     return VBlankArrived ? STATUS_SUCCESS : STATUS_TIMEOUT;
 }
+
+/* A source that scans out to no target has no v-blank to wait for, so the wait is refused at once. */
+NTSTATUS
+DxgkPresentVBlankSourceStatus(
+    _In_ BOOLEAN VsyncInterruptEnabled,
+    _In_ BOOLEAN ModeKnown,
+    _In_ BOOLEAN ScanoutPath)
+{
+    if (!VsyncInterruptEnabled)
+        return STATUS_NOT_SUPPORTED;
+    if (!ModeKnown || !ScanoutPath)
+        return STATUS_GRAPHICS_PRESENT_OCCLUDED;
+    return STATUS_SUCCESS;
+}

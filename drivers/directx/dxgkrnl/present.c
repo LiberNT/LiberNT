@@ -621,19 +621,25 @@ DxgkpValidateVBlankSource(
     _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId)
 {
     D3DKMT_CURRENTDISPLAYMODE CurrentMode;
+    D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId;
+    BOOLEAN VsyncInterruptEnabled;
+    BOOLEAN ModeKnown;
+    BOOLEAN ScanoutPath;
+
+    PAGED_CODE();
 
     /* A present queue also exists for display-only drivers without VSync
      * support, and for sources without an active scanout path. Neither can
      * satisfy a wait for a real VBlank. Do not synthesize a successful one. */
-    if (InterlockedCompareExchange(&Adapter->VsyncInterruptEnabled, 0, 0) == 0)
-        return STATUS_NOT_SUPPORTED;
+    VsyncInterruptEnabled = InterlockedCompareExchange(&Adapter->VsyncInterruptEnabled, 0, 0) != 0;
+    if (!VsyncInterruptEnabled)
+        return DxgkPresentVBlankSourceStatus(FALSE, FALSE, FALSE);
 
     RtlZeroMemory(&CurrentMode, sizeof(CurrentMode));
     CurrentMode.VidPnSourceId = VidPnSourceId;
-    if (!NT_SUCCESS(DxgkVidPnQueryCurrentDisplayMode(Adapter, &CurrentMode)))
-        return STATUS_GRAPHICS_PRESENT_OCCLUDED;
-
-    return STATUS_SUCCESS;
+    ModeKnown = NT_SUCCESS(DxgkVidPnQueryCurrentDisplayMode(Adapter, &CurrentMode));
+    ScanoutPath = NT_SUCCESS(DxgkVidPnResolveTargetForSource(Adapter, VidPnSourceId, &TargetId));
+    return DxgkPresentVBlankSourceStatus(TRUE, ModeKnown, ScanoutPath);
 }
 
 /*

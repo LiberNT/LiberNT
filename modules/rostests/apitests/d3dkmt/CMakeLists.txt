@@ -35,6 +35,7 @@ list(APPEND SOURCE
     d3dkmt_enum2.c
     d3dkmt_surface.c
     d3dkmt_adapterinfo.c
+    d3dkmt_vblank.c
     d3dkmt_adapterid.c
     d3dkmt_queryregistry.c
     d3dkmt_ctxvalidate.c

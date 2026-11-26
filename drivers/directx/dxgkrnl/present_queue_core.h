@@ -61,4 +61,10 @@ DxgkPresentQueueCoreRemove(
 
 NTSTATUS DxgkPresentVBlankWaitResult(_In_ BOOLEAN VBlankArrived);
 
+NTSTATUS
+DxgkPresentVBlankSourceStatus(
+    _In_ BOOLEAN VsyncInterruptEnabled,
+    _In_ BOOLEAN ModeKnown,
+    _In_ BOOLEAN ScanoutPath);
+
 #endif /* _DXGK_PRESENT_QUEUE_CORE_H_ */
