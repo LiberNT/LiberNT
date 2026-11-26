@@ -67,6 +67,7 @@ list(APPEND SOURCE
     wow64_startup.c
     wow64_native_process.c
     KnownDlls.c
+    LdrBaseAddressIndex.c
     LdrEnumResources.c
     LdrFindResource_U.c
     LdrForwarderPath.c

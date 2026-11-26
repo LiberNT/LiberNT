@@ -38,6 +38,7 @@ extern void func_arm64_chpe(void);
 extern void func_wow64_startup(void);
 extern void func_wow64_native_process(void);
 extern void func_KnownDlls(void);
+extern void func_LdrBaseAddressIndex(void);
 extern void func_LdrEnumResources(void);
 extern void func_LdrFindResource_U(void);
 extern void func_LdrForwarderPath(void);
@@ -302,6 +303,7 @@ const struct test winetest_testlist[] =
     { "FileStatInformation",            func_FileStatInformation },
     { "arm64_chpe",                     func_arm64_chpe },
     { "KnownDlls",                      func_KnownDlls },
+    { "LdrBaseAddressIndex",            func_LdrBaseAddressIndex },
     { "LdrEnumResources",               func_LdrEnumResources },
     { "LdrFindResource_U",              func_LdrFindResource_U },
     { "LdrForwarderPath",               func_LdrForwarderPath },
