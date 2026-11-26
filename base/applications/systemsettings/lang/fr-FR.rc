@@ -539,6 +539,8 @@ BEGIN
     IDS_ACTIVITY "Activité"
     IDS_TRACK_DOCS "Afficher les éléments récemment ouverts"
     IDS_TRACK_DOCS_DESC "Dans Démarrer, l'Explorateur de fichiers et les listes de raccourcis"
+    IDS_TRACK_PROGS "Afficher les applications récemment utilisées"
+    IDS_TRACK_PROGS_DESC "Dans Démarrer, à partir des applications que vous ouvrez"
     IDS_CLEAR_RECENT "Effacer les éléments récents"
     IDS_CLEAR_RECENT_DESC "Supprimer la liste des fichiers récemment ouverts"
     IDS_CLEAR "Effacer"

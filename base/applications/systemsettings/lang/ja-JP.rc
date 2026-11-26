@@ -539,6 +539,8 @@ BEGIN
     IDS_ACTIVITY "アクティビティ"
     IDS_TRACK_DOCS "最近開いた項目を表示する"
     IDS_TRACK_DOCS_DESC "スタート、エクスプローラー、ジャンプ リストに表示します"
+    IDS_TRACK_PROGS "最近使用したアプリを表示する"
+    IDS_TRACK_PROGS_DESC "開いたアプリをスタートに表示します"
     IDS_CLEAR_RECENT "最近使った項目の消去"
     IDS_CLEAR_RECENT_DESC "最近開いたファイルの一覧を削除します"
     IDS_CLEAR "消去"

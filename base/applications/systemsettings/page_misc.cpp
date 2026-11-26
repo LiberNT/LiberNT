@@ -561,6 +561,15 @@ BuildPrivacy(PageBuilder &page)
                         SHAddToRecentDocs(SHARD_PIDL, NULL);
                     BroadcastSetting(L"TraySettings");
                 });
+    page.Toggle(Str(IDS_TRACK_PROGS), Str(IDS_TRACK_PROGS_DESC), L"apps_list_20_regular",
+                ReadDword(HKEY_CURRENT_USER, ADVANCED_KEY, L"Start_TrackProgs", 1) != 0,
+                [](int on)
+                {
+                    WriteDword(HKEY_CURRENT_USER, ADVANCED_KEY, L"Start_TrackProgs", on != 0);
+                    if (!on)
+                        RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\ReactOS\\StartMenu2\\RecentApps");
+                    BroadcastSetting(L"TraySettings");
+                });
     page.Button(Str(IDS_CLEAR_RECENT), Str(IDS_CLEAR_RECENT_DESC), L"delete_20_regular", Str(IDS_CLEAR),
                 [](int) { SHAddToRecentDocs(SHARD_PIDL, NULL); });
 }

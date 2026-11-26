@@ -539,6 +539,8 @@ BEGIN
     IDS_ACTIVITY "Activity"
     IDS_TRACK_DOCS "Show recently opened items"
     IDS_TRACK_DOCS_DESC "In Start, File Explorer and jump lists"
+    IDS_TRACK_PROGS "Show recently used apps"
+    IDS_TRACK_PROGS_DESC "In Start, from the apps you open"
     IDS_CLEAR_RECENT "Clear recent items"
     IDS_CLEAR_RECENT_DESC "Remove the list of recently opened files"
     IDS_CLEAR "Clear"
