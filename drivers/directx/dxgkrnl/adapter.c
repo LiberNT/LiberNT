@@ -668,6 +668,8 @@ DxgkpRetainAndStopBasicDisplayFallback(
 {
     BOOLEAN Armed;
     BOOLEAN OwnerInUse;
+    ULONG InheritedWidth;
+    ULONG InheritedHeight;
     NTSTATUS RestoreStatus;
     NTSTATUS Status;
 
@@ -730,6 +732,11 @@ DxgkpRetainAndStopBasicDisplayFallback(
         }
     }
 
+    (VOID)KeWaitForSingleObject(&Owner->VidPnMutex, Executive, KernelMode, FALSE, NULL);
+    InheritedWidth = Owner->CommittedWidth;
+    InheritedHeight = Owner->CommittedHeight;
+    KeReleaseMutex(&Owner->VidPnMutex, FALSE);
+
     Status = DxgkpStopPostDisplayOwner(Owner,
                                        ReleasedPostDisplayInformation,
                                        ReleasedByDriver);
@@ -760,6 +767,8 @@ DxgkpRetainAndStopBasicDisplayFallback(
     Claimant->PostDisplayFallbackAdapter = Owner;
     Claimant->PostDisplayFallbackDeviceObject = *OwnerDeviceObject;
     Claimant->PostDisplayFallbackRemoveRundownHeld = TRUE;
+    Claimant->InheritedDesktopWidth = InheritedWidth;
+    Claimant->InheritedDesktopHeight = InheritedHeight;
     *OwnerDeviceObject = NULL;
     /* Native DpiFdoStartAdapterThreadImpl disables MSBDD at this point and
      * enables it again on the failure path.  Do the same before the rest of

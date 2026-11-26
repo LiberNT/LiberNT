@@ -142,6 +142,43 @@ DxgkPostDisplayCoreReportsPostDevice(
     return AdapterOwnsBootDisplay && Role == DxgkPostDisplayRoleMiniport;
 }
 
+/* A headless desktop keeps its own mode, then the firmware one, then the size of the desktop it took over. */
+FORCEINLINE
+VOID
+DxgkPostDisplayCoreHeadlessSize(
+    _In_ ULONG CommittedWidth,
+    _In_ ULONG CommittedHeight,
+    _In_ ULONG PostWidth,
+    _In_ ULONG PostHeight,
+    _In_ ULONG InheritedWidth,
+    _In_ ULONG InheritedHeight,
+    _Out_ PULONG Width,
+    _Out_ PULONG Height)
+{
+    if (CommittedWidth != 0 && CommittedHeight != 0)
+    {
+        *Width = CommittedWidth;
+        *Height = CommittedHeight;
+    }
+    else if (PostWidth != 0 && PostHeight != 0)
+    {
+        *Width = PostWidth;
+        *Height = PostHeight;
+    }
+    else if (InheritedWidth != 0 && InheritedHeight != 0)
+    {
+        *Width = InheritedWidth;
+        *Height = InheritedHeight;
+    }
+    else
+    {
+        *Width = 1024;
+        *Height = 768;
+    }
+    ASSERT(*Width != 0);
+    ASSERT(*Height != 0);
+}
+
 /* A CPU host aperture run inside the window the firmware framebuffer is seen through makes that window show other memory. */
 FORCEINLINE
 BOOLEAN

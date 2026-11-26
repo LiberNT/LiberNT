@@ -298,6 +298,29 @@ DxgkPostDisplayTestClaim(VOID)
     ok_bool_false(DxgkPostDisplayCoreReportsPostDevice(FALSE, Miniport), "an adapter that does not own the boot display is not the POST device");
 }
 
+static
+VOID
+DxgkPostDisplayTestHeadlessSize(VOID)
+{
+    ULONG Width, Height;
+
+    DxgkPostDisplayCoreHeadlessSize(1920, 1080, 1280, 800, 1440, 900, &Width, &Height);
+    ok_eq_ulong(Width, 1920UL);
+    ok_eq_ulong(Height, 1080UL);
+    DxgkPostDisplayCoreHeadlessSize(0, 0, 1280, 800, 1440, 900, &Width, &Height);
+    ok_eq_ulong(Width, 1280UL);
+    ok_eq_ulong(Height, 800UL);
+    DxgkPostDisplayCoreHeadlessSize(0, 0, 0, 0, 1440, 900, &Width, &Height);
+    ok_eq_ulong(Width, 1440UL);
+    ok_eq_ulong(Height, 900UL);
+    DxgkPostDisplayCoreHeadlessSize(1920, 0, 0, 0, 0, 0, &Width, &Height);
+    ok_eq_ulong(Width, 1024UL);
+    ok_eq_ulong(Height, 768UL);
+    DxgkPostDisplayCoreHeadlessSize(0, 0, 0, 800, 1440, 0, &Width, &Height);
+    ok_eq_ulong(Width, 1024UL);
+    ok_eq_ulong(Height, 768UL);
+}
+
 START_TEST(DxgkPostDisplayHandoff)
 {
     DxgkPostDisplayTestRestartableFailure();
@@ -305,6 +328,7 @@ START_TEST(DxgkPostDisplayHandoff)
     DxgkPostDisplayTestNonRestartableFailure();
     DxgkPostDisplayTestPostDevice();
     DxgkPostDisplayTestClaim();
+    DxgkPostDisplayTestHeadlessSize();
     DxgkPostDisplayTestFirmwareScanout();
     DxgkPostDisplayTestApertureRunTakesBootWindow();
     DxgkPostDisplayTestUefiRangeSegment();

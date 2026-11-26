@@ -1011,13 +1011,14 @@ DxgkpPrepareHeadlessDesktop(
     ULONG Width, Height;
     SIZE_T Index;
 
-    Width = Adapter->CommittedWidth ? Adapter->CommittedWidth : Adapter->PostDisplayWidth;
-    Height = Adapter->CommittedHeight ? Adapter->CommittedHeight : Adapter->PostDisplayHeight;
-    if (!Width || !Height)
-    {
-        Width = 1024;
-        Height = 768;
-    }
+    DxgkPostDisplayCoreHeadlessSize(Adapter->CommittedWidth,
+                                    Adapter->CommittedHeight,
+                                    Adapter->PostDisplayWidth,
+                                    Adapter->PostDisplayHeight,
+                                    Adapter->InheritedDesktopWidth,
+                                    Adapter->InheritedDesktopHeight,
+                                    &Width,
+                                    &Height);
     if (!DxgkVidPnEnsurePinnedSourceMode(VidPn, 0, Width, Height))
         return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
     Sources = VidPn->SourceModeSets[0];

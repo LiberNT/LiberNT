@@ -1202,6 +1202,8 @@ struct _DXGKRNL_ADAPTER
      */
     ULONG                       CommittedWidth;
     ULONG                       CommittedHeight;
+    ULONG                       InheritedDesktopWidth;
+    ULONG                       InheritedDesktopHeight;
     BOOLEAN                     VidPnCommitted;
     BOOLEAN                     HeadlessDesktop;
     struct _DXGKP_DISPLAY_MODE_CACHE *DisplayModeCache;
