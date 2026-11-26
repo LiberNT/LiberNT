@@ -21,6 +21,7 @@ extern void func_CreateStructHook(void);
 extern void func_CreateIconFromResourceEx(void);
 extern void func_CoveredWindow(void);
 extern void func_CreateWindowEx(void);
+extern void func_CrossThreadChildDestroy(void);
 extern void func_CrossThreadWindowPos(void);
 extern void func_DeferWindowPos(void);
 extern void func_DefFrameProc(void);
@@ -186,6 +187,7 @@ const struct test winetest_testlist[] =
     { "CreateIconFromResourceEx", func_CreateIconFromResourceEx },
     { "CoveredWindow", func_CoveredWindow },
     { "CreateWindowEx", func_CreateWindowEx },
+    { "CrossThreadChildDestroy", func_CrossThreadChildDestroy },
     { "CrossThreadWindowPos", func_CrossThreadWindowPos },
     { "DeferWindowPos", func_DeferWindowPos },
     { "DefFrameProc", func_DefFrameProc },

@@ -21,6 +21,7 @@ extern void func_wgl_render(void);
 extern void func_wgl_gears(void);
 extern void func_wgl_monitor_off(void);
 extern void func_wgl_quiet_init(void);
+extern void func_wgl_destroyed_window(void);
 
 const struct test winetest_testlist[] =
 {
@@ -43,6 +44,7 @@ const struct test winetest_testlist[] =
     { "wgl_gears", func_wgl_gears },
     { "wgl_monitor_off", func_wgl_monitor_off },
     { "wgl_quiet_init", func_wgl_quiet_init },
+    { "wgl_destroyed_window", func_wgl_destroyed_window },
 
     { 0, 0 }
 };
