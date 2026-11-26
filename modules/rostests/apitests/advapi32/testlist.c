@@ -22,6 +22,7 @@ extern void func_ImpersonateRestricted(void);
 extern void func_IntegrityLabels(void);
 extern void func_LogonSession(void);
 extern void func_LogonSessionEnd(void);
+extern void func_LogonUserExEx(void);
 extern void func_LogonUserNetwork(void);
 extern void func_IsTextUnicode(void);
 extern void func_LocalSystemPrivileges(void);
@@ -95,6 +96,7 @@ const struct test winetest_testlist[] =
     { "IntegrityLabels", func_IntegrityLabels },
     { "LogonSession", func_LogonSession },
     { "LogonSessionEnd", func_LogonSessionEnd },
+    { "LogonUserExEx", func_LogonUserExEx },
     { "LogonUserNetwork", func_LogonUserNetwork },
     { "IsTextUnicode" , func_IsTextUnicode },
     { "TokenDefaultDacl", func_TokenDefaultDacl },

@@ -22,6 +22,7 @@ list(APPEND SOURCE
     IntegrityLabels.c
     LogonSession.c
     LogonSessionEnd.c
+    LogonUserExEx.c
     LogonUserNetwork.c
     IsTextUnicode.c
     LocalSystemPrivileges.c
