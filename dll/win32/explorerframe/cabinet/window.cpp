@@ -2331,11 +2331,18 @@ void
 CCabinetWindow::UpdateTitle(CabinetTab *tab)
 {
     PWSTR name = NULL;
-    WCHAR title[MAX_PATH + 32];
+    WCHAR title[MAX_PATH + 32], folder[_countof(tab->Title)];
 
     if (!tab || !tab->Pidl)
         return;
     if (SUCCEEDED(SHGetNameFromIDList(tab->Pidl, SIGDN_NORMALDISPLAY, &name)))
+    {
+        StringCchCopyW(tab->Title, _countof(tab->Title), name);
+        CoTaskMemFree(name);
+    }
+    StringCchCopyW(folder, _countof(folder), tab->Title);
+    if (SHRegGetBoolUSValueW(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CabinetState", L"FullPath", FALSE, FALSE) &&
+        SUCCEEDED(SHGetNameFromIDList(tab->Pidl, SIGDN_DESKTOPABSOLUTEEDITING, &name)))
     {
         StringCchCopyW(tab->Title, _countof(tab->Title), name);
         CoTaskMemFree(name);
@@ -2348,7 +2355,7 @@ CCabinetWindow::UpdateTitle(CabinetTab *tab)
         StringCchPrintfW(title, _countof(title), format, tab->Title);
         SetWindowTextW(m_hwnd, title);
         LoadText(IDS_CAB_SEARCH_IN, format, _countof(format));
-        StringCchPrintfW(cue, _countof(cue), format, tab->Title);
+        StringCchPrintfW(cue, _countof(cue), format, folder);
         SendMessageW(m_SearchEdit, EM_SETCUEBANNER, FALSE, (LPARAM)cue);
         InvalidateRect(m_SearchEdit, NULL, TRUE);
     }
