@@ -5404,6 +5404,64 @@ OpenDeviceInterfaceByKeyName(
 }
 
 /***********************************************************************
+ *		SetupDiGetDeviceInterfaceAlias (SETUPAPI.@)
+ */
+BOOL WINAPI SetupDiGetDeviceInterfaceAlias(
+        HDEVINFO DeviceInfoSet,
+        PSP_DEVICE_INTERFACE_DATA DeviceInterfaceData,
+        const GUID *AliasInterfaceClassGuid,
+        PSP_DEVICE_INTERFACE_DATA AliasDeviceInterfaceData)
+{
+    struct DeviceInfoSet *set = (struct DeviceInfoSet *)DeviceInfoSet;
+    struct DeviceInterface *deviceInterface;
+    WCHAR Alias[1024];
+    ULONG Length = ARRAY_SIZE(Alias);
+    CONFIGRET cr;
+
+    TRACE("%s(%p %p %s %p)\n", __FUNCTION__, DeviceInfoSet, DeviceInterfaceData,
+          debugstr_guid(AliasInterfaceClassGuid), AliasDeviceInterfaceData);
+
+    if (!DeviceInfoSet || DeviceInfoSet == INVALID_HANDLE_VALUE ||
+        set->magic != SETUP_DEVICE_INFO_SET_MAGIC)
+    {
+        SetLastError(ERROR_INVALID_HANDLE);
+        return FALSE;
+    }
+    if (!DeviceInterfaceData ||
+        DeviceInterfaceData->cbSize != sizeof(SP_DEVICE_INTERFACE_DATA) ||
+        !DeviceInterfaceData->Reserved)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!AliasInterfaceClassGuid)
+    {
+        SetLastError(ERROR_INVALID_USER_BUFFER);
+        return FALSE;
+    }
+
+    deviceInterface = (struct DeviceInterface *)DeviceInterfaceData->Reserved;
+    cr = CM_Get_Device_Interface_Alias_ExW(deviceInterface->SymbolicLink,
+                                           (LPGUID)AliasInterfaceClassGuid,
+                                           Alias,
+                                           &Length,
+                                           0,
+                                           set->hMachine);
+    if (cr != CR_SUCCESS)
+    {
+        SetLastError(cr == CR_NO_SUCH_DEVICE_INTERFACE ? ERROR_NO_SUCH_DEVICE_INTERFACE : GetErrorCodeFromCrCode(cr));
+        return FALSE;
+    }
+    if (!AliasDeviceInterfaceData || AliasDeviceInterfaceData->cbSize != sizeof(SP_DEVICE_INTERFACE_DATA))
+    {
+        SetLastError(ERROR_INVALID_USER_BUFFER);
+        return FALSE;
+    }
+
+    return SetupDiOpenDeviceInterfaceW(DeviceInfoSet, Alias, 0, AliasDeviceInterfaceData);
+}
+
+/***********************************************************************
  *		SetupDiOpenDeviceInterfaceW (SETUPAPI.@)
  */
 BOOL WINAPI SetupDiOpenDeviceInterfaceW(

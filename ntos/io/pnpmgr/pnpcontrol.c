@@ -808,6 +808,7 @@ PiControlGetInterfaceDeviceAlias(
     _In_ KPROCESSOR_MODE PreviousMode)
 {
     UNICODE_STRING Link, Alias;
+    BOOLEAN UserForm;
     ULONG Length;
     GUID Guid;
     NTSTATUS Status;
@@ -821,14 +822,20 @@ PiControlGetInterfaceDeviceAlias(
                                     &Link);
     if (!NT_SUCCESS(Status)) return Status;
 
+    UserForm = (Link.Length >= 4 * sizeof(WCHAR)) && (Link.Buffer[1] == OBJ_NAME_PATH_SEPARATOR);
+    if (UserForm) Link.Buffer[1] = L'?';
+
     Status = IoGetDeviceInterfaceAlias(&Link, &Guid, &Alias);
     PiFreeCapturedString(&Link);
     if (!NT_SUCCESS(Status)) return Status;
 
+    ASSERT(Alias.Length >= 4 * sizeof(WCHAR));
+    if (UserForm) Alias.Buffer[1] = OBJ_NAME_PATH_SEPARATOR;
+
     /* The service is told the length of the alias without its terminator */
     Length = Data->AliasSymbolicLinkNameLength;
     Status = PiReturnString(&Alias, Data->AliasSymbolicLinkName, &Length, PreviousMode);
-    if (NT_SUCCESS(Status)) Data->AliasSymbolicLinkNameLength = Length - 1;
+    if (NT_SUCCESS(Status) || (Status == STATUS_BUFFER_TOO_SMALL)) Data->AliasSymbolicLinkNameLength = Length - 1;
 
     RtlFreeUnicodeString(&Alias);
     return Status;

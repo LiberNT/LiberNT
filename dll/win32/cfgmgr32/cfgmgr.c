@@ -3655,9 +3655,9 @@ CM_Get_Device_Interface_Alias_ExA(
     if (WideCharToMultiByte(CP_ACP,
                             0,
                             pszAliasDeviceInterfaceW,
-                            *pulLength + 1,
+                            *pulLength,
                             pszAliasDeviceInterface,
-                            *pulLength + 1,
+                            *pulLength,
                             NULL,
                             NULL) == 0)
         ret = CR_FAILURE;

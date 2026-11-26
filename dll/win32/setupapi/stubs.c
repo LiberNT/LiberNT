@@ -98,13 +98,6 @@ SetupDiUnremoveDevice(
 }
 
 
-WINSETUPAPI BOOL WINAPI SetupDiGetDeviceInterfaceAlias(IN HDEVINFO  DeviceInfoSet, IN PSP_DEVICE_INTERFACE_DATA  DeviceInterfaceData, IN CONST GUID *AliasInterfaceClassGuid, OUT PSP_DEVICE_INTERFACE_DATA  AliasDeviceInterfaceData)
-{
-    FIXME("%p %p %p %p %p stub\n", DeviceInfoSet, DeviceInterfaceData, AliasInterfaceClassGuid, AliasDeviceInterfaceData);
-    SetLastError(ERROR_INVALID_PARAMETER);
-    return FALSE;
-}
-
 /***********************************************************************
  *      SetupVerifyInfFileA(SETUPAPI.@)
  */

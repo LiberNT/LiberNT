@@ -2908,14 +2908,18 @@ PNP_GetInterfaceDeviceAlias(
                                sizeof(PLUGPLAY_CONTROL_INTERFACE_ALIAS_DATA));
     if (NT_SUCCESS(Status))
     {
-        *pulLength = PlugPlayData.AliasSymbolicLinkNameLength;
-        *pulTransferLen = *pulLength + 1;
+        *pulLength = PlugPlayData.AliasSymbolicLinkNameLength + 1;
+        *pulTransferLen = *pulLength;
     }
     else
     {
-        *pulLength = 0;
-        *pulTransferLen = 0;
-        ret = NtStatusToCrError(Status);
+        *pulLength = (Status == STATUS_BUFFER_TOO_SMALL) ? PlugPlayData.AliasSymbolicLinkNameLength + 1 : 0;
+        if (*pulTransferLen != 0)
+        {
+            pszAliasInterfaceDevice[0] = UNICODE_NULL;
+            *pulTransferLen = 1;
+        }
+        ret = (Status == STATUS_OBJECT_NAME_NOT_FOUND) ? CR_NO_SUCH_DEVICE_INTERFACE : NtStatusToCrError(Status);
     }
 
     DPRINT("PNP_GetInterfaceDeviceAlias() done (returns %lx)\n", ret);
