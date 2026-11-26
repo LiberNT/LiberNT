@@ -5,7 +5,8 @@
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  *
  * There is no air interface: transmitted frames are dropped and completed with
- * NDIS_STATUS_SUCCESS, and no receives are indicated.  The ExtSTA send context
+ * NDIS_STATUS_SUCCESS, except that EAPOL frames for the secured test network
+ * are handed to its access point (auth.c).  The ExtSTA send context
  * (DOT11_EXTSTA_SEND_CONTEXT in NetBufferListInfo) is left untouched.
  */
 
@@ -58,6 +59,10 @@ VWifiMiniportSendNetBufferLists(
 
         if (Deliverable)
         {
+            PNET_BUFFER NetBuffer;
+
+            for (NetBuffer = NET_BUFFER_LIST_FIRST_NB(Nbl); NetBuffer != NULL; NetBuffer = NET_BUFFER_NEXT_NB(NetBuffer))
+                (VOID)VWifiAuthCaptureTx(Adapter, NetBuffer);
             Adapter->TxOkCount++;
             Adapter->TxBytes += Length;
             NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SUCCESS;

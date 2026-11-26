@@ -110,6 +110,31 @@ VWifiSetMiniportAttributes(
     return Status;
 }
 
+static
+VOID
+VWifiFreeAdapter(
+    IN PVWIFI_ADAPTER Adapter)
+{
+    if (Adapter->RxNblPool)
+    {
+        NdisFreeNetBufferListPool(Adapter->RxNblPool);
+    }
+    if (Adapter->AuthTimer)
+    {
+        NdisFreeTimerObject(Adapter->AuthTimer);
+    }
+    if (Adapter->EngineWorkItem)
+    {
+        NdisFreeIoWorkItem(Adapter->EngineWorkItem);
+    }
+    if (Adapter->EngineTimer)
+    {
+        NdisFreeTimerObject(Adapter->EngineTimer);
+    }
+    NdisFreeSpinLock(&Adapter->Lock);
+    VWifiFree(Adapter);
+}
+
 NDIS_STATUS
 NTAPI
 VWifiMiniportInitializeEx(
@@ -120,6 +145,7 @@ VWifiMiniportInitializeEx(
     PVWIFI_ADAPTER Adapter;
     NDIS_STATUS Status;
     NDIS_TIMER_CHARACTERISTICS TimerChars;
+    NET_BUFFER_LIST_POOL_PARAMETERS PoolParameters;
 
     UNREFERENCED_PARAMETER(MiniportDriverContext);
     UNREFERENCED_PARAMETER(MiniportInitParameters);
@@ -193,20 +219,33 @@ VWifiMiniportInitializeEx(
         goto Fail;
     }
 
+    TimerChars.TimerFunction = VWifiAuthTimerDpc;
+    Status = NdisAllocateTimerObject(NdisMiniportHandle, &TimerChars, &Adapter->AuthTimer);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        VWifiFreeAdapter(Adapter);
+        return Status;
+    }
+
+    RtlZeroMemory(&PoolParameters, sizeof(PoolParameters));
+    PoolParameters.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+    PoolParameters.Header.Revision = NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1;
+    PoolParameters.Header.Size = NDIS_SIZEOF_NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1;
+    PoolParameters.ProtocolId = NDIS_PROTOCOL_ID_DEFAULT;
+    PoolParameters.fAllocateNetBuffer = TRUE;
+    PoolParameters.PoolTag = VWIFI_TAG;
+    Adapter->RxNblPool = NdisAllocateNetBufferListPool(NdisMiniportHandle, &PoolParameters);
+    if (!Adapter->RxNblPool)
+    {
+        VWifiFreeAdapter(Adapter);
+        return NDIS_STATUS_RESOURCES;
+    }
+
     DPRINT1("VWIFI: MiniportInitializeEx succeeded\n");
     return NDIS_STATUS_SUCCESS;
 
 Fail:
-    if (Adapter->EngineWorkItem)
-    {
-        NdisFreeIoWorkItem(Adapter->EngineWorkItem);
-    }
-    if (Adapter->EngineTimer)
-    {
-        NdisFreeTimerObject(Adapter->EngineTimer);
-    }
-    NdisFreeSpinLock(&Adapter->Lock);
-    VWifiFree(Adapter);
+    VWifiFreeAdapter(Adapter);
     return Status;
 }
 
@@ -226,6 +265,7 @@ VWifiMiniportHaltEx(
     Adapter->DataPathRunning = FALSE;
 
     /* Stop the async engine and wait for any in-flight work item to drain. */
+    NdisCancelTimerObject(Adapter->AuthTimer);
     if (Adapter->EngineTimer)
     {
         NdisCancelTimerObject(Adapter->EngineTimer);
@@ -234,9 +274,19 @@ VWifiMiniportHaltEx(
     {
         NdisMSleep(1000);
     }
+    NdisCancelTimerObject(Adapter->AuthTimer);
+    NdisCancelTimerObject(Adapter->EngineTimer);
+    KeFlushQueuedDpcs();
+    ASSERT(InterlockedCompareExchange(&Adapter->WorkPending, 0, 0) == 0);
 
     VWifiCompletePendingScan(Adapter, NDIS_STATUS_FAILURE);
     VWifiCompletePendingDisconnect(Adapter, NDIS_STATUS_FAILURE);
+    RtlSecureZeroMemory(&Adapter->Auth, sizeof(Adapter->Auth));
+
+    NdisFreeNetBufferListPool(Adapter->RxNblPool);
+    Adapter->RxNblPool = NULL;
+    NdisFreeTimerObject(Adapter->AuthTimer);
+    Adapter->AuthTimer = NULL;
 
     if (Adapter->EngineWorkItem)
     {

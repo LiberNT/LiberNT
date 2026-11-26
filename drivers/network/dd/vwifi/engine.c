@@ -16,12 +16,14 @@
 #define VWIFI_IE_SSID               0
 #define VWIFI_IE_SUPPORTED_RATES    1
 #define VWIFI_IE_DS_PARAMETER_SET   3
-#define VWIFI_IE_RSN                48
 
 /* 802.11 capability bits. */
 #define VWIFI_CAP_ESS               0x0001
 #define VWIFI_CAP_PRIVACY           0x0010
 #define VWIFI_CAP_SHORT_PREAMBLE    0x0020
+
+const UCHAR VWifiRsnPskCcmp[VWIFI_RSN_IE_BODY_LENGTH] = { 0x01, 0x00, 0x00, 0x0F, 0xAC, 0x04, 0x01, 0x00, 0x00, 0x0F,
+                                                         0xAC, 0x04, 0x01, 0x00, 0x00, 0x0F, 0xAC, 0x02, 0x00, 0x00 };
 
 /* 2.4 GHz channel number to centre frequency in MHz. */
 static
@@ -103,6 +105,23 @@ VWifiInitFakeBssList(
     Bss->CapabilityInformation = VWIFI_CAP_ESS | VWIFI_CAP_SHORT_PREAMBLE;
     Bss->AuthAlgorithm = DOT11_AUTH_ALGO_80211_OPEN;
     Bss->RejoinAfterDisconnect = TRUE;
+
+    Bss = &Adapter->Bss[Adapter->BssCount++];
+    Bss->Bssid[0] = 0x02; Bss->Bssid[1] = 0x11; Bss->Bssid[2] = 0x22;
+    Bss->Bssid[3] = 0x33; Bss->Bssid[4] = 0x44; Bss->Bssid[5] = 0x99;
+    Bss->BssType = dot11_BSS_type_infrastructure;
+    RtlCopyMemory(Bss->Ssid, "ReactOS-PSK", sizeof("ReactOS-PSK") - 1);
+    Bss->SsidLength = sizeof("ReactOS-PSK") - 1;
+    Bss->ChannelNumber = 11;
+    Bss->ChCenterFrequency = VWifiChannelToFrequency(11);
+    Bss->Rssi = -48;
+    Bss->LinkQuality = 82;
+    Bss->CapabilityInformation = VWIFI_CAP_ESS | VWIFI_CAP_PRIVACY | VWIFI_CAP_SHORT_PREAMBLE;
+    Bss->AuthAlgorithm = DOT11_AUTH_ALGO_RSNA_PSK;
+    Bss->Passphrase = "    cccccccc    ";
+    VWifiAuthInitBss(Bss);
+
+    ASSERT(Adapter->BssCount <= VWIFI_MAX_BSS);
 }
 
 /* Build the minimal beacon-IE blob (SSID, supported rates, DS parameters) for
@@ -118,8 +137,6 @@ VWifiBuildBeaconIes(
     /* 802.11b/g supported rates, in 500 kbit/s units; high bit = basic rate.
      * 1, 2, 5.5, 11 (basic) + 6, 9, 12, 18 Mbit/s. */
     static const UCHAR Rates[] = { 0x82, 0x84, 0x8B, 0x96, 0x0C, 0x12, 0x18, 0x24 };
-    static const UCHAR RsnPskCcmp[] = { 0x01, 0x00, 0x00, 0x0F, 0xAC, 0x04, 0x01, 0x00, 0x00, 0x0F, 0xAC, 0x04,
-                                        0x01, 0x00, 0x00, 0x0F, 0xAC, 0x02, 0x00, 0x00 };
     ULONG Offset = 0;
 
     if (Offset + 2 + Bss->SsidLength > BufferLength)
@@ -142,12 +159,12 @@ VWifiBuildBeaconIes(
     Buffer[Offset++] = 1;
     Buffer[Offset++] = (UCHAR)Bss->ChannelNumber;
 
-    if (Bss->AuthAlgorithm != DOT11_AUTH_ALGO_RSNA_PSK || Offset + 2 + sizeof(RsnPskCcmp) > BufferLength)
+    if (Bss->AuthAlgorithm != DOT11_AUTH_ALGO_RSNA_PSK || Offset + 2 + sizeof(VWifiRsnPskCcmp) > BufferLength)
         return Offset;
     Buffer[Offset++] = VWIFI_IE_RSN;
-    Buffer[Offset++] = (UCHAR)sizeof(RsnPskCcmp);
-    RtlCopyMemory(&Buffer[Offset], RsnPskCcmp, sizeof(RsnPskCcmp));
-    Offset += sizeof(RsnPskCcmp);
+    Buffer[Offset++] = (UCHAR)sizeof(VWifiRsnPskCcmp);
+    RtlCopyMemory(&Buffer[Offset], VWifiRsnPskCcmp, sizeof(VWifiRsnPskCcmp));
+    Offset += sizeof(VWifiRsnPskCcmp);
 
     return Offset;
 }
@@ -696,6 +713,7 @@ VWifiEngineWorker(
                 NdisReleaseSpinLock(&Adapter->Lock);
 
                 VWifiIndicateLinkState(Adapter, TRUE);
+                VWifiAuthStart(Adapter);
 
                 if (Bss->RoamAfterConnect)
                     VWifiScheduleJob(Adapter, VWifiJobRoam, 1000);
@@ -744,6 +762,7 @@ VWifiEngineWorker(
             BOOLEAN Rejoin = FALSE;
             BOOLEAN Associated;
 
+            VWifiAuthStop(Adapter);
             NdisAcquireSpinLock(&Adapter->Lock);
             Associated = (Adapter->ConnState != VWifiDisconnected);
             NdisReleaseSpinLock(&Adapter->Lock);
@@ -794,6 +813,14 @@ VWifiEngineWorker(
             VWifiIndicateAssocComplete(Adapter, Bss, DOT11_ASSOC_STATUS_SUCCESS);
             break;
         }
+
+        case VWifiJobAuthM1:
+            VWifiAuthSendM1(Adapter);
+            break;
+
+        case VWifiJobAuthRx:
+            VWifiAuthProcessEapol(Adapter);
+            break;
 
         case VWifiJobNone:
         default:
