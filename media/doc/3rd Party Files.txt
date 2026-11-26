@@ -435,3 +435,21 @@ URL: https://github.com/aurora-silicon/linux
 Notes: Structure layouts, the initial data's layout magic, register selectors, register windows
 Notes: and operating-point selections only; no code, and none of that driver's generated board
 Notes: data. See "3rd Party Apple GPU interface.txt" in this directory.
+Title: litehtml (with its bundled copy of gumbo)
+Path: sdk/lib/3rdparty/litehtml
+Used Version: 0.10
+License: BSD-3-Clause (https://spdx.org/licenses/BSD-3-Clause.html); gumbo: Apache-2.0 (https://spdx.org/licenses/Apache-2.0.html)
+URL: https://github.com/litehtml/litehtml
+Modifications: include/ and src/ only; strcasecmp/strncasecmp mapped to the CRT and <cstdlib> force-included through CMake
+
+Title: plutovg
+Path: sdk/lib/3rdparty/plutovg
+Used Version: 1.3.3
+License: MIT (https://spdx.org/licenses/MIT.html); FreeType rasterizer parts: FTL (https://spdx.org/licenses/FTL.html)
+URL: https://github.com/sammycage/plutovg
+
+Title: lunasvg
+Path: sdk/lib/3rdparty/lunasvg
+Used Version: 3.5.0
+License: MIT (https://spdx.org/licenses/MIT.html)
+URL: https://github.com/sammycage/lunasvg
