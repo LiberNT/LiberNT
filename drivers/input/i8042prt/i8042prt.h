@@ -89,6 +89,7 @@ typedef struct _PORT_DEVICE_EXTENSION
 	PI8042_MOUSE_EXTENSION MouseExtension;
 	INTERRUPT_DATA MouseInterrupt;
 	PKINTERRUPT HighestDIRQLInterrupt;
+	KSPIN_LOCK InterruptObjectLock;
 	KSPIN_LOCK SpinLock;
 	KIRQL HighestDirql;
 	KMUTEX PnpMutex;
@@ -102,6 +103,7 @@ typedef struct _PORT_DEVICE_EXTENSION
 
 	PIRP CurrentIrp;
 	PDEVICE_OBJECT CurrentIrpDevice;
+	KSPIN_LOCK PacketTimerLock;
 	KTIMER PacketTimer;
 	KDPC PacketTimeoutDpc;
 } PORT_DEVICE_EXTENSION, *PPORT_DEVICE_EXTENSION;
@@ -138,6 +140,8 @@ typedef struct _FDO_DEVICE_EXTENSION
 	DEVICE_STATE PnpState;
 
 	PPORT_DEVICE_EXTENSION PortDeviceExtension;
+	KSPIN_LOCK MouseTimerLock;
+	BOOLEAN MouseTimerStopping;
 } FDO_DEVICE_EXTENSION, *PFDO_DEVICE_EXTENSION;
 
 typedef struct _I8042_KEYBOARD_EXTENSION
@@ -146,6 +150,7 @@ typedef struct _I8042_KEYBOARD_EXTENSION
 	CONNECT_DATA KeyboardData;
 	INTERNAL_I8042_HOOK_KEYBOARD KeyboardHook; /* FIXME: IsrWritePort ignored */
 	KDPC DpcKeyboard;
+	volatile LONG KeyboardDpcState;
 
 	KEYBOARD_ATTRIBUTES KeyboardAttributes;
 
@@ -186,6 +191,7 @@ typedef struct _I8042_MOUSE_EXTENSION
 	CONNECT_DATA MouseData;
 	INTERNAL_I8042_HOOK_MOUSE MouseHook;
 	KDPC DpcMouse;
+	volatile LONG MouseDpcState;
 
 	MOUSE_ATTRIBUTES MouseAttributes;
 
@@ -199,8 +205,7 @@ typedef struct _I8042_MOUSE_EXTENSION
 
 	KTIMER TimerMouseTimeout;
 	KDPC DpcMouseTimeout;
-	MOUSE_TIMEOUT_STATE MouseTimeoutState;
-	BOOLEAN MouseTimeoutActive;
+	volatile ULONG MouseTimeoutState;
 
 	UCHAR MouseLogiBuffer[3];
 	I8042_MOUSE_TYPE MouseType;
@@ -339,7 +344,8 @@ DRIVER_ADD_DEVICE i8042AddDevice;
 BOOLEAN
 i8042PacketIsr(
 	IN PPORT_DEVICE_EXTENSION DeviceExtension,
-	IN UCHAR Output);
+	IN UCHAR Output,
+	IN BOOLEAN MouseInput);
 
 NTSTATUS
 i8042StartPacket(
@@ -359,7 +365,36 @@ DuplicateUnicodeString(
 	IN PCUNICODE_STRING SourceString,
 	OUT PUNICODE_STRING DestinationString);
 
+typedef struct _I8042_INTERRUPT_LOCK
+{
+    PKINTERRUPT Interrupt;
+    KIRQL TableIrql;
+    KIRQL InterruptIrql;
+} I8042_INTERRUPT_LOCK, *PI8042_INTERRUPT_LOCK;
+
+BOOLEAN
+i8042AcquireInterrupt(
+    IN PPORT_DEVICE_EXTENSION DeviceExtension,
+    OUT PI8042_INTERRUPT_LOCK Lock);
+
+VOID
+i8042ReleaseInterrupt(
+    IN PPORT_DEVICE_EXTENSION DeviceExtension,
+    IN PI8042_INTERRUPT_LOCK Lock);
+
+PKINTERRUPT
+i8042UnpublishInterrupt(
+    IN PPORT_DEVICE_EXTENSION DeviceExtension,
+    IN OUT PKINTERRUPT *InterruptObject,
+    IN PKINTERRUPT OtherInterrupt,
+    IN ULONG Flags);
+
 /* mouse.c */
+
+VOID
+i8042StopMouseTimer(
+	IN PI8042_MOUSE_EXTENSION DeviceExtension,
+	IN BOOLEAN TimerInitialized);
 
 VOID
 i8042MouHandle(
@@ -430,6 +465,13 @@ i8042ReadData(
 	IN PPORT_DEVICE_EXTENSION DeviceExtension,
 	IN UCHAR StatusFlags,
 	OUT PUCHAR Data);
+
+NTSTATUS
+i8042ReadDeviceData(
+	IN PPORT_DEVICE_EXTENSION DeviceExtension,
+	IN BOOLEAN MouseInput,
+	OUT PUCHAR Data,
+	OUT PUCHAR PortStatus);
 #define i8042ReadKeyboardData(DeviceExtension, Data) \
 	i8042ReadData(DeviceExtension, KBD_OBF, Data)
 #define i8042ReadMouseData(DeviceExtension, Data) \

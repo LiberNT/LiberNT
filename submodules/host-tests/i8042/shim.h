@@ -24,6 +24,7 @@
 #define STATUS_UNSUCCESSFUL ((NTSTATUS)0xc0000001u)
 #define STATUS_IO_TIMEOUT ((NTSTATUS)0xc00000b5u)
 #define STATUS_DEVICE_NOT_READY ((NTSTATUS)0xc00000a3u)
+#define STATUS_NOT_FOUND ((NTSTATUS)0xc0000225u)
 #define NT_SUCCESS(x) ((x) >= 0)
 #define KBD_OBF 0x01
 #define KBD_IBF 0x02
@@ -36,9 +37,11 @@ typedef void VOID;
 typedef void *PVOID;
 typedef uint8_t UCHAR, *PUCHAR, BOOLEAN, KIRQL;
 typedef uint32_t ULONG;
+typedef int32_t *PLONG;
 typedef uint64_t ULONGLONG;
 typedef int32_t NTSTATUS;
 typedef int32_t LONG;
+typedef int KSPIN_LOCK;
 typedef void *PKINTERRUPT;
 /* A timer is armed or not, and signalled once it expires; the DPC is only an address here */
 typedef struct { BOOLEAN Inserted; LONG SignalState; } KTIMER, *PKTIMER;
@@ -53,7 +56,7 @@ typedef void *PDEVICE_OBJECT;
 VOID IoCompleteRequest(PIRP Irp, int Increment);
 VOID IoStartNextPacket(PDEVICE_OBJECT Device, BOOLEAN Cancelable);
 typedef struct { ULONG PollingIterations, ResendIterations; } I8042_SETTINGS;
-typedef struct { PUCHAR DataPort, ControlPort; I8042_SETTINGS Settings; PKINTERRUPT HighestDIRQLInterrupt; OUTPUT_PACKET Packet; ULONG PacketResends; PIRP CurrentIrp; PDEVICE_OBJECT CurrentIrpDevice; KTIMER PacketTimer; KDPC PacketTimeoutDpc; } PORT_DEVICE_EXTENSION, *PPORT_DEVICE_EXTENSION;
+typedef struct { PUCHAR DataPort, ControlPort; I8042_SETTINGS Settings; PKINTERRUPT HighestDIRQLInterrupt; OUTPUT_PACKET Packet; ULONG PacketResends; BOOLEAN PacketComplete; NTSTATUS PacketResult; PIRP CurrentIrp; PDEVICE_OBJECT CurrentIrpDevice; KTIMER PacketTimer; KDPC PacketTimeoutDpc; KSPIN_LOCK PacketTimerLock, InterruptObjectLock; ULONG Flags; } PORT_DEVICE_EXTENSION, *PPORT_DEVICE_EXTENSION;
 UCHAR TestReadPort(PUCHAR Port);
 VOID TestWritePort(PUCHAR Port, UCHAR Value);
 VOID KeStallExecutionProcessor(ULONG Time);
@@ -61,15 +64,23 @@ ULONGLONG KeQueryInterruptTime(VOID);
 #define PASSIVE_LEVEL 0
 #define DISPATCH_LEVEL 2
 KIRQL KeGetCurrentIrql(VOID);
+VOID KeAcquireSpinLock(KSPIN_LOCK *Lock, KIRQL *OldIrql);
+VOID KeReleaseSpinLock(KSPIN_LOCK *Lock, KIRQL OldIrql);
 KIRQL KeAcquireInterruptSpinLock(PKINTERRUPT Interrupt);
 VOID KeReleaseInterruptSpinLock(PKINTERRUPT Interrupt, KIRQL OldIrql);
 #define READ_PORT_UCHAR(p) TestReadPort(p)
 #define WRITE_PORT_UCHAR(p, v) TestWritePort(p, v)
 NTSTATUS i8042ReadData(PPORT_DEVICE_EXTENSION DeviceExtension, UCHAR StatusFlags, PUCHAR Data);
+NTSTATUS i8042ReadDeviceData(PPORT_DEVICE_EXTENSION DeviceExtension, BOOLEAN MouseInput, PUCHAR Data, PUCHAR PortStatus);
 NTSTATUS i8042ReadStatus(PPORT_DEVICE_EXTENSION DeviceExtension, PUCHAR Status);
 NTSTATUS i8042ReadDataWait(PPORT_DEVICE_EXTENSION DeviceExtension, PUCHAR Data);
 NTSTATUS i8042ReadResetReply(PPORT_DEVICE_EXTENSION DeviceExtension, ULONG ReplyByte, PUCHAR Data);
 BOOLEAN i8042Write(PPORT_DEVICE_EXTENSION DeviceExtension, PUCHAR Port, UCHAR Data);
+typedef struct { PKINTERRUPT Interrupt; KIRQL TableIrql, InterruptIrql; } I8042_INTERRUPT_LOCK, *PI8042_INTERRUPT_LOCK;
+BOOLEAN i8042AcquireInterrupt(PPORT_DEVICE_EXTENSION DeviceExtension, PI8042_INTERRUPT_LOCK Lock);
+VOID i8042ReleaseInterrupt(PPORT_DEVICE_EXTENSION DeviceExtension, PI8042_INTERRUPT_LOCK Lock);
+PKINTERRUPT i8042UnpublishInterrupt(PPORT_DEVICE_EXTENSION DeviceExtension, PKINTERRUPT *InterruptObject, PKINTERRUPT OtherInterrupt, ULONG Flags);
+static inline LONG InterlockedAnd(PLONG Value, LONG Mask) { LONG Old = *Value; *Value &= Mask; return Old; }
 BOOLEAN i8042QuiesceMouse(PPORT_DEVICE_EXTENSION DeviceExtension);
 VOID i8042FinishPacket(PPORT_DEVICE_EXTENSION DeviceExtension, NTSTATUS Result);
 VOID i8042FailPacket(PDEVICE_OBJECT DeviceObject, PIRP Irp, NTSTATUS Result);

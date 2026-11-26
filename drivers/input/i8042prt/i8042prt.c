@@ -69,6 +69,7 @@ i8042AddDevice(
 
 	DeviceExtension = (PFDO_DEVICE_EXTENSION)Fdo->DeviceExtension;
 	RtlZeroMemory(DeviceExtension, DeviceExtensionSize);
+	KeInitializeSpinLock(&DeviceExtension->MouseTimerLock);
 	DeviceExtension->Type = Unknown;
 	DeviceExtension->Fdo = Fdo;
 	DeviceExtension->Pdo = Pdo;
@@ -278,10 +279,24 @@ i8042PacketWrite(
 BOOLEAN
 i8042PacketIsr(
 	IN PPORT_DEVICE_EXTENSION DeviceExtension,
-	IN UCHAR Output)
+	IN UCHAR Output,
+	IN BOOLEAN MouseInput)
 {
-	if (DeviceExtension->Packet.State == Idle)
+	if (DeviceExtension->Packet.State == Idle ||
+	    ((DeviceExtension->PacketPort == CTRL_WRITE_MOUSE) != (MouseInput != FALSE)))
 		return FALSE;
+	if (Output != KBD_ACK && Output != KBD_RESEND && Output != KBD_NACK)
+		return FALSE;
+	if (!DeviceExtension->Packet.Bytes || !DeviceExtension->Packet.ByteCount ||
+	    !DeviceExtension->Packet.CurrentByte ||
+	    DeviceExtension->Packet.CurrentByte > DeviceExtension->Packet.ByteCount)
+	{
+		DeviceExtension->Packet.State = Idle;
+		DeviceExtension->PacketComplete = TRUE;
+		DeviceExtension->PacketResult = STATUS_UNEXPECTED_IO_ERROR;
+		DeviceExtension->PacketResends = 0;
+		return TRUE;
+	}
 
 	switch (Output)
 	{
@@ -305,8 +320,12 @@ i8042PacketIsr(
 			DeviceExtension->PacketResends = 0;
 			return TRUE;
 
-		default:
+		case KBD_ACK:
 			DeviceExtension->PacketResends = 0;
+			break;
+
+		default:
+			return FALSE;
 	}
 
 	if (DeviceExtension->Packet.CurrentByte >= DeviceExtension->Packet.ByteCount)
@@ -329,10 +348,6 @@ i8042PacketIsr(
 	return TRUE;
 }
 
-/*
- * This function starts a packet. It must be called with the
- * correct DIRQL.
- */
 NTSTATUS
 i8042StartPacket(
 	IN PPORT_DEVICE_EXTENSION DeviceExtension,
@@ -341,29 +356,32 @@ i8042StartPacket(
 	IN ULONG ByteCount,
 	IN PIRP Irp)
 {
-	PKINTERRUPT Interrupt = DeviceExtension->HighestDIRQLInterrupt;
+	I8042_INTERRUPT_LOCK Lock;
 	ULONG Initialized = (FdoDeviceExtension->Type == Mouse) ? MOUSE_INITIALIZED : KEYBOARD_INITIALIZED;
 	LARGE_INTEGER Timeout;
-	KIRQL Irql;
+	KIRQL TimerIrql;
 	NTSTATUS Status;
 
-	Status = I8042CorePacketStatus((ReadULongAcquire(&DeviceExtension->Flags) & Initialized) != 0, Interrupt);
-	if (!NT_SUCCESS(Status))
+	if (!Bytes || !ByteCount)
 	{
-		i8042FailPacket(FdoDeviceExtension->Fdo, Irp, Status);
-		return Status;
+		i8042FailPacket(FdoDeviceExtension->Fdo, Irp, STATUS_INVALID_PARAMETER);
+		return STATUS_INVALID_PARAMETER;
 	}
 
-	/* Armed before the packet can complete, so a finished packet always cancels its own timer */
-	Timeout.QuadPart = -(LONGLONG)I8042_PACKET_TIMEOUT_MS * 10000;
-	KeSetTimer(&DeviceExtension->PacketTimer, Timeout, &DeviceExtension->PacketTimeoutDpc);
+	KeAcquireSpinLock(&DeviceExtension->PacketTimerLock, &TimerIrql);
+	if (!i8042AcquireInterrupt(DeviceExtension, &Lock))
+	{
+		Status = STATUS_DEVICE_NOT_READY;
+		goto unlock_timer;
+	}
 
-	Irql = KeAcquireInterruptSpinLock(Interrupt);
-
-	if (DeviceExtension->Packet.State != Idle)
+	Status = I8042CorePacketStatus((ReadULongAcquire(&DeviceExtension->Flags) & Initialized) != 0, Lock.Interrupt);
+	if (!NT_SUCCESS(Status))
+		goto unlock_interrupt;
+	if (DeviceExtension->Packet.State != Idle || DeviceExtension->CurrentIrp != NULL)
 	{
 		Status = STATUS_DEVICE_BUSY;
-		goto done;
+		goto unlock_interrupt;
 	}
 
 	switch (FdoDeviceExtension->Type)
@@ -401,14 +419,17 @@ done:
 		DeviceExtension->CurrentIrp = NULL;
 		DeviceExtension->CurrentIrpDevice = NULL;
 	}
-	KeReleaseInterruptSpinLock(Interrupt, Irql);
-
-	if (Status != STATUS_PENDING)
+unlock_interrupt:
+	i8042ReleaseInterrupt(DeviceExtension, &Lock);
+	if (Status == STATUS_PENDING)
 	{
-		if (Status != STATUS_DEVICE_BUSY)
-			KeCancelTimer(&DeviceExtension->PacketTimer);
-		i8042FailPacket(FdoDeviceExtension->Fdo, Irp, Status);
+		Timeout.QuadPart = -(LONGLONG)I8042_PACKET_TIMEOUT_MS * 10000;
+		KeSetTimer(&DeviceExtension->PacketTimer, Timeout, &DeviceExtension->PacketTimeoutDpc);
 	}
+unlock_timer:
+	KeReleaseSpinLock(&DeviceExtension->PacketTimerLock, TimerIrql);
+	if (Status != STATUS_PENDING)
+		i8042FailPacket(FdoDeviceExtension->Fdo, Irp, Status);
 	return Status;
 }
 
@@ -524,7 +545,9 @@ DriverEntry(
 	}
 	RtlZeroMemory(DriverExtension, sizeof(I8042_DRIVER_EXTENSION));
 	KeInitializeSpinLock(&DriverExtension->Port.SpinLock);
+	KeInitializeSpinLock(&DriverExtension->Port.InterruptObjectLock);
 	KeInitializeMutex(&DriverExtension->Port.PnpMutex, 0);
+	KeInitializeSpinLock(&DriverExtension->Port.PacketTimerLock);
 	KeInitializeTimer(&DriverExtension->Port.PacketTimer);
 	KeInitializeDpc(&DriverExtension->Port.PacketTimeoutDpc, i8042PacketTimeoutDpc, &DriverExtension->Port);
 	InitializeListHead(&DriverExtension->DeviceListHead);

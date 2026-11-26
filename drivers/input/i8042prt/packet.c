@@ -14,13 +14,18 @@ i8042FinishPacket(
     IN PPORT_DEVICE_EXTENSION DeviceExtension,
     IN NTSTATUS Result)
 {
-    PIRP Irp = DeviceExtension->CurrentIrp;
-    PDEVICE_OBJECT DeviceObject = DeviceExtension->CurrentIrpDevice;
+    PIRP Irp;
+    PDEVICE_OBJECT DeviceObject;
+    KIRQL OldIrql;
 
+    KeAcquireSpinLock(&DeviceExtension->PacketTimerLock, &OldIrql);
+    Irp = DeviceExtension->CurrentIrp;
+    DeviceObject = DeviceExtension->CurrentIrpDevice;
     ASSERT((Irp != NULL) == (DeviceObject != NULL));
     DeviceExtension->CurrentIrp = NULL;
     DeviceExtension->CurrentIrpDevice = NULL;
     KeCancelTimer(&DeviceExtension->PacketTimer);
+    KeReleaseSpinLock(&DeviceExtension->PacketTimerLock, OldIrql);
 
     if (Irp != NULL)
     {
@@ -53,7 +58,9 @@ i8042PacketTimeoutDpc(
     PPORT_DEVICE_EXTENSION DeviceExtension = DeferredContext;
     BOOLEAN TimedOut = FALSE;
     UCHAR Command = 0;
-    KIRQL Irql;
+    KIRQL TimerIrql;
+    BOOLEAN TimerSignaled;
+    I8042_INTERRUPT_LOCK Lock;
 
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
@@ -61,19 +68,25 @@ i8042PacketTimeoutDpc(
 
     ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
-    if (DeviceExtension->HighestDIRQLInterrupt == NULL)
+    KeAcquireSpinLock(&DeviceExtension->PacketTimerLock, &TimerIrql);
+    TimerSignaled = KeReadStateTimer(&DeviceExtension->PacketTimer);
+    if (!i8042AcquireInterrupt(DeviceExtension, &Lock))
+    {
+        KeReleaseSpinLock(&DeviceExtension->PacketTimerLock, TimerIrql);
         return;
+    }
 
-    Irql = KeAcquireInterruptSpinLock(DeviceExtension->HighestDIRQLInterrupt);
-    if (I8042CorePacketTimedOut(KeReadStateTimer(&DeviceExtension->PacketTimer),
+    if (I8042CorePacketTimedOut(TimerSignaled,
                                 DeviceExtension->Packet.State != Idle))
     {
-        Command = DeviceExtension->Packet.Bytes[0];
+        if (DeviceExtension->Packet.Bytes && DeviceExtension->Packet.ByteCount)
+            Command = DeviceExtension->Packet.Bytes[0];
         DeviceExtension->Packet.State = Idle;
         DeviceExtension->PacketResends = 0;
         TimedOut = TRUE;
     }
-    KeReleaseInterruptSpinLock(DeviceExtension->HighestDIRQLInterrupt, Irql);
+    i8042ReleaseInterrupt(DeviceExtension, &Lock);
+    KeReleaseSpinLock(&DeviceExtension->PacketTimerLock, TimerIrql);
 
     if (!TimedOut)
         return;

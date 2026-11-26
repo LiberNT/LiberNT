@@ -254,8 +254,24 @@ i8042MouInitialize(
 	return STATUS_IO_DEVICE_ERROR;
 }
 
+VOID
+i8042StopMouseTimer(
+	IN PI8042_MOUSE_EXTENSION DeviceExtension,
+	IN BOOLEAN TimerInitialized)
+{
+	KIRQL OldIrql;
+
+	KeAcquireSpinLock(&DeviceExtension->Common.MouseTimerLock, &OldIrql);
+	DeviceExtension->Common.MouseTimerStopping = TRUE;
+	if (TimerInitialized)
+	{
+		KeCancelTimer(&DeviceExtension->TimerMouseTimeout);
+	}
+	KeReleaseSpinLock(&DeviceExtension->Common.MouseTimerLock, OldIrql);
+}
+
 static VOID NTAPI
-i8042MouDpcRoutine(
+i8042MouDpcWork(
 	IN PKDPC Dpc,
 	IN PVOID DeferredContext,
 	IN PVOID SystemArgument1,
@@ -265,7 +281,9 @@ i8042MouDpcRoutine(
 	PPORT_DEVICE_EXTENSION PortDeviceExtension;
 	ULONG MouseTransferred = 0;
 	ULONG MouseInBufferCopy;
-	KIRQL Irql;
+	I8042_INTERRUPT_LOCK Lock;
+	KIRQL TimerIrql;
+	ULONG TimeoutState;
 	LARGE_INTEGER Timeout;
 
 	UNREFERENCED_PARAMETER(Dpc);
@@ -278,50 +296,42 @@ i8042MouDpcRoutine(
 	DeviceExtension = DeferredContext;
 	PortDeviceExtension = DeviceExtension->Common.PortDeviceExtension;
 
-	switch (DeviceExtension->MouseTimeoutState)
+	if (ReadULongAcquire(&DeviceExtension->MouseTimeoutState) != NoChange)
 	{
-		case TimeoutStart:
+		KeAcquireSpinLock(&DeviceExtension->Common.MouseTimerLock, &TimerIrql);
+		if (DeviceExtension->Common.MouseTimerStopping)
 		{
-			DeviceExtension->MouseTimeoutState = NoChange;
-			if (DeviceExtension->MouseTimeoutActive &&
-			    !KeCancelTimer(&DeviceExtension->TimerMouseTimeout))
-			{
-				/* The timer fired already, give up */
-				DeviceExtension->MouseTimeoutActive = FALSE;
-				return;
-			}
-
-			Timeout.QuadPart = -15000000; /* 1.5 seconds, should be enough */
-
-			KeSetTimer(
-				&DeviceExtension->TimerMouseTimeout,
-				Timeout,
-				&DeviceExtension->DpcMouseTimeout);
-			DeviceExtension->MouseTimeoutActive = TRUE;
+			KeReleaseSpinLock(&DeviceExtension->Common.MouseTimerLock, TimerIrql);
 			return;
 		}
 
-		case TimeoutCancel:
-		{
-			DeviceExtension->MouseTimeoutState = NoChange;
-			KeCancelTimer(&DeviceExtension->TimerMouseTimeout);
-			DeviceExtension->MouseTimeoutActive = FALSE;
-		}
+		TimeoutState = (ULONG)InterlockedExchange(
+			(volatile LONG *)&DeviceExtension->MouseTimeoutState, NoChange);
 
-		default:
-			;/* nothing, don't want a warning */
+		if (TimeoutState == TimeoutStart)
+		{
+			Timeout.QuadPart = -15000000;
+			KeSetTimer(&DeviceExtension->TimerMouseTimeout,
+				Timeout, &DeviceExtension->DpcMouseTimeout);
+		}
+		else if (TimeoutState == TimeoutCancel)
+		{
+			KeCancelTimer(&DeviceExtension->TimerMouseTimeout);
+		}
+		KeReleaseSpinLock(&DeviceExtension->Common.MouseTimerLock, TimerIrql);
 	}
 
 	/* Should be unlikely */
 	if (!DeviceExtension->MouseComplete)
 		return;
 
-	Irql = KeAcquireInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt);
+	if (!i8042AcquireInterrupt(PortDeviceExtension, &Lock))
+		return;
 
 	DeviceExtension->MouseComplete = FALSE;
 	MouseInBufferCopy = DeviceExtension->MouseInBuffer;
 
-	KeReleaseInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt, Irql);
+	i8042ReleaseInterrupt(PortDeviceExtension, &Lock);
 
 	TRACE_(I8042PRT, "Send a mouse packet\n");
 
@@ -335,10 +345,11 @@ i8042MouDpcRoutine(
 		DeviceExtension->MouseBuffer + MouseInBufferCopy,
 		&MouseTransferred);
 
-	Irql = KeAcquireInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt);
+	if (!i8042AcquireInterrupt(PortDeviceExtension, &Lock))
+		return;
 	if (MouseTransferred > MouseInBufferCopy || MouseTransferred > DeviceExtension->MouseInBuffer)
 	{
-		KeReleaseInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt, Irql);
+		i8042ReleaseInterrupt(PortDeviceExtension, &Lock);
 		WARN_(I8042PRT, "Invalid mouse transfer count\n");
 		return;
 	}
@@ -349,7 +360,32 @@ i8042MouDpcRoutine(
 			DeviceExtension->MouseBuffer,
 			DeviceExtension->MouseBuffer + MouseTransferred,
 			(DeviceExtension->MouseInBuffer + 1) * sizeof(MOUSE_INPUT_DATA));
-	KeReleaseInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt, Irql);
+	i8042ReleaseInterrupt(PortDeviceExtension, &Lock);
+}
+
+static VOID NTAPI
+i8042MouDpcRoutine(
+	IN PKDPC Dpc,
+	IN PVOID DeferredContext,
+	IN PVOID SystemArgument1,
+	IN PVOID SystemArgument2)
+{
+	enum { DpcRunning = 1, DpcPending = 2 };
+	PI8042_MOUSE_EXTENSION DeviceExtension = DeferredContext;
+	LONG State;
+
+	State = InterlockedOr(&DeviceExtension->MouseDpcState, DpcPending);
+	if ((State & DpcRunning) ||
+	    InterlockedCompareExchange(&DeviceExtension->MouseDpcState,
+	                               DpcRunning | DpcPending, DpcPending) != DpcPending)
+		return;
+
+	do
+	{
+		InterlockedAnd(&DeviceExtension->MouseDpcState, ~DpcPending);
+		i8042MouDpcWork(Dpc, DeferredContext, SystemArgument1, SystemArgument2);
+	} while (InterlockedCompareExchange(&DeviceExtension->MouseDpcState,
+	                                    0, DpcRunning) != DpcRunning);
 }
 
 /* This timer DPC will be called when the mouse reset times out.
@@ -365,7 +401,9 @@ i8042DpcRoutineMouseTimeout(
 {
 	PI8042_MOUSE_EXTENSION DeviceExtension;
 	PPORT_DEVICE_EXTENSION PortDeviceExtension;
-	KIRQL Irql;
+	I8042_INTERRUPT_LOCK Lock;
+	KIRQL TimerIrql;
+	BOOLEAN Expired;
 
 	UNREFERENCED_PARAMETER(Dpc);
 	UNREFERENCED_PARAMETER(SystemArgument1);
@@ -377,14 +415,29 @@ i8042DpcRoutineMouseTimeout(
 	DeviceExtension = DeferredContext;
 	PortDeviceExtension = DeviceExtension->Common.PortDeviceExtension;
 
-	Irql = KeAcquireInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt);
+	KeAcquireSpinLock(&DeviceExtension->Common.MouseTimerLock, &TimerIrql);
+	if (DeviceExtension->Common.MouseTimerStopping)
+	{
+		KeReleaseSpinLock(&DeviceExtension->Common.MouseTimerLock, TimerIrql);
+		return;
+	}
+	Expired = KeReadStateTimer(&DeviceExtension->TimerMouseTimeout) != 0;
+	if (!i8042AcquireInterrupt(PortDeviceExtension, &Lock))
+	{
+		KeReleaseSpinLock(&DeviceExtension->Common.MouseTimerLock, TimerIrql);
+		return;
+	}
 
-	WARN_(I8042PRT, "Mouse initialization timeout! (substate %x)\n",
-		DeviceExtension->MouseResetState);
+	if (Expired && DeviceExtension->MouseState == MouseResetting &&
+	    ReadULongAcquire(&DeviceExtension->MouseTimeoutState) == NoChange)
+	{
+		WARN_(I8042PRT, "Mouse initialization timeout! (substate %x)\n",
+			DeviceExtension->MouseResetState);
+		InterlockedAnd((PLONG)&PortDeviceExtension->Flags, ~MOUSE_PRESENT);
+	}
 
-	InterlockedAnd((PLONG)&PortDeviceExtension->Flags, ~MOUSE_PRESENT);
-
-	KeReleaseInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt, Irql);
+	i8042ReleaseInterrupt(PortDeviceExtension, &Lock);
+	KeReleaseSpinLock(&DeviceExtension->Common.MouseTimerLock, TimerIrql);
 }
 
 /*
@@ -467,17 +520,18 @@ i8042MouInternalDeviceControl(
 				i8042DpcRoutineMouseTimeout,
 				DeviceExtension);
 			KeInitializeTimer(&DeviceExtension->TimerMouseTimeout);
+			DeviceExtension->MouseState = MouseResetting;
+			DeviceExtension->MouseResetState = ExpectingReset;
+			DeviceExtension->MouseHook.IsrWritePort = i8042MouIsrWritePort;
+			DeviceExtension->MouseHook.QueueMousePacket = i8042MouQueuePacket;
+			DeviceExtension->MouseHook.CallContext = DeviceExtension;
+
 			KeWaitForSingleObject(&DeviceExtension->Common.PortDeviceExtension->PnpMutex, Executive, KernelMode, FALSE, NULL);
 			DeviceExtension->Common.PortDeviceExtension->MouseExtension = DeviceExtension;
 			InterlockedOr((PLONG)&DeviceExtension->Common.PortDeviceExtension->Flags, MOUSE_CONNECTED);
 			KeReleaseMutex(&DeviceExtension->Common.PortDeviceExtension->PnpMutex, FALSE);
 
 			IoMarkIrpPending(Irp);
-			DeviceExtension->MouseState = MouseResetting;
-			DeviceExtension->MouseResetState = ExpectingReset;
-			DeviceExtension->MouseHook.IsrWritePort = i8042MouIsrWritePort;
-			DeviceExtension->MouseHook.QueueMousePacket = i8042MouQueuePacket;
-			DeviceExtension->MouseHook.CallContext = DeviceExtension;
 			IoQueueWorkItem(WorkItem,
 				i8042SendHookWorkItem,
 				DelayedWorkQueue,
@@ -666,7 +720,7 @@ i8042MouResetIsr(
 	else if (MouseResetting != DeviceExtension->MouseState)
 		return FALSE;
 
-	DeviceExtension->MouseTimeoutState = TimeoutStart;
+	WriteULongRelease(&DeviceExtension->MouseTimeoutState, TimeoutStart);
 	PortDeviceExtension = DeviceExtension->Common.PortDeviceExtension;
 
 	switch ((ULONG)DeviceExtension->MouseResetState)
@@ -907,7 +961,7 @@ i8042MouResetIsr(
 		case ExpectingEnableACK:
 			InterlockedOr((PLONG)&PortDeviceExtension->Flags, MOUSE_PRESENT);
 			DeviceExtension->MouseState = MouseIdle;
-			DeviceExtension->MouseTimeoutState = TimeoutCancel;
+			WriteULongRelease(&DeviceExtension->MouseTimeoutState, TimeoutCancel);
 			INFO_(I8042PRT, "Mouse type = %u\n", DeviceExtension->MouseType);
 			return TRUE;
 		default:
@@ -937,13 +991,9 @@ i8042MouInterruptService(
 
 	while (Counter)
 	{
-		Status = i8042ReadStatus(PortDeviceExtension, &PortStatus);
-		if (!NT_SUCCESS(Status))
-		{
-			WARN_(I8042PRT, "i8042ReadStatus() failed with status 0x%08lx\n", Status);
+		Status = i8042ReadDeviceData(PortDeviceExtension, TRUE, &Output, &PortStatus);
+		if (Status == STATUS_NOT_FOUND)
 			return FALSE;
-		}
-		Status = i8042ReadMouseData(PortDeviceExtension, &Output);
 		if (NT_SUCCESS(Status))
 			break;
 		KeStallExecutionProcessor(1);
@@ -957,7 +1007,7 @@ i8042MouInterruptService(
 
 	INFO_(I8042PRT, "Got: 0x%02x\n", Output);
 
-	if (i8042PacketIsr(PortDeviceExtension, Output))
+	if (i8042PacketIsr(PortDeviceExtension, Output, TRUE))
 	{
 		if (PortDeviceExtension->PacketComplete)
 		{
@@ -975,7 +1025,7 @@ i8042MouInterruptService(
 	if (i8042MouResetIsr(DeviceExtension, PortStatus, Output))
 	{
 		TRACE_(I8042PRT, "Handled by ResetIsr or hooked Isr\n");
-		if (NoChange != DeviceExtension->MouseTimeoutState) {
+		if (ReadULongAcquire(&DeviceExtension->MouseTimeoutState) != NoChange) {
 			KeInsertQueueDpc(&DeviceExtension->DpcMouse, NULL, NULL);
 		}
 		return TRUE;

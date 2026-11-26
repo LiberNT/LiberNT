@@ -14,7 +14,7 @@ parser.add_argument('--cc', required=True)
 args = parser.parse_args()
 source = (pathlib.Path(args.root) / 'drivers/input/i8042prt/mouse.c').read_text(encoding='latin-1')
 functions = []
-for name in ('i8042MouQueuePacket', 'i8042MouHandleButtons', 'i8042MouHandle', 'i8042MouDpcRoutine'):
+for name in ('i8042MouQueuePacket', 'i8042MouHandleButtons', 'i8042MouHandle', 'i8042MouDpcWork', 'i8042MouDpcRoutine'):
     match = re.search(r'(?ms)^(?:static )?(?:VOID NTAPI|VOID|BOOLEAN)\n' + name + r'\(.*?^\}\n', source)
     if not match:
         raise RuntimeError(name + ' not found')
@@ -31,6 +31,7 @@ fixture = r'''
 #define FALSE 0
 #define ASSERT assert
 #define UNREFERENCED_PARAMETER(x) (void)(x)
+#undef __analysis_assume
 #define __analysis_assume(x) ((void)0)
 #define TRACE_(...)
 #define INFO_(...)
@@ -64,11 +65,52 @@ typedef struct { SETTINGS Settings; void *HighestDIRQLInterrupt; int Packet; } P
 typedef void (*PSERVICE_CALLBACK_ROUTINE)(void *, MOUSE_INPUT_DATA *, MOUSE_INPUT_DATA *, ULONG *);
 typedef struct { void *ClassDeviceObject; PSERVICE_CALLBACK_ROUTINE ClassService; } CONNECT_DATA;
 typedef struct { void (*QueueMousePacket)(void *); void *CallContext; } HOOK;
-typedef struct { struct { PORT_DEVICE_EXTENSION *PortDeviceExtension; } Common; MOUSE_INPUT_DATA *MouseBuffer; ULONG MouseInBuffer; MOUSE_STATE MouseState; MOUSE_TYPE MouseType; USHORT MouseButtonState; HOOK MouseHook; KDPC DpcMouse, DpcMouseTimeout; int TimerMouseTimeout; TIMEOUT_STATE MouseTimeoutState; int MouseTimeoutActive; int MouseComplete; CONNECT_DATA MouseData; } I8042_MOUSE_EXTENSION, *PI8042_MOUSE_EXTENSION;
+typedef struct { struct { PORT_DEVICE_EXTENSION *PortDeviceExtension; int MouseTimerLock, MouseTimerStopping; } Common; MOUSE_INPUT_DATA *MouseBuffer; ULONG MouseInBuffer; MOUSE_STATE MouseState; MOUSE_TYPE MouseType; USHORT MouseButtonState; HOOK MouseHook; KDPC DpcMouse, DpcMouseTimeout; int TimerMouseTimeout; volatile ULONG MouseTimeoutState; int MouseTimeoutActive; int MouseComplete; CONNECT_DATA MouseData; volatile LONG MouseDpcState; } I8042_MOUSE_EXTENSION, *PI8042_MOUSE_EXTENSION;
+static ULONG ReadULongAcquire(volatile ULONG *p) { return *p; }
+static LONG InterlockedExchange(volatile LONG *p, LONG n) { LONG old=*p; *p=n; return old; }
+static LONG InterlockedOr(volatile LONG *p, LONG value) { LONG old=*p; *p |= value; return old; }
+static void (*BeforeReleaseHook)(void), (*AfterReleaseHook)(void);
+static LONG InterlockedCompareExchange(volatile LONG *p, LONG n, LONG e)
+{
+    LONG old;
+    if (n == 0 && e == 1 && BeforeReleaseHook)
+    {
+        void (*hook)(void) = BeforeReleaseHook;
+        BeforeReleaseHook = 0;
+        hook();
+    }
+    old=*p;
+    if (old==e) *p=n;
+    if (old==e && n==0 && e==1 && AfterReleaseHook)
+    {
+        void (*hook)(void) = AfterReleaseHook;
+        AfterReleaseHook = 0;
+        hook();
+    }
+    return old;
+}
+static LONG InterlockedAnd(volatile LONG *p, LONG value) { LONG old=*p; *p &= value; return old; }
+static void KeAcquireSpinLock(int *p, KIRQL *old) { (void)p; *old=2; }
+static void KeReleaseSpinLock(int *p, KIRQL old) { (void)p; assert(old==2); }
 static int LockHeld;
 static KIRQL KeGetCurrentIrql(void) { return 2; }
 static KIRQL KeAcquireInterruptSpinLock(void *p) { assert(p && !LockHeld); LockHeld = 1; return 2; }
 static void KeReleaseInterruptSpinLock(void *p, KIRQL i) { assert(p && i == 2 && LockHeld); LockHeld = 0; }
+typedef struct { void *Interrupt; KIRQL TableIrql, InterruptIrql; } I8042_INTERRUPT_LOCK;
+static BOOLEAN i8042AcquireInterrupt(PORT_DEVICE_EXTENSION *port, I8042_INTERRUPT_LOCK *lock)
+{
+    lock->Interrupt = port->HighestDIRQLInterrupt;
+    if (!lock->Interrupt)
+        return 0;
+    lock->TableIrql = 2;
+    lock->InterruptIrql = KeAcquireInterruptSpinLock(lock->Interrupt);
+    return 1;
+}
+static void i8042ReleaseInterrupt(PORT_DEVICE_EXTENSION *port, I8042_INTERRUPT_LOCK *lock)
+{
+    (void)port;
+    KeReleaseInterruptSpinLock(lock->Interrupt, lock->InterruptIrql);
+}
 static void KeInsertQueueDpc(KDPC *p, void *a, void *b) { (void)p; (void)a; (void)b; }
 static int KeCancelTimer(int *p) { (void)p; return 1; }
 static void KeSetTimer(int *p, LARGE_INTEGER t, KDPC *d) { (void)p; (void)t; (void)d; }
@@ -184,8 +226,87 @@ static void overreported_count(void)
     assert(dev.MouseInBuffer == 2 && data[0].LastX == 10 && data[1].LastX == 3);
     assert(data[2].ExtraInformation == 0x1234 && data[4].ExtraInformation == 0xcafebabe);
 }
+static int CallbackDepth, CallbackCalls;
+static void overlap_callback(void *object, MOUSE_INPUT_DATA *start, MOUSE_INPUT_DATA *end, ULONG *count)
+{
+    I8042_MOUSE_EXTENSION *dev = object;
+    if (CallbackDepth)
+    {
+        fprintf(stderr, "mouse callbacks overlap and can deliver the same prefix twice\n");
+        assert(0);
+    }
+    assert(!LockHeld && end - start == 1);
+    ++CallbackCalls;
+    if (CallbackCalls == 1)
+    {
+        assert(start[0].LastX == 10);
+        dev->MouseBuffer[dev->MouseInBuffer].LastX = 20;
+        i8042MouQueuePacket(dev);
+        CallbackDepth = 1;
+        i8042MouDpcRoutine(NULL, dev, NULL, NULL);
+        CallbackDepth = 0;
+    }
+    else
+    {
+        assert(CallbackCalls == 2 && start[0].LastX == 20);
+    }
+    *count = 1;
+}
+static void overlap_delivery(void)
+{
+    PORT_DEVICE_EXTENSION port = {{4, 10}, (void *)1, 0};
+    MOUSE_INPUT_DATA data[5] = {{0}};
+    I8042_MOUSE_EXTENSION dev = {0};
+    dev.Common.PortDeviceExtension = &port;
+    dev.MouseBuffer = data;
+    dev.MouseInBuffer = 1;
+    dev.MouseComplete = TRUE;
+    dev.MouseData.ClassService = overlap_callback;
+    dev.MouseData.ClassDeviceObject = &dev;
+    data[0].LastX = 10;
+    i8042MouDpcRoutine(NULL, &dev, NULL, NULL);
+    assert(CallbackCalls == 2 && dev.MouseInBuffer == 0);
+}
+static I8042_MOUSE_EXTENSION *HandoffDevice;
+static int HandoffCalls;
+static void handoff_callback(void *object, MOUSE_INPUT_DATA *start, MOUSE_INPUT_DATA *end, ULONG *transferred)
+{
+    (void)object;
+    ++HandoffCalls;
+    assert(end - start == 1 && start[0].LastX == (LONG)HandoffCalls);
+    *transferred = 1;
+}
+static void inject_handoff(void)
+{
+    HandoffDevice->MouseBuffer[HandoffDevice->MouseInBuffer++].LastX = 2;
+    HandoffDevice->MouseComplete = TRUE;
+    i8042MouDpcRoutine(NULL, HandoffDevice, NULL, NULL);
+}
+static void handoff(int before)
+{
+    PORT_DEVICE_EXTENSION port = {{4, 10}, (void *)1, 0};
+    MOUSE_INPUT_DATA data[5] = {{0}};
+    data[0].LastX = 1;
+    data[4].ExtraInformation = 0xabcdef;
+    I8042_MOUSE_EXTENSION dev = {0};
+    dev.Common.PortDeviceExtension = &port;
+    dev.MouseBuffer = data;
+    dev.MouseInBuffer = 1;
+    dev.MouseComplete = TRUE;
+    dev.MouseData.ClassService = handoff_callback;
+    HandoffDevice = &dev;
+    HandoffCalls = 0;
+    if (before) BeforeReleaseHook = inject_handoff; else AfterReleaseHook = inject_handoff;
+    i8042MouDpcRoutine(NULL, &dev, NULL, NULL);
+    assert(HandoffCalls == 2 && dev.MouseInBuffer == 0 && dev.MouseDpcState == 0);
+    assert(!BeforeReleaseHook && !AfterReleaseHook);
+    assert(data[4].ExtraInformation == 0xabcdef);
+}
 int main(void)
 {
+    handoff(1);
+    handoff(0);
+    overlap_delivery();
     run(0, 1, 1);
     run(1, 1, 1);
     run(1, 2, 2);

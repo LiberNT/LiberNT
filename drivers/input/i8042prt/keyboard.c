@@ -200,15 +200,13 @@ i8042PacketDpc(
 	IN PPORT_DEVICE_EXTENSION DeviceExtension)
 {
 	BOOLEAN FinishIrp = FALSE;
-	KIRQL Irql;
+	I8042_INTERRUPT_LOCK Lock;
 	NTSTATUS Result = STATUS_INTERNAL_ERROR; /* Shouldn't happen */
 
 	/* If the interrupt happens before this is setup, the key
 	 * was already in the buffer. Too bad! */
-	if (!DeviceExtension->HighestDIRQLInterrupt)
+	if (!i8042AcquireInterrupt(DeviceExtension, &Lock))
 		return;
-
-	Irql = KeAcquireInterruptSpinLock(DeviceExtension->HighestDIRQLInterrupt);
 
 	if (DeviceExtension->Packet.State == Idle
 	 && DeviceExtension->PacketComplete)
@@ -218,7 +216,7 @@ i8042PacketDpc(
 		DeviceExtension->PacketComplete = FALSE;
 	}
 
-	KeReleaseInterruptSpinLock(DeviceExtension->HighestDIRQLInterrupt, Irql);
+	i8042ReleaseInterrupt(DeviceExtension, &Lock);
 
 	if (!FinishIrp)
 		return;
@@ -358,7 +356,7 @@ HandlePowerKeys(
 }
 
 static VOID NTAPI
-i8042KbdDpcRoutine(
+i8042KbdDpcWork(
 	IN PKDPC Dpc,
 	IN PVOID DeferredContext,
 	IN PVOID SystemArgument1,
@@ -368,7 +366,7 @@ i8042KbdDpcRoutine(
 	PPORT_DEVICE_EXTENSION PortDeviceExtension;
 	ULONG KeysTransferred = 0;
 	ULONG KeysInBufferCopy;
-	KIRQL Irql;
+	I8042_INTERRUPT_LOCK Lock;
 
 	UNREFERENCED_PARAMETER(Dpc);
 	UNREFERENCED_PARAMETER(SystemArgument1);
@@ -387,15 +385,13 @@ i8042KbdDpcRoutine(
 	if (!DeviceExtension->KeyComplete)
 		return;
 	/* We got the interrupt as it was being enabled, too bad */
-	if (!PortDeviceExtension->HighestDIRQLInterrupt)
+	if (!i8042AcquireInterrupt(PortDeviceExtension, &Lock))
 		return;
-
-	Irql = KeAcquireInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt);
 
 	DeviceExtension->KeyComplete = FALSE;
 	KeysInBufferCopy = DeviceExtension->KeysInBuffer;
 
-	KeReleaseInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt, Irql);
+	i8042ReleaseInterrupt(PortDeviceExtension, &Lock);
 
 	TRACE_(I8042PRT, "Send a key\n");
 
@@ -410,17 +406,47 @@ i8042KbdDpcRoutine(
 		&KeysTransferred);
 
 	/* Validate that the callback didn't change the Irql. */
-	ASSERT(KeGetCurrentIrql() == Irql);
+	ASSERT(KeGetCurrentIrql() == Lock.TableIrql);
 
-	Irql = KeAcquireInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt);
+	if (!i8042AcquireInterrupt(PortDeviceExtension, &Lock))
+		return;
 	if (KeysTransferred > KeysInBufferCopy || KeysTransferred > DeviceExtension->KeysInBuffer)
 	{
-		KeReleaseInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt, Irql);
+		i8042ReleaseInterrupt(PortDeviceExtension, &Lock);
 		WARN_(I8042PRT, "Invalid keyboard transfer count\n");
 		return;
 	}
 	DeviceExtension->KeysInBuffer -= KeysTransferred;
-	KeReleaseInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt, Irql);
+	if (KeysTransferred && DeviceExtension->KeysInBuffer)
+		RtlMoveMemory(DeviceExtension->KeyboardBuffer,
+		              DeviceExtension->KeyboardBuffer + KeysTransferred,
+		              DeviceExtension->KeysInBuffer * sizeof(KEYBOARD_INPUT_DATA));
+	i8042ReleaseInterrupt(PortDeviceExtension, &Lock);
+}
+
+static VOID NTAPI
+i8042KbdDpcRoutine(
+	IN PKDPC Dpc,
+	IN PVOID DeferredContext,
+	IN PVOID SystemArgument1,
+	IN PVOID SystemArgument2)
+{
+	enum { DpcRunning = 1, DpcPending = 2 };
+	PI8042_KEYBOARD_EXTENSION DeviceExtension = DeferredContext;
+	LONG State;
+
+	State = InterlockedOr(&DeviceExtension->KeyboardDpcState, DpcPending);
+	if ((State & DpcRunning) ||
+	    InterlockedCompareExchange(&DeviceExtension->KeyboardDpcState,
+	                               DpcRunning | DpcPending, DpcPending) != DpcPending)
+		return;
+
+	do
+	{
+		InterlockedAnd(&DeviceExtension->KeyboardDpcState, ~DpcPending);
+		i8042KbdDpcWork(Dpc, DeferredContext, SystemArgument1, SystemArgument2);
+	} while (InterlockedCompareExchange(&DeviceExtension->KeyboardDpcState,
+	                                    0, DpcRunning) != DpcRunning);
 }
 
 /*
@@ -643,17 +669,17 @@ i8042KbdInternalDeviceControl(
 				Status = STATUS_INSUFFICIENT_RESOURCES;
 				goto cleanup;
 			}
+            i8042InitializeKeyboardAttributes(DeviceExtension);
+			DeviceExtension->KeyboardHook.QueueKeyboardPacket = i8042KbdQueuePacket;
+			DeviceExtension->KeyboardHook.CallContext = DeviceExtension;
+
 			KeWaitForSingleObject(&DeviceExtension->Common.PortDeviceExtension->PnpMutex, Executive, KernelMode, FALSE, NULL);
 			DeviceExtension->Common.PortDeviceExtension->KeyboardExtension = DeviceExtension;
 			InterlockedOr((PLONG)&DeviceExtension->Common.PortDeviceExtension->Flags, KEYBOARD_CONNECTED);
 			KeReleaseMutex(&DeviceExtension->Common.PortDeviceExtension->PnpMutex, FALSE);
 
-            i8042InitializeKeyboardAttributes(DeviceExtension);
-
 			IoMarkIrpPending(Irp);
 			/* FIXME: DeviceExtension->KeyboardHook.IsrWritePort = ; */
-			DeviceExtension->KeyboardHook.QueueKeyboardPacket = i8042KbdQueuePacket;
-			DeviceExtension->KeyboardHook.CallContext = DeviceExtension;
 			IoQueueWorkItem(WorkItem,
 				i8042SendHookWorkItem,
 				DelayedWorkQueue,
@@ -894,13 +920,9 @@ i8042KbdInterruptService(
 
 	while (Counter)
 	{
-		Status = i8042ReadStatus(PortDeviceExtension, &PortStatus);
-		if (!NT_SUCCESS(Status))
-		{
-			WARN_(I8042PRT, "i8042ReadStatus() failed with status 0x%08lx\n", Status);
+		Status = i8042ReadDeviceData(PortDeviceExtension, FALSE, &Output, &PortStatus);
+		if (Status == STATUS_NOT_FOUND)
 			return FALSE;
-		}
-		Status = i8042ReadKeyboardData(PortDeviceExtension, &Output);
 		if (NT_SUCCESS(Status))
 			break;
 		KeStallExecutionProcessor(1);
@@ -970,7 +992,7 @@ i8042KbdInterruptService(
 	if (i8042KbdCallIsrHook(DeviceExtension, InputData, PortStatus, Output, &ToReturn))
 		return ToReturn;
 
-	if (i8042PacketIsr(PortDeviceExtension, Output))
+	if (i8042PacketIsr(PortDeviceExtension, Output, FALSE))
 	{
 		if (PortDeviceExtension->PacketComplete)
 		{
@@ -982,6 +1004,12 @@ i8042KbdInterruptService(
 	}
 
 	TRACE_(I8042PRT, "Irq is keyboard input\n");
+
+	if (Output == 0x00 || Output == 0xff)
+	{
+		DeviceExtension->KeyboardScanState = Normal;
+		return TRUE;
+	}
 
 	if (DeviceExtension->KeyboardScanState == Normal)
 	{

@@ -12,7 +12,11 @@
 static UCHAR ControlPort, DataPort;
 static struct { UCHAR Value; int Mouse; } Queue[8];
 static unsigned Head, Count, Writes, Stalls, LockDepth, LockCalls, UnlockCalls;
-static int Busy, MouseDisabled;
+static int Busy, MouseDisabled, TimerLockHeld, InjectAckDuringTimerRead;
+static KSPIN_LOCK *TableLock;
+static int TableLockHeld;
+static PKINTERRUPT AcquiredInterrupt;
+static KIRQL TestIrql = PASSIVE_LEVEL;
 static ULONGLONG Clock, Arrival;
 static PORT_DEVICE_EXTENSION *ActiveController;
 static IRP FirstIrp, NextIrp;
@@ -25,6 +29,7 @@ unsigned TestErrors, TestErrorValue;
 VOID IoCompleteRequest(PIRP Irp, int Increment)
 {
     assert(Irp == &FirstIrp && Increment == IO_NO_INCREMENT);
+    assert(!TimerLockHeld && !LockDepth);
     assert(Irp->IoStatus.Status == ExpectedStatus);
     Completions++;
 }
@@ -32,6 +37,7 @@ VOID IoCompleteRequest(PIRP Irp, int Increment)
 VOID IoStartNextPacket(PDEVICE_OBJECT Device, BOOLEAN Cancelable)
 {
     assert(Device == &ControlPort && !Cancelable && Completions == 1);
+    assert(!TimerLockHeld && !LockDepth);
     Starts++;
     ActiveController->CurrentIrp = &NextIrp;
     ActiveController->CurrentIrpDevice = Device;
@@ -56,6 +62,7 @@ VOID TestWritePort(PUCHAR Port, UCHAR Value)
 BOOLEAN KeCancelTimer(PKTIMER Timer)
 {
     BOOLEAN Armed = Timer->Inserted;
+    assert(TimerLockHeld && !LockDepth && TestIrql == DISPATCH_LEVEL);
     Timer->Inserted = FALSE;
     CancelCalls++;
     return Armed;
@@ -63,7 +70,20 @@ BOOLEAN KeCancelTimer(PKTIMER Timer)
 
 BOOLEAN KeReadStateTimer(PKTIMER Timer)
 {
-    return Timer->SignalState != 0;
+    BOOLEAN Signaled = Timer->SignalState != 0;
+    assert(TestIrql <= DISPATCH_LEVEL);
+    if (InjectAckDuringTimerRead)
+    {
+        KIRQL OldIrql;
+        assert(TimerLockHeld && !LockDepth && ActiveController);
+        InjectAckDuringTimerRead = 0;
+        OldIrql = KeAcquireInterruptSpinLock(ActiveController->HighestDIRQLInterrupt);
+        ActiveController->Packet.State = Idle;
+        ActiveController->PacketComplete = TRUE;
+        ActiveController->PacketResult = STATUS_SUCCESS;
+        KeReleaseInterruptSpinLock(ActiveController->HighestDIRQLInterrupt, OldIrql);
+    }
+    return Signaled;
 }
 
 VOID KeStallExecutionProcessor(ULONG Time)
@@ -78,7 +98,6 @@ ULONGLONG KeQueryInterruptTime(VOID)
     return Clock;
 }
 
-static KIRQL TestIrql = PASSIVE_LEVEL;
 
 KIRQL KeGetCurrentIrql(VOID)
 {
@@ -87,24 +106,60 @@ KIRQL KeGetCurrentIrql(VOID)
 
 static VOID RunTimeoutDpc(PPORT_DEVICE_EXTENSION Extension)
 {
+    TableLock = &Extension->InterruptObjectLock;
     TestIrql = DISPATCH_LEVEL;
     i8042PacketTimeoutDpc(&Extension->PacketTimeoutDpc, Extension, NULL, NULL);
     TestIrql = PASSIVE_LEVEL;
+    TableLock = NULL;
+}
+
+VOID KeAcquireSpinLock(KSPIN_LOCK *Lock, KIRQL *OldIrql)
+{
+    assert(!TableLockHeld && !LockDepth && TestIrql <= DISPATCH_LEVEL);
+    if (Lock == TableLock)
+        TableLockHeld = 1;
+    else
+    {
+        assert(!TimerLockHeld);
+        TimerLockHeld = 1;
+    }
+    *OldIrql = TestIrql;
+    TestIrql = DISPATCH_LEVEL;
+}
+
+VOID KeReleaseSpinLock(KSPIN_LOCK *Lock, KIRQL OldIrql)
+{
+    assert(!LockDepth && TestIrql == DISPATCH_LEVEL);
+    if (Lock == TableLock)
+    {
+        assert(TableLockHeld);
+        TableLockHeld = 0;
+    }
+    else
+    {
+        assert(TimerLockHeld && !TableLockHeld);
+        TimerLockHeld = 0;
+    }
+    TestIrql = OldIrql;
 }
 
 KIRQL KeAcquireInterruptSpinLock(PKINTERRUPT Interrupt)
 {
+    KIRQL OldIrql = TestIrql;
     assert(Interrupt && LockDepth == 0);
+    AcquiredInterrupt = Interrupt;
     LockDepth++;
     LockCalls++;
-    return 2;
+    TestIrql = DISPATCH_LEVEL + 1;
+    return OldIrql;
 }
 
 VOID KeReleaseInterruptSpinLock(PKINTERRUPT Interrupt, KIRQL OldIrql)
 {
-    assert(Interrupt && OldIrql == 2 && LockDepth == 1);
+    assert(Interrupt == AcquiredInterrupt && TestIrql > DISPATCH_LEVEL && LockDepth == 1);
     LockDepth--;
     UnlockCalls++;
+    TestIrql = OldIrql;
 }
 
 static PORT_DEVICE_EXTENSION NewController(void)
@@ -112,7 +167,8 @@ static PORT_DEVICE_EXTENSION NewController(void)
     PORT_DEVICE_EXTENSION Device;
     memset(&Device, 0, sizeof(Device));
     Head = Count = Writes = Stalls = LockDepth = LockCalls = UnlockCalls = 0;
-    Busy = MouseDisabled = 0;
+    Busy = MouseDisabled = TimerLockHeld = InjectAckDuringTimerRead = 0;
+    TestIrql = PASSIVE_LEVEL;
     Clock = Arrival = 0;
     Completions = Starts = CancelCalls = TestErrors = TestErrorValue = 0;
     Device.DataPort = &DataPort;
@@ -122,10 +178,37 @@ static PORT_DEVICE_EXTENSION NewController(void)
     return Device;
 }
 
+static void TestInterruptHandoff(void)
+{
+    PORT_DEVICE_EXTENSION Device = NewController();
+    I8042_INTERRUPT_LOCK Lock;
+    PKINTERRUPT Current = &ControlPort, Other = &DataPort;
+
+    Device.Flags = 3;
+    TableLock = &Device.InterruptObjectLock;
+    assert(i8042AcquireInterrupt(&Device, &Lock));
+    assert(TableLockHeld && AcquiredInterrupt == Current);
+    i8042ReleaseInterrupt(&Device, &Lock);
+    assert(!TableLockHeld && !LockDepth && TestIrql == PASSIVE_LEVEL);
+
+    assert(i8042UnpublishInterrupt(&Device, &Current, Other, 1) == &ControlPort);
+    assert(!Current && Device.Flags == 2);
+    assert(i8042AcquireInterrupt(&Device, &Lock));
+    assert(TableLockHeld && AcquiredInterrupt == Other);
+    i8042ReleaseInterrupt(&Device, &Lock);
+    assert(i8042UnpublishInterrupt(&Device, &Other, NULL, 2) == &DataPort);
+    assert(!Other && Device.Flags == 0);
+    assert(!i8042AcquireInterrupt(&Device, &Lock));
+    assert(!TableLockHeld && !LockDepth && TestIrql == PASSIVE_LEVEL);
+    TableLock = NULL;
+}
+
 int main(void)
 {
     PORT_DEVICE_EXTENSION Device = NewController();
-    UCHAR Value;
+    UCHAR Value, PortStatus, InvalidCommand = 0xab;
+    TestInterruptHandoff();
+    Device = NewController();
     Busy = 1;
     assert(!i8042Write(&Device, Device.ControlPort, MOUSE_DISAB));
     assert(Writes == 0 && Stalls == 3);
@@ -133,6 +216,25 @@ int main(void)
     assert(i8042Write(&Device, Device.ControlPort, MOUSE_DISAB));
     assert(Writes == 1);
 #ifndef WRITE_BASELINE
+    Device = NewController();
+    Queue[0].Mouse = 1; Queue[0].Value = 0x08;
+    Queue[1].Mouse = 0; Queue[1].Value = 0x1e;
+    Count = 2;
+    Value = 0x55;
+    assert(i8042ReadDeviceData(&Device, FALSE, &Value, &PortStatus) == STATUS_NOT_FOUND);
+    assert(Count == 2 && Head == 0 && Value == 0x55 && PortStatus == (KBD_OBF | MOU_OBF));
+    assert(i8042ReadDeviceData(&Device, TRUE, &Value, &PortStatus) == STATUS_SUCCESS);
+    assert(Value == 0x08 && Count == 1 && Head == 1);
+    assert(i8042ReadDeviceData(&Device, TRUE, &Value, &PortStatus) == STATUS_NOT_FOUND);
+    assert(Count == 1 && Head == 1 && PortStatus == KBD_OBF);
+    assert(i8042ReadDeviceData(&Device, FALSE, &Value, &PortStatus) == STATUS_SUCCESS);
+    assert(Value == 0x1e && Count == 0);
+
+    Device = NewController();
+    Queue[0].Mouse = 1; Queue[0].Value = 0xfa;
+    Count = 1;
+    assert(i8042ReadDataWait(&Device, &Value) == STATUS_SUCCESS && Value == 0xfa && Count == 0);
+
     Device = NewController();
     Queue[0].Mouse = 1; Queue[0].Value = 0xfa;
     Queue[1].Mouse = 1; Queue[1].Value = 0xaa;
@@ -203,6 +305,50 @@ int main(void)
     assert(TestErrors == 1 && TestErrorValue == 0xf3);
     assert(Device.CurrentIrp == &NextIrp);
     assert(LockCalls == 1 && UnlockCalls == 1 && LockDepth == 0);
+
+    Device = NewController();
+    ActiveController = &Device;
+    Device.CurrentIrp = &FirstIrp;
+    Device.CurrentIrpDevice = &ControlPort;
+    Device.Packet.Bytes = &InvalidCommand;
+    Device.Packet.ByteCount = 0;
+    Device.Packet.State = SendingBytes;
+    Device.PacketTimer.SignalState = 1;
+    ExpectedStatus = STATUS_IO_TIMEOUT;
+    RunTimeoutDpc(&Device);
+    assert(Device.Packet.State == Idle && Completions == 1 && Starts == 1);
+    assert(TestErrors == 1 && TestErrorValue == 0);
+
+    Device = NewController();
+    ActiveController = &Device;
+    Device.CurrentIrp = &FirstIrp;
+    Device.CurrentIrpDevice = &ControlPort;
+    Device.Packet.Bytes = NULL;
+    Device.Packet.ByteCount = 0;
+    Device.Packet.State = SendingBytes;
+    Device.PacketTimer.SignalState = 1;
+    ExpectedStatus = STATUS_IO_TIMEOUT;
+    RunTimeoutDpc(&Device);
+    assert(Device.Packet.State == Idle && Completions == 1 && Starts == 1);
+    assert(TestErrors == 1 && TestErrorValue == 0);
+
+    Device = NewController();
+    ActiveController = &Device;
+    Device.CurrentIrp = &FirstIrp;
+    Device.CurrentIrpDevice = &ControlPort;
+    Device.Packet.Bytes = Typematic;
+    Device.Packet.ByteCount = 2;
+    Device.Packet.CurrentByte = 2;
+    Device.Packet.State = SendingBytes;
+    Device.PacketTimer.SignalState = 1;
+    InjectAckDuringTimerRead = 1;
+    RunTimeoutDpc(&Device);
+    assert(!InjectAckDuringTimerRead && Device.Packet.State == Idle && Device.PacketComplete);
+    assert(Completions == 0 && Device.CurrentIrp == &FirstIrp);
+    Device.PacketComplete = FALSE;
+    ExpectedStatus = STATUS_SUCCESS;
+    i8042FinishPacket(&Device, STATUS_SUCCESS);
+    assert(Completions == 1 && Starts == 1 && Device.CurrentIrp == &NextIrp);
 
     /* An expiry of a timer the next packet re-armed leaves that packet alone */
     Device = NewController();

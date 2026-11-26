@@ -256,7 +256,7 @@ i8042ConnectKeyboardInterrupt(
     IN PI8042_KEYBOARD_EXTENSION DeviceExtension)
 {
     PPORT_DEVICE_EXTENSION PortDeviceExtension;
-    KIRQL DirqlMax;
+    KIRQL DirqlMax, OldIrql;
     NTSTATUS Status;
 
     TRACE_(I8042PRT, "i8042ConnectKeyboardInterrupt()\n");
@@ -295,10 +295,12 @@ i8042ConnectKeyboardInterrupt(
         return Status;
     }
 
+    KeAcquireSpinLock(&PortDeviceExtension->InterruptObjectLock, &OldIrql);
     PortDeviceExtension->HighestDIRQLInterrupt = I8042CoreSyncInterrupt(
         PortDeviceExtension->HighestDIRQLInterrupt, PortDeviceExtension->KeyboardInterrupt.Object,
         PortDeviceExtension->KeyboardInterrupt.Dirql, DirqlMax);
     InterlockedOr((PLONG)&PortDeviceExtension->Flags, KEYBOARD_INITIALIZED);
+    KeReleaseSpinLock(&PortDeviceExtension->InterruptObjectLock, OldIrql);
     return STATUS_SUCCESS;
 }
 
@@ -307,7 +309,7 @@ i8042ConnectMouseInterrupt(
     IN PI8042_MOUSE_EXTENSION DeviceExtension)
 {
     PPORT_DEVICE_EXTENSION PortDeviceExtension;
-    KIRQL DirqlMax;
+    KIRQL DirqlMax, OldIrql;
     NTSTATUS Status;
 
     TRACE_(I8042PRT, "i8042ConnectMouseInterrupt()\n");
@@ -346,23 +348,26 @@ i8042ConnectMouseInterrupt(
         goto cleanup;
     }
 
+    KeAcquireSpinLock(&PortDeviceExtension->InterruptObjectLock, &OldIrql);
     PortDeviceExtension->HighestDIRQLInterrupt = I8042CoreSyncInterrupt(
         PortDeviceExtension->HighestDIRQLInterrupt, PortDeviceExtension->MouseInterrupt.Object,
         PortDeviceExtension->MouseInterrupt.Dirql, DirqlMax);
 
     InterlockedOr((PLONG)&PortDeviceExtension->Flags, MOUSE_INITIALIZED);
+    KeReleaseSpinLock(&PortDeviceExtension->InterruptObjectLock, OldIrql);
     Status = STATUS_SUCCESS;
 
 cleanup:
     if (!NT_SUCCESS(Status))
     {
-        InterlockedAnd((PLONG)&PortDeviceExtension->Flags, ~MOUSE_INITIALIZED);
-        if (PortDeviceExtension->MouseInterrupt.Object)
-        {
-            IoDisconnectInterrupt(PortDeviceExtension->MouseInterrupt.Object);
-            PortDeviceExtension->MouseInterrupt.Object = NULL;
-            PortDeviceExtension->HighestDIRQLInterrupt = PortDeviceExtension->KeyboardInterrupt.Object;
-        }
+        PKINTERRUPT Interrupt;
+
+        Interrupt = i8042UnpublishInterrupt(PortDeviceExtension,
+                                            &PortDeviceExtension->MouseInterrupt.Object,
+                                            PortDeviceExtension->KeyboardInterrupt.Object,
+                                            MOUSE_INITIALIZED);
+        if (Interrupt)
+            IoDisconnectInterrupt(Interrupt);
     }
     return Status;
 }
@@ -683,12 +688,15 @@ i8042PnpStartDevice(
     return Status;
 }
 
-static VOID
+static NTSTATUS
 i8042RemoveDevice(
-    IN PDEVICE_OBJECT DeviceObject)
+    IN PDEVICE_OBJECT DeviceObject,
+    IN PIRP Irp)
 {
     PI8042_DRIVER_EXTENSION DriverExtension;
     KIRQL OldIrql;
+    NTSTATUS Status;
+    PKINTERRUPT Interrupt = NULL;
     PFDO_DEVICE_EXTENSION DeviceExtension;
     PPORT_DEVICE_EXTENSION PortDeviceExtension;
 
@@ -700,38 +708,37 @@ i8042RemoveDevice(
 
     if (DeviceExtension->Type == Mouse)
     {
+        i8042StopMouseTimer((PI8042_MOUSE_EXTENSION)DeviceExtension,
+                            (PortDeviceExtension->Flags & MOUSE_CONNECTED) &&
+                            PortDeviceExtension->MouseExtension == (PI8042_MOUSE_EXTENSION)DeviceExtension);
         if (PortDeviceExtension->DataPort != NULL &&
             !i8042QuiesceMouse(PortDeviceExtension))
             WARN_(I8042PRT, "Unable to quiesce mouse port\n");
 
-        if (PortDeviceExtension->Flags & MOUSE_INITIALIZED)
-        {
-            if (PortDeviceExtension->HighestDIRQLInterrupt == PortDeviceExtension->MouseInterrupt.Object)
-                PortDeviceExtension->HighestDIRQLInterrupt = PortDeviceExtension->KeyboardInterrupt.Object;
-            IoDisconnectInterrupt(PortDeviceExtension->MouseInterrupt.Object);
-            PortDeviceExtension->MouseInterrupt.Object = NULL;
-        }
-        if (PortDeviceExtension->Flags & MOUSE_CONNECTED)
-            KeCancelTimer(&PortDeviceExtension->MouseExtension->TimerMouseTimeout);
-        InterlockedAnd((PLONG)&PortDeviceExtension->Flags, ~(MOUSE_CONNECTED | MOUSE_STARTED | MOUSE_INITIALIZED));
+        Interrupt = i8042UnpublishInterrupt(PortDeviceExtension,
+                                            &PortDeviceExtension->MouseInterrupt.Object,
+                                            PortDeviceExtension->KeyboardInterrupt.Object,
+                                            MOUSE_CONNECTED | MOUSE_STARTED | MOUSE_INITIALIZED);
+        if (Interrupt)
+            IoDisconnectInterrupt(Interrupt);
         PortDeviceExtension->MouseExtension = NULL;
     }
     else if (DeviceExtension->Type == Keyboard)
     {
-        if (PortDeviceExtension->Flags & KEYBOARD_INITIALIZED)
-        {
-            if (PortDeviceExtension->HighestDIRQLInterrupt == PortDeviceExtension->KeyboardInterrupt.Object)
-                PortDeviceExtension->HighestDIRQLInterrupt = PortDeviceExtension->MouseInterrupt.Object;
-            IoDisconnectInterrupt(PortDeviceExtension->KeyboardInterrupt.Object);
-            PortDeviceExtension->KeyboardInterrupt.Object = NULL;
-        }
-        InterlockedAnd((PLONG)&PortDeviceExtension->Flags, ~(KEYBOARD_CONNECTED | KEYBOARD_STARTED | KEYBOARD_INITIALIZED));
+        Interrupt = i8042UnpublishInterrupt(PortDeviceExtension,
+                                            &PortDeviceExtension->KeyboardInterrupt.Object,
+                                            PortDeviceExtension->MouseInterrupt.Object,
+                                            KEYBOARD_CONNECTED | KEYBOARD_STARTED | KEYBOARD_INITIALIZED);
+        if (Interrupt)
+            IoDisconnectInterrupt(Interrupt);
         PortDeviceExtension->KeyboardExtension = NULL;
     }
 
     KeReleaseMutex(&PortDeviceExtension->PnpMutex, FALSE);
 
     KeFlushQueuedDpcs();
+
+    Status = ForwardIrpAndForget(DeviceObject, Irp);
 
     KeAcquireSpinLock(&DriverExtension->DeviceListLock, &OldIrql);
     RemoveEntryList(&DeviceExtension->ListEntry);
@@ -740,6 +747,7 @@ i8042RemoveDevice(
     IoDetachDevice(DeviceExtension->LowerDevice);
 
     IoDeleteDevice(DeviceObject);
+    return Status;
 }
 
 NTSTATUS NTAPI
@@ -835,9 +843,7 @@ i8042Pnp(
         case IRP_MN_REMOVE_DEVICE:
         {
             TRACE_(I8042PRT, "IRP_MJ_PNP / IRP_MN_REMOVE_DEVICE\n");
-            Status = ForwardIrpAndForget(DeviceObject, Irp);
-            i8042RemoveDevice(DeviceObject);
-            return Status;
+            return i8042RemoveDevice(DeviceObject, Irp);
         }
         default:
         {

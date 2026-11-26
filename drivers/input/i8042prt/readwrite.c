@@ -82,6 +82,28 @@ i8042ReadData(
 }
 
 NTSTATUS
+i8042ReadDeviceData(
+	IN PPORT_DEVICE_EXTENSION DeviceExtension,
+	IN BOOLEAN MouseInput,
+	OUT PUCHAR Data,
+	OUT PUCHAR PortStatus)
+{
+	UCHAR StatusByte;
+	NTSTATUS Status;
+
+	Status = i8042ReadStatus(DeviceExtension, &StatusByte);
+	if (!NT_SUCCESS(Status))
+		return Status;
+	*PortStatus = StatusByte;
+	if (!(StatusByte & KBD_OBF))
+		return STATUS_UNSUCCESSFUL;
+	if (((StatusByte & MOU_OBF) != 0) != (MouseInput != FALSE))
+		return STATUS_NOT_FOUND;
+	*Data = READ_PORT_UCHAR(DeviceExtension->DataPort);
+	return (StatusByte & KBD_PERR) ? STATUS_UNSUCCESSFUL : STATUS_SUCCESS;
+}
+
+NTSTATUS
 i8042ReadStatus(
 	IN PPORT_DEVICE_EXTENSION DeviceExtension,
 	OUT PUCHAR Status)
@@ -248,6 +270,53 @@ i8042Write(
 	WRITE_PORT_UCHAR(addr, data);
 	INFO_(I8042PRT, "Sent 0x%x to port %p\n", data, addr);
 	return TRUE;
+}
+
+BOOLEAN
+i8042AcquireInterrupt(
+    IN PPORT_DEVICE_EXTENSION DeviceExtension,
+    OUT PI8042_INTERRUPT_LOCK Lock)
+{
+    KeAcquireSpinLock(&DeviceExtension->InterruptObjectLock, &Lock->TableIrql);
+    Lock->Interrupt = DeviceExtension->HighestDIRQLInterrupt;
+    if (!Lock->Interrupt)
+    {
+        KeReleaseSpinLock(&DeviceExtension->InterruptObjectLock, Lock->TableIrql);
+        return FALSE;
+    }
+
+    Lock->InterruptIrql = KeAcquireInterruptSpinLock(Lock->Interrupt);
+    return TRUE;
+}
+
+VOID
+i8042ReleaseInterrupt(
+    IN PPORT_DEVICE_EXTENSION DeviceExtension,
+    IN PI8042_INTERRUPT_LOCK Lock)
+{
+    ASSERT(Lock->Interrupt != NULL);
+    KeReleaseInterruptSpinLock(Lock->Interrupt, Lock->InterruptIrql);
+    KeReleaseSpinLock(&DeviceExtension->InterruptObjectLock, Lock->TableIrql);
+}
+
+PKINTERRUPT
+i8042UnpublishInterrupt(
+    IN PPORT_DEVICE_EXTENSION DeviceExtension,
+    IN OUT PKINTERRUPT *InterruptObject,
+    IN PKINTERRUPT OtherInterrupt,
+    IN ULONG Flags)
+{
+    PKINTERRUPT Interrupt;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&DeviceExtension->InterruptObjectLock, &OldIrql);
+    Interrupt = *InterruptObject;
+    if (DeviceExtension->HighestDIRQLInterrupt == Interrupt)
+        DeviceExtension->HighestDIRQLInterrupt = OtherInterrupt;
+    *InterruptObject = NULL;
+    InterlockedAnd((PLONG)&DeviceExtension->Flags, ~Flags);
+    KeReleaseSpinLock(&DeviceExtension->InterruptObjectLock, OldIrql);
+    return Interrupt;
 }
 
 BOOLEAN
