@@ -18,6 +18,8 @@
 #include <shlwapi.h>
 #include <strsafe.h>
 
+#include <libernt/lntweb.h>
+
 #include "html.h"
 #include "resource.h"
 
@@ -33,6 +35,7 @@
 #define CP_ID_BASE 1000
 #define CP_ID_ACTION 100
 #define CP_ID_STATUS 101
+#define CP_ID_WEB 102
 #define CP_TIMER_PROBE 1
 #define CP_TIMER_REFRESH 2
 #define CP_PROBE_INTERVAL 5000
@@ -94,6 +97,8 @@ typedef struct _CP_PROBE
 static HINSTANCE Instance;
 static HWND MainWindow;
 static HWND PageWindow;
+static HWND WebWindow;
+static PFN_LNTWEB_LOAD WebLoad;
 static HWND StatusWindow;
 static HWND ActionButton;
 static HFONT TextFont;
@@ -442,6 +447,8 @@ Navigate(PCWSTR Url, char *Body, DWORD BodyLength, PCWSTR ContentType)
 
     Loading = TRUE;
     EnableWindow(PageWindow, FALSE);
+    if (WebWindow)
+        EnableWindow(WebWindow, FALSE);
     UpdateStatus();
 
     Thread = CreateThread(NULL, 0, NavigateThread, Request, 0, NULL);
@@ -926,6 +933,81 @@ SameHost(PCWSTR Left, PCWSTR Right)
            _wcsnicmp(A.lpszHostName, B.lpszHostName, A.dwHostNameLength) == 0;
 }
 
+static BOOL
+ShowInWebView(const char *Html, SIZE_T Length)
+{
+    char *Url;
+    BOOL Loaded;
+
+    if (!WebWindow || !WebLoad)
+        return FALSE;
+    Url = WideToUtf8(PageUrl);
+    Loaded = Url && WebLoad(WebWindow, Html, Length, Url);
+    free(Url);
+    if (Loaded)
+    {
+        ShowWindow(PageWindow, SW_HIDE);
+        ShowWindow(WebWindow, SW_SHOW);
+    }
+    return Loaded;
+}
+
+static BOOL CALLBACK
+HostFetch(PVOID Context, PCSTR Url, PSTR *Data, SIZE_T *Length)
+{
+    CP_RESPONSE *Response = calloc(1, sizeof(*Response));
+    PWSTR Wide = Utf8ToWide(Url);
+    BOOL Fetched = FALSE;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    if (Response && Wide && HttpFetch(PageSession, Wide, FALSE, NULL, 0, NULL, TRUE, Response) == NO_ERROR &&
+        Response->Status >= 200 && Response->Status < 300 && Response->Body)
+    {
+        *Data = Response->Body;
+        *Length = Response->Length;
+        Response->Body = NULL;
+        Fetched = TRUE;
+    }
+    if (Response)
+        free(Response->Body);
+    free(Response);
+    free(Wide);
+    return Fetched;
+}
+
+static VOID CALLBACK
+HostFree(PVOID Context, PSTR Data)
+{
+    UNREFERENCED_PARAMETER(Context);
+    free(Data);
+}
+
+static VOID CALLBACK
+HostNavigate(PVOID Context, PCSTR Url, PCSTR Body, SIZE_T BodyLength, PCSTR ContentType)
+{
+    PWSTR WideUrl = Utf8ToWide(Url), WideType = ContentType ? Utf8ToWide(ContentType) : NULL;
+    char *Copy = NULL;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    if (Body)
+    {
+        Copy = malloc(BodyLength + 1);
+        if (Copy)
+        {
+            memcpy(Copy, Body, BodyLength);
+            Copy[BodyLength] = 0;
+        }
+    }
+    if (WideUrl && !Loading && (!Body || Copy))
+        Navigate(WideUrl, Copy, (DWORD)BodyLength, WideType);
+    else
+        free(Copy);
+    free(WideUrl);
+    free(WideType);
+}
+
 static VOID
 ShowResponse(CP_RESPONSE *Response)
 {
@@ -936,6 +1018,12 @@ ShowResponse(CP_RESPONSE *Response)
     ClearPage();
     Loading = FALSE;
     EnableWindow(PageWindow, TRUE);
+    if (WebWindow)
+    {
+        EnableWindow(WebWindow, TRUE);
+        ShowWindow(WebWindow, SW_HIDE);
+        ShowWindow(PageWindow, SW_SHOW);
+    }
 
     if (Response->Error != NO_ERROR)
     {
@@ -989,9 +1077,12 @@ ShowResponse(CP_RESPONSE *Response)
             StringCchCopyW(BaseUrl, ARRAYSIZE(BaseUrl), Resolved);
     }
 
-    BuildControls();
-    if (ControlCount == 0)
-        AddMessage(Page.HasScript ? IDS_SCRIPT : IDS_EMPTY, Page.HasScript ? PageUrl : NULL);
+    if (!ShowInWebView(Utf8, Length))
+    {
+        BuildControls();
+        if (ControlCount == 0)
+            AddMessage(Page.HasScript ? IDS_SCRIPT : IDS_EMPTY, Page.HasScript ? PageUrl : NULL);
+    }
 
     if (Page.HasRefresh && Page.RefreshUrl && ResolveUrl(Page.RefreshUrl, RefreshUrl, ARRAYSIZE(RefreshUrl)) &&
         lstrcmpiW(RefreshUrl, PageUrl) != 0)
@@ -1339,6 +1430,8 @@ LayoutMain(VOID)
     Bar = ButtonHeight + 2 * Margin;
 
     MoveWindow(PageWindow, 0, 0, Client.right, max(Client.bottom - Bar - 1, 0), TRUE);
+    if (WebWindow)
+        MoveWindow(WebWindow, 0, 0, Client.right, max(Client.bottom - Bar - 1, 0), TRUE);
     MoveWindow(ActionButton, Client.right - Margin - ButtonWidth, Client.bottom - Margin - ButtonHeight, ButtonWidth,
                ButtonHeight, TRUE);
     MoveWindow(StatusWindow, Margin, Client.bottom - Bar + (Bar - Metrics.tmHeight) / 2,
@@ -1382,6 +1475,23 @@ MainProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
             PageWindow = CreateWindowExW(WS_EX_CONTROLPARENT, CP_PAGE_CLASS_NAME, NULL,
                                          WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_CLIPCHILDREN | WS_TABSTOP, 0, 0, 0, 0,
                                          Hwnd, NULL, Instance, NULL);
+            {
+                static const LNTWEB_HOST Host = { sizeof(LNTWEB_HOST), NULL, HostFetch, HostFree, HostNavigate };
+                HMODULE Web = LoadLibraryW(L"lntweb.dll");
+                PFN_LNTWEB_CREATE CreateView = Web ? (PFN_LNTWEB_CREATE)GetProcAddress(Web, "LntWebCreate") : NULL;
+
+                WebLoad = Web ? (PFN_LNTWEB_LOAD)GetProcAddress(Web, "LntWebLoad") : NULL;
+                WebWindow = (CreateView && WebLoad) ? CreateView(Hwnd, CP_ID_WEB, &Host) : NULL;
+                if (WebWindow)
+                {
+                    ShowWindow(WebWindow, SW_HIDE);
+                }
+                else if (Web)
+                {
+                    WebLoad = NULL;
+                    FreeLibrary(Web);
+                }
+            }
             StatusWindow = CreateWindowExW(0, WC_STATICW, NULL, WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX |
                                            SS_ENDELLIPSIS, 0, 0, 0, 0, Hwnd, (HMENU)CP_ID_STATUS, Instance, NULL);
             LoadText(IDS_CANCEL, Text, ARRAYSIZE(Text));
