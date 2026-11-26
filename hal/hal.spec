@@ -180,6 +180,7 @@
 @ stdcall -arch=riscv64 HalpRiscvProfileInterrupt(ptr)
 @ stdcall -arch=riscv64 HalpRiscvSuspendClockTick()
 @ stdcall -arch=riscv64 HalpRiscvResumeClockTick()
+@ stdcall -arch=riscv64 HalpRiscvQuerySuspendedClockTicks(long)
 @ stdcall -arch=riscv64 HalpRiscvClaimPlicInterrupt()
 @ stdcall -arch=riscv64 HalpRiscvCompletePlicInterrupt(long)
 @ stdcall -arch=riscv64 HalpRiscvQueryProcessorHartId(long ptr)

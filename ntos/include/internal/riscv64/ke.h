@@ -322,6 +322,7 @@ NTHALAPI VOID NTAPI HalpRiscvClockInterrupt(_In_ PKTRAP_FRAME TrapFrame);
 NTHALAPI VOID NTAPI HalpRiscvProfileInterrupt(_In_ PKTRAP_FRAME TrapFrame);
 NTHALAPI VOID NTAPI HalpRiscvSuspendClockTick(VOID);
 NTHALAPI ULONG NTAPI HalpRiscvResumeClockTick(VOID);
+NTHALAPI ULONG NTAPI HalpRiscvQuerySuspendedClockTicks(_In_ ULONG Number);
 DECLSPEC_NORETURN VOID NTAPI KiRiscvUnimplemented(_In_ const CHAR *Routine);
 ULONG NTAPI KeGetCurrentProcessorNumber(VOID);
 PKTRAP_FRAME NTAPI KeGetTrapFrame(_In_ PKTHREAD Thread);
@@ -564,7 +565,7 @@ extern PCONTEXT KiProcessorContext[MAXIMUM_PROCESSORS];
 #define KI_PRCB_CONTEXT_OFFSET 0
 #define KiClockTickSuspended(Prcb) ((Prcb)->Sleeping != FALSE)
 #define KiClockTimerInserted(DueTime) ((VOID)(DueTime))
-#define KiRefreshProcessorRunTime(Prcb) ((VOID)(Prcb))
+#define KiRefreshProcessorRunTime(Prcb) KiRiscvRefreshProcessorRunTime(Prcb)
 #define KiQueryClockTickBaseline(Counter, Remainder) (*(Counter) = KeQueryPerformanceCounter(NULL), *(Remainder) = 0)
 
 #ifdef __cplusplus
@@ -572,6 +573,7 @@ extern "C" {
 #endif
 VOID NTAPI KiRiscvInitializePcr(PKPCR Pcr, PKTHREAD Thread, ULONG_PTR HartId,
                               ULONG Number, PVOID DpcStack, PVOID PanicStack);
+VOID NTAPI KiRiscvRefreshProcessorRunTime(_In_ PKPRCB Prcb);
 NTHALAPI BOOLEAN NTAPI HalpRiscvQueryProcessorHartId(ULONG Number, PULONG_PTR HartId);
 NTHALAPI VOID NTAPI HalpRiscvAbandonProcessor(ULONG Number);
 NTHALAPI VOID NTAPI HalpRiscvRemoteFence(KAFFINITY Targets, PVOID Address, SIZE_T Size, BOOLEAN Instruction);

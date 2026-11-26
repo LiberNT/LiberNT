@@ -117,24 +117,56 @@ HalpRiscvSuspendClockTick(VOID)
     HalpRiscvWriteClockDeadline(~0ULL);
 }
 
+static
+ULONG
+HalpRiscvConsumeSuspendedTicks(
+    _Inout_ HAL_RISCV_CLOCK *Clock,
+    _In_ ULONG64 Now)
+{
+    ULONG64 Skipped, Elapsed;
+
+    ASSERT(Clock->Period != 0);
+    ASSERT(Clock->RunTimeElapsed < RISCV_HAL_MAXIMUM_INCREMENT);
+
+    if ((LONG64)(Now - Clock->Deadline) < 0)
+        return 0;
+    Skipped = (Now - Clock->Deadline) / Clock->Period + 1;
+    Clock->Deadline += Skipped * Clock->Period;
+    Elapsed = Skipped * Clock->Increment + Clock->RunTimeElapsed;
+    Clock->RunTimeElapsed = (ULONG)(Elapsed % RISCV_HAL_MAXIMUM_INCREMENT);
+    return (ULONG)min(Elapsed / RISCV_HAL_MAXIMUM_INCREMENT, MAXULONG);
+}
+
 ULONG
 NTAPI
 HalpRiscvResumeClockTick(VOID)
 {
     HAL_RISCV_CLOCK *Clock = &HalpRiscvClocks[KeGetCurrentProcessorNumber()];
-    ULONG64 Now, Skipped = 0;
+    ULONG Ticks;
 
     if (!Clock->Suspended)
         return 0;
     Clock->Suspended = FALSE;
-    Now = HalpRiscvReadTime();
-    if ((LONG64)(Now - Clock->Deadline) >= 0)
-    {
-        Skipped = (Now - Clock->Deadline) / Clock->Period + 1;
-        Clock->Deadline += Skipped * Clock->Period;
-    }
+    Ticks = HalpRiscvConsumeSuspendedTicks(Clock, HalpRiscvReadTime());
     HalpRiscvWriteClockDeadline(Clock->Deadline);
-    return (ULONG)min(Skipped, MAXULONG);
+    return Ticks;
+}
+
+/* The caller serializes this against the hart's own suspend and resume. */
+ULONG
+NTAPI
+HalpRiscvQuerySuspendedClockTicks(
+    _In_ ULONG Number)
+{
+    HAL_RISCV_CLOCK *Clock;
+
+    ASSERT(Number < MAXIMUM_PROCESSORS);
+    ASSERT(Number != KeGetCurrentProcessorNumber());
+    Clock = &HalpRiscvClocks[Number];
+
+    if (!Clock->Suspended)
+        return 0;
+    return HalpRiscvConsumeSuspendedTicks(Clock, HalpRiscvReadTime());
 }
 
 /* Called by the kernel at CLOCK_LEVEL with interrupts masked. */

@@ -164,6 +164,90 @@ TestProcessorTimesAcrossIdle(_In_ DWORD_PTR ProcessorMask, _In_ ULONG Count)
        "Only %I64u us idle over %I64u us on %lu processors\n", IdleSum / 10, Wall / 10, Count);
 }
 
+static volatile LONG StopSpinning;
+
+static DWORD WINAPI
+SpinProcessorThread(_In_ PVOID Parameter)
+{
+    UNREFERENCED_PARAMETER(Parameter);
+    while (!StopSpinning)
+        YieldProcessor();
+    return 0;
+}
+
+static VOID
+TestProcessorTimesUnderLoad(_In_ ULONG Count)
+{
+    SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION Before[MAX_TEST_PROCESSORS];
+    SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION After[MAX_TEST_PROCESSORS];
+    HANDLE Threads[MAX_TEST_PROCESSORS];
+    ULONGLONG Start, Wall, Total, Idle, TotalSum = 0, IdleSum = 0;
+    ULONG FirstBusy = Count - Count / 2, Processor, Started = 0, Usage;
+    BOOL Queried;
+
+    if (Count < 2)
+    {
+        skip("One processor cannot be both busy and idle\n");
+        return;
+    }
+
+    InterlockedExchange(&StopSpinning, 0);
+    for (Processor = FirstBusy; Processor < Count; Processor++)
+    {
+        Threads[Started] = CreateThread(NULL, 0, SpinProcessorThread, NULL, CREATE_SUSPENDED, NULL);
+        ok(Threads[Started] != NULL, "CreateThread failed: %lu\n", GetLastError());
+        if (Threads[Started] == NULL)
+            continue;
+        ok(SetThreadAffinityMask(Threads[Started], (DWORD_PTR)1 << Processor) != 0,
+           "SetThreadAffinityMask(%lu) failed: %lu\n", Processor, GetLastError());
+        ok(ResumeThread(Threads[Started]) == 1, "ResumeThread failed: %lu\n", GetLastError());
+        Started++;
+    }
+    ok(Started == Count - FirstBusy, "Started %lu of %lu spinning threads\n", Started, Count - FirstBusy);
+
+    Sleep(300);
+    Queried = QueryProcessorTimes(Before, Count);
+    Start = QpcNow100ns();
+    Sleep(LONG_IDLE_MS);
+    Wall = QpcNow100ns() - Start;
+    Queried = Queried && QueryProcessorTimes(After, Count);
+
+    InterlockedExchange(&StopSpinning, 1);
+    if (Started != 0)
+        ok(WaitForMultipleObjects(Started, Threads, TRUE, 5000) == WAIT_OBJECT_0, "Spinning threads did not stop\n");
+    for (Processor = 0; Processor < Started; Processor++)
+        CloseHandle(Threads[Processor]);
+    if (!Queried || (Started != Count - FirstBusy))
+        return;
+
+    for (Processor = 0; Processor < Count; Processor++)
+    {
+        Total = (After[Processor].KernelTime.QuadPart + After[Processor].UserTime.QuadPart) -
+                (Before[Processor].KernelTime.QuadPart + Before[Processor].UserTime.QuadPart);
+        Idle = After[Processor].IdleTime.QuadPart - Before[Processor].IdleTime.QuadPart;
+        ok(Total + ACCOUNTING_SLACK_100NS >= Wall,
+           "Processor %lu was charged %I64u us over %I64u us\n", Processor, Total / 10, Wall / 10);
+        ok(Total <= Wall + ACCOUNTING_SLACK_100NS,
+           "Processor %lu was charged %I64u us over %I64u us\n", Processor, Total / 10, Wall / 10);
+        ok(Idle <= Total + TICK_100NS,
+           "Processor %lu idle %I64u us exceeds its total %I64u us\n", Processor, Idle / 10, Total / 10);
+        if (Processor >= FirstBusy)
+            ok(Idle <= ACCOUNTING_SLACK_100NS,
+               "Busy processor %lu idled %I64u us over %I64u us\n", Processor, Idle / 10, Wall / 10);
+        TotalSum += Total;
+        IdleSum += Idle;
+    }
+
+    if (TotalSum == 0)
+    {
+        ok(FALSE, "No processor time was charged over %I64u us\n", Wall / 10);
+        return;
+    }
+    Usage = (ULONG)((TotalSum - min(IdleSum, TotalSum)) * 100 / TotalSum);
+    ok(Usage + 3 >= (Count - FirstBusy) * 100 / Count,
+       "%lu of %lu processors busy read as %lu%% usage\n", Count - FirstBusy, Count, Usage);
+}
+
 START_TEST(IdleClockAccounting)
 {
     LARGE_INTEGER Frequency;
@@ -199,4 +283,5 @@ START_TEST(IdleClockAccounting)
         return;
     }
     TestProcessorTimesAcrossIdle(ProcessMask, SystemInfo.dwNumberOfProcessors);
+    TestProcessorTimesUnderLoad(SystemInfo.dwNumberOfProcessors);
 }
