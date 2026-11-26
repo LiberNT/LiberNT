@@ -2187,8 +2187,13 @@ void wined3d_texture_update_sub_resource(struct wined3d_texture *texture, unsign
     unsigned int width = wined3d_texture_get_level_width(texture, level);
     unsigned int height = wined3d_texture_get_level_height(texture, level);
     unsigned int depth = wined3d_texture_get_level_depth(texture, level);
+    uint32_t location = WINED3D_LOCATION_TEXTURE_RGB;
     struct wined3d_box src_box;
 
+#ifdef __REACTOS__
+    if (texture->resource.device->wined3d->flags & WINED3D_NO3D)
+        location = WINED3D_LOCATION_SYSMEM;
+#endif
     if (upload_bo->flags & UPLOAD_BO_RENAME_ON_UNMAP)
     {
         wined3d_texture_set_bo(texture, sub_resource_idx, context, upload_bo->addr.buffer_object);
@@ -2202,17 +2207,17 @@ void wined3d_texture_update_sub_resource(struct wined3d_texture *texture, unsign
     /* Only load the sub-resource for partial updates. */
     if (!box->left && !box->top && !box->front
             && box->right == width && box->bottom == height && box->back == depth)
-        wined3d_texture_prepare_location(texture, sub_resource_idx, context, WINED3D_LOCATION_TEXTURE_RGB);
+        wined3d_texture_prepare_location(texture, sub_resource_idx, context, location);
     else
-        wined3d_texture_load_location(texture, sub_resource_idx, context, WINED3D_LOCATION_TEXTURE_RGB);
+        wined3d_texture_load_location(texture, sub_resource_idx, context, location);
 
     wined3d_box_set(&src_box, 0, 0, box->right - box->left, box->bottom - box->top, 0, box->back - box->front);
     texture->texture_ops->texture_upload_data(context, &upload_bo->addr, texture->resource.format,
             &src_box, row_pitch, slice_pitch, texture, sub_resource_idx,
-            WINED3D_LOCATION_TEXTURE_RGB, box->left, box->top, box->front);
+            location, box->left, box->top, box->front);
 
-    wined3d_texture_validate_location(texture, sub_resource_idx, WINED3D_LOCATION_TEXTURE_RGB);
-    wined3d_texture_invalidate_location(texture, sub_resource_idx, ~WINED3D_LOCATION_TEXTURE_RGB);
+    wined3d_texture_validate_location(texture, sub_resource_idx, location);
+    wined3d_texture_invalidate_location(texture, sub_resource_idx, ~location);
 }
 
 struct wined3d_shader_resource_view * CDECL wined3d_texture_acquire_identity_srv(struct wined3d_texture *texture)
@@ -2259,7 +2264,41 @@ static void wined3d_texture_no3d_upload_data(struct wined3d_context *context,
         struct wined3d_texture *dst_texture, unsigned int dst_sub_resource_idx, unsigned int dst_location,
         unsigned int dst_x, unsigned int dst_y, unsigned int dst_z)
 {
+#ifdef __REACTOS__
+    const struct wined3d_format *format = dst_texture->resource.format;
+    unsigned int level = dst_sub_resource_idx % dst_texture->level_count;
+    unsigned int dst_row_pitch, dst_slice_pitch;
+    struct wined3d_bo_address dst;
+    const uint8_t *src;
+
+    TRACE("context %p, src_bo_addr %s, src_format %s, src_box %s, src_row_pitch %u, src_slice_pitch %u, "
+            "dst_texture %p, dst_sub_resource_idx %u, dst_location %s, dst_x %u, dst_y %u, dst_z %u.\n",
+            context, debug_const_bo_address(src_bo_addr), debug_d3dformat(src_format->id), debug_box(src_box),
+            src_row_pitch, src_slice_pitch, dst_texture, dst_sub_resource_idx,
+            wined3d_debug_location(dst_location), dst_x, dst_y, dst_z);
+
+    if (dst_location != WINED3D_LOCATION_SYSMEM || src_bo_addr->buffer_object || src_format->id != format->id)
+    {
+        FIXME("Unhandled upload from %s %s to %s.\n", debug_const_bo_address(src_bo_addr),
+                debug_d3dformat(src_format->id), wined3d_debug_location(dst_location));
+        return;
+    }
+    assert(dst_x + src_box->right - src_box->left <= wined3d_texture_get_level_width(dst_texture, level));
+    assert(dst_y + src_box->bottom - src_box->top <= wined3d_texture_get_level_height(dst_texture, level));
+    assert(dst_z + src_box->back - src_box->front <= wined3d_texture_get_level_depth(dst_texture, level));
+
+    wined3d_texture_get_pitch(dst_texture, level, &dst_row_pitch, &dst_slice_pitch);
+    wined3d_texture_get_bo_address(dst_texture, dst_sub_resource_idx, &dst, WINED3D_LOCATION_SYSMEM);
+    src = (const uint8_t *)src_bo_addr->addr + src_box->front * src_slice_pitch
+            + (src_box->top / format->block_height) * src_row_pitch
+            + (src_box->left / format->block_width) * format->block_byte_count;
+    dst.addr += dst_z * dst_slice_pitch + (dst_y / format->block_height) * dst_row_pitch
+            + (dst_x / format->block_width) * format->block_byte_count;
+    wined3d_format_copy_data(format, src, src_row_pitch, src_slice_pitch, dst.addr, dst_row_pitch, dst_slice_pitch,
+            src_box->right - src_box->left, src_box->bottom - src_box->top, src_box->back - src_box->front);
+#else
     FIXME("Not implemented.\n");
+#endif
 }
 
 static void wined3d_texture_no3d_download_data(struct wined3d_context *context,

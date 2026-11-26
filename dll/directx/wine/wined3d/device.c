@@ -4489,7 +4489,13 @@ void CDECL wined3d_device_context_update_sub_resource(struct wined3d_device_cont
     if (flags)
         FIXME("Ignoring flags %#x.\n", flags);
 
+#ifdef __REACTOS__
+    /* Without 3D, default resources such as swap chain buffers live in system memory and cannot be mapped. */
+    if (!(resource->access & WINED3D_RESOURCE_ACCESS_GPU) && !((resource->device->wined3d->flags & WINED3D_NO3D)
+            && !(resource->access & (WINED3D_RESOURCE_ACCESS_MAP_R | WINED3D_RESOURCE_ACCESS_MAP_W))))
+#else
     if (!(resource->access & WINED3D_RESOURCE_ACCESS_GPU))
+#endif
     {
         WARN("Resource %p is not GPU accessible.\n", resource);
         return;
