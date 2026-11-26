@@ -29,6 +29,7 @@ add_executable(mmdevapi_apitest
     deviceenum.c
     devicetopology.c
     exclusivestream.c
+    renderendpoint.c
     renderstream.c
     sandboxaudio.c
     sessionapi.c
@@ -41,7 +42,7 @@ add_executable(mmdevapi_apitest
 target_compile_definitions(mmdevapi_apitest PRIVATE _FORCENAMELESSUNION _FORCENAMELESSSTRUCT "CONST_VTABLE=")
 set_module_type(mmdevapi_apitest win32cui)
 target_link_libraries(mmdevapi_apitest uuid wine)
-add_importlibs(mmdevapi_apitest ole32 user32 advapi32 setupapi msvcrt kernel32 ntdll)
+add_importlibs(mmdevapi_apitest ole32 user32 advapi32 setupapi winmm msvcrt kernel32 ntdll)
 add_dependencies(mmdevapi_apitest dxsdk mmdevapi_child)
 
 add_rostests_file(TARGET mmdevapi_apitest)

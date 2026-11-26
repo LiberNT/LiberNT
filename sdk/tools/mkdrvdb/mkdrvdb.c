@@ -27,6 +27,7 @@
 #define SERVICE_DEMAND_START 0x00000003
 #define CONFIGFLAG_FINISH_INSTALL 0x00000400
 #define NET_CLASS_GUID "{4D36E972-E325-11CE-BFC1-08002BE10318}"
+#define MEDIA_CLASS_GUID "{4D36E96C-E325-11CE-BFC1-08002BE10318}"
 #define MAX_SET_INFS 16
 
 typedef struct _INF_FILE
@@ -971,7 +972,7 @@ EmitConfiguration(INF_FILE *File, const char *PackageKey, const char *Section)
     if (Found)
         InfHostFreeContext(Context);
     ClassGuid = LineField(File->Inf, "Version", "ClassGUID", 1);
-    if (ClassGuid && Equal(ClassGuid, NET_CLASS_GUID))
+    if (ClassGuid && (Equal(ClassGuid, NET_CLASS_GUID) || Equal(ClassGuid, MEDIA_CLASS_GUID)))
         Found = 1;
     free(ClassGuid);
     PutDword(Key, "ConfigFlags", Found ? CONFIGFLAG_FINISH_INSTALL : 0);

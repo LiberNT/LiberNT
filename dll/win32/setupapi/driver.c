@@ -2732,7 +2732,8 @@ DriverDatabaseRecordConfiguration(
     swprintf(Path, ARRAY_SIZE(Path), L"%s.CoInstallers", Section);
     DriverDatabaseSetDword(Configuration, L"ConfigFlags",
                            (SetupFindFirstLineW(hInf, Path, NULL, &Context) ||
-                            IsEqualGUID(ClassGuid, &GUID_DEVCLASS_NET)) ? CONFIGFLAG_FINISH_INSTALL : 0);
+                            IsEqualGUID(ClassGuid, &GUID_DEVCLASS_NET) ||
+                            IsEqualGUID(ClassGuid, &GUID_DEVCLASS_MEDIA)) ? CONFIGFLAG_FINISH_INSTALL : 0);
 
     Included[0] = UNICODE_NULL;
     for (Found = SetupFindFirstLineW(hInf, Section, L"Include", &Context);

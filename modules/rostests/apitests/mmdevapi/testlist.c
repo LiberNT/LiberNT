@@ -12,6 +12,7 @@ extern void func_capturestream(void);
 extern void func_deviceenum(void);
 extern void func_devicetopology(void);
 extern void func_exclusivestream(void);
+extern void func_renderendpoint(void);
 extern void func_renderstream(void);
 extern void func_sandboxaudio(void);
 extern void func_sessionapi(void);
@@ -26,6 +27,7 @@ const struct test winetest_testlist[] =
     { "deviceenum", func_deviceenum },
     { "devicetopology", func_devicetopology },
     { "exclusivestream", func_exclusivestream },
+    { "renderendpoint", func_renderendpoint },
     { "renderstream", func_renderstream },
     { "sandboxaudio", func_sandboxaudio },
     { "sessionapi", func_sessionapi },
