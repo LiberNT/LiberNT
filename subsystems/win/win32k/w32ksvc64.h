@@ -721,7 +721,6 @@
     SVC_(GdiDdDDIInvalidateActiveVidPn, 1)
     SVC_(GdiDdDDILock, 1)
     SVC_(GdiDdDDIOpenAdapterFromDeviceName, 1)
-    SVC_(GdiDdDDIOpenAdapterFromGdiDisplayName, 1)
     SVC_(GdiDdDDIOpenAdapterFromHdc, 1)
     SVC_(GdiDdDDIOpenResource, 1)
     SVC_(GdiDdDDIPollDisplayChildren, 1)

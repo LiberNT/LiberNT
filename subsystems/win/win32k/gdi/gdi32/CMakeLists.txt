@@ -47,8 +47,7 @@ list(APPEND SOURCE
     include/precomp.h)
 
 add_library(gdi32_thunks STATIC
-    misc/dc_thunk.c
-    misc/d3dkmt_thunk.c)
+    misc/dc_thunk.c)
 target_link_libraries(gdi32_thunks win32ksys)
 add_dependencies(gdi32_thunks psdk)
 

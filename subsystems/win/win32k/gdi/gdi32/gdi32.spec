@@ -700,7 +700,7 @@
 @ stdcall -version=0xA00+ D3DKMTMarkDeviceAsError(ptr) NtGdiDdDDIMarkDeviceAsError
 @ stdcall -version=0xA00+ D3DKMTNotifyWorkSubmission(ptr) NtDxgkNotifyWorkSubmission
 @ stdcall -version=0x600+ D3DKMTOpenAdapterFromDeviceName(ptr) NtGdiDdDDIOpenAdapterFromDeviceName
-@ stdcall -version=0x600+ D3DKMTOpenAdapterFromGdiDisplayName(ptr) NtGdiDdDDIOpenAdapterFromGdiDisplayName
+@ stdcall -version=0x600+ D3DKMTOpenAdapterFromGdiDisplayName(ptr)
 @ stdcall -version=0x600+ D3DKMTOpenAdapterFromHdc(ptr) NtGdiDdDDIOpenAdapterFromHdc
 @ stdcall -version=0xA00+ D3DKMTOpenKeyedMutexFromNtHandle(ptr) NtGdiDdDDIOpenKeyedMutexFromNtHandle
 @ stdcall -version=0xA00+ D3DKMTOpenNativeFenceFromNtHandle(ptr) NtDxgkOpenNativeFenceFromNtHandle

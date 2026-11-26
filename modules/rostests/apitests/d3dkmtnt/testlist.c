@@ -21,6 +21,7 @@ extern void func_win32unames(void);
 extern void func_allocabi(void);
 extern void func_nestedptr(void);
 extern void func_win32kserved(void);
+extern void func_gdidisplayname(void);
 
 const struct test winetest_testlist[] =
 {
@@ -37,5 +38,6 @@ const struct test winetest_testlist[] =
     { "allocabi",     func_allocabi },
     { "nestedptr",    func_nestedptr },
     { "win32kserved", func_win32kserved },
+    { "gdidisplayname", func_gdidisplayname },
     { 0, 0 }
 };
