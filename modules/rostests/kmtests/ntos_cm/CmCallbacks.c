@@ -626,7 +626,20 @@ TestCreateInformation(VOID)
             Status = CmCallbackGetKeyObjectID(&Ctx->Cookie, Object, &Id, &Name);
             ok_eq_hex(Status, STATUS_SUCCESS);
             if (NT_SUCCESS(Status))
+            {
+                PCUNICODE_STRING RootName = NULL, Again = NULL;
+                UNICODE_STRING ExpectedRoot = RTL_CONSTANT_STRING(ROOT_KEY_NAME);
+
                 ok(RtlEqualUnicodeString(Name, &Expected, TRUE), "Name = %wZ\n", Name);
+                Status = CmCallbackGetKeyObjectID(&Ctx->Cookie, Object, NULL, &Again);
+                ok_eq_hex(Status, STATUS_SUCCESS);
+                ok_eq_pointer(Again, Name);
+                Status = CmCallbackGetKeyObjectID(&Ctx->Cookie, RootObject, NULL, &RootName);
+                ok_eq_hex(Status, STATUS_SUCCESS);
+                if (NT_SUCCESS(Status))
+                    ok(RtlEqualUnicodeString(RootName, &ExpectedRoot, TRUE), "Root name = %wZ\n", RootName);
+                ok(RtlEqualUnicodeString(Name, &Expected, TRUE), "Name after another key's name = %wZ\n", Name);
+            }
 
             ok_eq_pointer(CmGetBoundTransaction(&Ctx->Cookie, Object), NULL);
 
