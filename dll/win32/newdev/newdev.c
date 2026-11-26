@@ -212,6 +212,8 @@ UpdateDriverForPlugAndPlayDevicesW(
     BOOL FoundHardwareId, FoundAtLeastOneDevice = FALSE;
     BOOL FoundCurrentDriver = FALSE;
     BOOL ret = FALSE, Wow64 = FALSE;
+    BOOL Stopped, StopVetoed, Installed;
+    ULONG Status, Problem;
 
     DevInstData.hDevInfo = INVALID_HANDLE_VALUE;
 
@@ -375,14 +377,31 @@ UpdateDriverForPlugAndPlayDevicesW(
             }
         }
 
+        Stopped = StopVetoed = FALSE;
+        if (CM_Get_DevNode_Status(&Status, &Problem, DevInstData.devInfoData.DevInst, 0) == CR_SUCCESS &&
+            (Status & DN_STARTED))
+        {
+            Stopped = CM_Query_And_Remove_SubTreeW(DevInstData.devInfoData.DevInst, NULL, NULL, 0,
+                                                   CM_REMOVE_UI_NOT_OK) == CR_SUCCESS;
+            StopVetoed = !Stopped;
+        }
+
+        Installed = InstallCurrentDriver(&DevInstData);
+        if (!Installed && Stopped)
+        {
+            LastError = GetLastError();
+            CM_Setup_DevNode(DevInstData.devInfoData.DevInst, CM_SETUP_DEVNODE_READY);
+            SetLastError(LastError);
+        }
+
         /* FIXME: HACK! We shouldn't check of ERROR_PRIVILEGE_NOT_HELD */
         //if (!InstallCurrentDriver(&DevInstData))
-        if (!InstallCurrentDriver(&DevInstData) && GetLastError() != ERROR_PRIVILEGE_NOT_HELD)
+        if (!Installed && GetLastError() != ERROR_PRIVILEGE_NOT_HELD)
         {
             continue;
         }
 
-        if (bRebootRequired && InstallNeedsReboot(&DevInstData))
+        if (bRebootRequired && (StopVetoed || InstallNeedsReboot(&DevInstData)))
             *bRebootRequired = TRUE;
 
         FoundAtLeastOneDevice = TRUE;

@@ -142,7 +142,7 @@ START_TEST(NdisSgDma)
 START_TEST(NdisCheckForHang)
 {
     WCHAR InfPath[MAX_PATH];
-    ULONG Irql = NDISSG_UNSET, One = 1, Zero = 0;
+    ULONG Irql = NDISSG_UNSET, One = 1, Zero = 0, Done = 0;
     BOOL Reboot = FALSE, Found = FALSE;
     PWSTR Filename;
     HKEY Key = NULL;
@@ -181,7 +181,18 @@ START_TEST(NdisCheckForHang)
         ok(Irql == 0, "MiniportCheckForHangEx ran at IRQL %lu, expected PASSIVE_LEVEL\n", Irql);
 
     RegSetValueExW(Key, L"HangCheck", 0, REG_DWORD, (PBYTE)&Zero, sizeof(Zero));
-    RegCloseKey(Key);
+    RegDeleteValueW(Key, L"Done");
+    Reboot = TRUE;
     ok(UpdateDriverForPlugAndPlayDevicesW(NULL, NDISSG_HARDWARE_ID, InfPath, INSTALLFLAG_FORCE | INSTALLFLAG_NONINTERACTIVE, &Reboot),
        "Reinstalling the test miniport failed: %lu\n", GetLastError());
+    ok(!Reboot, "Reinstalling the started test miniport needs a reboot\n");
+    Start = GetTickCount();
+    do
+    {
+        if (NdisSgRead(Key, L"Done", &Done) && Done)
+            break;
+        Sleep(100);
+    } while (GetTickCount() - Start < 10000);
+    ok(Done == 1, "The started test miniport was not restarted by the reinstall\n");
+    RegCloseKey(Key);
 }
