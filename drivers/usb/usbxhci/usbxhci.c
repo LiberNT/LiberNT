@@ -16195,6 +16195,13 @@ XHCI_PollEndpoint(PVOID MiniPortExtension,
     if (XHCI_EventRingHasPendingTrb(Extension))
         XHCI_ServiceEventRing(Extension, FALSE, FALSE);
 
+    /* The frozen crash owner polls at HIGH_LEVEL on its own stack: a DPC queued now could never run before it gives up. */
+    if (KeGetCurrentIrql() == HIGH_LEVEL)
+    {
+        XHCI_DrainDeferredTransferCompletions(Extension);
+        return;
+    }
+
     KeInsertQueueDpc(&Extension->DeferredDrainDpc, NULL, NULL);
 }
 
