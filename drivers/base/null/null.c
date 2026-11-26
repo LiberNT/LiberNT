@@ -9,10 +9,12 @@
 /* INCLUDES ******************************************************************/
 
 #include <wdm.h>
+#include <wdmsec.h>
 
 /* GLOBALS *******************************************************************/
 
 FAST_IO_DISPATCH FastIoDispatch;
+
 
 /* FUNCTIONS *****************************************************************/
 
@@ -181,14 +183,19 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
     /* Page the driver */
     MmPageEntireDriver(DriverEntry);
 
-    /* Create the Null device */
-    Status = IoCreateDevice(DriverObject,
-                            0,
-                            &DeviceName,
-                            FILE_DEVICE_NULL,
-                            FILE_DEVICE_SECURE_OPEN,
-                            FALSE,
-                            &DeviceObject);
+    /* Create the Null device. The bit bucket is world-writable on Windows:
+     * the default security of a named device grants Everyone only
+     * read/execute, and every user-mode redirect to NUL, whatever the
+     * user, has to open it for read and write. */
+    Status = IoCreateDeviceSecure(DriverObject,
+                                  0,
+                                  &DeviceName,
+                                  FILE_DEVICE_NULL,
+                                  FILE_DEVICE_SECURE_OPEN,
+                                  FALSE,
+                                  &SDDL_DEVOBJ_SYS_ALL_ADM_RWX_WORLD_RW_RES_R,
+                                  NULL,
+                                  &DeviceObject);
     if (!NT_SUCCESS(Status))
         return Status;
 
