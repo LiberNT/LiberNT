@@ -8,6 +8,7 @@
 #define NDEBUG
 #include <debug.h>
 #include <kbdmou.h>
+#include "../hidread.h"
 //#include <kbd.h>
 #include <ntddkbd.h>
 #include <debug.h>
@@ -20,15 +21,7 @@ typedef struct
     //
     PDEVICE_OBJECT NextDeviceObject;
 
-    //
-    // irp which is used for reading input reports
-    //
-    PIRP Irp;
-
-    //
-    // event
-    //
-    KEVENT ReadCompletionEvent;
+    HID_READ_STATE Read;
 
     //
     // device object for class callback
@@ -90,20 +83,6 @@ typedef struct
     //
     ULONG ReportLength;
 
-    //
-    // file object the device is reading reports from
-    //
-    PFILE_OBJECT FileObject;
-
-    //
-    // report read is active
-    //
-    UCHAR ReadReportActive;
-
-    //
-    // stop reading flag
-    //
-    UCHAR StopReadReport;
     BOOLEAN DeviceStarted;
     BOOLEAN RepeatWanted;
     BOOLEAN RepeatEnabled;
@@ -148,9 +127,5 @@ typedef struct
 #define KEYBOARD_TYPE_UNKNOWN   (0x51)
 #define MICROSOFT_KBD_101_TYPE           0
 
-
-NTSTATUS
-KbdHid_InitiateRead(
-    IN PKBDHID_DEVICE_EXTENSION DeviceExtension);
 
 #define KBDHID_TAG 'diHK'

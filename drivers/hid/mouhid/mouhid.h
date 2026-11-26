@@ -9,6 +9,7 @@
 #include <debug.h>
 #include <ntddmou.h>
 #include <kbdmou.h>
+#include "../hidread.h"
 #include <debug.h>
 
 
@@ -19,15 +20,7 @@ typedef struct
     //
     PDEVICE_OBJECT NextDeviceObject;
 
-    //
-    // irp which is used for reading input reports
-    //
-    PIRP Irp;
-
-    //
-    // event
-    //
-    KEVENT ReadCompletionEvent;
+    HID_READ_STATE Read;
 
     //
     // device object for class callback
@@ -105,21 +98,6 @@ typedef struct
     ULONG ReportLength;
 
     //
-    // file object the device is reading reports from
-    //
-    PFILE_OBJECT FileObject;
-
-    //
-    // report read is active
-    //
-    UCHAR ReadReportActive;
-
-    //
-    // stop reading flag
-    //
-    UCHAR StopReadReport;
-
-    //
     // mouse absolute
     //
     UCHAR MouseAbsolute;
@@ -139,9 +117,5 @@ typedef struct
 #define WHEEL_DELTA 120
 #define VIRTUAL_SCREEN_SIZE_X (65536)
 #define VIRTUAL_SCREEN_SIZE_Y (65536)
-
-NTSTATUS
-MouHid_InitiateRead(
-    IN PMOUHID_DEVICE_EXTENSION DeviceExtension);
 
 #define MOUHID_TAG 'diHM'

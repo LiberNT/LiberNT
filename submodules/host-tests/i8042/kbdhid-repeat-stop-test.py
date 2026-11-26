@@ -14,7 +14,7 @@ parser.add_argument('--cc', required=True)
 args = parser.parse_args()
 source = (pathlib.Path(args.root) / 'drivers/hid/kbdhid/kbdhid.c').read_text(encoding='latin-1')
 functions = []
-for name in ('KbdHid_RepeatDpc', 'KbdHid_UpdateRepeat', 'KbdHid_StopRead', 'KbdHid_EnableRepeat', 'KbdHid_MarkStarted'):
+for name in ('KbdHid_RepeatDpc', 'KbdHid_UpdateRepeat', 'KbdHid_StopRepeat', 'KbdHid_EnableRepeat', 'KbdHid_MarkStarted'):
     match = re.search(r'(?ms)^static\nVOID\n(?:NTAPI\n)?' + name + r'\(.*?^\}\n', source)
     if not match:
         raise RuntimeError(name + ' not found')
@@ -77,8 +77,6 @@ static void KeFlushQueuedDpcs(void)
         KeReleaseSpinLock(&InjectedDevice->InputLock, old);
     }
 }
-static int IoCancelIrp(void *irp) { (void)irp; assert(!Locked); return 0; }
-static int KeWaitForSingleObject(void *event, int reason, int mode, int alert, void *timeout) { (void)event; (void)reason; (void)mode; (void)alert; (void)timeout; return 0; }
 ''' + '\n'.join(functions) + r'''
 int main(void)
 {
@@ -97,7 +95,7 @@ int main(void)
     Arms=0;
     InjectedDevice=&dev;
     InjectCompletion=1;
-    KbdHid_StopRead(&dev, TRUE);
+    KbdHid_StopRepeat(&dev, TRUE);
     if (Arms || dev.RepeatUsage.Usage || dev.RepeatEnabled)
     {
         fprintf(stderr, "report completion rearmed repeat during shutdown: arms=%d usage=%u enabled=%u\n", Arms, dev.RepeatUsage.Usage, dev.RepeatEnabled);
@@ -118,7 +116,7 @@ int main(void)
     assert(Arms==1 && dev.RepeatUsage.Usage==4);
     KbdHid_RepeatDpc(NULL, &dev, NULL, NULL);
     assert(Translations==1 && Arms==2);
-    KbdHid_StopRead(&dev, FALSE);
+    KbdHid_StopRepeat(&dev, FALSE);
     assert(dev.DeviceStarted && !dev.RepeatWanted && !dev.RepeatEnabled && dev.RepeatUsage.Usage==0);
     KbdHid_MarkStarted(&dev);
     assert(!dev.RepeatEnabled);

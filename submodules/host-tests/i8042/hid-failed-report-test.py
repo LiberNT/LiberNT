@@ -24,6 +24,8 @@ fixture = r"""
 #define NTAPI
 #define NT_SUCCESS(status) ((status) >= 0)
 #define FALSE 0
+#define TRUE 1
+#define ASSERT assert
 #define STATUS_SUCCESS 0
 #define STATUS_PRIVILEGE_NOT_HELD (-1)
 #define STATUS_DEVICE_NOT_CONNECTED (-2)
@@ -45,13 +47,14 @@ typedef unsigned short USHORT;
 typedef void *PVOID, *PDEVICE_OBJECT;
 typedef struct { struct { NTSTATUS Status; } IoStatus; } IRP, *PIRP;
 typedef struct { USHORT ButtonFlags, Flags, ButtonData; LONG LastX, LastY; } MOUSE_INPUT_DATA;
+typedef struct { PIRP Irp; int Stopping, Finished; } HID_READ_STATE;
 typedef struct {
-    int ReadReportActive, StopReadReport, ReadCompletionEvent, MouseIdentifier, FlipFlopWheel;
+    HID_READ_STATE Read;
+    int MouseIdentifier, FlipFlopWheel;
     void *PreparsedData, *Report;
     unsigned ReportLength;
 } MOUHID_DEVICE_EXTENSION, *PMOUHID_DEVICE_EXTENSION;
 static unsigned Parsed, Dispatched, Resubmitted;
-static void KeSetEvent(int *e, int increment, int wait) { (void)increment; (void)wait; *e = 1; }
 static void MouHid_GetButtonMove(PMOUHID_DEVICE_EXTENSION d, LONG *x, LONG *y)
 {
     ++Parsed;
@@ -75,11 +78,15 @@ static void MouHid_DispatchInputData(PMOUHID_DEVICE_EXTENSION d, MOUSE_INPUT_DAT
     assert(data->LastX == 17);
     ++Dispatched;
 }
-static NTSTATUS MouHid_InitiateRead(PMOUHID_DEVICE_EXTENSION d)
+static int HidReadBeginCompletion(HID_READ_STATE *r, NTSTATUS status)
 {
-    (void)d;
-    ++Resubmitted;
-    return STATUS_SUCCESS;
+    return !r->Stopping && NT_SUCCESS(status);
+}
+static NTSTATUS HidReadEndCompletion(HID_READ_STATE *r, int again)
+{
+    ++r->Finished;
+    Resubmitted += again;
+    return STATUS_MORE_PROCESSING_REQUIRED;
 }
 """ + completion.group(0) + r"""
 static void Run(NTSTATUS status, int stopping)
@@ -90,8 +97,8 @@ static void Run(NTSTATUS status, int stopping)
 
     dev.Report = &stale;
     dev.ReportLength = sizeof(stale);
-    dev.ReadReportActive = 1;
-    dev.StopReadReport = stopping;
+    dev.Read.Irp = &irp;
+    dev.Read.Stopping = stopping;
     Parsed = Dispatched = Resubmitted = 0;
     assert(MouHid_ReadCompletion(NULL, &irp, &dev) == STATUS_MORE_PROCESSING_REQUIRED);
     if (!NT_SUCCESS(status) || stopping)
@@ -101,12 +108,12 @@ static void Run(NTSTATUS status, int stopping)
             fprintf(stderr, "failed or stopped mouse read replayed input or submitted another read\n");
             assert(0);
         }
-        assert(!dev.ReadReportActive && dev.ReadCompletionEvent);
+        assert(dev.Read.Finished == 1);
     }
     else
     {
         assert(Parsed == 1 && Dispatched == 1 && Resubmitted == 1);
-        assert(dev.ReadReportActive && !dev.ReadCompletionEvent);
+        assert(dev.Read.Finished == 1);
     }
 }
 int main(void)

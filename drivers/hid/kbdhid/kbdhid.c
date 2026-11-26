@@ -225,31 +225,9 @@ KbdHid_ReadCompletion(
     /* get device extension */
     DeviceExtension = Context;
 
-    if (Irp->IoStatus.Status == STATUS_PRIVILEGE_NOT_HELD ||
-        Irp->IoStatus.Status == STATUS_DEVICE_NOT_CONNECTED ||
-        Irp->IoStatus.Status == STATUS_CANCELLED ||
-        DeviceExtension->StopReadReport)
-    {
-        /* failed to read or should be stopped*/
-        DPRINT("[KBDHID] ReadCompletion terminating read Status %x\n", Irp->IoStatus.Status);
-
-        /* report no longer active */
-        DeviceExtension->ReadReportActive = FALSE;
-
-        /* request stopping of the report cycle */
-        DeviceExtension->StopReadReport = FALSE;
-
-        /* signal completion event */
-        KeSetEvent(&DeviceExtension->ReadCompletionEvent, 0, 0);
-        return STATUS_MORE_PROCESSING_REQUIRED;
-    }
-
-    if (!NT_SUCCESS(Irp->IoStatus.Status))
-    {
-        DeviceExtension->ReadReportActive = FALSE;
-        KeSetEvent(&DeviceExtension->ReadCompletionEvent, 0, 0);
-        return STATUS_MORE_PROCESSING_REQUIRED;
-    }
+    ASSERT(Irp == DeviceExtension->Read.Irp);
+    if (!HidReadBeginCompletion(&DeviceExtension->Read, Irp->IoStatus.Status))
+        return HidReadEndCompletion(&DeviceExtension->Read, FALSE);
 
     //
     // print out raw report
@@ -273,16 +251,14 @@ KbdHid_ReadCompletion(
     if (Status != HIDP_STATUS_SUCCESS)
     {
         DPRINT1("[KBDHID] HidP_GetUsagesEx failed with %x\n", Status);
-        KbdHid_InitiateRead(DeviceExtension);
-        return STATUS_MORE_PROCESSING_REQUIRED;
+        return HidReadEndCompletion(&DeviceExtension->Read, TRUE);
     }
     ASSERT(ButtonLength <= DeviceExtension->UsageListLength);
 
     /* ErrorRollOver, POSTFail and ErrorUndefined mark a phantom state: the report holds no key state, keep the last one */
     if (KbdHid_IsPhantomReport(DeviceExtension->CurrentUsageList, ButtonLength))
     {
-        KbdHid_InitiateRead(DeviceExtension);
-        return STATUS_MORE_PROCESSING_REQUIRED;
+        return HidReadEndCompletion(&DeviceExtension->Read, TRUE);
     }
 
     /* FIXME check if needs mapping */
@@ -296,8 +272,7 @@ KbdHid_ReadCompletion(
     if (Status != HIDP_STATUS_SUCCESS)
     {
         DPRINT1("[KBDHID] HidP_UsageAndPageListDifference failed with %x\n", Status);
-        KbdHid_InitiateRead(DeviceExtension);
-        return STATUS_MORE_PROCESSING_REQUIRED;
+        return HidReadEndCompletion(&DeviceExtension->Read, TRUE);
     }
 
     /* replace previous usage list with current list */
@@ -330,48 +305,9 @@ KbdHid_ReadCompletion(
     KbdHid_UpdateRepeat(DeviceExtension);
     KeReleaseSpinLock(&DeviceExtension->InputLock, OldIrql);
 
-    /* re-init read */
-    KbdHid_InitiateRead(DeviceExtension);
-
-    /* stop completion */
-    return STATUS_MORE_PROCESSING_REQUIRED;
+    return HidReadEndCompletion(&DeviceExtension->Read, TRUE);
 }
 
-NTSTATUS
-KbdHid_InitiateRead(
-    IN PKBDHID_DEVICE_EXTENSION DeviceExtension)
-{
-    PIO_STACK_LOCATION IoStack;
-    NTSTATUS Status;
-
-    /* re-use irp */
-    IoReuseIrp(DeviceExtension->Irp, STATUS_SUCCESS);
-
-    /* init irp */
-    DeviceExtension->Irp->MdlAddress = DeviceExtension->ReportMDL;
-
-    /* get next stack location */
-    IoStack = IoGetNextIrpStackLocation(DeviceExtension->Irp);
-
-    /* init stack location */
-    IoStack->Parameters.Read.Length = DeviceExtension->ReportLength;
-    IoStack->Parameters.Read.Key = 0;
-    IoStack->Parameters.Read.ByteOffset.QuadPart = 0LL;
-    IoStack->MajorFunction = IRP_MJ_READ;
-    IoStack->FileObject = DeviceExtension->FileObject;
-
-    /* set completion routine */
-    IoSetCompletionRoutine(DeviceExtension->Irp, KbdHid_ReadCompletion, DeviceExtension, TRUE, TRUE, TRUE);
-
-    /* read is active */
-    DeviceExtension->ReadReportActive = TRUE;
-
-    /* start the read */
-    Status = IoCallDriver(DeviceExtension->NextDeviceObject, DeviceExtension->Irp);
-
-    /* done */
-    return Status;
-}
 
 NTSTATUS
 NTAPI
@@ -386,7 +322,7 @@ KbdHid_CreateCompletion(
 
 static
 VOID
-KbdHid_StopRead(
+KbdHid_StopRepeat(
     IN PKBDHID_DEVICE_EXTENSION DeviceExtension,
     IN BOOLEAN StopDevice)
 {
@@ -402,18 +338,6 @@ KbdHid_StopRead(
     KeCancelTimer(&DeviceExtension->RepeatTimer);
     KeReleaseSpinLock(&DeviceExtension->InputLock, OldIrql);
     KeFlushQueuedDpcs();
-
-    if (!DeviceExtension->ReadReportActive)
-        return;
-
-    /* request stopping of the report cycle */
-    DeviceExtension->StopReadReport = TRUE;
-
-    /* cancel irp */
-    IoCancelIrp(DeviceExtension->Irp);
-
-    /* wait until the read completion routine has stopped the report cycle */
-    KeWaitForSingleObject(&DeviceExtension->ReadCompletionEvent, Executive, KernelMode, FALSE, NULL);
 }
 
 static
@@ -458,6 +382,22 @@ KbdHid_Create(
     /* get device extension */
     DeviceExtension = DeviceObject->DeviceExtension;
 
+    Status = IoAcquireRemoveLock(&DeviceExtension->Read.RemoveLock, Irp);
+    if (!NT_SUCCESS(Status))
+    {
+        Irp->IoStatus.Status = Status;
+        Irp->IoStatus.Information = 0;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return Status;
+    }
+
+    if (!HidReadCanOpen(&DeviceExtension->Read))
+    {
+        Status = STATUS_DEVICE_NOT_CONNECTED;
+        Irp->IoStatus.Information = 0;
+        goto complete;
+    }
+
     /* get stack location */
     IoStack = IoGetCurrentIrpStackLocation(Irp);
 
@@ -479,41 +419,16 @@ KbdHid_Create(
         Status = Irp->IoStatus.Status;
     }
 
-    /* check for success */
-    if (!NT_SUCCESS(Status))
+    if (NT_SUCCESS(Status) && Status != STATUS_REPARSE &&
+        IoStack->Parameters.Create.SecurityContext->DesiredAccess &&
+        HidReadOpen(&DeviceExtension->Read, IoStack->FileObject))
     {
-        /* failed */
-        Irp->IoStatus.Status = Status;
-        IoCompleteRequest(Irp, IO_NO_INCREMENT);
-        return Status;
+        KbdHid_EnableRepeat(DeviceExtension);
+        HidReadSubmit(&DeviceExtension->Read);
     }
 
-    /* is the driver already in use */
-    if (DeviceExtension->FileObject == NULL)
-    {
-         /* did the caller specify correct attributes */
-         ASSERT(IoStack->Parameters.Create.SecurityContext);
-         if (IoStack->Parameters.Create.SecurityContext->DesiredAccess)
-         {
-             /* store file object */
-             DeviceExtension->FileObject = IoStack->FileObject;
-
-             KbdHid_EnableRepeat(DeviceExtension);
-
-             /* reset event */
-             KeClearEvent(&DeviceExtension->ReadCompletionEvent);
-
-             /* initiating read */
-             Status = KbdHid_InitiateRead(DeviceExtension);
-             DPRINT("[KBDHID] KbdHid_InitiateRead: status %x\n", Status);
-             if (Status == STATUS_PENDING)
-             {
-                 /* report irp is pending */
-                 Status = STATUS_SUCCESS;
-             }
-         }
-    }
-
+complete:
+    IoReleaseRemoveLock(&DeviceExtension->Read.RemoveLock, Irp);
     /* complete request */
     Irp->IoStatus.Status = Status;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
@@ -527,29 +442,33 @@ KbdHid_Close(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp)
 {
-    PIO_STACK_LOCATION IoStack;
-    PKBDHID_DEVICE_EXTENSION DeviceExtension;
+    PKBDHID_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+    PHID_READ_STATE Read = &DeviceExtension->Read;
+    PFILE_OBJECT File = IoGetCurrentIrpStackLocation(Irp)->FileObject;
+    NTSTATUS Status;
 
-    /* get device extension */
-    DeviceExtension = DeviceObject->DeviceExtension;
-    IoStack = IoGetCurrentIrpStackLocation(Irp);
-
-    DPRINT("[KBDHID] IRP_MJ_CLOSE ReadReportActive %x\n", DeviceExtension->ReadReportActive);
-
-    if (IoStack->FileObject == DeviceExtension->FileObject)
+    Status = IoAcquireRemoveLock(&Read->RemoveLock, Irp);
+    if (!NT_SUCCESS(Status))
     {
-        KbdHid_StopRead(DeviceExtension, FALSE);
-
-        /* remove file object */
-        DeviceExtension->FileObject = NULL;
+        Irp->IoStatus.Status = Status;
+        Irp->IoStatus.Information = 0;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return Status;
     }
 
-    DPRINT("[KBDHID] IRP_MJ_CLOSE ReadReportActive %x\n", DeviceExtension->ReadReportActive);
+    if (File && HidReadBeginStop(Read, File, FALSE))
+    {
+        KbdHid_StopRepeat(DeviceExtension, FALSE);
 
-    /* skip location */
-    IoSkipCurrentIrpStackLocation(Irp);
+        if (HidReadFinishStop(Read))
+        {
+            KbdHid_EnableRepeat(DeviceExtension);
+            HidReadSubmit(Read);
+        }
+    }
 
-    /* pass irp to down the stack */
+    IoCopyCurrentIrpStackLocationToNext(Irp);
+    IoSetCompletionRoutine(Irp, HidReadReleaseCloseLock, Read, TRUE, TRUE, TRUE);
     return IoCallDriver(DeviceExtension->NextDeviceObject, Irp);
 }
 
@@ -1077,12 +996,48 @@ KbdHid_Pnp(
     {
     case IRP_MN_STOP_DEVICE:
     case IRP_MN_SURPRISE_REMOVAL:
-        /* stop pending reads before freeing report buffers */
-        KbdHid_StopRead(DeviceExtension, TRUE);
+    case IRP_MN_REMOVE_DEVICE:
+    {
+        PHID_READ_STATE Read = &DeviceExtension->Read;
+        BOOLEAN Remove = (IoStack->MinorFunction == IRP_MN_REMOVE_DEVICE);
 
-        /* free resources */
-        KbdHid_FreeResources(DeviceObject);
-        /* fall through */
+        Status = IoAcquireRemoveLock(&Read->RemoveLock, Irp);
+        ASSERT(NT_SUCCESS(Status));
+        if (!NT_SUCCESS(Status))
+        {
+            Irp->IoStatus.Status = Status;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return Status;
+        }
+
+        HidReadBeginStop(Read, NULL, IoStack->MinorFunction != IRP_MN_STOP_DEVICE);
+        KbdHid_StopRepeat(DeviceExtension, TRUE);
+
+        Irp->IoStatus.Status = STATUS_SUCCESS;
+        if (IoForwardIrpSynchronously(DeviceExtension->NextDeviceObject, Irp))
+            Status = Irp->IoStatus.Status;
+        else
+            Status = STATUS_INVALID_DEVICE_STATE;
+
+        (VOID)HidReadFinishStop(Read);
+        if (Remove)
+        {
+            IoReleaseRemoveLockAndWait(&Read->RemoveLock, Irp);
+            KbdHid_FreeResources(DeviceObject);
+            IoFreeIrp(Read->Irp);
+            IoDetachDevice(DeviceExtension->NextDeviceObject);
+            IoDeleteDevice(DeviceObject);
+        }
+        else
+        {
+            KbdHid_FreeResources(DeviceObject);
+            IoReleaseRemoveLock(&Read->RemoveLock, Irp);
+        }
+        Irp->IoStatus.Status = Status;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return Status;
+    }
+
     case IRP_MN_CANCEL_REMOVE_DEVICE:
     case IRP_MN_QUERY_STOP_DEVICE:
     case IRP_MN_CANCEL_STOP_DEVICE:
@@ -1095,29 +1050,6 @@ KbdHid_Pnp(
 
         /* dispatch to lower device */
         return IoCallDriver(DeviceExtension->NextDeviceObject, Irp);
-
-    case IRP_MN_REMOVE_DEVICE:
-        /* FIXME synchronization */
-
-        /* stop pending reads before freeing report buffers */
-        KbdHid_StopRead(DeviceExtension, TRUE);
-
-        /* free resources */
-        KbdHid_FreeResources(DeviceObject);
-
-        /* indicate success */
-        Irp->IoStatus.Status = STATUS_SUCCESS;
-
-        /* skip irp stack location */
-        IoSkipCurrentIrpStackLocation(Irp);
-
-        /* dispatch to lower device */
-        Status = IoCallDriver(DeviceExtension->NextDeviceObject, Irp);
-
-        IoFreeIrp(DeviceExtension->Irp);
-        IoDetachDevice(DeviceExtension->NextDeviceObject);
-        IoDeleteDevice(DeviceObject);
-        return Status;
 
     case IRP_MN_START_DEVICE:
         /* init event */
@@ -1146,11 +1078,24 @@ KbdHid_Pnp(
             return Status;
         }
 
+        if (HidReadIsStarted(&DeviceExtension->Read))
+        {
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return Status;
+        }
+
         /* lets start the device */
         Status = KbdHid_StartDevice(DeviceObject);
         DPRINT("KbdHid_StartDevice %x\n", Status);
         if (NT_SUCCESS(Status))
+        {
             KbdHid_MarkStarted(DeviceExtension);
+            if (HidReadStart(&DeviceExtension->Read, DeviceExtension->ReportMDL, DeviceExtension->ReportLength))
+            {
+                KbdHid_EnableRepeat(DeviceExtension);
+                HidReadSubmit(&DeviceExtension->Read);
+            }
+        }
 
         /* complete request */
         Irp->IoStatus.Status = Status;
@@ -1261,7 +1206,7 @@ KbdHid_AddDevice(
 
     /* init device extension */
     DeviceExtension->NextDeviceObject = NextDeviceObject;
-    KeInitializeEvent(&DeviceExtension->ReadCompletionEvent, NotificationEvent, FALSE);
+    HidReadInitialize(&DeviceExtension->Read, NextDeviceObject, KbdHid_ReadCompletion, DeviceExtension, KBDHID_TAG);
     KeInitializeSpinLock(&DeviceExtension->InputLock);
     KeInitializeTimer(&DeviceExtension->RepeatTimer);
     KeInitializeDpc(&DeviceExtension->RepeatDpc, KbdHid_RepeatDpc, DeviceExtension);
@@ -1280,10 +1225,14 @@ KbdHid_AddDevice(
     KbdHid_QueryDeviceParameters(PhysicalDeviceObject, DeviceExtension);
 
     /* allocate irp */
-    DeviceExtension->Irp = IoAllocateIrp(NextDeviceObject->StackSize, FALSE);
+    DeviceExtension->Read.Irp = IoAllocateIrp(NextDeviceObject->StackSize, FALSE);
 
-    /* FIXME handle allocation error */
-    ASSERT(DeviceExtension->Irp);
+    if (!DeviceExtension->Read.Irp)
+    {
+        IoDetachDevice(NextDeviceObject);
+        IoDeleteDevice(DeviceObject);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
 
     /* set power state to D0 */
     State.DeviceState =  PowerDeviceD0;
