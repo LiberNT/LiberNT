@@ -150,16 +150,63 @@ static NTSTATUS NTAPI USBSTOR_DumpWrite(_In_ PVOID Context, _In_ ULONG64 DiskByt
     return USBSTOR_DumpCommand(DumpContext, (PUCHAR)&Cdb, CdbLength, NULL, Buffer, TRUE, Length, FALSE);
 }
 
+static BOOLEAN USBSTOR_DumpCommandFailed(_In_ PUSBSTOR_DUMP_CONTEXT DumpContext)
+{
+    return (DumpContext->Csw.Signature == CSW_SIGNATURE) && (DumpContext->Csw.Tag == DumpContext->Cbw.Tag) && (DumpContext->Csw.Status == CSW_STATUS_COMMAND_FAILED);
+}
+
+static NTSTATUS USBSTOR_DumpRequestSense(_In_ PUSBSTOR_DUMP_CONTEXT DumpContext)
+{
+    CDB Cdb;
+    PHYSICAL_ADDRESS PhysicalAddress;
+    NTSTATUS Status;
+
+    C_ASSERT(sizeof(DumpContext->Sense) <= MAXUCHAR);
+
+    RtlZeroMemory(&Cdb, sizeof(Cdb));
+    RtlZeroMemory(&DumpContext->Sense, sizeof(DumpContext->Sense));
+    PhysicalAddress.QuadPart = 0;
+    Cdb.CDB6GENERIC.OperationCode = SCSIOP_REQUEST_SENSE;
+    Cdb.AsByte[4] = (UCHAR)sizeof(DumpContext->Sense);
+    Status = USBSTOR_DumpCommand(DumpContext, (PUCHAR)&Cdb, 6, &DumpContext->Sense, PhysicalAddress, FALSE, sizeof(DumpContext->Sense), TRUE);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if ((DumpContext->Sense.ErrorCode != SCSI_SENSE_ERRORCODE_FIXED_CURRENT) && (DumpContext->Sense.ErrorCode != SCSI_SENSE_ERRORCODE_FIXED_DEFERRED))
+        return STATUS_DEVICE_PROTOCOL_ERROR;
+
+    return STATUS_SUCCESS;
+}
+
 static NTSTATUS NTAPI USBSTOR_DumpFlush(_In_ PVOID Context)
 {
     PUSBSTOR_DUMP_CONTEXT DumpContext = Context;
     CDB Cdb;
     PHYSICAL_ADDRESS PhysicalAddress;
+    NTSTATUS Status;
+
+    ASSERT(DumpContext != NULL);
+
+    if (DumpContext->NoSynchronizeCache)
+        return STATUS_SUCCESS;
 
     RtlZeroMemory(&Cdb, sizeof(Cdb));
     PhysicalAddress.QuadPart = 0;
     Cdb.CDB10.OperationCode = SCSIOP_SYNCHRONIZE_CACHE;
-    return USBSTOR_DumpCommand(DumpContext, (PUCHAR)&Cdb, 10, NULL, PhysicalAddress, FALSE, 0, FALSE);
+    Status = USBSTOR_DumpCommand(DumpContext, (PUCHAR)&Cdb, 10, NULL, PhysicalAddress, FALSE, 0, FALSE);
+    if (NT_SUCCESS(Status) || !USBSTOR_DumpCommandFailed(DumpContext))
+        return Status;
+
+    /* A device without SYNCHRONIZE CACHE has no write cache to commit: its completed writes are already on the medium. */
+    if (NT_SUCCESS(USBSTOR_DumpRequestSense(DumpContext)) &&
+        (DumpContext->Sense.SenseKey == SCSI_SENSE_ILLEGAL_REQUEST) &&
+        (DumpContext->Sense.AdditionalSenseCode == SCSI_ADSENSE_ILLEGAL_COMMAND))
+    {
+        DumpContext->NoSynchronizeCache = TRUE;
+        return STATUS_SUCCESS;
+    }
+
+    return Status;
 }
 
 static NTSTATUS USBSTOR_GetDumpInterface(_In_ PPDO_DEVICE_EXTENSION PdoExtension, _Inout_ PROS_STORAGE_DUMP_INTERFACE Interface)

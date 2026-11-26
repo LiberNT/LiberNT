@@ -193,6 +193,8 @@ typedef struct _USBSTOR_DUMP_CONTEXT
     CSW Csw;
     ULONG BytesPerSector;
     ULONG Tag;
+    SENSE_DATA Sense;
+    BOOLEAN NoSynchronizeCache;
 } USBSTOR_DUMP_CONTEXT, *PUSBSTOR_DUMP_CONTEXT;
 
 // we need this to be compatible with ReactOS' classpnp (which is compiled with NTDDI_WIN8)
