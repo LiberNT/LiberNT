@@ -73,6 +73,7 @@ list(APPEND SOURCE
     ShellExecuteEx.cpp
     ShellExecuteSlash.cpp
     ShellExecuteLink.cpp
+    ShellExecuteUrlExe.cpp
     #ShellExecuteW.cpp # Broke on Windows
     ShellHook.cpp
     ShellInfo.cpp

@@ -67,6 +67,7 @@ extern void func_ShellExecCmdLine(void);
 extern void func_ShellExecuteEx(void);
 extern void func_ShellExecuteSlash(void);
 extern void func_ShellExecuteLink(void);
+extern void func_ShellExecuteUrlExe(void);
 extern void func_ShellExecuteW(void);
 extern void func_ShellHook(void);
 extern void func_Shell_NotifyIconGetRect(void);
@@ -175,6 +176,7 @@ const struct test winetest_testlist[] =
     { "ShellExecuteEx", func_ShellExecuteEx }, // Mostly broken on Windows, only simple tests enabled
     { "ShellExecuteSlash", func_ShellExecuteSlash },
     { "ShellExecuteLink", func_ShellExecuteLink },
+    { "ShellExecuteUrlExe", func_ShellExecuteUrlExe },
     //{ "ShellExecuteW", func_ShellExecuteW }, Broke on Windows
     { "ShellHook", func_ShellHook },
     { "Shell_NotifyIconGetRect", func_Shell_NotifyIconGetRect },
