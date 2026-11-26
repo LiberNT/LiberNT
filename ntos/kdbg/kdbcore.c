@@ -81,6 +81,19 @@ typedef struct _KDB_STEP_OVER
 
 static KDB_STEP_OVER KdbpStepOvers[MAXIMUM_PROCESSORS];
 
+/* Software breakpoints recently taken out of memory, so only our own traps can be treated as stale */
+typedef struct _KDB_REMOVED_BREAKPOINT
+{
+    ULONG_PTR Address;
+    PEPROCESS Process;
+    BOOLEAN Global;
+    BOOLEAN Valid;
+} KDB_REMOVED_BREAKPOINT, *PKDB_REMOVED_BREAKPOINT;
+
+static KDB_REMOVED_BREAKPOINT KdbpRemovedBreakPoints[KDB_MAXIMUM_BREAKPOINT_COUNT];
+static ULONG KdbpRemovedBreakPointNext;
+static BOOLEAN KdbpHasRemovedBreakPoints;
+
 /* The thread the person at the prompt is stepping */
 static PKTHREAD KdbpStepThread;
 
@@ -225,6 +238,18 @@ KdbpApplySoftwareBreakPoint(
     /* The instruction fetch path does not see a store to code until it is told to */
     if (NT_SUCCESS(Status))
     {
+        if (!Enable)
+        {
+            PKDB_REMOVED_BREAKPOINT Removed = &KdbpRemovedBreakPoints[KdbpRemovedBreakPointNext];
+
+            Removed->Address = BreakPoint->Address;
+            Removed->Process = BreakPoint->Global ? NULL : BreakPoint->Process;
+            Removed->Global = BreakPoint->Global;
+            Removed->Valid = TRUE;
+            KdbpRemovedBreakPointNext = (KdbpRemovedBreakPointNext + 1) % RTL_NUMBER_OF(KdbpRemovedBreakPoints);
+            KdbpHasRemovedBreakPoints = TRUE;
+        }
+
         if (Process == NULL)
             KeSweepICache((PVOID)BreakPoint->Address, sizeof(KD_BREAKPOINT_TYPE));
         else
@@ -1318,6 +1343,32 @@ KdbpStepPastBreakInstruction(
 
 static
 BOOLEAN
+KdbpWasBreakPointRemoved(
+    _In_ ULONG_PTR Address)
+{
+    PEPROCESS Process;
+    ULONG Index;
+
+    if (!KdbpHasRemovedBreakPoints)
+        return FALSE;
+
+    Process = PsGetCurrentProcess();
+    for (Index = 0; Index < RTL_NUMBER_OF(KdbpRemovedBreakPoints); Index++)
+    {
+        PKDB_REMOVED_BREAKPOINT Removed = &KdbpRemovedBreakPoints[Index];
+
+        if (!Removed->Valid || (Removed->Address != Address))
+            continue;
+
+        if (Removed->Global || (Removed->Process == Process))
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+static
+BOOLEAN
 KdbpIsStaleBreak(
     _In_opt_ PEXCEPTION_RECORD64 ExceptionRecord,
     _In_ PCONTEXT Context)
@@ -1338,7 +1389,9 @@ KdbpIsStaleBreak(
     if ((Pc != Address) && (Pc != Address + KD_BREAKPOINT_SIZE))
         return FALSE;
 
-    return (KdbpFindBreakPointAt(Address) < 0) && !KdbpArchIsBreakInstruction(Address);
+    return KdbpWasBreakPointRemoved(Address) &&
+           (KdbpFindBreakPointAt(Address) < 0) &&
+           !KdbpArchIsBreakInstruction(Address);
 }
 
 /*

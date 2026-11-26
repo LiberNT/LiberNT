@@ -172,18 +172,31 @@ KdbpArchSetHardwareBreakPoint(
 
 /*
  * The status register says which of the four watch registers matched; only
- * one the control register has switched on counts.
+ * one the debugger itself armed counts. A user thread's own watchpoint must
+ * keep its DR6 status bits intact when handed back to exception dispatch.
  */
 LONG
 NTAPI
 KdbpArchHardwareBreakPointHit(
     _Inout_ PCONTEXT Context)
 {
+    ULONG_PTR Addresses[4];
     ULONG Index;
+
+    if (KdbpWatchControl == 0)
+        return -1;
+
+    Addresses[0] = Context->Dr0;
+    Addresses[1] = Context->Dr1;
+    Addresses[2] = Context->Dr2;
+    Addresses[3] = Context->Dr3;
 
     for (Index = 0; Index < 4; Index++)
     {
-        if (((Context->Dr6 & (1 << Index)) != 0) && ((Context->Dr7 & (3 << (Index * 2))) != 0))
+        if (((KdbpWatchControl & ((ULONG_PTR)3 << (Index * 2))) != 0) &&
+            ((Context->Dr6 & ((ULONG_PTR)1 << Index)) != 0) &&
+            ((Context->Dr7 & ((ULONG_PTR)3 << (Index * 2))) != 0) &&
+            (Addresses[Index] == KdbpWatchAddress[Index]))
         {
             Context->Dr6 &= ~0xF;
             return (LONG)Index;
