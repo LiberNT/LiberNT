@@ -21,8 +21,12 @@
 #ifndef __WINE_HTTP_H
 #define __WINE_HTTP_H
 
+#if !defined(_NTDDK_) && !defined(_NTIFS_)
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#else
+#include <ws2def.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -456,6 +460,7 @@ typedef struct _HTTP_BINDING_INFO
     HANDLE RequestQueueHandle;
 } HTTP_BINDING_INFO, *PHTTP_BINDING_INFO;
 
+#if !defined(_NTDDK_) && !defined(_NTIFS_)
 ULONG WINAPI HttpAddUrl(HANDLE,PCWSTR,PVOID);
 ULONG WINAPI HttpAddUrlToUrlGroup(HTTP_URL_GROUP_ID id, const WCHAR *url, HTTP_URL_CONTEXT context, ULONG reserved);
 ULONG WINAPI HttpCloseRequestQueue(HANDLE handle);
@@ -475,6 +480,7 @@ ULONG WINAPI HttpRemoveUrlFromUrlGroup(HTTP_URL_GROUP_ID id, const WCHAR *url, U
 ULONG WINAPI HttpSendHttpResponse(HANDLE queue, HTTP_REQUEST_ID id, ULONG flags, HTTP_RESPONSE *response, HTTP_CACHE_POLICY *cache_policy, ULONG *ret_size, void *reserved1, ULONG reserved2, OVERLAPPED *ovl, HTTP_LOG_DATA *log_data);
 ULONG WINAPI HttpSetServiceConfiguration(HANDLE,HTTP_SERVICE_CONFIG_ID,PVOID,ULONG,LPOVERLAPPED);
 ULONG WINAPI HttpSetUrlGroupProperty(HTTP_URL_GROUP_ID id, HTTP_SERVER_PROPERTY property, void *value, ULONG length);
+#endif
 
 #ifdef __cplusplus
 }
@@ -1508,7 +1514,9 @@ typedef struct HTTP_SERVICE_CONFIG_CACHE_SET {
 #define HTTP_VERSION_2_0 { 2, 0 }
 #define HTTP_VERSION_3_0 { 3, 0 }
 #define HTTP_VERSION_UNKNOWN { 0, 0 }
+#ifndef HTTPAPI_LINKAGE
 #define HTTPAPI_LINKAGE DECLSPEC_IMPORT
+#endif
 
 struct _HTTP_SERVICE_CONFIG_SSL_PARAM_EX
 {
@@ -1564,6 +1572,7 @@ typedef struct _HTTP_SERVICE_CONFIG_SSL_SNI_SET_EX *PHTTP_SERVICE_CONFIG_SSL_SNI
 extern "C" {
 #endif
 
+#if !defined(_NTDDK_) && !defined(_NTIFS_)
 ULONG WINAPI HttpReceiveRequestEntityBody(HANDLE RequestQueueHandle, HTTP_REQUEST_ID RequestId, ULONG Flags, PVOID EntityBuffer, ULONG EntityBufferLength, PULONG BytesReturned, LPOVERLAPPED Overlapped);
 
 /* TODO: LiberNT does not implement the functions below yet */
@@ -1590,6 +1599,7 @@ ULONG WINAPI HttpUpdateServiceConfiguration(HANDLE Handle, HTTP_SERVICE_CONFIG_I
 ULONG WINAPI HttpWaitForDemandStart(HANDLE RequestQueueHandle, LPOVERLAPPED Overlapped);
 ULONG WINAPI HttpWaitForDisconnect(HANDLE RequestQueueHandle, HTTP_CONNECTION_ID ConnectionId, LPOVERLAPPED Overlapped);
 ULONG WINAPI HttpWaitForDisconnectEx(HANDLE RequestQueueHandle, HTTP_CONNECTION_ID ConnectionId, ULONG Reserved, LPOVERLAPPED Overlapped);
+#endif
 
 #ifdef __cplusplus
 }
