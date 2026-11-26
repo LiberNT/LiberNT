@@ -539,6 +539,8 @@ BEGIN
     IDS_ACTIVITY "活动"
     IDS_TRACK_DOCS "显示最近打开的项目"
     IDS_TRACK_DOCS_DESC "在“开始”、文件资源管理器和跳转列表中"
+    IDS_TRACK_PROGS "显示最近使用的应用"
+    IDS_TRACK_PROGS_DESC "在“开始”中显示你打开过的应用"
     IDS_CLEAR_RECENT "清除最近使用的项目"
     IDS_CLEAR_RECENT_DESC "删除最近打开的文件列表"
     IDS_CLEAR "清除"

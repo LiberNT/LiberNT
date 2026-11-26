@@ -529,7 +529,7 @@ SM2LaunchItem(SM2ITEM *pItem)
         return;
 
     HINSTANCE hResult = ShellExecuteW(NULL, NULL, pItem->szPath, NULL, NULL, SW_SHOWNORMAL);
-    if ((INT_PTR)hResult > 32)
+    if ((INT_PTR)hResult > 32 && GetAdvancedBool(L"Start_TrackProgs", TRUE))
         SM2SetLastUsed(SM2_RECENT_LINK_KEY, pItem->szPath);
 }
 
@@ -1308,6 +1308,8 @@ public:
     VOID BuildRecent()
     {
         m_Recent.SetCount(0);
+        if (!GetAdvancedBool(L"Start_TrackProgs", TRUE))
+            return;
 
         CAtlArray<ULONGLONG> LastUsed;
         LastUsed.SetCount(m_Flat.GetCount());
@@ -2714,7 +2716,7 @@ public:
                     hr = SHOpenFolderAndSelectItems(pidl, 0, NULL, 0);
                 else
                     hr = ContextMenu->InvokeCommand((LPCMINVOKECOMMANDINFO)&Info);
-                if (bLaunch && SUCCEEDED(hr))
+                if (bLaunch && SUCCEEDED(hr) && GetAdvancedBool(L"Start_TrackProgs", TRUE))
                     SM2SetLastUsed(SM2_RECENT_LINK_KEY, ItemPath);
 
                 RebuildData();
