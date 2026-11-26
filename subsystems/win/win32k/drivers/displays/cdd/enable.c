@@ -107,6 +107,7 @@ RcddEnableDriver(
 
    if (cj >= sizeof(DRVENABLEDATA))
    {
+      RcddDxgkInitialize();
       pded->c = sizeof(gaRcddDriverFunctions) / sizeof(DRVFN);
       pded->pdrvfn = (DRVFN *)gaRcddDriverFunctions;
       pded->iDriverVersion = DDI_DRIVER_VERSION_NT5;
@@ -154,6 +155,12 @@ RcddEnablePDEV(
    }
 
    ppdev->hDriver = hDriver;
+   ppdev->DxgkAdapter = RcddDxgkGetAdapter(hDriver);
+   if (ppdev->DxgkAdapter == NULL && RosWddmHandOverEngineInterface() != NULL)
+   {
+      EngFreeMem(ppdev);
+      return NULL;
+   }
    KeInitializeMutex(&ppdev->PointerMutex, 0);
    KeInitializeMutex(&ppdev->CaptureMutex, 0);
 

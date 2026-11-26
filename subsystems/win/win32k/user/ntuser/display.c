@@ -61,6 +61,18 @@ RegReadDisplaySettings(HKEY hkey, PDEVMODEW pdm)
     READ(dmPosition.y, "Attach.RelativeY", DM_POSITION);
 }
 
+PEPROCESS
+NTAPI
+RosWddmHandOverDisplayProcess(VOID)
+{
+    PUSER_SESSION Session;
+
+    if (!WddmHandOverIsActive())
+        return NULL;
+    Session = UserGetCurrentSession();
+    return Session != NULL ? Session->CsrProcess : NULL;
+}
+
 PGRAPHICS_DEVICE
 NTAPI
 InitDisplayDriver(
@@ -93,6 +105,14 @@ InitDisplayDriver(
                            REG_MULTI_SZ,
                            awcBuffer,
                            &cbSize);
+    if (!NT_SUCCESS(Status) && WddmHandOverIsActive())
+    {
+        static const WCHAR CanonicalDisplayDriver[] = L"cdd\0";
+
+        RtlCopyMemory(awcBuffer, CanonicalDisplayDriver, sizeof(CanonicalDisplayDriver));
+        cbSize = sizeof(CanonicalDisplayDriver);
+        Status = STATUS_SUCCESS;
+    }
     if (!NT_SUCCESS(Status))
     {
         ERR("Didn't find 'InstalledDisplayDrivers', status = 0x%lx\n", Status);

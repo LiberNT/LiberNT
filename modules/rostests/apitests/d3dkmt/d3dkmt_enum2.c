@@ -14,6 +14,7 @@
  */
 
 #include "precomp.h"
+#include <winuser.h>
 
 /* ---- NULL-argument contract ---- */
 static void Test_EnumAdapters2_NullArg(void)
@@ -105,6 +106,91 @@ static void Test_EnumAdapters2_TwoPass(void)
             }
         }
     }
+
+    LocalFree(pAdapters);
+}
+
+/* ---- The adapter that scans out the desktop reports the desktop size as its current mode ---- */
+static void Test_EnumAdapters2_CurrentDisplayMode(void)
+{
+    D3DKMT_ENUMADAPTERS2 ea;
+    D3DKMT_ADAPTERINFO *pAdapters;
+    PFND3DKMT_QUERYADAPTERINFO pfnQuery;
+    NTSTATUS Status;
+    ULONG Count, i, Matches;
+    HDC hdc;
+    int Width, Height;
+
+    LOADFN(PFND3DKMT_ENUMADAPTERS2, p, "D3DKMTEnumAdapters2");
+    LOAD_D3DKMT(D3DKMTCloseAdapter);
+    pfnQuery = (PFND3DKMT_QUERYADAPTERINFO)LoadD3DKMTProc("D3DKMTQueryAdapterInfo");
+    if (!pfnQuery)
+    {
+        skip("D3DKMTQueryAdapterInfo not available\n");
+        return;
+    }
+
+    hdc = GetDC(NULL);
+    ok(hdc != NULL, "GetDC(NULL) failed\n");
+    if (!hdc)
+        return;
+    Width = GetDeviceCaps(hdc, DESKTOPHORZRES);
+    Height = GetDeviceCaps(hdc, DESKTOPVERTRES);
+    ReleaseDC(NULL, hdc);
+    ok(Width > 0 && Height > 0, "desktop size %dx%d\n", Width, Height);
+
+    memset(&ea, 0, sizeof(ea));
+    Status = p(&ea);
+    if (!NT_SUCCESS(Status) && Status != STATUS_BUFFER_TOO_SMALL)
+    {
+        skip("EnumAdapters2 count query failed 0x%08lX\n", (long)Status);
+        return;
+    }
+    Count = ea.NumAdapters;
+    ok(Count >= 1, "Expected at least one adapter, got %lu\n", Count);
+    if (Count == 0 || Count > 1024)
+        return;
+
+    pAdapters = (D3DKMT_ADAPTERINFO *)LocalAlloc(LMEM_ZEROINIT, Count * sizeof(D3DKMT_ADAPTERINFO));
+    if (!pAdapters) { skip("Out of memory for adapter array\n"); return; }
+
+    memset(&ea, 0, sizeof(ea));
+    ea.pAdapters = pAdapters;
+    ea.NumAdapters = Count;
+    Status = p(&ea);
+    ok_succeeded(Status, "EnumAdapters2 enumerate failed 0x%08lX\n", (long)Status);
+    if (!NT_SUCCESS(Status))
+        ea.NumAdapters = 0;
+    if (ea.NumAdapters > Count)
+        ea.NumAdapters = Count;
+
+    Matches = 0;
+    for (i = 0; i < ea.NumAdapters; i++)
+    {
+        D3DKMT_CURRENTDISPLAYMODE Mode;
+        D3DKMT_QUERYADAPTERINFO Query;
+        D3DKMT_CLOSEADAPTER ca;
+
+        memset(&Mode, 0, sizeof(Mode));
+        Mode.VidPnSourceId = 0;
+        memset(&Query, 0, sizeof(Query));
+        Query.hAdapter = pAdapters[i].hAdapter;
+        Query.Type = KMTQAITYPE_CURRENTDISPLAYMODE;
+        Query.pPrivateDriverData = &Mode;
+        Query.PrivateDriverDataSize = sizeof(Mode);
+        Status = pfnQuery(&Query);
+        trace("adapter[%lu] LUID %08lx:%08lx sources %lu: current mode 0x%08lX %ux%u\n", i,
+              (ULONG)pAdapters[i].AdapterLuid.HighPart, pAdapters[i].AdapterLuid.LowPart, pAdapters[i].NumOfSources,
+              (long)Status, Mode.DisplayMode.Width, Mode.DisplayMode.Height);
+        if (NT_SUCCESS(Status) && Mode.DisplayMode.Width == (UINT)Width && Mode.DisplayMode.Height == (UINT)Height)
+            Matches++;
+
+        memset(&ca, 0, sizeof(ca));
+        ca.hAdapter = pAdapters[i].hAdapter;
+        Status = pfnD3DKMTCloseAdapter(&ca);
+        ok_succeeded(Status, "CloseAdapter for EnumAdapters2 handle[%lu] failed 0x%08lX\n", i, (long)Status);
+    }
+    ok(Matches >= 1, "no adapter reports the %dx%d desktop as the current mode of source 0\n", Width, Height);
 
     LocalFree(pAdapters);
 }
@@ -243,5 +329,6 @@ START_TEST(enum2)
     Test_EnumAdapters2_NullArg();
     Test_EnumAdapters3_NullArg();
     Test_EnumAdapters2_TwoPass();
+    Test_EnumAdapters2_CurrentDisplayMode();
     Test_EnumAdapters3_Filters();
 }
