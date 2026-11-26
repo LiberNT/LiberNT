@@ -11,6 +11,20 @@
 #include <ndk/setypes.h>
 
 static
+ULONG
+HibernateEnabledValue(VOID)
+{
+    DWORD Value = 0xA5A5A5A5, Size = sizeof(Value);
+
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Power", L"HibernateEnabled",
+                     RRF_RT_REG_DWORD, NULL, &Value, &Size) != ERROR_SUCCESS)
+    {
+        return 0xA5A5A5A5;
+    }
+    return Value;
+}
+
+static
 BOOLEAN
 HiberFilePresent(VOID)
 {
@@ -48,11 +62,13 @@ START_TEST(PoHibernate)
     Status = NtPowerInformation(SystemReserveHiberFile, Enable, sizeof(BOOLEAN), NULL, 0);
     ok_eq_hex(Status, STATUS_SUCCESS);
     ok(!HiberFilePresent(), "the hibernation file is still reported\n");
+    ok_eq_ulong(HibernateEnabledValue(), 0UL);
 
     *Enable = TRUE;
     Status = NtPowerInformation(SystemReserveHiberFile, Enable, sizeof(BOOLEAN), NULL, 0);
     ok_eq_hex(Status, STATUS_SUCCESS);
     ok(HiberFilePresent(), "the hibernation file is not reported\n");
+    ok_eq_ulong(HibernateEnabledValue(), 1UL);
 
     if (!Present)
     {
