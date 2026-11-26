@@ -94,31 +94,31 @@ Detect = "%10%\3rdParty\ICU-LICENSE-x86"
 
 [LLVMpipe.amd64]
 Name = "LLVMpipe and Lavapipe software OpenGL and Vulkan (x64)"
-Url = "https://github.com/LiberNT/LiberNT/releases/download/mesa-llvmpipe-26.2.2-1/libernt-mesa-llvmpipe-26.2.2-1-amd64.msi"
-File = "libernt-mesa-llvmpipe-26.2.2-1-amd64.msi"
+Url = "https://github.com/LiberNT/LiberNT/releases/download/mesa-llvmpipe-26.2.2-2/libernt-mesa-llvmpipe-26.2.2-2-amd64.msi"
+File = "libernt-mesa-llvmpipe-26.2.2-2-amd64.msi"
 Type = "msi"
 Space = 150
-Sha256 = "33c698cf25a0ad59756d26b4248793828da5e23c77b0e7aecdd5f45234d0dd37"
+Sha256 = "5c9f9694aad9340320816a3257a63a5516003426645e3dbdd5dedd163af54b47"
 Detect = "%11%\mesa_llvmpipe.dll"
 Unattended = yes
 
 [LLVMpipe.arm64]
 Name = "LLVMpipe and Lavapipe software OpenGL and Vulkan (ARM64)"
-Url = "https://github.com/LiberNT/LiberNT/releases/download/mesa-llvmpipe-26.2.2-1/libernt-mesa-llvmpipe-26.2.2-1-arm64.msi"
-File = "libernt-mesa-llvmpipe-26.2.2-1-arm64.msi"
+Url = "https://github.com/LiberNT/LiberNT/releases/download/mesa-llvmpipe-26.2.2-2/libernt-mesa-llvmpipe-26.2.2-2-arm64.msi"
+File = "libernt-mesa-llvmpipe-26.2.2-2-arm64.msi"
 Type = "msi"
 Space = 200
-Sha256 = "a29ec7b37d9ed534251285951c56f2ccbfcfea11a61629840a6a364b931e5229"
+Sha256 = "34d3cbed994964d7fc302e3cd643ebab1481a6e658107de162c207d1a05bc743"
 Detect = "%11%\mesa_llvmpipe.dll"
 Unattended = yes
 
 [LLVMpipe.riscv64]
 Name = "LLVMpipe and Lavapipe software OpenGL and Vulkan (RISC-V64)"
-Url = "https://github.com/LiberNT/LiberNT/releases/download/mesa-llvmpipe-26.2.2-1/libernt-mesa-llvmpipe-26.2.2-1-riscv64.msi"
-File = "libernt-mesa-llvmpipe-26.2.2-1-riscv64.msi"
+Url = "https://github.com/LiberNT/LiberNT/releases/download/mesa-llvmpipe-26.2.2-2/libernt-mesa-llvmpipe-26.2.2-2-riscv64.msi"
+File = "libernt-mesa-llvmpipe-26.2.2-2-riscv64.msi"
 Type = "msi"
 Space = 150
-Sha256 = "c1ade2e09945a70ab7a5421c7cf829a668fd630f922e3cefa6688181f2ba9406"
+Sha256 = "62b28422d3008ba6937964ceeb191d83e554e368bc1c81f0f9652f7120f094ba"
 Detect = "%11%\mesa_llvmpipe.dll"
 Unattended = yes
 
