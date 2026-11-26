@@ -7016,7 +7016,12 @@ public:
     D3DKMT_HANDLE foreign_share = 0;
     NativeTexture2D *foreign_target = NULL;
     NativeTexture2D *crop_texture = NULL;
+    NativeTexture2D *window_target = NULL;
+    NativeTexture2D *window_staging = NULL;
     bool ForeignAdapter();
+    HRESULT CopyForeign(NativeTexture2D *target, NativeTexture2D *region);
+    HRESULT EnsureWindowTexture(NativeTexture2D **texture, UINT width, UINT height, bool staging);
+    HRESULT WriteWindow(NativeTexture2D *region);
     HRESULT PublishForeign(NativeTexture2D *);
     void DumpTrace();
     bool primary = false;
@@ -7091,6 +7096,8 @@ public:
         for (UINT i = 0; i < 3; ++i) if (transports[i]) transports[i]->Drop();
         if (foreign_target) foreign_target->Drop();
         if (crop_texture) crop_texture->Drop();
+        if (window_target) window_target->Drop();
+        if (window_staging) window_staging->Drop();
         if (resolved) resolved->Drop();
         for (UINT i = 0; i < 16; ++i) if (buffers[i]) buffers[i]->Drop();
         if (device_child) device->ChildRelease();
@@ -7880,6 +7887,80 @@ bool NativeSwapChain::ForeignAdapter()
     return foreign;
 }
 
+HRESULT NativeSwapChain::CopyForeign(NativeTexture2D *target, NativeTexture2D *region)
+{
+    bool convert = NativeFormatFamily(target->desc.Format) != NativeFormatFamily(region->desc.Format);
+    bool stretch = target->desc.Width != region->desc.Width || target->desc.Height != region->desc.Height;
+    if (!convert && !stretch)
+    {
+        device->context->CopyResource(target, region);
+        return S_OK;
+    }
+    if (!device->dxgi_functions.pfnBlt) return DXGI_ERROR_UNSUPPORTED;
+    DXGI_DDI_ARG_BLT blt = {};
+    blt.hDevice = reinterpret_cast<DXGI_DDI_HDEVICE>(device->driver_device.pDrvPrivate);
+    blt.hDstResource = reinterpret_cast<DXGI_DDI_HRESOURCE>(target->handle.pDrvPrivate);
+    blt.DstRight = target->desc.Width;
+    blt.DstBottom = target->desc.Height;
+    blt.hSrcResource = reinterpret_cast<DXGI_DDI_HRESOURCE>(region->handle.pDrvPrivate);
+    blt.Flags.Convert = convert;
+    blt.Flags.Stretch = stretch;
+    blt.Rotate = DXGI_DDI_MODE_ROTATION_IDENTITY;
+    return device->dxgi_functions.pfnBlt(&blt);
+}
+
+HRESULT NativeSwapChain::EnsureWindowTexture(NativeTexture2D **texture, UINT width, UINT height, bool staging)
+{
+    if (*texture && (*texture)->desc.Width == width && (*texture)->desc.Height == height) return S_OK;
+    if (*texture) (*texture)->Drop();
+    *texture = NULL;
+    D3D11_TEXTURE2D_DESC texture_desc = {};
+    texture_desc.Width = width;
+    texture_desc.Height = height;
+    texture_desc.MipLevels = texture_desc.ArraySize = 1;
+    texture_desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    texture_desc.SampleDesc.Count = 1;
+    texture_desc.Usage = staging ? D3D11_USAGE_STAGING : D3D11_USAGE_DEFAULT;
+    texture_desc.BindFlags = staging ? 0 : D3D11_BIND_RENDER_TARGET;
+    texture_desc.CPUAccessFlags = staging ? D3D11_CPU_ACCESS_READ : 0;
+    ID3D11Texture2D *created = NULL;
+    HRESULT hr = device->CreateTexture(&texture_desc, NULL, &created, !staging);
+    if (FAILED(hr)) return hr;
+    *texture = static_cast<NativeTexture2D *>(created);
+    (*texture)->Retain();
+    created->Release();
+    return S_OK;
+}
+
+HRESULT NativeSwapChain::WriteWindow(NativeTexture2D *region)
+{
+    RECT client;
+    if (!GetClientRect(window, &client) || client.right <= 0 || client.bottom <= 0) return S_OK;
+    UINT width = static_cast<UINT>(client.right), height = static_cast<UINT>(client.bottom);
+    HRESULT hr = EnsureWindowTexture(&window_target, width, height, false);
+    if (SUCCEEDED(hr)) hr = EnsureWindowTexture(&window_staging, width, height, true);
+    if (SUCCEEDED(hr)) hr = CopyForeign(window_target, region);
+    if (SUCCEEDED(hr) && FAILED(device->operation_error)) hr = device->operation_error;
+    if (FAILED(hr)) return hr;
+    device->context->CopyResource(window_staging, window_target);
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    hr = device->context->Map(window_staging, 0, D3D11_MAP_READ, 0, &mapped);
+    if (FAILED(hr)) return hr;
+    BITMAPINFO info = {};
+    info.bmiHeader.biSize = sizeof(info.bmiHeader);
+    info.bmiHeader.biWidth = static_cast<LONG>(mapped.RowPitch / sizeof(UINT32));
+    info.bmiHeader.biHeight = -static_cast<LONG>(height);
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+    HDC dc = GetDC(window);
+    if (!dc || !SetDIBitsToDevice(dc, 0, 0, width, height, 0, 0, 0, height, mapped.pData, &info, DIB_RGB_COLORS))
+        hr = E_FAIL;
+    if (dc) ReleaseDC(window, dc);
+    device->context->Unmap(window_staging, 0);
+    return hr;
+}
+
 HRESULT NativeSwapChain::PublishForeign(NativeTexture2D *texture)
 {
     typedef HRESULT (WINAPI *GetSurface)(HWND, LUID, HMONITOR, DWORD, UINT *, HANDLE *, ULONGLONG *);
@@ -7905,9 +7986,11 @@ HRESULT NativeSwapChain::PublishForeign(NativeTexture2D *texture)
     /* FIXME: DWM composes only visible windows of the presenting process; it drops frames for the others */
     if (hr == S_FALSE || hr == E_ACCESSDENIED || hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND)
             || hr == HRESULT_FROM_WIN32(ERROR_NOT_READY)) return S_OK;
-    if (FAILED(hr)) return hr;
+    bool window_write = hr == HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+    if (FAILED(hr) && !window_write) return hr;
     D3DKMT_HANDLE share = static_cast<D3DKMT_HANDLE>(reinterpret_cast<ULONG_PTR>(shared));
-    if (!foreign_target || share != foreign_share)
+    if (window_write) hr = S_OK;
+    else if (!foreign_target || share != foreign_share)
     {
         if (foreign_target) foreign_target->Drop();
         foreign_target = NULL;
@@ -7953,30 +8036,14 @@ HRESULT NativeSwapChain::PublishForeign(NativeTexture2D *texture)
             region = crop_texture;
         }
     }
+    /* The render adapter cannot make the compositor's window surface: draw the frame into the window instead */
+    if (window_write) return SUCCEEDED(hr) ? WriteWindow(region) : hr;
     RECT rect = {};
     if (SUCCEEDED(hr))
     {
         rect.right = foreign_target->desc.Width;
         rect.bottom = foreign_target->desc.Height;
-        bool convert = NativeFormatFamily(foreign_target->desc.Format) != NativeFormatFamily(region->desc.Format);
-        bool stretch = foreign_target->desc.Width != region->desc.Width || foreign_target->desc.Height != region->desc.Height;
-        if (!convert && !stretch)
-            device->context->CopyResource(foreign_target, region);
-        else if (device->dxgi_functions.pfnBlt)
-        {
-            DXGI_DDI_ARG_BLT blt = {};
-            blt.hDevice = reinterpret_cast<DXGI_DDI_HDEVICE>(device->driver_device.pDrvPrivate);
-            blt.hDstResource = reinterpret_cast<DXGI_DDI_HRESOURCE>(foreign_target->handle.pDrvPrivate);
-            blt.DstRight = foreign_target->desc.Width;
-            blt.DstBottom = foreign_target->desc.Height;
-            blt.hSrcResource = reinterpret_cast<DXGI_DDI_HRESOURCE>(region->handle.pDrvPrivate);
-            blt.Flags.Convert = convert;
-            blt.Flags.Stretch = stretch;
-            blt.Rotate = DXGI_DDI_MODE_ROTATION_IDENTITY;
-            hr = device->dxgi_functions.pfnBlt(&blt);
-        }
-        else
-            hr = DXGI_ERROR_UNSUPPORTED;
+        hr = CopyForeign(foreign_target, region);
         if (SUCCEEDED(hr) && FAILED(device->operation_error)) hr = device->operation_error;
         if (SUCCEEDED(hr)) device->context->Flush();
     }
