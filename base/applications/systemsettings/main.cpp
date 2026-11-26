@@ -54,6 +54,7 @@ struct RowControl
     int Action;
     int Height;
     HICON Image;
+    LRESULT Committed;
 };
 
 struct SearchEntry
@@ -491,8 +492,18 @@ protected:
                     GoForward();
                 if (index >= 0 && HIWORD(wParam) == BN_CLICKED)
                     PostMessageW(m_hwnd, WM_SETTINGS_CONTROL, index, 0);
-                if (index >= 0 && HIWORD(wParam) == CBN_SELCHANGE)
-                    PostMessageW(m_hwnd, WM_SETTINGS_CONTROL, index, SendMessageW((HWND)lParam, CB_GETCURSEL, 0, 0));
+                if (index >= 0 && (HIWORD(wParam) == CBN_SELENDOK ||
+                                   (HIWORD(wParam) == CBN_SELCHANGE && !SendMessageW((HWND)lParam, CB_GETDROPPEDSTATE, 0, 0))))
+                {
+                    LRESULT selection = SendMessageW((HWND)lParam, CB_GETCURSEL, 0, 0);
+                    if (selection != CB_ERR && selection != m_Controls[index].Committed)
+                    {
+                        m_Controls[index].Committed = selection;
+                        PostMessageW(m_hwnd, WM_SETTINGS_CONTROL, index, selection);
+                    }
+                }
+                if (index >= 0 && HIWORD(wParam) == CBN_SELENDCANCEL)
+                    SendMessageW((HWND)lParam, CB_SETCURSEL, m_Controls[index].Committed, 0);
                 break;
             }
             case WM_NOTIFY:
@@ -1725,7 +1736,7 @@ private:
     {
         HWND hwnd = CreateWindowExW(0, className, text, WS_CHILD | WS_CLIPSIBLINGS | style, 0, 0, 0, 0, m_hwnd,
                                     (HMENU)(INT_PTR)(IDC_ROW_FIRST + m_Controls.size()), Instance, NULL);
-        RowControl control = { hwnd, place, action, 0, NULL };
+        RowControl control = { hwnd, place, action, 0, NULL, CB_ERR };
 
         if (!hwnd)
             return NULL;
@@ -1783,6 +1794,7 @@ private:
                         for (const std::wstring &option : row.Options)
                             SendMessageW(hwnd, CB_ADDSTRING, 0, (LPARAM)option.c_str());
                         SendMessageW(hwnd, CB_SETCURSEL, row.Selected, 0);
+                        m_Controls.back().Committed = SendMessageW(hwnd, CB_GETCURSEL, 0, 0);
                         SetWindowPos(hwnd, NULL, 0, 0, rc.right - rc.left, m_Theme.Scale(240), SWP_NOZORDER | SWP_NOMOVE);
                         GetWindowRect(hwnd, &field);
                         m_Controls.back().Height = field.bottom - field.top;
