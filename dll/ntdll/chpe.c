@@ -1289,15 +1289,6 @@ ChpepEnsureCurrentCpuArea(VOID)
     return STATUS_SUCCESS;
 }
 
-ULONG_PTR
-NTAPI
-ChpeCallArm64Routine(PVOID EntryPoint,
-                     ULONG_PTR Arg0,
-                     ULONG_PTR Arg1,
-                     ULONG_PTR Arg2,
-                     ULONG_PTR Arg3,
-                     ULONG_PTR Arg4);
-
 #if defined(_MSC_VER) && !defined(__clang__)
 ULONG_PTR
 ChpepInvokeX64Routine(ULONG_PTR Arg0,
@@ -1389,7 +1380,7 @@ ChpepCallFlsCallback(PFLS_CALLBACK_FUNCTION Callback,
 
     if (RtlIsEcCode((ULONG_PTR)Callback))
     {
-        Callback(Data);
+        ChpeCallArm64Routine((PVOID)Callback, (ULONG_PTR)Data, 0, 0, 0, 0);
         return;
     }
 
@@ -1414,7 +1405,12 @@ ChpepCallRunOnceCallback(PRTL_RUN_ONCE_INIT_FN InitFn,
     NTSTATUS Status;
 
     if (RtlIsEcCode((ULONG_PTR)InitFn))
-        return InitFn(RunOnce, Parameter, Context) ? TRUE : FALSE;
+        return (ULONG)ChpeCallArm64Routine((PVOID)InitFn,
+                                           (ULONG_PTR)RunOnce,
+                                           (ULONG_PTR)Parameter,
+                                           (ULONG_PTR)Context,
+                                           0,
+                                           0) != 0;
 
     Status = ChpeInitializeThread();
     if (!NT_SUCCESS(Status))
@@ -1496,8 +1492,12 @@ ChpeInvokeUserApcRoutine(PVOID NormalContext, PVOID SystemArgument1,
     {
         /* LdrInitializeThunk consumes the saved CONTEXT in x3; ordinary
          * three-argument APC routines simply ignore the fourth argument. */
-        ((VOID (NTAPI *)(PVOID, PVOID, PVOID, PCONTEXT))NormalRoutine)(
-            NormalContext, SystemArgument1, SystemArgument2, SavedContext);
+        ChpeCallArm64Routine((PVOID)NormalRoutine,
+                             (ULONG_PTR)NormalContext,
+                             (ULONG_PTR)SystemArgument1,
+                             (ULONG_PTR)SystemArgument2,
+                             (ULONG_PTR)SavedContext,
+                             0);
         return;
     }
 
