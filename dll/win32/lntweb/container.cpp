@@ -12,6 +12,9 @@
 #include <wincodec.h>
 #include <lunasvg.h>
 #include <litehtml/url.h>
+#include <woff2/decode.h>
+#include <woff2/output.h>
+#include <zlib.h>
 #include <cmath>
 #include <cstring>
 
@@ -85,8 +88,9 @@ RoundedRect(plutovg_canvas_t *Canvas, const litehtml::position &Box, const liteh
     plutovg_canvas_close_path(Canvas);
 }
 
-Container::Container(const LNTWEB_HOST &Host, const std::string &Url, int ViewportWidth, int ViewportHeight, int Dpi)
-    : m_Host(Host), m_DocumentUrl(Url), m_BaseUrl(Url), m_Cursor(LoadCursorW(nullptr, IDC_ARROW)),
+Container::Container(const std::shared_ptr<Resources> &Cache, const std::string &Url, int ViewportWidth,
+                     int ViewportHeight, int Dpi)
+    : m_Cache(Cache), m_DocumentUrl(Url), m_BaseUrl(Url), m_Cursor(LoadCursorW(nullptr, IDC_ARROW)),
       m_ViewportWidth(ViewportWidth), m_ViewportHeight(ViewportHeight), m_Dpi(Dpi)
 {
     NONCLIENTMETRICSW Metrics = { sizeof(Metrics) };
@@ -105,6 +109,11 @@ Container::~Container()
         if (Entry.second.Surface)
             plutovg_surface_destroy(Entry.second.Surface);
     }
+    for (auto &Entry : m_FallbackFonts)
+    {
+        if (Entry.second)
+            DeleteObject(Entry.second);
+    }
     if (m_MeasureDc)
         DeleteDC(m_MeasureDc);
 }
@@ -117,20 +126,263 @@ Container::Resolve(const std::string &Reference, const std::string &Base) const
     return litehtml::resolve(BaseUrl, Relative).str();
 }
 
+Resources::~Resources()
+{
+    for (auto &Entry : m_Images)
+    {
+        if (Entry.second.Surface)
+            plutovg_surface_destroy(Entry.second.Surface);
+    }
+    for (HANDLE Font : m_FontHandles)
+        RemoveFontMemResourceEx(Font);
+}
+
+static uint16_t
+Be16(const unsigned char *Data)
+{
+    return (uint16_t)(Data[0] << 8 | Data[1]);
+}
+
+static uint32_t
+Be32(const unsigned char *Data)
+{
+    return (uint32_t)Data[0] << 24 | (uint32_t)Data[1] << 16 | (uint32_t)Data[2] << 8 | Data[3];
+}
+
+static bool
+FontFamilyName(const std::string &Data, std::wstring &Family)
+{
+    const unsigned char *Font = (const unsigned char *)Data.data();
+    size_t Size = Data.size();
+    uint32_t Tag;
+    uint16_t Tables;
+
+    if (Size < 12)
+        return false;
+    Tag = Be32(Font);
+    if (Tag != 0x00010000 && Tag != 0x4F54544F && Tag != 0x74727565)
+        return false;
+    Tables = Be16(Font + 4);
+    if (12 + (size_t)Tables * 16 > Size)
+        return false;
+    for (uint16_t Table = 0; Table < Tables; Table++)
+    {
+        const unsigned char *Entry = Font + 12 + (size_t)Table * 16;
+        uint32_t Offset = Be32(Entry + 8), Length = Be32(Entry + 12);
+        const unsigned char *Name = Font + Offset;
+        uint16_t Count, Strings;
+        bool Found = false;
+
+        if (Be32(Entry) != 0x6E616D65)
+            continue;
+        if (Offset > Size || Length > Size - Offset || Length < 6)
+            return false;
+        Count = Be16(Name + 2);
+        Strings = Be16(Name + 4);
+        if (6 + (size_t)Count * 12 > Length || Strings > Length)
+            return false;
+        for (uint16_t Record = 0; Record < Count; Record++)
+        {
+            const unsigned char *Item = Name + 6 + (size_t)Record * 12;
+            uint16_t Platform = Be16(Item), Encoding = Be16(Item + 2), Language = Be16(Item + 4);
+            uint16_t Id = Be16(Item + 6), Bytes = Be16(Item + 8), At = Be16(Item + 10);
+
+            if (Platform != 3 || (Encoding != 0 && Encoding != 1) || Id != 1)
+                continue;
+            if ((size_t)Strings + At + Bytes > Length)
+                return false;
+            if (Found && Language != 0x0409)
+                continue;
+            Family.clear();
+            for (uint16_t Offset16 = 0; Offset16 + 1 < Bytes; Offset16 += 2)
+                Family += (wchar_t)Be16(Name + Strings + At + Offset16);
+            Found = !Family.empty();
+            if (Found && Language == 0x0409)
+                break;
+        }
+        return Found && Family.size() < LF_FACESIZE;
+    }
+    return false;
+}
+
+static bool
+DecodeWoff(const std::string &Data, std::string &Font)
+{
+    const unsigned char *Woff = (const unsigned char *)Data.data();
+    size_t Size = Data.size(), Offset;
+    uint16_t Tables, Shift = 0;
+
+    if (Size < 44)
+        return false;
+    Tables = Be16(Woff + 12);
+    if (!Tables || 44 + (size_t)Tables * 20 > Size || Be32(Woff + 16) > 64 * 1024 * 1024)
+        return false;
+    while ((2u << Shift) <= Tables)
+        Shift++;
+    Font.assign(12 + (size_t)Tables * 16, '\0');
+    unsigned char *Header = (unsigned char *)&Font[0];
+    auto Put16 = [](unsigned char *At, uint16_t Value) { At[0] = (unsigned char)(Value >> 8); At[1] = (unsigned char)Value; };
+    auto Put32 = [&](unsigned char *At, uint32_t Value) { Put16(At, (uint16_t)(Value >> 16)); Put16(At + 2, (uint16_t)Value); };
+    memcpy(Header, Woff + 4, 4);
+    Put16(Header + 4, Tables);
+    Put16(Header + 6, (uint16_t)(16u << Shift));
+    Put16(Header + 8, Shift);
+    Put16(Header + 10, (uint16_t)(Tables * 16 - (16u << Shift)));
+    Offset = Font.size();
+    for (uint16_t Table = 0; Table < Tables; Table++)
+    {
+        const unsigned char *Entry = Woff + 44 + (size_t)Table * 20;
+        uint32_t At = Be32(Entry + 4), Compressed = Be32(Entry + 8), Original = Be32(Entry + 12);
+        std::string Content;
+
+        if (At > Size || Compressed > Size - At || Compressed > Original || Original > 64 * 1024 * 1024)
+            return false;
+        if (Compressed < Original)
+        {
+            uLongf Length = Original;
+            Content.assign(Original, '\0');
+            if (uncompress((Bytef *)&Content[0], &Length, Woff + At, Compressed) != Z_OK || Length != Original)
+                return false;
+        }
+        else
+        {
+            Content.assign((const char *)Woff + At, Original);
+        }
+        Header = (unsigned char *)&Font[0] + 12 + (size_t)Table * 16;
+        memcpy(Header, Entry, 4);
+        Put32(Header + 4, Be32(Entry + 16));
+        Put32(Header + 8, (uint32_t)Offset);
+        Put32(Header + 12, Original);
+        Font += Content;
+        Font.append((4 - Font.size() % 4) % 4, '\0');
+        Offset = Font.size();
+    }
+    return true;
+}
+
+static bool
+DecodeWoff2(const std::string &Data, std::string &Font)
+{
+    const uint8_t *Woff = (const uint8_t *)Data.data();
+    size_t Size = woff2::ComputeWOFF2FinalSize(Woff, Data.size());
+
+    if (!Size || Size > 64 * 1024 * 1024)
+        return false;
+    Font.reserve(Size);
+    woff2::WOFF2StringOut Out(&Font);
+    return woff2::ConvertWOFF2ToTTF(Woff, Data.size(), &Out);
+}
+
 bool
-Container::Fetch(const std::string &Url, std::string &Data)
+Resources::LoadFont(const std::string &Url, std::wstring &Face)
+{
+    std::string Data;
+    DWORD Count = 0;
+    HANDLE Font = nullptr;
+    bool Known;
+
+    AcquireSRWLockShared(&m_Lock);
+    auto Cached = m_Fonts.find(Url);
+    Known = Cached != m_Fonts.end();
+    if (Known)
+        Face = Cached->second;
+    ReleaseSRWLockShared(&m_Lock);
+    if (Known)
+        return !Face.empty();
+
+    Face.clear();
+    if (Fetch(Url, Data) && Data.size() >= 4)
+    {
+        std::string Font;
+        if (Data.compare(0, 4, "wOFF") == 0 && DecodeWoff(Data, Font))
+            Data.swap(Font);
+        else if (Data.compare(0, 4, "wOF2") == 0 && DecodeWoff2(Data, Font))
+            Data.swap(Font);
+    }
+    if (Data.size() <= MAXDWORD && FontFamilyName(Data, Face))
+    {
+        Font = AddFontMemResourceEx((PVOID)Data.data(), (DWORD)Data.size(), nullptr, &Count);
+        if (!Font || !Count)
+            Face.clear();
+    }
+    AcquireSRWLockExclusive(&m_Lock);
+    m_Fonts[Url] = Face;
+    if (Font)
+        m_FontHandles.push_back(Font);
+    ReleaseSRWLockExclusive(&m_Lock);
+    return !Face.empty();
+}
+
+bool
+Resources::Fetch(const std::string &Url, std::string &Data)
 {
     PSTR Buffer = nullptr;
     SIZE_T Length = 0;
+    bool Fetched;
 
     if (!m_Host.Fetch || (Url.compare(0, 7, "http://") != 0 && Url.compare(0, 8, "https://") != 0))
         return false;
-    if (!m_Host.Fetch(m_Host.Context, Url.c_str(), &Buffer, &Length) || !Buffer)
-        return false;
-    Data.assign(Buffer, Length);
-    if (m_Host.Free)
-        m_Host.Free(m_Host.Context, Buffer);
-    return true;
+    AcquireSRWLockShared(&m_Lock);
+    auto Cached = m_Data.find(Url);
+    bool Hit = Cached != m_Data.end();
+    bool Known = Hit || m_Failed.count(Url) != 0;
+    if (Hit)
+        Data = Cached->second;
+    ReleaseSRWLockShared(&m_Lock);
+    if (Known)
+        return Hit;
+
+    Fetched = m_Host.Fetch(m_Host.Context, Url.c_str(), &Buffer, &Length) && Buffer;
+    if (Fetched)
+    {
+        Data.assign(Buffer, Length);
+        if (m_Host.Free)
+            m_Host.Free(m_Host.Context, Buffer);
+    }
+    AcquireSRWLockExclusive(&m_Lock);
+    if (Fetched)
+        m_Data[Url] = Data;
+    else
+        m_Failed[Url] = true;
+    ReleaseSRWLockExclusive(&m_Lock);
+    return Fetched;
+}
+
+bool
+Resources::FindImage(const std::string &Url, Image &Found)
+{
+    bool Known;
+
+    AcquireSRWLockShared(&m_Lock);
+    auto Entry = m_Images.find(Url);
+    Known = Entry != m_Images.end();
+    if (Known)
+    {
+        Found = Entry->second;
+        if (Found.Surface)
+            plutovg_surface_reference(Found.Surface);
+    }
+    ReleaseSRWLockShared(&m_Lock);
+    return Known;
+}
+
+void
+Resources::AddImage(const std::string &Url, const Image &Decoded)
+{
+    AcquireSRWLockExclusive(&m_Lock);
+    if (!m_Images.count(Url))
+    {
+        m_Images[Url] = Decoded;
+        if (Decoded.Surface)
+            plutovg_surface_reference(Decoded.Surface);
+    }
+    ReleaseSRWLockExclusive(&m_Lock);
+}
+
+bool
+Container::Fetch(const std::string &Url, std::string &Data)
+{
+    return m_Cache->Fetch(Url, Data);
 }
 
 static int CALLBACK
@@ -140,8 +392,163 @@ FaceExists(const LOGFONTW *, const TEXTMETRICW *, DWORD, LPARAM Found)
     return 0;
 }
 
+static std::string
+LowerCase(std::string Text)
+{
+    for (auto &Character : Text)
+        Character = (char)tolower((unsigned char)Character);
+    return Text;
+}
+
+static std::string
+TrimValue(std::string Text)
+{
+    while (!Text.empty() && (isspace((unsigned char)Text.front()) || Text.front() == '"' || Text.front() == '\''))
+        Text.erase(0, 1);
+    while (!Text.empty() && (isspace((unsigned char)Text.back()) || Text.back() == '"' || Text.back() == '\''))
+        Text.pop_back();
+    return Text;
+}
+
+static std::vector<std::string>
+SplitOutside(const std::string &Text, char Separator)
+{
+    std::vector<std::string> Parts;
+    std::string Current;
+    int Depth = 0;
+    char Quote = 0;
+
+    for (char Character : Text)
+    {
+        if (Quote)
+        {
+            if (Character == Quote)
+                Quote = 0;
+        }
+        else if (Character == '"' || Character == '\'')
+            Quote = Character;
+        else if (Character == '(')
+            Depth++;
+        else if (Character == ')' && Depth > 0)
+            Depth--;
+        else if (Character == Separator && Depth == 0)
+        {
+            Parts.push_back(Current);
+            Current.clear();
+            continue;
+        }
+        Current += Character;
+    }
+    Parts.push_back(Current);
+    return Parts;
+}
+
+static std::string
+FunctionArgument(const std::string &Text, const char *Name)
+{
+    std::string Lower = LowerCase(Text);
+    size_t Start = Lower.find(std::string(Name) + "(");
+    size_t End;
+
+    if (Start == std::string::npos)
+        return std::string();
+    Start += strlen(Name) + 1;
+    End = Text.find(')', Start);
+    return End == std::string::npos ? std::string() : TrimValue(Text.substr(Start, End - Start));
+}
+
+static int
+CssWeight(const std::string &Value)
+{
+    std::string Lower = LowerCase(TrimValue(Value));
+
+    if (Lower == "bold" || Lower == "bolder")
+        return FW_BOLD;
+    if (Lower.empty() || Lower == "normal" || Lower == "lighter")
+        return FW_NORMAL;
+    int Weight = atoi(Lower.c_str());
+    return Weight >= 1 && Weight <= 1000 ? Weight : FW_NORMAL;
+}
+
+void
+Container::LoadFontFaces(const std::string &Css, const std::string &BaseUrl)
+{
+    std::string Lower = LowerCase(Css);
+    size_t At = 0;
+
+    while ((At = Lower.find("@font-face", At)) != std::string::npos)
+    {
+        size_t Open = Css.find('{', At);
+        size_t Close = Open == std::string::npos ? std::string::npos : Css.find('}', Open);
+        std::string Family, Source, Weight, Style;
+
+        if (Close == std::string::npos)
+            break;
+        for (const auto &Declaration : SplitOutside(Css.substr(Open + 1, Close - Open - 1), ';'))
+        {
+            size_t Colon = Declaration.find(':');
+            if (Colon == std::string::npos)
+                continue;
+            std::string Name = LowerCase(TrimValue(Declaration.substr(0, Colon))), Value = Declaration.substr(Colon + 1);
+            if (Name == "font-family")
+                Family = LowerCase(TrimValue(Value));
+            else if (Name == "src")
+                Source = Value;
+            else if (Name == "font-weight")
+                Weight = Value;
+            else if (Name == "font-style")
+                Style = LowerCase(TrimValue(Value));
+        }
+        At = Close + 1;
+        if (Family.empty())
+            continue;
+        for (const auto &Entry : SplitOutside(Source, ','))
+        {
+            std::string Url = FunctionArgument(Entry, "url"), Format = LowerCase(FunctionArgument(Entry, "format"));
+            std::string Path = LowerCase(Url.substr(0, Url.find_first_of("?#")));
+            size_t Dot = Path.rfind('.');
+            std::string Extension = Dot == std::string::npos ? std::string() : Path.substr(Dot);
+            bool Sfnt = Format.empty() ? (Extension == ".ttf" || Extension == ".otf" || Extension == ".woff" ||
+                                          Extension == ".woff2")
+                                       : (Format == "truetype" || Format == "opentype" || Format == "woff" ||
+                                          Format == "woff2");
+            std::wstring Face;
+
+            if (Url.empty() || !Sfnt || Url.compare(0, 5, "data:") == 0)
+                continue;
+            if (m_Cache->LoadFont(Resolve(Url, BaseUrl), Face))
+            {
+                m_FontFaces[Family].push_back({ CssWeight(Weight), Style == "italic" || Style == "oblique", Face });
+                break;
+            }
+        }
+    }
+}
+
+void
+Container::LoadInlineFontFaces(const std::string &Html)
+{
+    std::string Lower = LowerCase(Html);
+    size_t At = 0;
+
+    while ((At = Lower.find("<style", At)) != std::string::npos)
+    {
+        size_t Start = Lower.find('>', At), End;
+        if (Start == std::string::npos)
+            break;
+        End = Lower.find("</style", Start);
+        if (End == std::string::npos)
+            break;
+        if (Lower.find("@font-face", Start) < End)
+        {
+            LoadFontFaces(Html.substr(Start + 1, End - Start - 1), m_BaseUrl);
+        }
+        At = End + 1;
+    }
+}
+
 std::wstring
-Container::PickFace(const std::string &Families)
+Container::PickFace(const std::string &Families, int &Weight, bool &Italic)
 {
     auto Cached = m_Faces.find(Families);
     if (Cached != m_Faces.end())
@@ -162,9 +569,26 @@ Container::PickFace(const std::string &Families)
         if (Name.empty())
             continue;
 
-        std::string Lower = Name;
-        for (auto &Character : Lower)
-            Character = (char)tolower((unsigned char)Character);
+        std::string Lower = LowerCase(Name);
+        auto Web = m_FontFaces.find(Lower);
+        if (Web != m_FontFaces.end() && !Web->second.empty())
+        {
+            const FontFace *Best = &Web->second.front();
+            for (const auto &Candidate : Web->second)
+            {
+                if ((Candidate.Italic == Italic) != (Best->Italic == Italic))
+                {
+                    if (Candidate.Italic == Italic)
+                        Best = &Candidate;
+                    continue;
+                }
+                if (abs(Candidate.Weight - Weight) < abs(Best->Weight - Weight))
+                    Best = &Candidate;
+            }
+            Weight = Best->Weight;
+            Italic = Best->Italic;
+            return Best->Face;
+        }
         if (Lower == "serif")
         {
             Result = L"Times New Roman";
@@ -206,11 +630,13 @@ Container::create_font(const litehtml::font_description &Description, const lite
     LOGFONTW Font = {};
     TEXTMETRICW Text = {};
     SIZE Zero = {}, X = {};
-    std::wstring Face = PickFace(Description.family);
+    int Weight = Description.weight;
+    bool Italic = Description.style != litehtml::font_style_normal;
+    std::wstring Face = PickFace(Description.family, Weight, Italic);
 
     Font.lfHeight = -(LONG)std::lround(Description.size);
-    Font.lfWeight = Description.weight;
-    Font.lfItalic = Description.style != litehtml::font_style_normal;
+    Font.lfWeight = Weight;
+    Font.lfItalic = Italic;
     Font.lfUnderline = (Description.decoration_line & litehtml::text_decoration_line_underline) != 0;
     Font.lfStrikeOut = (Description.decoration_line & litehtml::text_decoration_line_line_through) != 0;
     Font.lfCharSet = DEFAULT_CHARSET;
@@ -246,20 +672,133 @@ Container::create_font(const litehtml::font_description &Description, const lite
 void
 Container::delete_font(litehtml::uint_ptr Font)
 {
+    HFONT Primary = (HFONT)Font;
+
+    for (auto Entry = m_FallbackFonts.begin(); Entry != m_FallbackFonts.end();)
+    {
+        if (Entry->first.first != Primary)
+        {
+            ++Entry;
+            continue;
+        }
+        if (Entry->second)
+            DeleteObject(Entry->second);
+        Entry = m_FallbackFonts.erase(Entry);
+    }
+    for (auto Entry = m_FallbackChoice.begin(); Entry != m_FallbackChoice.end();)
+        Entry = Entry->first.first == Primary ? m_FallbackChoice.erase(Entry) : std::next(Entry);
     m_Descents.erase(Font);
-    DeleteObject((HFONT)Font);
+    DeleteObject(Primary);
+}
+
+static const wchar_t *const FallbackFaces[] = {
+    L"Segoe UI Symbol", L"Segoe UI Emoji", L"Segoe UI", L"Verdana", L"FreeSans", L"Lucida Console",
+    L"Courier New", L"Noto Sans JP", L"Noto Sans SC",
+};
+
+static bool
+HasGlyph(HDC Dc, wchar_t Character)
+{
+    WORD Index = 0xFFFF;
+
+    return GetGlyphIndicesW(Dc, &Character, 1, &Index, GGI_MARK_NONEXISTING_GLYPHS) == 1 && Index != 0xFFFF;
+}
+
+HFONT
+Container::FallbackFont(HDC Dc, HFONT Font, wchar_t Character)
+{
+    auto Chosen = m_FallbackChoice.find({ Font, Character });
+    HFONT Result = nullptr;
+
+    if (Chosen != m_FallbackChoice.end())
+        return Chosen->second;
+    for (size_t Index = 0; Index < ARRAYSIZE(FallbackFaces) && !Result; Index++)
+    {
+        auto Cached = m_FallbackFonts.find({ Font, Index });
+        HFONT Candidate;
+
+        if (Cached != m_FallbackFonts.end())
+        {
+            Candidate = Cached->second;
+        }
+        else
+        {
+            LOGFONTW Log = {};
+            WCHAR Face[LF_FACESIZE] = L"";
+            Candidate = nullptr;
+            if (GetObjectW(Font, sizeof(Log), &Log) == sizeof(Log))
+            {
+                wcsncpy(Log.lfFaceName, FallbackFaces[Index], LF_FACESIZE - 1);
+                Candidate = CreateFontIndirectW(&Log);
+            }
+            if (Candidate)
+            {
+                HGDIOBJ Old = SelectObject(Dc, Candidate);
+                GetTextFaceW(Dc, LF_FACESIZE, Face);
+                SelectObject(Dc, Old);
+                if (_wcsicmp(Face, FallbackFaces[Index]) != 0)
+                {
+                    DeleteObject(Candidate);
+                    Candidate = nullptr;
+                }
+            }
+            m_FallbackFonts[{ Font, Index }] = Candidate;
+        }
+        if (Candidate)
+        {
+            HGDIOBJ Old = SelectObject(Dc, Candidate);
+            if (HasGlyph(Dc, Character))
+                Result = Candidate;
+            SelectObject(Dc, Old);
+        }
+    }
+    m_FallbackChoice[{ Font, Character }] = Result;
+    return Result;
+}
+
+void
+Container::SplitRuns(HDC Dc, HFONT Font, const std::wstring &Text, std::vector<TextRun> &Runs)
+{
+    std::vector<WORD> Indices(Text.size(), 0xFFFF);
+    HGDIOBJ Old = SelectObject(Dc, Font);
+    bool Mapped = !Text.empty() && GetGlyphIndicesW(Dc, Text.c_str(), (int)Text.size(), Indices.data(),
+                                                    GGI_MARK_NONEXISTING_GLYPHS) == Text.size();
+
+    SelectObject(Dc, Old);
+    for (size_t Index = 0; Index < Text.size(); Index++)
+    {
+        wchar_t Character = Text[Index];
+        HFONT Use = Font;
+
+        if (Mapped && Indices[Index] == 0xFFFF && Character > 0x20 && (Character < 0xD800 || Character > 0xDFFF))
+        {
+            HFONT Fallback = FallbackFont(Dc, Font, Character);
+            if (Fallback)
+                Use = Fallback;
+        }
+        if (Runs.empty() || Runs.back().Font != Use)
+            Runs.push_back({ std::wstring(), Use });
+        Runs.back().Text += Character;
+    }
 }
 
 litehtml::pixel_t
 Container::text_width(const char *Text, litehtml::uint_ptr Font)
 {
     std::wstring Wide = Utf8ToWide(Text);
-    SIZE Size = {};
-    HGDIOBJ Old = SelectObject(m_MeasureDc, (HFONT)Font);
+    std::vector<TextRun> Runs;
+    LONG Width = 0;
 
-    GetTextExtentPoint32W(m_MeasureDc, Wide.c_str(), (int)Wide.size(), &Size);
-    SelectObject(m_MeasureDc, Old);
-    return (litehtml::pixel_t)Size.cx;
+    SplitRuns(m_MeasureDc, (HFONT)Font, Wide, Runs);
+    for (const auto &Run : Runs)
+    {
+        SIZE Size = {};
+        HGDIOBJ Old = SelectObject(m_MeasureDc, Run.Font);
+        GetTextExtentPoint32W(m_MeasureDc, Run.Text.c_str(), (int)Run.Text.size(), &Size);
+        SelectObject(m_MeasureDc, Old);
+        Width += Size.cx;
+    }
+    return (litehtml::pixel_t)Width;
 }
 
 void
@@ -272,14 +811,56 @@ Container::draw_text(litehtml::uint_ptr Hdc, const char *Text, litehtml::uint_pt
 
     if (Color.alpha == 0 || Wide.empty())
         return;
+    std::vector<TextRun> Runs;
+    SplitRuns(Context->Dc, (HFONT)Font, Wide, Runs);
     HGDIOBJ Old = SelectObject(Context->Dc, (HFONT)Font);
+    int X = (int)std::lround(Position.x);
+    int Baseline = (int)std::lround(Position.bottom()) - (Descent != m_Descents.end() ? Descent->second : 0);
+    plutovg_surface_t *Surface = Color.alpha < 255 ? plutovg_canvas_get_surface(Context->Canvas) : nullptr;
+    unsigned char *Bits = Surface ? plutovg_surface_get_data(Surface) : nullptr;
+    std::vector<unsigned char> Saved;
+    RECT Box = {};
+
+    if (Bits)
+    {
+        SIZE Extent = { (LONG)std::lround(text_width(Text, Font)), 0 };
+        Box.left = std::max(X - 2, 0);
+        Box.top = std::max((int)std::floor(Position.y) - 2, 0);
+        Box.right = std::min<int>(X + Extent.cx + 4, plutovg_surface_get_width(Surface));
+        Box.bottom = std::min<int>((int)std::ceil(Position.bottom()) + 2, plutovg_surface_get_height(Surface));
+        if (Box.right > Box.left && Box.bottom > Box.top)
+        {
+            GdiFlush();
+            for (int Row = Box.top; Row < Box.bottom; Row++)
+            {
+                const unsigned char *Line = Bits + (size_t)Row * plutovg_surface_get_stride(Surface) + (size_t)Box.left * 4;
+                Saved.insert(Saved.end(), Line, Line + (size_t)(Box.right - Box.left) * 4);
+            }
+        }
+    }
     SetTextColor(Context->Dc, RGB(Color.red, Color.green, Color.blue));
     SetBkMode(Context->Dc, TRANSPARENT);
     SetTextAlign(Context->Dc, TA_LEFT | TA_BASELINE | TA_NOUPDATECP);
-    ExtTextOutW(Context->Dc, (int)std::lround(Position.x),
-                (int)std::lround(Position.bottom()) - (Descent != m_Descents.end() ? Descent->second : 0), 0, nullptr,
-                Wide.c_str(), (UINT)Wide.size(), nullptr);
+    for (const auto &Run : Runs)
+    {
+        SIZE Size = {};
+        SelectObject(Context->Dc, Run.Font);
+        ExtTextOutW(Context->Dc, X, Baseline, 0, nullptr, Run.Text.c_str(), (UINT)Run.Text.size(), nullptr);
+        GetTextExtentPoint32W(Context->Dc, Run.Text.c_str(), (int)Run.Text.size(), &Size);
+        X += Size.cx;
+    }
     SelectObject(Context->Dc, Old);
+    if (!Saved.empty())
+    {
+        size_t Index = 0;
+        GdiFlush();
+        for (int Row = Box.top; Row < Box.bottom; Row++)
+        {
+            unsigned char *Line = Bits + (size_t)Row * plutovg_surface_get_stride(Surface) + (size_t)Box.left * 4;
+            for (int Byte = 0; Byte < (Box.right - Box.left) * 4; Byte++, Index++)
+                Line[Byte] = (unsigned char)(Saved[Index] + ((int)Line[Byte] - (int)Saved[Index]) * Color.alpha / 255);
+        }
+    }
 }
 
 litehtml::pixel_t
@@ -459,8 +1040,14 @@ Container::load_image(const char *Source, const char *BaseUrl, bool)
     if (m_Images.count(Url))
         return;
     Image Result;
+    if (m_Cache->FindImage(Url, Result))
+    {
+        m_Images[Url] = Result;
+        return;
+    }
     if (Url.compare(0, 5, "data:") != 0 && Fetch(Url, Data) && !Data.empty())
         Result = LooksLikeSvg(Data, Url) ? DecodeSvg(Data, m_Dpi) : DecodeRaster(Data);
+    m_Cache->AddImage(Url, Result);
     m_Images[Url] = Result;
 }
 
@@ -757,7 +1344,10 @@ Container::import_css(litehtml::string &Text, const litehtml::string &Url, liteh
 
     Text.clear();
     if (Fetch(Resolved, Text))
+    {
         BaseUrl = Resolved;
+        LoadFontFaces(Text, Resolved);
+    }
 }
 
 void
@@ -790,12 +1380,24 @@ Container::get_viewport(litehtml::position &Viewport) const
 }
 
 litehtml::element::ptr
-Container::create_element(const char *TagName, const litehtml::string_map &,
+Container::create_element(const char *TagName, const litehtml::string_map &Attributes,
                           const std::shared_ptr<litehtml::document> &Document)
 {
+    litehtml::element::ptr Element;
+
     if (TagName && (strcmp(TagName, "input") == 0 || strcmp(TagName, "select") == 0 || strcmp(TagName, "textarea") == 0))
-        return std::make_shared<Control>(Document);
-    return nullptr;
+        Element = std::make_shared<Control>(Document);
+    if (m_InDefaultElement || !Attributes.count("data-lnt-target"))
+        return Element;
+    if (!Element)
+    {
+        m_InDefaultElement = true;
+        Element = Document->create_element(TagName, Attributes);
+        m_InDefaultElement = false;
+    }
+    if (Element)
+        Element->set_pseudo_class(litehtml::_id("target"), true);
+    return Element;
 }
 
 void

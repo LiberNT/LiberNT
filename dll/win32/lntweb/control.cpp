@@ -14,6 +14,61 @@
 namespace lntweb
 {
 
+class ControlRender : public litehtml::render_item_image
+{
+public:
+    explicit ControlRender(std::shared_ptr<litehtml::element> Element) : render_item_image(std::move(Element)) {}
+
+    std::shared_ptr<litehtml::render_item> clone() override { return std::make_shared<ControlRender>(src_el()); }
+
+protected:
+    litehtml::rendered_width _render(litehtml::pixel_t X, litehtml::pixel_t Y,
+                                     const litehtml::containing_block_context &Containing,
+                                     litehtml::formatting_context *, bool) override;
+};
+
+litehtml::rendered_width
+ControlRender::_render(litehtml::pixel_t X, litehtml::pixel_t Y, const litehtml::containing_block_context &Containing,
+                       litehtml::formatting_context *, bool)
+{
+    typedef litehtml::containing_block_context Context;
+    Context Self = calculate_containing_block_context(Containing);
+    const litehtml::css_properties &Css = src_el()->css();
+    litehtml::size Natural;
+    litehtml::rendered_width Result;
+
+    calc_outlines(Containing.width);
+    m_pos.move_to(X, Y);
+    src_el()->get_content_size(Natural, Containing.width);
+
+    m_pos.width = Self.width.type != Context::cbc_value_type_auto ? (litehtml::pixel_t)Self.render_width : Natural.width;
+    if (Self.min_width.type != Context::cbc_value_type_none)
+        m_pos.width = std::max<litehtml::pixel_t>(m_pos.width, Self.min_width);
+    if (Self.max_width.type != Context::cbc_value_type_none)
+        m_pos.width = std::min<litehtml::pixel_t>(m_pos.width, Self.max_width);
+
+    if (Self.height.type != Context::cbc_value_type_auto && Self.height > 0)
+        m_pos.height = Self.height - box_sizing_height();
+    else
+        m_pos.height = Natural.height;
+    if (Self.min_height.type != Context::cbc_value_type_none)
+        m_pos.height = std::max<litehtml::pixel_t>(m_pos.height, Self.min_height);
+    if (Self.max_height.type != Context::cbc_value_type_none)
+        m_pos.height = std::min<litehtml::pixel_t>(m_pos.height, Self.max_height);
+    m_pos.width = std::max<litehtml::pixel_t>(m_pos.width, 0);
+    m_pos.height = std::max<litehtml::pixel_t>(m_pos.height, 0);
+
+    src_el()->css_w().line_height_w().computed_value = height();
+    m_pos.x += content_offset_left();
+    m_pos.y += content_offset_top();
+
+    Result.natural_width = m_pos.width + content_offset_width();
+    bool Compressible = Css.get_width().units() == litehtml::css_units_percentage ||
+                        Css.get_max_width().units() == litehtml::css_units_percentage;
+    Result.min_width = Compressible ? content_offset_width() : Result.natural_width;
+    return Result;
+}
+
 static std::string
 Lower(const char *Text)
 {
@@ -144,7 +199,7 @@ Control::draw(litehtml::uint_ptr Hdc, litehtml::pixel_t X, litehtml::pixel_t Y, 
 std::shared_ptr<litehtml::render_item>
 Control::create_render_item(const std::shared_ptr<litehtml::render_item> &Parent)
 {
-    auto Item = std::make_shared<litehtml::render_item_image>(shared_from_this());
+    auto Item = std::make_shared<ControlRender>(shared_from_this());
     Item->parent(Parent);
     return Item;
 }

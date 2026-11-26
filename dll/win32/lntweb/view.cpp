@@ -12,6 +12,7 @@
 #include <windowsx.h>
 #include <uxtheme.h>
 #include <litehtml/render_item.h>
+#include <algorithm>
 #include <cstring>
 
 #define LNTWEB_CLASS L"LiberNTWebView"
@@ -20,9 +21,12 @@
     "input, select, textarea { border: 1px solid #767676; border-radius: 2px; padding: 1px 2px; background-color: white; }\n" \
     "input[type=checkbox], input[type=radio] { border: none; padding: 0; margin: 3px 3px 3px 4px; background-color: transparent; }\n" \
     "input[type=submit], input[type=button], input[type=reset], input[type=image], button { border: 1px solid #767676; " \
-    "border-radius: 3px; padding: 1px 6px; background-color: #efefef; color: black; }\n"
-#define WM_LNTWEB_READY (WM_APP + 0x100)
-#define WM_LNTWEB_SUBMIT (WM_APP + 0x101)
+    "border-radius: 3px; padding: 1px 6px; background-color: #efefef; color: black; }\n" \
+    "input[disabled], select[disabled], textarea[disabled], button[disabled] { color: rgba(16, 16, 16, 0.3); " \
+    "border-color: rgba(118, 118, 118, 0.3); }\n" \
+    "input[type=submit][disabled], input[type=button][disabled], input[type=reset][disabled], button[disabled] { " \
+    "background-color: rgba(239, 239, 239, 0.3); }\n"
+#define LNTWEB_SENT_HISTORY 32
 #define LNTWEB_CONTROL_ID 2000
 #define LNTWEB_LINE 40
 #define LNTWEB_COMBO_DROP 200
@@ -30,20 +34,13 @@
 namespace lntweb
 {
 
-struct LoadResult
-{
-    LONG Sequence = 0;
-    std::unique_ptr<Container> Owner;
-    std::shared_ptr<litehtml::document> Document;
-};
-
 struct LoadJob
 {
     HWND Hwnd;
     LONG Sequence;
     std::string Html;
     std::string Url;
-    LNTWEB_HOST Host;
+    std::shared_ptr<Resources> Cache;
     int Width;
     int Height;
     int Dpi;
@@ -57,27 +54,34 @@ struct View
     std::shared_ptr<litehtml::document> Document;
     std::vector<std::shared_ptr<Control>> Controls;
     std::vector<std::vector<std::string>> OptionValues;
+    std::shared_ptr<Resources> Cache;
+    std::shared_ptr<Script> Engine;
+    std::map<std::string, std::deque<std::string>> Sent;
+    std::string FocusText;
     LONG Sequence = 0;
     int ScrollY = 0;
     int ContentHeight = 0;
     int Dpi = 96;
     bool Tracking = false;
+    bool Scripted = false;
+    bool Updating = false;
 };
 
-static HINSTANCE Module;
+HINSTANCE Module;
 
-static DWORD WINAPI
-LoadThread(LPVOID Parameter)
+LoadResult *
+BuildDocument(const std::shared_ptr<Resources> &Cache, const std::string &Html, const std::string &Url, int Width,
+              int Height, int Dpi)
 {
-    std::unique_ptr<LoadJob> Job((LoadJob *)Parameter);
-    LoadResult *Result = new LoadResult;
-    HRESULT Com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    LoadResult *Result = new (std::nothrow) LoadResult;
 
-    Result->Sequence = Job->Sequence;
+    if (!Result)
+        return nullptr;
     try
     {
-        Result->Owner.reset(new Container(Job->Host, Job->Url, Job->Width, Job->Height, Job->Dpi));
-        Result->Document = litehtml::document::createFromString(litehtml::estring(Job->Html, litehtml::encoding::utf_8),
+        Result->Owner.reset(new Container(Cache, Url, Width, Height, Dpi));
+        Result->Owner->LoadInlineFontFaces(Html);
+        Result->Document = litehtml::document::createFromString(litehtml::estring(Html, litehtml::encoding::utf_8),
                                                                  Result->Owner.get(),
                                                                  std::string(litehtml::master_css) + LNTWEB_FORM_CSS);
     }
@@ -85,11 +89,27 @@ LoadThread(LPVOID Parameter)
     {
         Result->Document.reset();
     }
-    if (SUCCEEDED(Com))
-        CoUninitialize();
-    if (!PostMessageW(Job->Hwnd, WM_LNTWEB_READY, 0, (LPARAM)Result))
-        delete Result;
-    return 0;
+    return Result;
+}
+
+static DWORD WINAPI
+LoadThread(LPVOID Parameter)
+{
+    {
+        std::unique_ptr<LoadJob> Job((LoadJob *)Parameter);
+        HRESULT Com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        LoadResult *Result = BuildDocument(Job->Cache, Job->Html, Job->Url, Job->Width, Job->Height, Job->Dpi);
+
+        if (Result)
+        {
+            Result->Sequence = Job->Sequence;
+            if (!PostMessageW(Job->Hwnd, WM_LNTWEB_READY, 0, (LPARAM)Result))
+                delete Result;
+        }
+        if (SUCCEEDED(Com))
+            CoUninitialize();
+    }
+    FreeLibraryAndExitThread(Module, 0);
 }
 
 static void
@@ -179,7 +199,7 @@ CreateField(View *Self, size_t Index)
     if (!Field->Window)
         return;
     SendMessageW(Field->Window, WM_SETFONT, (WPARAM)Field->css().get_font(), FALSE);
-    SetWindowTheme(Field->Window, L"Explorer", nullptr);
+    SetWindowTheme(Field->Window, L"ContentLight", nullptr);
 
     if (Kind == "checkbox" || Kind == "radio")
     {
@@ -376,6 +396,147 @@ WindowText(HWND Window)
     return WideToUtf8(Text);
 }
 
+static std::vector<FieldValue>
+Snapshot(View *Self)
+{
+    std::vector<FieldValue> Fields;
+
+    for (const auto &Field : Self->Controls)
+    {
+        const char *Id = Field->get_attr("data-lntid");
+        std::string Kind = Field->Type();
+        FieldValue Value;
+
+        if (!Field->Window || !Id || Kind == "checkbox" || Kind == "radio")
+            continue;
+        Value.Id = Id;
+        if (Kind == "select")
+        {
+            Value.IsSelect = true;
+            Value.Index = (int)SendMessageW(Field->Window, CB_GETCURSEL, 0, 0);
+        }
+        else
+        {
+            Value.Value = WindowText(Field->Window);
+            std::deque<std::string> &History = Self->Sent[Value.Id];
+            if (History.empty() || History.back() != Value.Value)
+            {
+                History.push_back(Value.Value);
+                if (History.size() > LNTWEB_SENT_HISTORY)
+                    History.pop_front();
+            }
+        }
+        Fields.push_back(std::move(Value));
+    }
+    return Fields;
+}
+
+static void
+PostEvent(View *Self, ScriptEvent Event, const char *Id)
+{
+    if (!Self->Engine || !Id)
+        return;
+    ScriptTask Task;
+    Task.Event = Event;
+    Task.Id = Id;
+    Task.Fields = Snapshot(Self);
+    PostScriptTask(Self->Engine, std::move(Task));
+}
+
+static std::string
+FieldText(Control *Field)
+{
+    std::string Value;
+
+    if (Field->Type() == "textarea")
+        Field->get_text(Value);
+    else
+        Value = Field->get_attr("value", "");
+    return Value;
+}
+
+static int
+SelectedOption(const litehtml::element::ptr &Field, std::vector<std::string> &Values)
+{
+    std::vector<std::pair<std::string, std::string>> Options;
+    int Selected = 0;
+
+    CollectOptions(Field, Options, Selected);
+    for (const auto &Option : Options)
+        Values.push_back(Option.first + '\0' + Option.second);
+    return Selected;
+}
+
+static void
+Reuse(View *Self, std::vector<std::shared_ptr<Control>> &Old)
+{
+    std::map<std::string, std::shared_ptr<Control>> ById;
+
+    for (const auto &Field : Old)
+    {
+        const char *Id = Field->get_attr("data-lntid");
+        if (Id && Field->Window)
+            ById[Id] = Field;
+    }
+    for (size_t Index = 0; Index < Self->Controls.size(); Index++)
+    {
+        Control *Field = Self->Controls[Index].get();
+        const char *Id = Field->get_attr("data-lntid");
+        auto Match = Id ? ById.find(Id) : ById.end();
+        std::string Kind = Field->Type();
+
+        if (Match == ById.end() || !Field->IsField() || Match->second->Type() != Kind)
+            continue;
+        std::shared_ptr<Control> Previous = Match->second;
+        ById.erase(Match);
+        Field->Window = Previous->Window;
+        Previous->Window = nullptr;
+        SetWindowLongPtrW(Field->Window, GWLP_ID, (LONG_PTR)(LNTWEB_CONTROL_ID + Index));
+        SendMessageW(Field->Window, WM_SETFONT, (WPARAM)Field->css().get_font(), FALSE);
+        EnableWindow(Field->Window, Field->get_attr("disabled") == nullptr);
+
+        if (Kind == "checkbox" || Kind == "radio")
+        {
+            SendMessageW(Field->Window, BM_SETCHECK, Field->get_attr("checked") ? BST_CHECKED : BST_UNCHECKED, 0);
+        }
+        else if (Kind == "select")
+        {
+            std::vector<std::string> Before, After;
+            int OldSelected = SelectedOption(Previous, Before), NewSelected = SelectedOption(Self->Controls[Index], After);
+            std::vector<std::pair<std::string, std::string>> Options;
+            int Selected = 0;
+
+            CollectOptions(Self->Controls[Index], Options, Selected);
+            for (const auto &Option : Options)
+                Self->OptionValues[Index].push_back(Option.second);
+            if (Before != After)
+            {
+                SendMessageW(Field->Window, CB_RESETCONTENT, 0, 0);
+                for (const auto &Option : Options)
+                    SendMessageW(Field->Window, CB_ADDSTRING, 0, (LPARAM)Utf8ToWide(Option.first).c_str());
+                SendMessageW(Field->Window, CB_SETCURSEL, NewSelected, 0);
+            }
+            else if (NewSelected != OldSelected)
+            {
+                SendMessageW(Field->Window, CB_SETCURSEL, NewSelected, 0);
+            }
+        }
+        else
+        {
+            std::string Value = FieldText(Field);
+            const std::deque<std::string> &History = Self->Sent[Id];
+            if (Value != FieldText(Previous.get()) && std::find(History.begin(), History.end(), Value) == History.end() &&
+                WindowText(Field->Window) != Value)
+            {
+                Self->Updating = true;
+                SetWindowTextW(Field->Window, Utf8ToWide(Value).c_str());
+                Self->Updating = false;
+            }
+            SendMessageW(Field->Window, EM_SETREADONLY, Field->get_attr("readonly") != nullptr, 0);
+        }
+    }
+}
+
 static litehtml::element::ptr
 Ancestor(litehtml::element::ptr Element, const char *Tag)
 {
@@ -490,6 +651,20 @@ ClickAt(View *Self, int X, int Y)
     litehtml::element::ptr Element = Self->Document->root_render()->get_element_by_point(
         (litehtml::pixel_t)X, (litehtml::pixel_t)(Y + Self->ScrollY), (litehtml::pixel_t)X, (litehtml::pixel_t)Y, nullptr);
 
+    if (Self->Scripted)
+    {
+        for (; Element; Element = Element->parent())
+        {
+            const char *Id = Element->get_attr("data-lntid");
+            if (Id)
+            {
+                PostEvent(Self, ScriptEvent::Click, Id);
+                return;
+            }
+        }
+        return;
+    }
+
     for (; Element; Element = Element->parent())
     {
         const char *Tag = Element->get_tagName();
@@ -531,6 +706,8 @@ static void
 OnAnchor(void *Context, const std::string &Url)
 {
     View *Self = (View *)Context;
+    if (Self->Scripted)
+        return;
     std::string Target = Self->Owner->Resolve(Url);
 
     if (Self->Host.Navigate && (Target.compare(0, 7, "http://") == 0 || Target.compare(0, 8, "https://") == 0))
@@ -540,25 +717,40 @@ OnAnchor(void *Context, const std::string &Url)
 static void
 Adopt(View *Self, LoadResult *Result)
 {
-    for (const auto &Field : Self->Controls)
-    {
-        if (Field->Window)
-            DestroyWindow(Field->Window);
-    }
+    std::vector<std::shared_ptr<Control>> Old = std::move(Self->Controls);
+    std::shared_ptr<litehtml::document> OldDocument = std::move(Self->Document);
+    std::unique_ptr<Container> OldOwner = std::move(Self->Owner);
+    bool Keep = Result->Rerender && Self->Scripted && Result->Document;
+    bool HadFocus = IsChild(Self->Hwnd, GetFocus()) != FALSE;
+
     Self->Controls.clear();
     Self->OptionValues.clear();
-    Self->Document.reset();
-    Self->Owner.reset();
-
     Self->Owner = std::move(Result->Owner);
     Self->Document = std::move(Result->Document);
-    Self->ScrollY = 0;
+    Self->Scripted = Result->Scripted;
+    if (!Keep)
+    {
+        Self->ScrollY = 0;
+        Self->Sent.clear();
+    }
     if (Self->Document)
     {
         Self->Owner->SetClickHandler(OnAnchor, Self);
         CollectControls(Self->Document->root(), Self->Controls);
         Self->OptionValues.resize(Self->Controls.size());
+        if (Keep)
+            Reuse(Self, Old);
     }
+    for (const auto &Field : Old)
+    {
+        if (Field->Window)
+            DestroyWindow(Field->Window);
+    }
+    Old.clear();
+    OldDocument.reset();
+    OldOwner.reset();
+    if (HadFocus && !IsChild(Self->Hwnd, GetFocus()))
+        SetFocus(Self->Hwnd);
     Layout(Self);
     InvalidateRect(Self->Hwnd, nullptr, TRUE);
 }
@@ -587,6 +779,8 @@ ViewProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
         case WM_NCDESTROY:
             if (Self)
             {
+                StopScript(Self->Engine);
+                Self->Engine.reset();
                 Self->Document.reset();
                 Self->Owner.reset();
                 delete Self;
@@ -602,10 +796,27 @@ ViewProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
             return 0;
         }
 
+        case WM_LNTWEB_NAVIGATE:
+        {
+            std::unique_ptr<NavigateRequest> Request((NavigateRequest *)LParam);
+            if (Self && Request->Sequence == Self->Sequence && Self->Host.Navigate)
+            {
+                Self->Host.Navigate(Self->Host.Context, Request->Url.c_str(),
+                                    Request->HasBody ? Request->Body.c_str() : nullptr, Request->Body.size(),
+                                    Request->HasBody && !Request->ContentType.empty() ? Request->ContentType.c_str()
+                                                                                       : nullptr);
+            }
+            return 0;
+        }
+
         case WM_LNTWEB_SUBMIT:
         {
             size_t Index = (size_t)WParam - LNTWEB_CONTROL_ID;
-            if (Self && Index < Self->Controls.size())
+            if (Self && Self->Scripted && Index < Self->Controls.size())
+            {
+                PostEvent(Self, ScriptEvent::Submit, Self->Controls[Index]->get_attr("data-lntid"));
+            }
+            else if (Self && Index < Self->Controls.size())
             {
                 std::shared_ptr<Control> Submitter;
                 litehtml::element::ptr Form = Ancestor(Self->Controls[Index], "form");
@@ -636,6 +847,7 @@ ViewProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
         case WM_SIZE:
             if (Self)
             {
+                ResizeScript(Self->Engine, LOWORD(LParam), HIWORD(LParam));
                 Layout(Self);
                 InvalidateRect(Hwnd, nullptr, FALSE);
             }
@@ -732,8 +944,27 @@ ViewProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
         case WM_COMMAND:
         {
             size_t Index = (size_t)LOWORD(WParam) - LNTWEB_CONTROL_ID;
-            if (Self && HIWORD(WParam) == BN_CLICKED && Index < Self->Controls.size() &&
-                Self->Controls[Index]->Type() == "radio")
+            if (!Self || Index >= Self->Controls.size())
+                return 0;
+            std::string Kind = Self->Controls[Index]->Type();
+            const char *Id = Self->Controls[Index]->get_attr("data-lntid");
+            HWND Field = Self->Controls[Index]->Window;
+            if (Self->Scripted && Field && (HWND)LParam == Field)
+            {
+                bool Toggle = Kind == "checkbox" || Kind == "radio";
+                if (Toggle && HIWORD(WParam) == BN_CLICKED)
+                    PostEvent(Self, ScriptEvent::Click, Id);
+                else if (Kind == "select" && HIWORD(WParam) == CBN_SELCHANGE)
+                    PostEvent(Self, ScriptEvent::Change, Id);
+                else if (!Toggle && Kind != "select" && HIWORD(WParam) == EN_CHANGE && !Self->Updating)
+                    PostEvent(Self, ScriptEvent::Input, Id);
+                else if (!Toggle && Kind != "select" && HIWORD(WParam) == EN_SETFOCUS)
+                    Self->FocusText = WindowText(Field);
+                else if (!Toggle && Kind != "select" && HIWORD(WParam) == EN_KILLFOCUS &&
+                         WindowText(Field) != Self->FocusText)
+                    PostEvent(Self, ScriptEvent::Change, Id);
+            }
+            if (HIWORD(WParam) == BN_CLICKED && Kind == "radio")
             {
                 const char *Name = Self->Controls[Index]->get_attr("name", "");
                 for (const auto &Other : Self->Controls)
@@ -800,6 +1031,16 @@ LntWebCreate(HWND Parent, INT Id, const LNTWEB_HOST *Host)
                            (HMENU)(INT_PTR)Id, Module, (LPVOID)Host);
 }
 
+static bool
+HasScripts(const std::string &Html)
+{
+    static const char Tag[] = "<script";
+
+    return std::search(Html.begin(), Html.end(), Tag, Tag + sizeof(Tag) - 1, [](char Left, char Right) {
+               return tolower((unsigned char)Left) == Right;
+           }) != Html.end();
+}
+
 extern "C" BOOL WINAPI
 LntWebLoad(HWND Window, PCSTR Html, SIZE_T Length, PCSTR Url)
 {
@@ -812,22 +1053,43 @@ LntWebLoad(HWND Window, PCSTR Html, SIZE_T Length, PCSTR Url)
         return FALSE;
     }
     GetClientRect(Window, &Client);
+    StopScript(Self->Engine);
+    Self->Engine.reset();
+    LONG Sequence = InterlockedIncrement(&Self->Sequence);
+    int Width = std::max<int>(Client.right - GetSystemMetrics(SM_CXVSCROLL), 1), Height = std::max<int>(Client.bottom, 1);
+    std::string Page(Html, Length);
+    Self->Cache = std::make_shared<Resources>(Self->Host);
+
+    if (HasScripts(Page))
+    {
+        Self->Engine = StartScript(Window, Sequence, Self->Host, Self->Cache, Page, Url, Width, Height, Self->Dpi);
+        if (Self->Engine)
+            return TRUE;
+    }
+
     LoadJob *Job = new (std::nothrow) LoadJob;
+    HMODULE Pinned;
     if (!Job)
         return FALSE;
     Job->Hwnd = Window;
-    Job->Sequence = InterlockedIncrement(&Self->Sequence);
-    Job->Html.assign(Html, Length);
+    Job->Sequence = Sequence;
+    Job->Html = std::move(Page);
     Job->Url = Url;
-    Job->Host = Self->Host;
-    Job->Width = std::max<int>(Client.right - GetSystemMetrics(SM_CXVSCROLL), 1);
-    Job->Height = std::max<int>(Client.bottom, 1);
+    Job->Cache = Self->Cache;
+    Job->Width = Width;
+    Job->Height = Height;
     Job->Dpi = Self->Dpi;
 
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)(void *)LoadThread, &Pinned))
+    {
+        delete Job;
+        return FALSE;
+    }
     HANDLE Thread = CreateThread(nullptr, 0, LoadThread, Job, 0, nullptr);
     if (!Thread)
     {
         delete Job;
+        FreeLibrary(Pinned);
         return FALSE;
     }
     CloseHandle(Thread);

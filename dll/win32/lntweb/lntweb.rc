@@ -2,3 +2,8 @@
 #define REACTOS_STR_INTERNAL_NAME     "lntweb"
 #define REACTOS_STR_ORIGINAL_FILENAME "lntweb.dll"
 #include <libernt/version.rc>
+
+#include "resource.h"
+
+IDR_LINKEDOM RCDATA "../../../sdk/lib/3rdparty/linkedom/linkedom.js"
+IDR_BOOTSTRAP RCDATA "bootstrap.js"
