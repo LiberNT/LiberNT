@@ -223,13 +223,14 @@ ChpepNtAllocateVirtualMemoryEx(HANDLE ProcessHandle,
 
     Status = ZwAllocateVirtualMemoryEx(ProcessHandle, BaseAddress, RegionSize, AllocationType, Protect, ExtendedParameters, ExtendedParameterCount);
     ChpepCaptureRange(BaseAddress, RegionSize, &Base, &Size);
-    if (NT_SUCCESS(Status) && IsCurrent && EcCode)
-        ChpeMarkEcCodeRange(Base, Size);
 
     if (IsCurrent)
         ChpeNotifyMemoryAlloc(Base, Size, AllocationType, Protect, TRUE, Status);
     else
         ChpepSendCrossProcessNotification(&Connection, CrossProcessPostVirtualAlloc, Base, Size, 3, AllocationType, Protect, Status);
+
+    if (NT_SUCCESS(Status) && IsCurrent && EcCode)
+        ChpeMarkEcCodeRange(Base, Size);
 
     ChpepCloseCrossProcessConnection(&Connection);
     ChpeLeaveEmulatorCallback(CallbackToken);
