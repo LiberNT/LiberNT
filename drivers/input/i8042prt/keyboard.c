@@ -68,11 +68,11 @@ i8042KbdQueuePacket(
 	DeviceExtension = (PI8042_KEYBOARD_EXTENSION)Context;
 
 	DeviceExtension->KeyComplete = TRUE;
-	DeviceExtension->KeysInBuffer++;
-	if (DeviceExtension->KeysInBuffer > DeviceExtension->Common.PortDeviceExtension->Settings.KeyboardDataQueueSize)
+	if (DeviceExtension->KeysInBuffer < DeviceExtension->Common.PortDeviceExtension->Settings.KeyboardDataQueueSize)
+		DeviceExtension->KeysInBuffer++;
+	else
 	{
 		WARN_(I8042PRT, "Keyboard buffer overflow\n");
-		DeviceExtension->KeysInBuffer--;
 	}
 
 	TRACE_(I8042PRT, "Irq completes key\n");
@@ -413,6 +413,12 @@ i8042KbdDpcRoutine(
 	ASSERT(KeGetCurrentIrql() == Irql);
 
 	Irql = KeAcquireInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt);
+	if (KeysTransferred > KeysInBufferCopy || KeysTransferred > DeviceExtension->KeysInBuffer)
+	{
+		KeReleaseInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt, Irql);
+		WARN_(I8042PRT, "Invalid keyboard transfer count\n");
+		return;
+	}
 	DeviceExtension->KeysInBuffer -= KeysTransferred;
 	KeReleaseInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt, Irql);
 }

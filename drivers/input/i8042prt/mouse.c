@@ -205,7 +205,7 @@ i8042MouHandleButtons(
 	 * MOUSE_LEFT_BUTTON_UP   2
 	 */
 	MouseInput->ButtonFlags |= (NewButtonData & ButtonDiff) |
-		(((~(NewButtonData)) << 1) & (ButtonDiff << 1)) |
+		(((USHORT)~NewButtonData << 1) & (ButtonDiff << 1)) |
 		(MouseInput->RawButtons & 0xfc00);
 
 	INFO_(I8042PRT, "Left raw/up/down: %u/%u/%u\n",
@@ -336,12 +336,19 @@ i8042MouDpcRoutine(
 		&MouseTransferred);
 
 	Irql = KeAcquireInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt);
+	if (MouseTransferred > MouseInBufferCopy || MouseTransferred > DeviceExtension->MouseInBuffer)
+	{
+		KeReleaseInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt, Irql);
+		WARN_(I8042PRT, "Invalid mouse transfer count\n");
+		return;
+	}
 	DeviceExtension->MouseInBuffer -= MouseTransferred;
-	if (DeviceExtension->MouseInBuffer)
+	ASSERT(DeviceExtension->MouseInBuffer < PortDeviceExtension->Settings.MouseDataQueueSize);
+	if (MouseTransferred)
 		RtlMoveMemory(
 			DeviceExtension->MouseBuffer,
 			DeviceExtension->MouseBuffer + MouseTransferred,
-			DeviceExtension->MouseInBuffer * sizeof(MOUSE_INPUT_DATA));
+			(DeviceExtension->MouseInBuffer + 1) * sizeof(MOUSE_INPUT_DATA));
 	KeReleaseInterruptSpinLock(PortDeviceExtension->HighestDIRQLInterrupt, Irql);
 }
 

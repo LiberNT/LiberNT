@@ -28,7 +28,8 @@ static NTSTATUS
 HandleReadIrp(
 	IN PDEVICE_OBJECT DeviceObject,
 	IN PIRP Irp,
-	BOOLEAN IsInStartIo);
+	BOOLEAN IsInStartIo,
+	OUT PBOOLEAN CompleteCancelled);
 
 static VOID NTAPI
 DriverUnload(IN PDRIVER_OBJECT DriverObject)
@@ -144,6 +145,7 @@ ClassRead(
 	PCLASS_DEVICE_EXTENSION DeviceExtension;
 	KIRQL OldIrql;
 	NTSTATUS Status;
+	BOOLEAN CompleteCancelled;
 
 	TRACE_(CLASS_NAME, "IRP_MJ_READ\n");
 
@@ -163,8 +165,14 @@ ClassRead(
 	}
 
 	KeAcquireSpinLock(&DeviceExtension->SpinLock, &OldIrql);
-	Status = HandleReadIrp(ClassDevice, Irp, FALSE);
+	Status = HandleReadIrp(ClassDevice, Irp, FALSE, &CompleteCancelled);
 	KeReleaseSpinLock(&DeviceExtension->SpinLock, OldIrql);
+	if (CompleteCancelled)
+	{
+		Irp->IoStatus.Status = STATUS_CANCELLED;
+		Irp->IoStatus.Information = 0;
+		IoCompleteRequest(Irp, IO_NO_INCREMENT);
+	}
 	return Status;
 }
 
@@ -542,6 +550,7 @@ ClassCallback(
 	KIRQL OldIrql;
 	SIZE_T InputCount = DataEnd - DataStart;
 	SIZE_T ReadSize;
+	BOOLEAN CompleteCancelled;
 
 	TRACE_(CLASS_NAME, "ClassCallback()\n");
 
@@ -577,7 +586,10 @@ ClassCallback(
 
 		/* Complete pending IRP (if any) */
 		if (ClassDeviceExtension->PendingIrp)
-			HandleReadIrp(ClassDeviceObject, ClassDeviceExtension->PendingIrp, FALSE);
+		{
+			HandleReadIrp(ClassDeviceObject, ClassDeviceExtension->PendingIrp, FALSE, &CompleteCancelled);
+			ASSERT(!CompleteCancelled);
+		}
 	}
 	KeReleaseSpinLock(&ClassDeviceExtension->SpinLock, OldIrql);
 
@@ -836,7 +848,8 @@ static NTSTATUS
 HandleReadIrp(
 	IN PDEVICE_OBJECT DeviceObject,
 	IN PIRP Irp,
-	BOOLEAN IsInStartIo)
+	BOOLEAN IsInStartIo,
+	OUT PBOOLEAN CompleteCancelled)
 {
 	PCLASS_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
 	NTSTATUS Status;
@@ -845,6 +858,8 @@ HandleReadIrp(
 	TRACE_(CLASS_NAME, "HandleReadIrp(DeviceObject %p, Irp %p)\n", DeviceObject, Irp);
 
 	ASSERT(DeviceExtension->Common.IsClassDO);
+	ASSERT(CompleteCancelled != NULL);
+	*CompleteCancelled = FALSE;
 
 	if (DeviceExtension->InputCount > 0)
 	{
@@ -886,7 +901,7 @@ HandleReadIrp(
 		IoAcquireCancelSpinLock(&OldIrql);
 		if (Irp->Cancel)
 		{
-			DeviceExtension->PendingIrp = NULL;
+			*CompleteCancelled = TRUE;
 			Status = STATUS_CANCELLED;
 		}
 		else
@@ -1152,13 +1167,14 @@ ClassStartIo(
 {
 	PCLASS_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
 	KIRQL OldIrql;
+	BOOLEAN CompleteCancelled;
 
 	TRACE_(CLASS_NAME, "ClassStartIo(DeviceObject %p, Irp %p)\n", DeviceObject, Irp);
 
 	ASSERT(DeviceExtension->Common.IsClassDO);
 
 	KeAcquireSpinLock(&DeviceExtension->SpinLock, &OldIrql);
-	HandleReadIrp(DeviceObject, Irp, TRUE);
+	HandleReadIrp(DeviceObject, Irp, TRUE, &CompleteCancelled);
 	KeReleaseSpinLock(&DeviceExtension->SpinLock, OldIrql);
 }
 
