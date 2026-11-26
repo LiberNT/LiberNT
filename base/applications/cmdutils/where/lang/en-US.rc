@@ -39,7 +39,7 @@ Example:\n\
     IDS_NOT_FOUND "INFO: Could not find files for the given pattern(s).\n"
     IDS_FILE_INFO "%10I64u  %-12ls %-12ls %ls\n"
     IDS_WANT_VALUE "ERROR: Value is needed for '%ls'.\n"
-    IDS_TYPE_HELP "Type ""WHERE /?"" for usage help.\n"
+    IDS_TYPE_HELP "Type ""WHERE /?"" for usage.\n"
     IDS_ENVPAT_WITH_R "ERROR: ""$env:pattern"" cannot be used with /R.\n"
     IDS_PATHPAT_WITH_R "ERROR: ""path:pattern"" format cannot be used with /R.\n"
     IDS_BAD_PATHPAT "ERROR: Invalid pattern is specified in ""path:pattern"".\n"
@@ -48,5 +48,5 @@ Example:\n\
     IDS_CANT_FOUND "ERROR: The system could not find the file specified.\n"
     IDS_BAD_DIR "ERROR: Invalid directory is specified.\n"
     IDS_BAD_NAME "ERROR: The filename, directory name or volume label syntax is wrong.\n"
-    IDS_TOO_MANY "ERROR: '%ls' option is not allowed more than '%u' time(s).\n"
+    IDS_TOO_MANY "ERROR: Invalid syntax. '%ls' option is not allowed more than '%u' time(s).\n"
 END
