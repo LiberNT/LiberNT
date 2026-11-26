@@ -904,7 +904,7 @@
 @ stdcall LZStart()
 @ stdcall LeaveCriticalSection(ptr) ntdll.RtlLeaveCriticalSection
 @ stdcall -version=0x600+ LeaveCriticalSectionWhenCallbackReturns(ptr ptr) ntdll.TpCallbackLeaveCriticalSectionOnCompletion
-@ stdcall -thunk -version=0x601+ LoadAppInitDlls() kernelbase.LoadAppInitDlls
+@ stdcall -version=0x601+ LoadAppInitDlls() kernelbase.LoadAppInitDlls
 @ stdcall LoadLibraryA(str)
 @ stdcall LoadLibraryExA(str long long)
 @ stdcall LoadLibraryExW(wstr long long)
