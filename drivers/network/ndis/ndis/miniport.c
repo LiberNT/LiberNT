@@ -1177,13 +1177,12 @@ MiniCheckForHang( PLOGICAL_ADAPTER Adapter )
     * CheckForHangHandlerEx in the driver block characteristics. e1000e
     * and usbrndis don't register one; other drivers may. Helper lives
     * in 60oid.c so this file doesn't need NDIS 6 struct visibility. */
+   ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
    if (Adapter->IsNdis6)
    {
        extern BOOLEAN Ndis6CallCheckForHangHandlerEx(PLOGICAL_ADAPTER);
-       KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
-       Ret = Ndis6CallCheckForHangHandlerEx(Adapter);
-       KeLowerIrql(OldIrql);
-       return Ret;
+       return Ndis6CallCheckForHangHandlerEx(Adapter);
    }
 
    KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
@@ -1312,11 +1311,21 @@ MiniStartHangTimer(
 {
     LARGE_INTEGER Timeout;
     KIRQL OldIrql;
+    PIO_WORKITEM WorkItem;
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
 
+    WorkItem = IoAllocateWorkItem(Adapter->NdisMiniportBlock.DeviceObject);
+    if (!WorkItem)
+    {
+        NDIS_DbgPrint(MIN_TRACE, ("No work item for the hang check\n"));
+        return;
+    }
+
     KeAcquireSpinLock(&Adapter->HangTimerLock, &OldIrql);
     ASSERT(!Adapter->HangTimerInitialized);
+    ASSERT(Adapter->HangWorkItem == NULL);
+    Adapter->HangWorkItem = WorkItem;
     ExInitializeRundownProtection(&Adapter->HangTimerRundown);
     Adapter->HangTimerStopping = FALSE;
     Adapter->HangTimerInitialized = TRUE;
@@ -1324,7 +1333,9 @@ MiniStartHangTimer(
     {
         Adapter->HangTimerStopping = TRUE;
         Adapter->HangTimerInitialized = FALSE;
+        Adapter->HangWorkItem = NULL;
         KeReleaseSpinLock(&Adapter->HangTimerLock, OldIrql);
+        IoFreeWorkItem(WorkItem);
         return;
     }
     Timeout.QuadPart = Int32x32To64(Adapter->NdisMiniportBlock.CheckForHangSeconds, -10000000);
@@ -1338,6 +1349,7 @@ MiniStopHangTimer(
 {
     BOOLEAN Cancelled;
     KIRQL OldIrql;
+    PIO_WORKITEM WorkItem;
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
 
@@ -1359,7 +1371,51 @@ MiniStopHangTimer(
 
     KeAcquireSpinLock(&Adapter->HangTimerLock, &OldIrql);
     Adapter->HangTimerInitialized = FALSE;
+    WorkItem = Adapter->HangWorkItem;
+    Adapter->HangWorkItem = NULL;
     KeReleaseSpinLock(&Adapter->HangTimerLock, OldIrql);
+
+    ASSERT(WorkItem != NULL);
+    if (WorkItem)
+        IoFreeWorkItem(WorkItem);
+}
+
+static
+VOID
+NTAPI
+MiniportHangWorker(
+    PDEVICE_OBJECT DeviceObject,
+    PVOID Context)
+{
+    PLOGICAL_ADAPTER Adapter = Context;
+    LARGE_INTEGER Timeout;
+    BOOLEAN RunCheck;
+    KIRQL OldIrql;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(Adapter != NULL);
+
+    KeAcquireSpinLock(&Adapter->HangTimerLock, &OldIrql);
+    ASSERT(Adapter->HangTimerInitialized);
+    RunCheck = !Adapter->HangTimerStopping;
+    KeReleaseSpinLock(&Adapter->HangTimerLock, OldIrql);
+
+    if (RunCheck && MiniCheckForHang(Adapter))
+    {
+        NDIS_DbgPrint(MIN_TRACE, ("Miniport detected adapter hang\n"));
+        MiniReset(Adapter);
+    }
+
+    KeAcquireSpinLock(&Adapter->HangTimerLock, &OldIrql);
+    if (!Adapter->HangTimerStopping && ExAcquireRundownProtection(&Adapter->HangTimerRundown))
+    {
+        Timeout.QuadPart = Int32x32To64(Adapter->NdisMiniportBlock.CheckForHangSeconds, -10000000);
+        KeSetTimer(&Adapter->NdisMiniportBlock.WakeUpDpcTimer.Timer, Timeout, &Adapter->NdisMiniportBlock.WakeUpDpcTimer.Dpc);
+    }
+    KeReleaseSpinLock(&Adapter->HangTimerLock, OldIrql);
+    ExReleaseRundownProtection(&Adapter->HangTimerRundown);
 }
 
 VOID NTAPI
@@ -1370,8 +1426,7 @@ MiniportHangDpc(
         PVOID SystemArgument2)
 {
   PLOGICAL_ADAPTER Adapter = DeferredContext;
-  LARGE_INTEGER Timeout;
-  BOOLEAN RunCheck;
+  PIO_WORKITEM WorkItem = NULL;
 
   UNREFERENCED_PARAMETER(Dpc);
   UNREFERENCED_PARAMETER(SystemArgument1);
@@ -1383,21 +1438,15 @@ MiniportHangDpc(
       return;
 
   KeAcquireSpinLockAtDpcLevel(&Adapter->HangTimerLock);
-  RunCheck = Adapter->HangTimerInitialized && !Adapter->HangTimerStopping;
+  if (Adapter->HangTimerInitialized && !Adapter->HangTimerStopping)
+      WorkItem = Adapter->HangWorkItem;
   KeReleaseSpinLockFromDpcLevel(&Adapter->HangTimerLock);
 
-  if (RunCheck && MiniCheckForHang(Adapter)) {
-      NDIS_DbgPrint(MIN_TRACE, ("Miniport detected adapter hang\n"));
-      MiniReset(Adapter);
-  }
-
-  KeAcquireSpinLockAtDpcLevel(&Adapter->HangTimerLock);
-  if (!Adapter->HangTimerStopping && ExAcquireRundownProtection(&Adapter->HangTimerRundown))
+  if (WorkItem)
   {
-      Timeout.QuadPart = Int32x32To64(Adapter->NdisMiniportBlock.CheckForHangSeconds, -10000000);
-      KeSetTimer(&Adapter->NdisMiniportBlock.WakeUpDpcTimer.Timer, Timeout, &Adapter->NdisMiniportBlock.WakeUpDpcTimer.Dpc);
+      IoQueueWorkItem(WorkItem, MiniportHangWorker, DelayedWorkQueue, Adapter);
+      return;
   }
-  KeReleaseSpinLockFromDpcLevel(&Adapter->HangTimerLock);
   ExReleaseRundownProtection(&Adapter->HangTimerRundown);
 }
 

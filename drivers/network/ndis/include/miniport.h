@@ -130,6 +130,7 @@ typedef struct _LOGICAL_ADAPTER
     EX_RUNDOWN_REF              HangTimerRundown;       /* Keeps adapter alive through queued DPCs */
     BOOLEAN                     HangTimerInitialized;
     BOOLEAN                     HangTimerStopping;
+    PIO_WORKITEM                HangWorkItem;
     EX_RUNDOWN_REF              AddressingResetRundown; /* Keeps the miniport from halting under a queued addressing reset */
 
     /* Cached lookahead buffer for the legacy (NDIS_STATUS_RESOURCES) receive

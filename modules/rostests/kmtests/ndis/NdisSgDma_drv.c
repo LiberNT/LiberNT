@@ -21,6 +21,10 @@ static PUCHAR NdisSgListBuffer;
 static ULONG NdisSgListLength;
 static ULONG NdisSgListReachable;
 static ULONG NdisSgListMatches;
+static NDIS_HANDLE NdisSgHangWorkItem;
+static LONG NdisSgHangRecorded;
+static LONG NdisSgHangWritten;
+static ULONG NdisSgHangIrql;
 
 static
 VOID
@@ -38,6 +42,98 @@ NdisSgWrite(
     RtlInitUnicodeString(&ValueName, Name);
     ZwSetValueKey(Key, &ValueName, 0, REG_DWORD, &Value, sizeof(Value));
     ZwClose(Key);
+}
+
+static
+ULONG
+NdisSgRead(
+    _In_ PCWSTR Name)
+{
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(ULONG)];
+    PKEY_VALUE_PARTIAL_INFORMATION Info = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+    OBJECT_ATTRIBUTES Attributes;
+    UNICODE_STRING ValueName;
+    ULONG Length, Value = 0;
+    HANDLE Key;
+
+    InitializeObjectAttributes(&Attributes, &NdisSgParameters, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    if (!NT_SUCCESS(ZwOpenKey(&Key, KEY_QUERY_VALUE, &Attributes)))
+        return 0;
+    RtlInitUnicodeString(&ValueName, Name);
+    if (NT_SUCCESS(ZwQueryValueKey(Key, &ValueName, KeyValuePartialInformation, Info, sizeof(Buffer), &Length)) &&
+        Info->Type == REG_DWORD && Info->DataLength == sizeof(ULONG))
+    {
+        Value = *(PULONG)Info->Data;
+    }
+    ZwClose(Key);
+    return Value;
+}
+
+static
+VOID
+NTAPI
+NdisSgHangWrite(
+    _In_opt_ PVOID WorkItemContext,
+    _In_ NDIS_HANDLE NdisIoWorkItemHandle)
+{
+    UNREFERENCED_PARAMETER(WorkItemContext);
+    UNREFERENCED_PARAMETER(NdisIoWorkItemHandle);
+    NdisSgWrite(L"HangIrql", NdisSgHangIrql);
+    InterlockedExchange(&NdisSgHangWritten, 1);
+}
+
+static
+BOOLEAN
+NTAPI
+NdisSgCheckForHang(
+    _In_ NDIS_HANDLE MiniportAdapterContext)
+{
+    UNREFERENCED_PARAMETER(MiniportAdapterContext);
+    if (InterlockedExchange(&NdisSgHangRecorded, 1) == 0)
+    {
+        NdisSgHangIrql = KeGetCurrentIrql();
+        NdisQueueIoWorkItem(NdisSgHangWorkItem, NdisSgHangWrite, NULL);
+    }
+    return FALSE;
+}
+
+static
+NDIS_STATUS
+NdisSgStartForHangCheck(
+    _In_ NDIS_HANDLE MiniportAdapterHandle)
+{
+    static const UCHAR Address[6] = { 0x02, 0x00, 0x4E, 0x44, 0x49, 0x53 };
+    NDIS_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES General;
+
+    NdisSgHangRecorded = 0;
+    NdisSgHangWritten = 0;
+    NdisSgHangWorkItem = NdisAllocateIoWorkItem(MiniportAdapterHandle);
+    if (!NdisSgHangWorkItem)
+        return NDIS_STATUS_RESOURCES;
+
+    RtlZeroMemory(&General, sizeof(General));
+    General.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES;
+    General.Header.Revision = NDIS_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES_REVISION_1;
+    General.Header.Size = NDIS_SIZEOF_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES_REVISION_1;
+    General.MediaType = NdisMedium802_3;
+    General.PhysicalMediumType = NdisPhysicalMediumUnspecified;
+    General.MtuSize = 1500;
+    General.MaxXmitLinkSpeed = General.XmitLinkSpeed = 1000000000ULL;
+    General.MaxRcvLinkSpeed = General.RcvLinkSpeed = 1000000000ULL;
+    General.MediaConnectState = MediaConnectStateDisconnected;
+    General.MediaDuplexState = MediaDuplexStateFull;
+    General.LookaheadSize = 1500;
+    General.SupportedPacketFilters = NDIS_PACKET_TYPE_DIRECTED;
+    General.MaxMulticastListSize = 0;
+    General.MacAddressLength = sizeof(Address);
+    RtlCopyMemory(General.PermanentMacAddress, Address, sizeof(Address));
+    RtlCopyMemory(General.CurrentMacAddress, Address, sizeof(Address));
+    General.AccessType = NET_IF_ACCESS_BROADCAST;
+    General.DirectionType = NET_IF_DIRECTION_SENDRECEIVE;
+    General.ConnectionType = NET_IF_CONNECTION_DEDICATED;
+    General.IfType = IF_TYPE_ETHERNET_CSMACD;
+    General.IfConnectorPresent = TRUE;
+    return NdisMSetMiniportAttributes(MiniportAdapterHandle, (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&General);
 }
 
 static
@@ -196,12 +292,14 @@ NdisSgInitialize(
     NDIS_SG_DMA_DESCRIPTION Description;
     NDIS_HANDLE DmaHandle;
     NDIS_STATUS Status;
+    BOOLEAN HangCheck;
     ULONG i;
 
     UNREFERENCED_PARAMETER(MiniportDriverContext);
     UNREFERENCED_PARAMETER(InitParameters);
 
     NdisSgAdapterHandle = MiniportAdapterHandle;
+    HangCheck = NdisSgRead(L"HangCheck") != 0;
     RtlZeroMemory(&Registration, sizeof(Registration));
     Registration.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES;
     Registration.Header.Revision = NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_1;
@@ -209,10 +307,13 @@ NdisSgInitialize(
     Registration.MiniportAdapterContext = &NdisSgAdapterContext;
     Registration.AttributeFlags = NDIS_MINIPORT_ATTRIBUTES_HARDWARE_DEVICE | NDIS_MINIPORT_ATTRIBUTES_BUS_MASTER;
     Registration.InterfaceType = NdisInterfacePci;
+    Registration.CheckForHangTimeInSeconds = HangCheck ? 1 : 0;
     Status = NdisMSetMiniportAttributes(MiniportAdapterHandle, (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&Registration);
     NdisSgWrite(L"Registration", Status);
     if (Status != NDIS_STATUS_SUCCESS)
         return Status;
+    if (HangCheck)
+        return NdisSgStartForHangCheck(MiniportAdapterHandle);
 
     for (i = 0; i < NDISSG_MAPPING_COUNT; ++i)
     {
@@ -248,6 +349,11 @@ NdisSgHalt(
 {
     UNREFERENCED_PARAMETER(MiniportAdapterContext);
     UNREFERENCED_PARAMETER(HaltAction);
+    if (NdisSgHangWorkItem && (!NdisSgHangRecorded || NdisSgHangWritten))
+    {
+        NdisFreeIoWorkItem(NdisSgHangWorkItem);
+        NdisSgHangWorkItem = NULL;
+    }
 }
 
 static
@@ -411,6 +517,7 @@ DriverEntry(
     Characteristics.CancelSendHandler = NdisSgCancelSend;
     Characteristics.DevicePnPEventNotifyHandler = NdisSgPnpEvent;
     Characteristics.ShutdownHandlerEx = NdisSgShutdown;
+    Characteristics.CheckForHangHandlerEx = NdisSgCheckForHang;
     Status = NdisMRegisterMiniportDriver(DriverObject, RegistryPath, NULL, &Characteristics, &NdisSgDriverHandle);
     if (Status != NDIS_STATUS_SUCCESS)
         ExFreePoolWithTag(NdisSgParameters.Buffer, 'gSdN');

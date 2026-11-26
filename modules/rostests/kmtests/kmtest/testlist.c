@@ -80,6 +80,7 @@ KMT_TESTFUNC Test_PoIrp;
 KMT_TESTFUNC Test_PoBatteryState;
 KMT_TESTFUNC Test_PoFxState;
 KMT_TESTFUNC Test_NdisSgDma;
+KMT_TESTFUNC Test_NdisCheckForHang;
 KMT_TESTFUNC Test_IoDeviceNumaNode;
 KMT_TESTFUNC Test_ExWddmPoFx;
 KMT_TESTFUNC Test_RtlAvlTree;
@@ -162,6 +163,7 @@ const KMT_TEST TestList[] =
     { "MmMapLockedPagesSpecifyCache", Test_MmMapLockedPagesSpecifyCache },
     { "NtCreateSection",              Test_NtCreateSection },
     { "NdisSgDma",                    Test_NdisSgDma },
+    { "NdisCheckForHang",             Test_NdisCheckForHang },
     { "NtSystemDebugControl",         Test_NtSystemDebugControl },
     { "NtUserPhysicalPages",          Test_NtUserPhysicalPages },
     { "NtProcessClone",               Test_NtProcessClone },
