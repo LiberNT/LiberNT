@@ -1437,6 +1437,15 @@ FileRecord::FilterAttributeList(
         Offset += Entry->RecordLength;
     }
 
+    for (Offset = 0; *DroppedUnnamedData && Offset < NewLength;)
+    {
+        PAttributeListEx Kept = reinterpret_cast<PAttributeListEx>(NewList + Offset);
+
+        if (Kept->Type == TypeData && Kept->NameLength == 0)
+            *DroppedUnnamedData = FALSE;
+        Offset += Kept->RecordLength;
+    }
+
     if (!Commit || *Dropped == 0)
     {
         delete[] NewList;
@@ -1481,6 +1490,101 @@ FileRecord::FilterAttributeList(
         delete Extension;
     }
     return Status;
+}
+
+static BOOLEAN
+AttributeListEntryMatches(
+    _In_ const AttributeListEx* Entry,
+    _In_ const Attribute* Attr)
+{
+    ULONGLONG FirstVcn = Attr->IsNonResident ? Attr->NonResident.FirstVCN : 0;
+
+    if (Entry->Type != Attr->AttributeType || Entry->NameLength != Attr->NameLength || Entry->FirstVCN != FirstVcn)
+        return FALSE;
+    return RtlCompareMemory(reinterpret_cast<const UCHAR*>(Entry) + Entry->NameOffset,
+                            reinterpret_cast<const UCHAR*>(Attr) + Attr->NameOffset,
+                            Attr->NameLength * sizeof(WCHAR)) == Attr->NameLength * sizeof(WCHAR);
+}
+
+NTSTATUS
+FileRecord::RestoreAttributeListEntries(
+    _In_ FileRecord* Extension,
+    _In_ BOOLEAN (*Keep)(_In_ void* Context, _In_ const AttributeListEx* Entry),
+    _In_ void* Context,
+    _In_ BOOLEAN Commit,
+    _Out_ PULONG Missing)
+{
+    ULONG Offset;
+    NTSTATUS Status;
+
+    *Missing = 0;
+    ASSERT(Extension != NULL && Extension != this);
+    if (!Extension->Header ||
+        GetFRNFromFileRef(Extension->Header->BaseFileRecord) != RecordNumber ||
+        (USHORT)(Extension->Header->BaseFileRecord >> 48) != Header->SequenceNumber ||
+        Extension->Header->SequenceNumber == 0 ||
+        Extension->Header->ActualSize > Extension->Header->AllocatedSize)
+    {
+        return STATUS_SUCCESS;
+    }
+
+    Status = LoadAttributeList();
+    if (!NT_SUCCESS(Status) || !AttributeListData || AttributeListLength == 0)
+        return Status;
+
+    for (Offset = Extension->Header->AttributeOffset;
+         Offset + 2 * sizeof(UINT32) <= Extension->Header->ActualSize;)
+    {
+        PAttribute Attr = reinterpret_cast<PAttribute>(Extension->Data + Offset);
+        BOOLEAN Listed = FALSE;
+        BOOLEAN Claimed = FALSE;
+        ULONG ListOffset = 0;
+
+        if (Attr->AttributeType == TypeAttributeEndMarker)
+            break;
+        if (Attr->Length < FIELD_OFFSET(Attribute, Resident) || Attr->Length > Extension->Header->ActualSize - Offset ||
+            (ULONG)Attr->NameOffset + Attr->NameLength * sizeof(WCHAR) > Attr->Length ||
+            (Attr->IsNonResident && Attr->Length < FIELD_OFFSET(Attribute, NonResident.AllocatedSize)))
+        {
+            return STATUS_FILE_CORRUPT_ERROR;
+        }
+
+        while (ListOffset < AttributeListLength)
+        {
+            PAttributeListEx Entry = reinterpret_cast<PAttributeListEx>(AttributeListData + ListOffset);
+
+            if (!IsWritableAttributeListEntryValid(Entry, AttributeListLength - ListOffset))
+                return STATUS_FILE_CORRUPT_ERROR;
+            if (Keep(Context, Entry))
+            {
+                if (GetFRNFromFileRef(Entry->BaseFileRef) == Extension->RecordNumber &&
+                    Entry->AttributeId == Attr->AttributeID)
+                {
+                    Listed = TRUE;
+                }
+                else if (AttributeListEntryMatches(Entry, Attr))
+                {
+                    Claimed = TRUE;
+                }
+            }
+            ListOffset += Entry->RecordLength;
+        }
+
+        if (!Listed && !Claimed && Attr->AttributeType != TypeAttributeList)
+        {
+            (*Missing)++;
+            if (Commit)
+            {
+                BOOLEAN OwnerReferenced;
+
+                Status = InsertAttributeListEntry(Attr, Extension, 0, FALSE, &OwnerReferenced);
+                if (!NT_SUCCESS(Status))
+                    return Status;
+            }
+        }
+        Offset += Attr->Length;
+    }
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS

@@ -738,6 +738,14 @@ if(BUILD_TESTING AND NTFSLIB_BUILD_FUSE)
                 "${NTFSCP_EXECUTABLE}"
                 "${NTFSCAT_EXECUTABLE}"
         )
+        add_test(
+            NAME ntfslib_linux_attribute_list_restore
+            COMMAND /bin/sh
+                "${CMAKE_CURRENT_LIST_DIR}/tests/attribute_list_restore_smoke.sh"
+                "$<TARGET_FILE:ntfslib_fuse>"
+                "${MKNTFS_EXECUTABLE}"
+                "${NTFSCP_EXECUTABLE}"
+        )
     endif()
     if(MKNTFS_EXECUTABLE AND
        NTFSCP_EXECUTABLE AND

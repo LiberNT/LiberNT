@@ -1163,6 +1163,14 @@ public:
         _Out_ PULONG DroppedNames,
         _Out_ PBOOLEAN DroppedUnnamedData);
 
+    NTSTATUS
+    RestoreAttributeListEntries(
+        _In_ FileRecord* Extension,
+        _In_ BOOLEAN (*Keep)(_In_ void* Context, _In_ const AttributeListEx* Entry),
+        _In_ void* Context,
+        _In_ BOOLEAN Commit,
+        _Out_ PULONG Missing);
+
     NTSTATUS ReadSecurityDescriptor(
         _In_opt_ PUCHAR Buffer,
         _Inout_ PULONG BufferLength);
