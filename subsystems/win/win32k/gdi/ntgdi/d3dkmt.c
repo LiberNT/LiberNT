@@ -134,14 +134,6 @@ C_ASSERT(FIELD_OFFSET(RXGK_RESOLVESHAREDRESOURCENTHANDLE_PACKET, GlobalShareHand
         return DxgAdapterCallbacks.CallbackField(HandleArgument);         \
     } while (0)
 
-#define D3DKMT_REQUIRE_HANDLE(Handle)                                    \
-    do                                                                   \
-    {                                                                    \
-        NTSTATUS Status = D3dkmtValidateHandle(Handle);                  \
-        if (!NT_SUCCESS(Status))                                         \
-            return Status;                                               \
-    } while (0)
-
 #define D3DKMT_PRESENT_MAX_SUBRECTS 64U
 #define TAG_D3DKMT_PRESENT_SUBRECTS 'rPmD'
 #define TAG_D3DKMT_CAPTURE 'aCmD'
@@ -536,13 +528,6 @@ D3dkmtValidateWddmHandleThunk(
         return STATUS_INVALID_PARAMETER;
 
     return WddmBridgeRequireReady();
-}
-
-static NTSTATUS
-D3dkmtValidateHandle(
-    _In_ D3DKMT_HANDLE Handle)
-{
-    return (Handle != 0) ? STATUS_SUCCESS : STATUS_INVALID_HANDLE;
 }
 
 static NTSTATUS
@@ -1500,11 +1485,9 @@ APIENTRY
 NtGdiDdDDIGetPresentQueueEvent(_In_ D3DKMT_HANDLE hAdapter,
                                _Inout_ HANDLE* unnamedParam2)
 {
-    if (!unnamedParam2)
-        return STATUS_INVALID_PARAMETER;
-    D3DKMT_REQUIRE_HANDLE(hAdapter);
-    /* Win11 refuses this to callers that do not own the present queue; not
-     * implementing it is honest, answering NOT_IMPLEMENTED is not. */
+    UNREFERENCED_PARAMETER(hAdapter);
+    UNREFERENCED_PARAMETER(unnamedParam2);
+    /* TODO: hand the present queue event to the process that owns the present queue */
     return STATUS_ACCESS_DENIED;
 }
 
