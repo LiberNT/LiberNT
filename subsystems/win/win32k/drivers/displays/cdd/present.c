@@ -538,6 +538,7 @@ RcddAcquireScreenReadRegion(
                               sizeof(Capture), &Returned);
    if (Error == (ULONG)STATUS_NOT_SUPPORTED || Error == (ULONG)STATUS_INVALID_DEVICE_REQUEST)
    {
+      ASSERT(ppdev->CaptureMutex.OwnerThread == KeGetCurrentThread());
       ppdev->ScreenMirrorNeeded = TRUE;
       KeReleaseMutex(&ppdev->CaptureMutex, FALSE);
       return TRUE;
