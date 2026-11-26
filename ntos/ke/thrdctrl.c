@@ -1606,20 +1606,23 @@ KeSetIdealProcessorThread(
     ULONG Number;
 
     ASSERT_THREAD(Thread);
-    ASSERT(Processor < KiMaximumGroupSize);
+    ASSERT(Processor < KiMaximumGroupSize || Processor == MAXIMUM_PROCESSORS);
 
     OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
-    /* A processor named without a group is one of the thread's primary group */
-    Number = (ULONG)KiThreadPrimaryGroup(Thread) * KiMaximumGroupSize + Processor;
-    ASSERT(Number < KE_MAXIMUM_PROCESSORS);
     Previous = (UCHAR)(Thread->UserIdealProcessor % KiMaximumGroupSize);
-    Thread->UserIdealProcessor = Number;
+    if (Processor < KiMaximumGroupSize)
+    {
+        /* A processor named without a group is one of the thread's primary group */
+        Number = (ULONG)KiThreadPrimaryGroup(Thread) * KiMaximumGroupSize + Processor;
+        ASSERT(Number < KE_MAXIMUM_PROCESSORS);
+        Thread->UserIdealProcessor = Number;
 
-    /* TODO: no layout-neutral flag records that the choice was explicit */
-    if (!Thread->SystemAffinityActive)
-        Thread->IdealProcessor = Number;
+        /* TODO: no layout-neutral flag records that the choice was explicit */
+        if (!Thread->SystemAffinityActive)
+            Thread->IdealProcessor = Number;
+    }
 
     KiReleaseThreadLock(Thread);
     KiExitDispatcher(OldIrql);
