@@ -73,7 +73,12 @@ CheckIdentifier(const WCHAR *Vendor, const WCHAR *Identifier)
         return;
     }
 
+#if defined(_M_IX86) || defined(_M_AMD64)
     __cpuid(Registers, 1);
+#else
+    skip("No CPUID on architecture %u\n", Info.wProcessorArchitecture);
+    return;
+#endif
     Family = (Registers[0] >> 8) & 0xF;
     Model = (Registers[0] >> 4) & 0xF;
     if (Family == 0xF)
