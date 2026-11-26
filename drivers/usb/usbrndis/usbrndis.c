@@ -544,9 +544,10 @@ RndisMiniportInitializeEx(
     }
 
     /* Allocate receive buffer */
+    Adapter->RxHot.RxBufferSize = Adapter->IsCdcNcm ? NCM_RX_BUFFER_SIZE : RNDIS_MAX_TRANSFER_SIZE;
     Adapter->RxHot.RxBuffer = NdisAllocateMemoryWithTagPriority(
         NdisMiniportHandle,
-        RNDIS_MAX_TRANSFER_SIZE,
+        Adapter->RxHot.RxBufferSize,
         USBRNDIS_TAG,
         NormalPoolPriority);
     if (!Adapter->RxHot.RxBuffer)

@@ -341,6 +341,8 @@ C_ASSERT(sizeof(USB_CDC_ETHERNET_DESCRIPTOR) == 13);
 #define NCM_DEFAULT_NDP_ALIGNMENT       4           /* 4-byte alignment */
 #define NCM_DEFAULT_NDP_DIVISOR         4           /* Datagram alignment divisor */
 #define NCM_DEFAULT_NDP_REMAINDER       0           /* Datagram alignment remainder */
+#define NCM_NTB_MIN_IN_SIZE             2048
+#define NCM_RX_BUFFER_SIZE              65536
 
 /*
  * Maximum number of multicast addresses
@@ -407,6 +409,7 @@ typedef struct DECLSPEC_CACHEALIGN _RNDIS_RX_HOT {
     volatile LONG RxPolling;            /* NAPI-style polling active */
     volatile LONG RxBudgetRemaining;    /* Packets remaining in current DPC */
     ULONG RxConsecutiveErrors;          /* Consecutive failures for backoff */
+    ULONG RxBufferSize;
     URB RxUrb;                          /* RX URB structure */
 } RNDIS_RX_HOT, *PRNDIS_RX_HOT;
 
