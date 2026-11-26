@@ -34,6 +34,7 @@ list(APPEND SOURCE
     SoftwareBusRestart.c
     SetupCommitFileQueue.c
     SetupDiInstallClassExA.c
+    SetupDiInterfaceSubkeys.c
     SetupDiOpenDeviceInterface.c
     SetupDiGetActualModelsSection.c
     SetupInstallFile.c
