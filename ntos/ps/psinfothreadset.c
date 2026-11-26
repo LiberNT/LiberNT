@@ -555,14 +555,19 @@ NtSetInformationThread(
                                                     sizeof(Value));
             if (!NT_SUCCESS(Status)) break;
 
+            if (Value == MAXIMUM_PROCESSORS)
+            {
+                Status = (NTSTATUS)KeSetIdealProcessorThread((PKTHREAD)&Thread->Tcb, MAXIMUM_PROCESSORS);
+                break;
+            }
+
             if (Value >= KeQueryMaximumProcessorCountEx(KeQueryPrimaryGroupThread(&Thread->Tcb)))
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;
             }
 
-            KeSetIdealProcessorThread((PKTHREAD)&Thread->Tcb, (UCHAR)Value);
-            Status = STATUS_SUCCESS;
+            Status = (NTSTATUS)KeSetIdealProcessorThread((PKTHREAD)&Thread->Tcb, (UCHAR)Value);
             break;
 
         case ThreadIdealProcessorEx:
