@@ -637,6 +637,9 @@ public:
      */
     ULONGLONG FreeClusterHint = 0;
 
+    ULONGLONG MftZoneStart = 0;
+    ULONGLONG MftZoneEnd = 0;
+
     ULONGLONG AllocationLimit = 0;
     ULONGLONG ReservedClusters = 0;
     BOOLEAN ReservedClustersKnown = FALSE;
@@ -802,7 +805,11 @@ public:
     AllocateClusters(_In_ ULONGLONG PreferredLCN,
                      _In_ ULONG ClusterCount,
                      _In_ ULONG MaxRuns,
-                     _Out_ PDataRun* Runs);
+                     _Out_ PDataRun* Runs,
+                     _In_ BOOLEAN ForMft = FALSE);
+
+    void
+    SetMftZone(_In_ ULONGLONG MftEndLcn);
 
     /*
      * Clears the $Bitmap bits for runs previously returned by

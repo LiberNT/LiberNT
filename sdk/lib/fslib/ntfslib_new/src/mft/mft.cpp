@@ -188,6 +188,18 @@ MasterFileTable::MasterFileTable(_In_ PVolume TargetVolume,
                                  MFTFile->Header->AllocatedSize,
                                  DiskVolume->BytesPerSector,
                                  &DiskVolume->FixupStride);
+        if (MFTDataAttr && MFTDataAttr->IsNonResident)
+        {
+            PDataRun Tail = MFTFile->GetCachedDataRuns(MFTDataAttr);
+
+            while (Tail && Tail->NextRun)
+                Tail = Tail->NextRun;
+            if (Tail && !Tail->IsSparse &&
+                Tail->LCN <= ~(ULONGLONG)0 - Tail->Length)
+            {
+                DiskVolume->SetMftZone(Tail->LCN + Tail->Length);
+            }
+        }
     }
 
     // Initialize $MFTMirr
@@ -231,12 +243,8 @@ MasterFileTable::QueryVolumeInformation(
         MFTDataAttr->NonResident.DataSize;
     Information->MftStartLcn = MFTLCN;
     Information->Mft2StartLcn = MFTMirrLCN;
-
-    /*
-     * The MFT-zone bounds deliberately remain zero.
-     * This allocator does not reserve or enforce an MFT zone, so reporting
-     * guessed bounds would promise space that is not actually protected.
-     */
+    Information->MftZoneStart = DiskVolume->MftZoneStart;
+    Information->MftZoneEnd = DiskVolume->MftZoneEnd;
     return STATUS_SUCCESS;
 }
 

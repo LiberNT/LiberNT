@@ -5556,7 +5556,9 @@ FileRecord::ResizeNonResidentStream(
             PreferredLCN,
             ChangedClusters,
             MaxRuns,
-            &AddedRuns);
+            &AddedRuns,
+            RecordNumber == _MFT &&
+                TargetAttribute->AttributeType == TypeData);
         if (!NT_SUCCESS(Status))
             goto Done;
 
@@ -5832,7 +5834,9 @@ FileRecord::ExtendNonResidentData(
         PreferredLCN,
         AddedClusterCount,
         MaxRuns,
-        &AddedRuns);
+        &AddedRuns,
+        RecordNumber == _MFT &&
+            TargetAttribute->AttributeType == TypeData);
     if (Status == STATUS_DISK_FULL &&
         RequiredClusters != MinimumRequiredClusters)
     {
@@ -5844,7 +5848,9 @@ FileRecord::ExtendNonResidentData(
             PreferredLCN,
             AddedClusterCount,
             MaxRuns,
-            &AddedRuns);
+            &AddedRuns,
+            RecordNumber == _MFT &&
+                TargetAttribute->AttributeType == TypeData);
     }
     if (!NT_SUCCESS(Status))
         goto Done;

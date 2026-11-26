@@ -624,20 +624,161 @@ Done:
     return Status;
 }
 
+typedef struct _LCN_RANGE
+{
+    ULONGLONG Start;
+    ULONGLONG End;
+} LCN_RANGE;
+
+static NTSTATUS
+AllocateFromRanges(_In_ PVolume DiskVolume,
+                   _In_ PFileRecord BitmapFile,
+                   _In_ PAttribute BitmapData,
+                   _In_ const LCN_RANGE* Ranges,
+                   _In_ ULONG RangeCount,
+                   _In_ ULONG ClusterCount,
+                   _In_ ULONG MaxRuns,
+                   _Out_ PDataRun* Runs)
+{
+    PDataRun Head = NULL;
+    PDataRun Tail = NULL;
+    ULONGLONG ContiguousLCN;
+    ULONG ClustersNeeded;
+    ULONG RunCount = 0;
+    ULONG Index;
+    NTSTATUS Status = STATUS_NOT_FOUND;
+
+    *Runs = NULL;
+
+    /*
+     * Prefer one extent. Besides reducing I/O, this keeps mapping pairs
+     * small enough to remain in the owning MFT record in the common case.
+     */
+    for (Index = 0; Index < RangeCount; Index++)
+    {
+        ASSERT(Ranges[Index].Start <= Ranges[Index].End);
+        if (Ranges[Index].Start == Ranges[Index].End)
+            continue;
+        Status = FindContiguousFreeClusters(DiskVolume,
+                                            BitmapFile,
+                                            BitmapData,
+                                            Ranges[Index].Start,
+                                            Ranges[Index].End,
+                                            ClusterCount,
+                                            &ContiguousLCN);
+        if (Status != STATUS_NOT_FOUND)
+            break;
+    }
+    if (NT_SUCCESS(Status))
+    {
+        Head = new(PagedPool, TAG_DATA_RUN) DataRun();
+        if (!Head)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        Head->NextRun = NULL;
+        Head->LCN = ContiguousLCN;
+        Head->Length = ClusterCount;
+        Head->IsSparse = FALSE;
+        *Runs = Head;
+        return STATUS_SUCCESS;
+    }
+    if (Status != STATUS_NOT_FOUND)
+        return Status;
+
+    /*
+     * No single extent fits. Gather ordered free extents, bounded by
+     * the caller's mapping-pairs capacity.
+     */
+    ClustersNeeded = ClusterCount;
+    Status = STATUS_SUCCESS;
+    for (Index = 0;
+         Index < RangeCount && NT_SUCCESS(Status) && ClustersNeeded != 0;
+         Index++)
+    {
+        if (Ranges[Index].Start == Ranges[Index].End)
+            continue;
+        Status = AppendFreeClustersFromRange(DiskVolume,
+                                             BitmapFile,
+                                             BitmapData,
+                                             Ranges[Index].Start,
+                                             Ranges[Index].End,
+                                             &ClustersNeeded,
+                                             MaxRuns,
+                                             &RunCount,
+                                             &Head,
+                                             &Tail);
+    }
+    if (NT_SUCCESS(Status) && ClustersNeeded != 0)
+        Status = STATUS_DISK_FULL;
+    if (!NT_SUCCESS(Status))
+    {
+        FreeDataRun(Head);
+        return Status;
+    }
+    *Runs = Head;
+    return STATUS_SUCCESS;
+}
+
+static ULONG
+ExcludeClusterRange(_In_ const LCN_RANGE* Range,
+                    _In_ ULONGLONG ExcludedStart,
+                    _In_ ULONGLONG ExcludedEnd,
+                    _Out_ LCN_RANGE* Output)
+{
+    ULONG Count = 0;
+
+    ASSERT(Range->Start <= Range->End);
+    ASSERT(ExcludedStart <= ExcludedEnd);
+    if (Range->Start < ExcludedStart)
+    {
+        Output[Count].Start = Range->Start;
+        Output[Count].End = min(Range->End, ExcludedStart);
+        Count++;
+    }
+    if (Range->End > ExcludedEnd)
+    {
+        Output[Count].Start = Range->Start > ExcludedEnd
+            ? Range->Start
+            : ExcludedEnd;
+        Output[Count].End = Range->End;
+        Count++;
+    }
+    return Count;
+}
+
+void
+Volume::SetMftZone(_In_ ULONGLONG MftEndLcn)
+{
+    ULONGLONG Length = ClustersInVolume >> 3;
+
+    if (MftEndLcn == 0 || MftEndLcn >= ClustersInVolume || Length == 0)
+    {
+        MftZoneStart = 0;
+        MftZoneEnd = 0;
+        return;
+    }
+    MftZoneStart = MftEndLcn;
+    MftZoneEnd = Length > ClustersInVolume - MftEndLcn
+        ? ClustersInVolume
+        : MftEndLcn + Length;
+    ASSERT(MftZoneStart < MftZoneEnd && MftZoneEnd <= ClustersInVolume);
+}
+
 NTSTATUS
 Volume::AllocateClusters(_In_ ULONGLONG PreferredLCN,
                          _In_ ULONG ClusterCount,
                          _In_ ULONG MaxRuns,
-                         _Out_ PDataRun* Runs)
+                         _Out_ PDataRun* Runs,
+                         _In_ BOOLEAN ForMft)
 {
     PFileRecord BitmapFile = NULL;
     PAttribute BitmapData = NULL;
     PDataRun Head = NULL;
-    PDataRun Tail = NULL;
-    ULONGLONG ContiguousLCN;
     ULONGLONG End = AllocationEnd();
-    ULONG ClustersNeeded;
-    ULONG RunCount = 0;
+    LCN_RANGE Ranges[2];
+    LCN_RANGE OutsideZone[4];
+    ULONG RangeCount = 0;
+    ULONG OutsideCount = 0;
+    ULONG Index;
     NTSTATUS Status;
 
     if (!Runs || ClusterCount == 0 || MaxRuns == 0)
@@ -662,81 +803,54 @@ Volume::AllocateClusters(_In_ ULONGLONG PreferredLCN,
         PreferredLCN = FreeClusterHint;
     }
 
-    /*
-     * Prefer one extent. Besides reducing I/O, this keeps mapping pairs
-     * small enough to remain in the owning MFT record in the common case.
-     */
-    Status = FindContiguousFreeClusters(this,
-                                        BitmapFile,
-                                        BitmapData,
-                                        PreferredLCN,
-                                        End,
-                                        ClusterCount,
-                                        &ContiguousLCN);
-    if (Status == STATUS_NOT_FOUND && PreferredLCN != 0)
+    Ranges[RangeCount].Start = PreferredLCN;
+    Ranges[RangeCount].End = End;
+    RangeCount++;
+    if (PreferredLCN != 0)
     {
-        Status = FindContiguousFreeClusters(this,
-                                            BitmapFile,
-                                            BitmapData,
-                                            0,
-                                            PreferredLCN,
-                                            ClusterCount,
-                                            &ContiguousLCN);
+        Ranges[RangeCount].Start = 0;
+        Ranges[RangeCount].End = PreferredLCN;
+        RangeCount++;
     }
-    if (NT_SUCCESS(Status))
+
+    /* The MFT zone stays free for $MFT until the rest of the volume is used up. */
+    Status = STATUS_NOT_FOUND;
+    if (!ForMft && MftZoneStart < MftZoneEnd && MftZoneStart < End)
     {
-        Head = new(PagedPool, TAG_DATA_RUN) DataRun();
-        if (!Head)
+        for (Index = 0; Index < RangeCount; Index++)
         {
-            Status = STATUS_INSUFFICIENT_RESOURCES;
-            goto Done;
+            OutsideCount += ExcludeClusterRange(&Ranges[Index],
+                                                MftZoneStart,
+                                                min(MftZoneEnd, End),
+                                                &OutsideZone[OutsideCount]);
         }
-        Head->NextRun = NULL;
-        Head->LCN = ContiguousLCN;
-        Head->Length = ClusterCount;
-        Head->IsSparse = FALSE;
+        Status = AllocateFromRanges(this,
+                                    BitmapFile,
+                                    BitmapData,
+                                    OutsideZone,
+                                    OutsideCount,
+                                    ClusterCount,
+                                    MaxRuns,
+                                    &Head);
     }
-    else if (Status == STATUS_NOT_FOUND)
+    if (Status == STATUS_NOT_FOUND ||
+        Status == STATUS_DISK_FULL ||
+        Status == STATUS_BUFFER_TOO_SMALL)
     {
-        /*
-         * No single extent fits. Gather ordered free extents, bounded by
-         * the caller's mapping-pairs capacity.
-         */
-        ClustersNeeded = ClusterCount;
-        Status = AppendFreeClustersFromRange(this,
-                                             BitmapFile,
-                                             BitmapData,
-                                             PreferredLCN,
-                                             End,
-                                             &ClustersNeeded,
-                                             MaxRuns,
-                                             &RunCount,
-                                             &Head,
-                                             &Tail);
-        if (NT_SUCCESS(Status) &&
-            ClustersNeeded != 0 &&
-            PreferredLCN != 0)
-        {
-            Status = AppendFreeClustersFromRange(this,
-                                                 BitmapFile,
-                                                 BitmapData,
-                                                 0,
-                                                 PreferredLCN,
-                                                 &ClustersNeeded,
-                                                 MaxRuns,
-                                                 &RunCount,
-                                                 &Head,
-                                                 &Tail);
-        }
-        if (NT_SUCCESS(Status) && ClustersNeeded != 0)
-            Status = STATUS_DISK_FULL;
-        if (!NT_SUCCESS(Status))
-            goto Done;
+        Status = AllocateFromRanges(this,
+                                    BitmapFile,
+                                    BitmapData,
+                                    Ranges,
+                                    RangeCount,
+                                    ClusterCount,
+                                    MaxRuns,
+                                    &Head);
     }
-    else
-    {
+    if (Status == STATUS_NOT_FOUND)
+        Status = STATUS_DISK_FULL;
+    if (!NT_SUCCESS(Status))
         goto Done;
-    }
+    ASSERT(Head != NULL);
 
     Status = SetClusterRunBits(this,
                                BitmapFile,
@@ -751,6 +865,8 @@ Volume::AllocateClusters(_In_ ULONGLONG PreferredLCN,
         while (Last->NextRun)
             Last = Last->NextRun;
         FreeClusterHint = Last->LCN + Last->Length;
+        if (ForMft)
+            SetMftZone(Last->LCN + Last->Length);
 
         *Runs = Head;
         Head = NULL;

@@ -263,6 +263,12 @@ if(BUILD_TESTING AND NTFSLIB_BUILD_FUSE)
         ntfslib_linux_index_record_full
         PROPERTIES TIMEOUT 600
     )
+    add_test(
+        NAME ntfslib_linux_mft_zone
+        COMMAND /bin/sh
+            "${CMAKE_CURRENT_LIST_DIR}/tests/mft_zone_smoke.sh"
+            "$<TARGET_FILE:ntfslib_fuse>"
+    )
     if(WIM_LIBRARY)
         add_executable(ntfslib_wof_fixture
             tests/wof_fixture.cpp
