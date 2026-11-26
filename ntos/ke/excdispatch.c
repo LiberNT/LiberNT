@@ -134,6 +134,30 @@ KiForwardToDebugPort(
 }
 
 static
+DECLSPEC_NORETURN
+VOID
+KiBugCheckUnhandledException(
+    _In_ PEXCEPTION_RECORD ExceptionRecord,
+    _In_ PKTRAP_FRAME TrapFrame)
+{
+    ULONG_PTR Parameter0 = 0;
+    ULONG_PTR Parameter1 = 0;
+
+    ASSERT(ExceptionRecord != NULL);
+    ASSERT(ExceptionRecord->NumberParameters <= EXCEPTION_MAXIMUM_PARAMETERS);
+    if (ExceptionRecord->NumberParameters > 0)
+        Parameter0 = ExceptionRecord->ExceptionInformation[0];
+    if (ExceptionRecord->NumberParameters > 1)
+        Parameter1 = ExceptionRecord->ExceptionInformation[1];
+    KeBugCheckWithTf(KMODE_EXCEPTION_NOT_HANDLED,
+                     ExceptionRecord->ExceptionCode,
+                     (ULONG_PTR)ExceptionRecord->ExceptionAddress,
+                     Parameter0,
+                     Parameter1,
+                     TrapFrame);
+}
+
+static
 BOOLEAN
 KiDispatchKernelException(
     _Inout_ PEXCEPTION_RECORD ExceptionRecord,
@@ -163,11 +187,7 @@ KiDispatchKernelException(
     if ((ExceptionRecord->ExceptionCode == STATUS_BREAKPOINT) && KeBugCheckActive)
         HalHaltSystem();
 
-    KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED,
-                 ExceptionRecord->ExceptionCode,
-                 (ULONG_PTR)ExceptionRecord->ExceptionAddress,
-                 (ULONG_PTR)TrapFrame,
-                 0);
+    KiBugCheckUnhandledException(ExceptionRecord, TrapFrame);
 }
 
 static
@@ -254,11 +274,7 @@ KiDispatchUserException(
     ZwTerminateProcess(NtCurrentProcess(), ExceptionRecord->ExceptionCode);
 
     /* Self-termination does not return; failing to end the process must not resume the fault */
-    KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED,
-                 ExceptionRecord->ExceptionCode,
-                 (ULONG_PTR)ExceptionRecord->ExceptionAddress,
-                 (ULONG_PTR)TrapFrame,
-                 0);
+    KiBugCheckUnhandledException(ExceptionRecord, TrapFrame);
 }
 
 VOID

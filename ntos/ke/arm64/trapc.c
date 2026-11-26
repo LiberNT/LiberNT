@@ -2655,11 +2655,12 @@ KiArm64HandleSynchronousException(
 
                         ZwTerminateProcess(NtCurrentProcess(),
                                            STATUS_STACK_BUFFER_OVERRUN);
-                        KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED,
-                                     STATUS_STACK_BUFFER_OVERRUN,
-                                     (ULONG_PTR)ExceptionRecord.ExceptionAddress,
-                                     (ULONG_PTR)TrapFrame,
-                                     0);
+                        KeBugCheckWithTf(KMODE_EXCEPTION_NOT_HANDLED,
+                                         STATUS_STACK_BUFFER_OVERRUN,
+                                         (ULONG_PTR)ExceptionRecord.ExceptionAddress,
+                                         ExceptionRecord.NumberParameters > 0 ? ExceptionRecord.ExceptionInformation[0] : 0,
+                                         ExceptionRecord.NumberParameters > 1 ? ExceptionRecord.ExceptionInformation[1] : 0,
+                                         TrapFrame);
 
                     case KI_ARM64_BRK_DIVIDE_BY_0:
                         ExceptionRecord.ExceptionCode = STATUS_INTEGER_DIVIDE_BY_ZERO;
