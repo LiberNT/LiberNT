@@ -24,6 +24,7 @@ list(APPEND SOURCE
     CreateIconFromResourceEx.c
     CoveredWindow.c
     CreateWindowEx.c
+    CrossThreadChildDestroy.c
     CrossThreadWindowPos.c
     DeferWindowPos.c
     DefFrameProc.c
