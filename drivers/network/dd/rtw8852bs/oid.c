@@ -193,6 +193,7 @@ RtwDot11Query(
 
         case OID_DOT11_SUPPORTED_PHY_TYPES:
         {
+            /* FIXME: the OID's payload is DOT11_SUPPORTED_PHY_TYPES, which has no NDIS header */
             UCHAR Buffer[FIELD_OFFSET(DOT11_PHY_TYPE_LIST, dot11PhyType) + 2 * sizeof(DOT11_PHY_TYPE)];
             PDOT11_PHY_TYPE_LIST List = (PDOT11_PHY_TYPE_LIST)Buffer;
 
