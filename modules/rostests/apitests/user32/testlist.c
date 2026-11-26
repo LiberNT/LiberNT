@@ -107,6 +107,7 @@ extern void func_NestedDialogKeys(void);
 extern void func_NextDlgItem(void);
 extern void func_NonClientPaint(void);
 extern void func_NonClientUpdate(void);
+extern void func_OccludedPageSwitch(void);
 extern void func_OwnedZOrder(void);
 extern void func_OwnerDestroy(void);
 extern void func_OwnerDrawButtonCues(void);
@@ -273,6 +274,7 @@ const struct test winetest_testlist[] =
     { "NextDlgItem", func_NextDlgItem },
     { "NonClientPaint", func_NonClientPaint },
     { "NonClientUpdate", func_NonClientUpdate },
+    { "OccludedPageSwitch", func_OccludedPageSwitch },
     { "OwnedZOrder", func_OwnedZOrder },
     { "OwnerDestroy", func_OwnerDestroy },
     { "OwnerDrawButtonCues", func_OwnerDrawButtonCues },

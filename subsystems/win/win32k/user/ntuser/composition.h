@@ -141,6 +141,8 @@ BOOL FASTCALL IntCompositionGetLayered(PWND pWnd, BYTE *pAlpha, COLORREF *pKey, 
  * is not redirected — callers then fall back to the primary). */
 PSURFACE IntCompositionGetRedirectSurface(_In_ PWND Wnd);
 
+PREGION IntCompositionComputeVisibleRegion(_In_ PWND Wnd, _In_ BOOLEAN ClientArea, _In_ BOOLEAN ClipChildren, _In_ BOOLEAN ClipSiblings);
+
 /* Redirect a window DC into its top-level ancestor's backing surface (no-op
  * when composition is off). DcxFlags/hrgnClip are the owning DCE's — they pick
  * the window vs client origin and reproduce the DCX_INTERSECTRGN/EXCLUDERGN

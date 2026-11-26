@@ -5273,6 +5273,21 @@ IntCompositionVisRgnBounded(
     return VisRgn;
 }
 
+PREGION
+IntCompositionComputeVisibleRegion(
+    _In_ PWND Wnd,
+    _In_ BOOLEAN ClientArea,
+    _In_ BOOLEAN ClipChildren,
+    _In_ BOOLEAN ClipSiblings)
+{
+    PWND Ancestor = gbCompositionEnabled ? IntCompositionTopLevel(Wnd) : NULL;
+
+    if (Ancestor != NULL && Ancestor != Wnd && IntCompositionGetRedirectSurface(Ancestor) != NULL)
+        return IntCompositionVisRgnBounded(Wnd, Ancestor, ClientArea, ClipChildren, ClipSiblings);
+
+    return VIS_ComputeVisibleRegion(Wnd, ClientArea, ClipChildren, ClipSiblings);
+}
+
 /* Restore a locked, redirected DC to the PDEV primary (mirrors DC_vUpdateDC). */
 static VOID
 IntCompositionRestoreDC(_Inout_ PDC pdc)
