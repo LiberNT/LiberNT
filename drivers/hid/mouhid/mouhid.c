@@ -351,10 +351,7 @@ MouHid_ReadCompletion(
     /* get device extension */
     DeviceExtension = Context;
 
-    if (Irp->IoStatus.Status == STATUS_PRIVILEGE_NOT_HELD ||
-        Irp->IoStatus.Status == STATUS_DEVICE_NOT_CONNECTED ||
-        Irp->IoStatus.Status == STATUS_CANCELLED ||
-        DeviceExtension->StopReadReport)
+    if (!NT_SUCCESS(Irp->IoStatus.Status) || DeviceExtension->StopReadReport)
     {
         /* failed to read or should be stopped*/
         DPRINT("[MOUHID] ReadCompletion terminating read Status %x\n", Irp->IoStatus.Status);
