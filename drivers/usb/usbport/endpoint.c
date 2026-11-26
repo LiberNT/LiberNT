@@ -952,6 +952,9 @@ USBPORT_ClosePipe(IN PUSBPORT_DEVICE_HANDLE DeviceHandle,
         }
     }
 
+    USBPORT_DetachDumpEndpoint(FdoExtension->Aux.DumpContext, Endpoint);
+    USBPORT_DetachDumpEndpoint(FdoExtension->Aux.KeyboardContext, Endpoint);
+
     KeReleaseSpinLock(&FdoExtension->EndpointListSpinLock, OldIrql);
 
     while (TRUE)

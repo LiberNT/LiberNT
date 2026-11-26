@@ -266,6 +266,9 @@ static NTSTATUS NTAPI USBPORT_DumpPrepare(_In_ PVOID Context)
     PUSBPORT_REGISTRATION_PACKET Packet;
     NTSTATUS Status;
 
+    if ((DumpContext->ControlEndpoint == NULL) || (DumpContext->BulkInEndpoint == NULL) || (DumpContext->BulkOutEndpoint == NULL))
+        return STATUS_DEVICE_NOT_CONNECTED;
+
     FdoExtension = DumpContext->FdoExtension;
     Packet = &FdoExtension->MiniPortInterface->Packet;
     DumpContext->DumpMode = TRUE;
@@ -299,6 +302,9 @@ static NTSTATUS NTAPI USBPORT_KeyboardPrepare(_In_ PVOID Context)
     PUSBPORT_DEVICE_EXTENSION FdoExtension;
     PUSBPORT_REGISTRATION_PACKET Packet;
 
+    if ((KeyboardContext->ControlEndpoint == NULL) || (KeyboardContext->BulkInEndpoint == NULL))
+        return STATUS_DEVICE_NOT_CONNECTED;
+
     FdoExtension = KeyboardContext->FdoExtension;
     Packet = &FdoExtension->MiniPortInterface->Packet;
     KeyboardContext->DumpMode = TRUE;
@@ -319,6 +325,11 @@ static NTSTATUS NTAPI USBPORT_KeyboardPoll(_In_ PVOID Context, _Out_writes_bytes
     *ReturnedLength = 0;
     if (!KeyboardContext->DumpMode || (Length < ROS_USB_KEYBOARD_BOOT_REPORT_SIZE))
         return STATUS_DEVICE_NOT_READY;
+    if (KeyboardContext->BulkInEndpoint == NULL)
+    {
+        KeyboardContext->TransferPending = FALSE;
+        return STATUS_DEVICE_NOT_CONNECTED;
+    }
 
     FdoExtension = KeyboardContext->FdoExtension;
     Packet = &FdoExtension->MiniPortInterface->Packet;
@@ -359,6 +370,51 @@ static VOID NTAPI USBPORT_KeyboardRelease(_In_ PVOID Context)
 
     if (InterlockedCompareExchangePointer(&KeyboardContext->FdoExtension->Aux.KeyboardContext, NULL, KeyboardContext) == KeyboardContext)
         USBPORT_FreeDumpContext(KeyboardContext);
+}
+
+/* Called with EndpointListSpinLock held: an endpoint leaving its device stops being usable at crash time. */
+VOID USBPORT_DetachDumpEndpoint(_Inout_opt_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ PUSBPORT_ENDPOINT Endpoint)
+{
+    ASSERT(Endpoint != NULL);
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
+    if (DumpContext == NULL)
+        return;
+
+    if (DumpContext->ControlEndpoint == Endpoint)
+        DumpContext->ControlEndpoint = NULL;
+    if (DumpContext->BulkInEndpoint == Endpoint)
+        DumpContext->BulkInEndpoint = NULL;
+    if (DumpContext->BulkOutEndpoint == Endpoint)
+        DumpContext->BulkOutEndpoint = NULL;
+}
+
+/* Called with EndpointListSpinLock held: a reset device keeps its interface endpoints under a new handle and default pipe. */
+VOID USBPORT_RetargetDumpContext(_Inout_opt_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ PUSBPORT_DEVICE_HANDLE OldDeviceHandle, _In_opt_ PUSBPORT_DEVICE_HANDLE NewDeviceHandle)
+{
+    PUSBPORT_ENDPOINT ControlEndpoint = NULL;
+
+    ASSERT(OldDeviceHandle != NULL);
+    ASSERT(OldDeviceHandle != NewDeviceHandle);
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
+    if ((DumpContext == NULL) || (DumpContext->DeviceHandle != OldDeviceHandle))
+        return;
+
+    if (NewDeviceHandle != NULL)
+    {
+        ControlEndpoint = NewDeviceHandle->PipeHandle.Endpoint;
+        if (ControlEndpoint == (PUSBPORT_ENDPOINT)-1)
+            ControlEndpoint = NULL;
+    }
+
+    DumpContext->DeviceHandle = NewDeviceHandle;
+    DumpContext->ControlEndpoint = ControlEndpoint;
+    if (NewDeviceHandle == NULL)
+    {
+        DumpContext->BulkInEndpoint = NULL;
+        DumpContext->BulkOutEndpoint = NULL;
+    }
 }
 
 VOID USBPORT_FreeDumpContext(_In_opt_ PUSBPORT_DUMP_CONTEXT DumpContext)
@@ -422,6 +478,7 @@ static NTSTATUS USBPORT_GetDumpInterface(_Inout_ PROS_USB_DUMP_INTERFACE Interfa
     PUSBPORT_ENDPOINT ControlEndpoint;
     PUSBPORT_ENDPOINT BulkInEndpoint;
     PUSBPORT_ENDPOINT BulkOutEndpoint;
+    KIRQL OldIrql;
 
     if ((Interface == NULL) || (Interface->Version != ROS_USB_DUMP_INTERFACE_VERSION) || (Interface->Size < sizeof(*Interface)) || (Interface->DeviceHandle == NULL) || (Interface->BulkInPipe == NULL) || (Interface->BulkOutPipe == NULL))
     {
@@ -458,20 +515,24 @@ static NTSTATUS USBPORT_GetDumpInterface(_Inout_ PROS_USB_DUMP_INTERFACE Interfa
         DumpContext = USBPORT_AllocateDumpContext(FdoExtension);
         if (DumpContext == NULL)
             return STATUS_INSUFFICIENT_RESOURCES;
-
-        DumpContext->DeviceHandle = DeviceHandle;
-        DumpContext->ControlEndpoint = ControlEndpoint;
-        DumpContext->BulkInEndpoint = BulkInEndpoint;
-        DumpContext->BulkOutEndpoint = BulkOutEndpoint;
-        DumpContext->InterfaceNumber = Interface->InterfaceNumber;
-        DumpContext->BulkInEndpointAddress = Interface->BulkInEndpointAddress;
-        DumpContext->BulkOutEndpointAddress = Interface->BulkOutEndpointAddress;
         FdoExtension->Aux.DumpContext = DumpContext;
     }
-    else if ((DumpContext->DeviceHandle != DeviceHandle) || (DumpContext->BulkInEndpoint != BulkInEndpoint) || (DumpContext->BulkOutEndpoint != BulkOutEndpoint))
+
+    KeAcquireSpinLock(&FdoExtension->EndpointListSpinLock, &OldIrql);
+    if ((DumpContext->DeviceHandle != NULL) && (DumpContext->BulkInEndpoint != NULL) && (DumpContext->BulkOutEndpoint != NULL) &&
+        ((DumpContext->DeviceHandle != DeviceHandle) || (DumpContext->BulkInEndpoint != BulkInEndpoint) || (DumpContext->BulkOutEndpoint != BulkOutEndpoint)))
     {
+        KeReleaseSpinLock(&FdoExtension->EndpointListSpinLock, OldIrql);
         return STATUS_DEVICE_BUSY;
     }
+    DumpContext->DeviceHandle = DeviceHandle;
+    DumpContext->ControlEndpoint = ControlEndpoint;
+    DumpContext->BulkInEndpoint = BulkInEndpoint;
+    DumpContext->BulkOutEndpoint = BulkOutEndpoint;
+    DumpContext->InterfaceNumber = Interface->InterfaceNumber;
+    DumpContext->BulkInEndpointAddress = Interface->BulkInEndpointAddress;
+    DumpContext->BulkOutEndpointAddress = Interface->BulkOutEndpointAddress;
+    KeReleaseSpinLock(&FdoExtension->EndpointListSpinLock, OldIrql);
 
     Interface->Version = ROS_USB_DUMP_INTERFACE_VERSION;
     Interface->Size = sizeof(*Interface);
@@ -516,6 +577,7 @@ static NTSTATUS USBPORT_GetKeyboardInterface(_Inout_ PROS_USB_KEYBOARD_INTERFACE
     KeyboardContext->ControlEndpoint = ControlEndpoint;
     KeyboardContext->BulkInEndpoint = InterruptEndpoint;
     KeyboardContext->InterfaceNumber = Interface->InterfaceNumber;
+    /* TODO: re-arm a keyboard context whose device went away instead of refusing the new keyboard */
     if (InterlockedCompareExchangePointer(&FdoExtension->Aux.KeyboardContext, KeyboardContext, NULL) != NULL)
     {
         USBPORT_FreeDumpContext(KeyboardContext);
