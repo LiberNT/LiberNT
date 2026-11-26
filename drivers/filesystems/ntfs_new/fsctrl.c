@@ -776,6 +776,7 @@ Done:
 static
 NTSTATUS
 NtfsQueryAllocatedRanges(
+    _In_ PDEVICE_OBJECT VolumeDeviceObject,
     _Inout_ PIRP Irp,
     _In_ PIO_STACK_LOCATION IrpSp)
 {
@@ -784,6 +785,7 @@ NtfsQueryAllocatedRanges(
     PNtfsAllocatedRange Ranges = NULL;
     PFILE_OBJECT FileObject;
     PFileContextBlock FileCB;
+    PVolumeContextBlock VolCB;
     ULONG InputLength;
     ULONG OutputLength;
     ULONG Capacity;
@@ -793,7 +795,8 @@ NtfsQueryAllocatedRanges(
     Irp->IoStatus.Information = 0;
     FileObject = IrpSp->FileObject;
     FileCB = NtfsGetFileContext(FileObject);
-    if (!FileObject || !FileCB || !FileCB->FileRec)
+    VolCB = (PVolumeContextBlock)VolumeDeviceObject->DeviceExtension;
+    if (!FileObject || !FileCB || !FileCB->FileRec || !VolCB || !VolCB->DiskVolume)
         return STATUS_INVALID_PARAMETER;
     if (FileCB->RequestedType != TypeData ||
         (NtfsFileRecordGetHeader(FileCB->FileRec)->
@@ -889,16 +892,48 @@ NtfsQueryAllocatedRanges(
     Count = Capacity;
 
     KeEnterCriticalRegion();
-    ExAcquireResourceSharedLite(NtfsGetMainResource(FileCB), TRUE);
-    Status = NtfsFileRecordQueryAllocatedRanges(
-        FileCB->FileRec,
-        FileCB->RequestedType,
-        FileCB->RequestedStream,
-        (ULONGLONG)Query.FileOffset.QuadPart,
-        (ULONGLONG)Query.Length.QuadPart,
-        Ranges,
-        &Count);
-    ExReleaseResourceLite(NtfsGetMainResource(FileCB));
+    if (!NtfsVolumeIsReadOnly(VolCB->DiskVolume))
+    {
+        IO_STATUS_BLOCK CacheStatus;
+
+        ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
+        if (CcIsFileCached(FileObject))
+        {
+            CcFlushCache(FileObject->SectionObjectPointer,
+                         NULL,
+                         0,
+                         &CacheStatus);
+            if (!NT_SUCCESS(CacheStatus.Status))
+                Status = CacheStatus.Status;
+        }
+        if (NT_SUCCESS(Status))
+            Status = NtfsPersistPendingSize(VolCB, FileCB, FALSE);
+        if (NT_SUCCESS(Status))
+        {
+            Status = NtfsFileRecordQueryAllocatedRanges(
+                FileCB->FileRec,
+                FileCB->RequestedType,
+                FileCB->RequestedStream,
+                (ULONGLONG)Query.FileOffset.QuadPart,
+                (ULONGLONG)Query.Length.QuadPart,
+                Ranges,
+                &Count);
+        }
+        ExReleaseResourceLite(NtfsGetMainResource(FileCB));
+    }
+    else
+    {
+        ExAcquireResourceSharedLite(NtfsGetMainResource(FileCB), TRUE);
+        Status = NtfsFileRecordQueryAllocatedRanges(
+            FileCB->FileRec,
+            FileCB->RequestedType,
+            FileCB->RequestedStream,
+            (ULONGLONG)Query.FileOffset.QuadPart,
+            (ULONGLONG)Query.Length.QuadPart,
+            Ranges,
+            &Count);
+        ExReleaseResourceLite(NtfsGetMainResource(FileCB));
+    }
     KeLeaveCriticalRegion();
 
     if (NT_SUCCESS(Status) ||
@@ -2452,6 +2487,7 @@ NtfsFsdFileSystemControl(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                     case FSCTL_QUERY_ALLOCATED_RANGES:
                         Irp->IoStatus.Status =
                             NtfsQueryAllocatedRanges(
+                                VolumeDeviceObject,
                                 Irp,
                                 IrpSp);
                         break;
