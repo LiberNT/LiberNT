@@ -154,6 +154,7 @@ extern void func_SystemMenu(void);
 extern void func_TrackMouseEvent(void);
 extern void func_TrackPopupMenuEx(void);
 extern void func_UncoveredWindow(void);
+extern void func_UnpumpedWindow(void);
 extern void func_UpdateRegion(void);
 extern void func_UserHandleGrantAccess(void);
 extern void func_VirtualKey(void);
@@ -321,6 +322,7 @@ const struct test winetest_testlist[] =
     { "TrackMouseEvent", func_TrackMouseEvent },
     { "TrackPopupMenuEx", func_TrackPopupMenuEx },
     { "UncoveredWindow", func_UncoveredWindow },
+    { "UnpumpedWindow", func_UnpumpedWindow },
     { "UpdateRegion", func_UpdateRegion },
     { "UserHandleGrantAccess", func_UserHandleGrantAccess },
     { "VirtualKey", func_VirtualKey },

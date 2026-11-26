@@ -536,6 +536,12 @@ RcddAcquireScreenReadRegion(
    Error = EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_DXGK_CAPTURE_DESKTOP,
                               &Capture, sizeof(Capture), &Capture,
                               sizeof(Capture), &Returned);
+   if (Error == (ULONG)STATUS_NOT_SUPPORTED || Error == (ULONG)STATUS_INVALID_DEVICE_REQUEST)
+   {
+      ppdev->ScreenMirrorNeeded = TRUE;
+      KeReleaseMutex(&ppdev->CaptureMutex, FALSE);
+      return TRUE;
+   }
    if (Error != 0 || Returned != sizeof(Capture))
       goto Failure;
    if (!(Capture.Flags & DXGK_DESKTOP_CAPTURE_HAS_IMAGE))

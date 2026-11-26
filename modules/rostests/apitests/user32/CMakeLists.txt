@@ -153,6 +153,7 @@ list(APPEND SOURCE
     TrackMouseEvent.c
     TrackPopupMenuEx.c
     UncoveredWindow.c
+    UnpumpedWindow.c
     UpdateRegion.c
     UserHandleGrantAccess.c
     VirtualKey.c
