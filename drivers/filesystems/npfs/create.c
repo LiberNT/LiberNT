@@ -741,7 +741,7 @@ NpCreateNewNamedPipe(IN PNP_DCB Dcb,
     SecurityContext = &AccessState->SubjectSecurityContext;
     SeLockSubjectContext(SecurityContext);
 
-    Status = SeAssignSecurity(NULL,
+    Status = SeAssignSecurity(NpVcb->DefaultPipeSecurityDescriptor,
                               AccessState->SecurityDescriptor,
                               &SecurityDescriptor,
                               FALSE,

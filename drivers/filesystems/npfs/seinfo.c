@@ -17,6 +17,80 @@
 
 NTSTATUS
 NTAPI
+NpCreateDefaultPipeSecurityDescriptor(
+    OUT PSECURITY_DESCRIPTOR *SecurityDescriptor)
+{
+    SECURITY_DESCRIPTOR Absolute;
+    PACL Dacl;
+    ULONG DaclLength;
+    ULONG SdLength = 0;
+    PSECURITY_DESCRIPTOR SelfRelative;
+    NTSTATUS Status;
+    PAGED_CODE();
+
+    *SecurityDescriptor = NULL;
+
+    DaclLength = sizeof(ACL) +
+                 5 * FIELD_OFFSET(ACCESS_ALLOWED_ACE, SidStart) +
+                 RtlLengthSid(SeExports->SeLocalSystemSid) +
+                 RtlLengthSid(SeExports->SeAliasAdminsSid) +
+                 RtlLengthSid(SeExports->SeCreatorOwnerSid) +
+                 RtlLengthSid(SeExports->SeWorldSid) +
+                 RtlLengthSid(SeExports->SeAnonymousLogonSid);
+
+    Dacl = ExAllocatePoolWithTag(PagedPool, DaclLength, NPFS_CCB_TAG);
+    if (Dacl == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = RtlCreateAcl(Dacl, DaclLength, ACL_REVISION);
+    if (NT_SUCCESS(Status))
+        Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, OBJECT_INHERIT_ACE, FILE_ALL_ACCESS, SeExports->SeLocalSystemSid);
+    if (NT_SUCCESS(Status))
+        Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, OBJECT_INHERIT_ACE, FILE_ALL_ACCESS, SeExports->SeAliasAdminsSid);
+    if (NT_SUCCESS(Status))
+        Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, OBJECT_INHERIT_ACE, FILE_ALL_ACCESS, SeExports->SeCreatorOwnerSid);
+    if (NT_SUCCESS(Status))
+        Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, OBJECT_INHERIT_ACE, FILE_GENERIC_READ, SeExports->SeWorldSid);
+    if (NT_SUCCESS(Status))
+        Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, OBJECT_INHERIT_ACE, FILE_GENERIC_READ, SeExports->SeAnonymousLogonSid);
+    if (NT_SUCCESS(Status))
+        Status = RtlCreateSecurityDescriptor(&Absolute, SECURITY_DESCRIPTOR_REVISION);
+    if (NT_SUCCESS(Status))
+        Status = RtlSetDaclSecurityDescriptor(&Absolute, TRUE, Dacl, FALSE);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Dacl, NPFS_CCB_TAG);
+        return Status;
+    }
+
+    Status = RtlAbsoluteToSelfRelativeSD(&Absolute, NULL, &SdLength);
+    if (Status != STATUS_BUFFER_TOO_SMALL)
+    {
+        ExFreePoolWithTag(Dacl, NPFS_CCB_TAG);
+        return NT_SUCCESS(Status) ? STATUS_INTERNAL_ERROR : Status;
+    }
+
+    SelfRelative = ExAllocatePoolWithTag(PagedPool, SdLength, NPFS_CCB_TAG);
+    if (SelfRelative == NULL)
+    {
+        ExFreePoolWithTag(Dacl, NPFS_CCB_TAG);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Status = RtlAbsoluteToSelfRelativeSD(&Absolute, SelfRelative, &SdLength);
+    ExFreePoolWithTag(Dacl, NPFS_CCB_TAG);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(SelfRelative, NPFS_CCB_TAG);
+        return Status;
+    }
+
+    *SecurityDescriptor = SelfRelative;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
 NpCommonQuerySecurityInfo(IN PDEVICE_OBJECT DeviceObject,
                           IN PIRP Irp)
 {
@@ -45,6 +119,10 @@ NpCommonQuerySecurityInfo(IN PDEVICE_OBJECT DeviceObject,
     {
         Irp->IoStatus.Information = IoStack->Parameters.QuerySecurity.Length;
         Status = STATUS_BUFFER_OVERFLOW;
+    }
+    else
+    {
+        Irp->IoStatus.Information = 0;
     }
 
     return Status;

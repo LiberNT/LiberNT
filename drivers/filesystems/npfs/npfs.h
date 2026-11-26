@@ -288,6 +288,7 @@ typedef struct _NP_VCB
     ERESOURCE Lock;
     RTL_GENERIC_TABLE EventTable;
     NP_WAIT_QUEUE WaitQueue;
+    PSECURITY_DESCRIPTOR DefaultPipeSecurityDescriptor;
 } NP_VCB, *PNP_VCB;
 
 extern PNP_VCB NpVcb;
@@ -571,6 +572,11 @@ NpDecodeFileObject(IN PFILE_OBJECT FileObject,
                    OUT PVOID *PrimaryContext OPTIONAL,
                    OUT PNP_CCB *Ccb,
                    OUT PULONG NamedPipeEnd OPTIONAL);
+
+NTSTATUS
+NTAPI
+NpCreateDefaultPipeSecurityDescriptor(
+    OUT PSECURITY_DESCRIPTOR *SecurityDescriptor);
 
 PNP_FCB
 NTAPI

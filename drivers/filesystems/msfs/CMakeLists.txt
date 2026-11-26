@@ -6,6 +6,7 @@ list(APPEND SOURCE
     msfs.c
     msfssup.c
     rw.c
+    seinfo.c
     msfs.h)
 
 add_library(msfs MODULE ${SOURCE} msfs.rc)

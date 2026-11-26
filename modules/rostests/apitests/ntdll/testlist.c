@@ -133,6 +133,7 @@ extern void func_NtQuerySection(void);
 extern void func_NtQuerySectionImageNoExecute(void);
 extern void func_NtQuerySecurityObject(void);
 extern void func_NtSetSecurityObjectStatus(void);
+extern void func_PipeMailslotSecurity(void);
 extern void func_NtQuerySystemEnvironmentValue(void);
 extern void func_NtQueryLicenseValue(void);
 extern void func_NtQuerySystemInformation(void);
@@ -400,6 +401,7 @@ const struct test winetest_testlist[] =
     { "NtQuerySectionImageNoExecute",   func_NtQuerySectionImageNoExecute },
     { "NtQuerySecurityObject",          func_NtQuerySecurityObject },
     { "NtSetSecurityObjectStatus",      func_NtSetSecurityObjectStatus },
+    { "PipeMailslotSecurity",           func_PipeMailslotSecurity },
     { "NtQuerySystemEnvironmentValue",  func_NtQuerySystemEnvironmentValue },
     { "NtQueryLicenseValue",            func_NtQueryLicenseValue },
     { "NtQuerySystemInformation",       func_NtQuerySystemInformation },
