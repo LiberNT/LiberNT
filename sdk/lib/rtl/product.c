@@ -21,6 +21,8 @@ RtlGetProductInfo(
     _In_ ULONG SpMinorVersion,
     _Out_ PULONG ReturnedProductType)
 {
+    NT_PRODUCT_TYPE ProductType;
+
     if (ReturnedProductType == NULL)
     {
         return FALSE;
@@ -32,7 +34,13 @@ RtlGetProductInfo(
         return FALSE;
     }
 
-    if (SharedUserData->NtProductType == NtProductWinNt)
+    if (!RtlGetNtProductType(&ProductType))
+    {
+        *ReturnedProductType = PRODUCT_UNDEFINED;
+        return FALSE;
+    }
+
+    if (ProductType == NtProductWinNt)
     {
         if ((OSMajorVersion == 6) && (OSMinorVersion == 0))
         {
@@ -44,12 +52,12 @@ RtlGetProductInfo(
         }
         return TRUE;
     }
-    else if (SharedUserData->NtProductType == NtProductLanManNt)
+    else if (ProductType == NtProductLanManNt)
     {
         *ReturnedProductType = PRODUCT_ENTERPRISE_SERVER;
         return TRUE;
     }
-    else if (SharedUserData->NtProductType == NtProductServer)
+    else if (ProductType == NtProductServer)
     {
         *ReturnedProductType = PRODUCT_STANDARD_SERVER;
         return TRUE;
