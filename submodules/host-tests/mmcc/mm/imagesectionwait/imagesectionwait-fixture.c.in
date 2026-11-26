@@ -11,12 +11,15 @@
 
 typedef uint32_t ULONG;
 typedef int32_t NTSTATUS;
+typedef unsigned char BOOLEAN;
 typedef unsigned char KIRQL;
 typedef struct { int Unused; } FILE_OBJECT, *PFILE_OBJECT;
 typedef struct { int Unused; } MI_CONTROL_AREA, *PMI_CONTROL_AREA;
 
 #define _In_
 #define _Out_
+#define FALSE 0
+#define TRUE 1
 #define PASSIVE_LEVEL 0
 #define APC_LEVEL 1
 #define STATUS_SUCCESS ((NTSTATUS)0)
@@ -28,14 +31,16 @@ typedef struct { int Unused; } MI_CONTROL_AREA, *PMI_CONTROL_AREA;
 static FILE_OBJECT File;
 static MI_CONTROL_AREA Control;
 static NTSTATUS Failure;
+static BOOLEAN ExpectedSystemDll;
 static int Shortage, CreateCalls, WaitCalls;
 
 static KIRQL KeGetCurrentIrql(void) { return PASSIVE_LEVEL; }
 
 static NTSTATUS
-MiCreateImageControlArea(PFILE_OBJECT FileObject, PMI_CONTROL_AREA *ControlOut)
+MiCreateImageControlArea(PFILE_OBJECT FileObject, BOOLEAN SystemDll, PMI_CONTROL_AREA *ControlOut)
 {
     assert(FileObject == &File);
+    assert(SystemDll == ExpectedSystemDll);
     CreateCalls++;
     *ControlOut = NULL;
     if (Shortage > 0)
@@ -59,12 +64,13 @@ MiWaitForMemory(NTSTATUS Status, ULONG *Attempts)
 @NTSECTION_FUNCTION@
 
 static NTSTATUS
-Create(int Failures, NTSTATUS Status, PMI_CONTROL_AREA *ControlOut)
+Create(int Failures, BOOLEAN SystemDll, NTSTATUS Status, PMI_CONTROL_AREA *ControlOut)
 {
     Shortage = Failures;
     Failure = Status;
+    ExpectedSystemDll = SystemDll;
     CreateCalls = WaitCalls = 0;
-    return MiCreateImageControlAreaWaiting(&File, ControlOut);
+    return MiCreateImageControlAreaWaiting(&File, SystemDll, ControlOut);
 }
 
 int
@@ -73,19 +79,19 @@ main(void)
     PMI_CONTROL_AREA Result;
     NTSTATUS Status;
 
-    Status = Create(0, STATUS_NO_MEMORY, &Result);
+    Status = Create(0, FALSE, STATUS_NO_MEMORY, &Result);
     if (Status != STATUS_SUCCESS || Result != &Control || CreateCalls != 1 || WaitCalls != 0)
         return 1;
 
-    Status = Create(3, STATUS_NO_MEMORY, &Result);
+    Status = Create(3, TRUE, STATUS_NO_MEMORY, &Result);
     if (Status != STATUS_SUCCESS || Result != &Control || CreateCalls != 4 || WaitCalls != 3)
         return 2;
 
-    Status = Create(1000, STATUS_NO_MEMORY, &Result);
+    Status = Create(1000, FALSE, STATUS_NO_MEMORY, &Result);
     if (Status != STATUS_NO_MEMORY || Result != NULL || CreateCalls != 65 || WaitCalls != 65)
         return 3;
 
-    Status = Create(1, STATUS_INVALID_IMAGE_FORMAT, &Result);
+    Status = Create(1, FALSE, STATUS_INVALID_IMAGE_FORMAT, &Result);
     if (Status != STATUS_INVALID_IMAGE_FORMAT || Result != NULL || CreateCalls != 1 || WaitCalls != 0)
         return 4;
 
