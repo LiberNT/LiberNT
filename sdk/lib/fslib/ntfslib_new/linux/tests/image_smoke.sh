@@ -106,8 +106,10 @@ test "$(volume_field clusters-per-file-record)" -eq \
 test "$(volume_field mft-valid-bytes)" = "$ntfs_mft_valid"
 test "$(volume_field mft-lcn)" = "$boot_mft_lcn"
 test "$(volume_field mftmirr-lcn)" = "$boot_mftmirr_lcn"
-test "$(volume_field mft-zone-start)" -eq 0
-test "$(volume_field mft-zone-end)" -eq 0
+mft_end=$("$frontend" --show-metadata --retrieval-pointers "$image" '/$MFT' 0 |
+    awk '$1 == "start" { vcn = $2; next } { end = $2 + $1 - vcn; vcn = $1 } END { print end }')
+test "$(volume_field mft-zone-start)" -eq "$mft_end"
+test "$(volume_field mft-zone-end)" -eq "$((mft_end + $(volume_field clusters) / 8))"
 test "$(volume_field version)" = "$ntfs_version"
 
 # Find the first in-use MFT ordinal at or below 23 from the independent
