@@ -38,6 +38,9 @@
 #include "wine/debug.h"
 #include "wine/list.h"
 #include "netprofm_private.h"
+#ifdef __REACTOS__
+#include <libernt/nlaprobe.h>
+#endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(netprofm);
 
@@ -52,6 +55,11 @@ struct network
     VARIANT_BOOL         connected_to_internet_v6;
     VARIANT_BOOL         connected_v4;
     VARIANT_BOOL         connected_v6;
+#ifdef __REACTOS__
+    IPropertyBag         IPropertyBag_iface;
+    DWORD                internet_flags_v4;
+    DWORD                internet_flags_v6;
+#endif
 };
 
 struct connection
@@ -68,6 +76,11 @@ struct connection
     VARIANT_BOOL           connected_to_internet_v6;
     VARIANT_BOOL           connected_v4;
     VARIANT_BOOL           connected_v6;
+#ifdef __REACTOS__
+    IPropertyBag           IPropertyBag_iface;
+    DWORD                  internet_flags_v4;
+    DWORD                  internet_flags_v6;
+#endif
 };
 
 struct connection_point
@@ -96,6 +109,13 @@ struct list_manager
     struct connection_point cost_mgr_cp;
     struct connection_point conn_mgr_cp;
     struct connection_point events_cp;
+#ifdef __REACTOS__
+    HKEY                nla_key;
+    HANDLE              nla_event;
+    HANDLE              nla_quit;
+    HANDLE              nla_thread;
+    DWORD               nla_thread_id;
+#endif
 };
 
 struct sink_entry
@@ -107,6 +127,9 @@ struct sink_entry
 
 static ULONG network_release_internal( struct network *network );
 static ULONG connection_release_internal( struct connection *connection );
+#ifdef __REACTOS__
+static void unwatch_nla_state( struct list_manager *mgr );
+#endif
 
 static NLM_CONNECTIVITY get_connectivity( VARIANT_BOOL connected_v4, VARIANT_BOOL internet_v4,
                                           VARIANT_BOOL connected_v6, VARIANT_BOOL internet_v6 )
@@ -341,6 +364,14 @@ static HRESULT WINAPI network_QueryInterface(
         INetwork_AddRef( iface );
         return S_OK;
     }
+#ifdef __REACTOS__
+    else if (IsEqualIID( riid, &IID_IPropertyBag ))
+    {
+        *obj = &network->IPropertyBag_iface;
+        INetwork_AddRef( iface );
+        return S_OK;
+    }
+#endif
     else
     {
         WARN( "interface not supported %s\n", debugstr_guid(riid) );
@@ -677,6 +708,72 @@ static const struct INetworkVtbl network_vtbl =
     network_SetCategory
 };
 
+#ifdef __REACTOS__
+static HRESULT read_internet_property( LPCOLESTR name, VARIANT *var, DWORD flags_v4, DWORD flags_v6 )
+{
+    if (!name || !var) return E_POINTER;
+    if (!wcscmp( name, NA_InternetConnectivityV4 ))
+    {
+        V_VT( var ) = VT_UI4;
+        V_UI4( var ) = flags_v4;
+        return S_OK;
+    }
+    if (!wcscmp( name, NA_InternetConnectivityV6 ))
+    {
+        V_VT( var ) = VT_UI4;
+        V_UI4( var ) = flags_v6;
+        return S_OK;
+    }
+    return E_INVALIDARG;
+}
+
+static inline struct network *impl_from_network_IPropertyBag( IPropertyBag *iface )
+{
+    return CONTAINING_RECORD( iface, struct network, IPropertyBag_iface );
+}
+
+static HRESULT WINAPI network_bag_QueryInterface( IPropertyBag *iface, REFIID riid, void **obj )
+{
+    struct network *network = impl_from_network_IPropertyBag( iface );
+    return INetwork_QueryInterface( &network->INetwork_iface, riid, obj );
+}
+
+static ULONG WINAPI network_bag_AddRef( IPropertyBag *iface )
+{
+    struct network *network = impl_from_network_IPropertyBag( iface );
+    return INetwork_AddRef( &network->INetwork_iface );
+}
+
+static ULONG WINAPI network_bag_Release( IPropertyBag *iface )
+{
+    struct network *network = impl_from_network_IPropertyBag( iface );
+    return INetwork_Release( &network->INetwork_iface );
+}
+
+static HRESULT WINAPI network_bag_Read( IPropertyBag *iface, LPCOLESTR name, VARIANT *var, IErrorLog *log )
+{
+    struct network *network = impl_from_network_IPropertyBag( iface );
+
+    TRACE( "%p, %s, %p, %p\n", network, debugstr_w(name), var, log );
+    return read_internet_property( name, var, network->internet_flags_v4, network->internet_flags_v6 );
+}
+
+static HRESULT WINAPI network_bag_Write( IPropertyBag *iface, LPCOLESTR name, VARIANT *var )
+{
+    FIXME( "%p, %s, %p\n", iface, debugstr_w(name), var );
+    return E_NOTIMPL;
+}
+
+static const IPropertyBagVtbl network_bag_vtbl =
+{
+    network_bag_QueryInterface,
+    network_bag_AddRef,
+    network_bag_Release,
+    network_bag_Read,
+    network_bag_Write
+};
+#endif
+
 static struct network *create_network( struct list_manager *mgr, const GUID *id )
 {
     struct network *ret;
@@ -684,6 +781,9 @@ static struct network *create_network( struct list_manager *mgr, const GUID *id 
     if (!(ret = calloc( 1, sizeof(*ret) ))) return NULL;
 
     ret->INetwork_iface.lpVtbl = &network_vtbl;
+#ifdef __REACTOS__
+    ret->IPropertyBag_iface.lpVtbl = &network_bag_vtbl;
+#endif
     ret->refs = 1;
     ret->id   = *id;
     ret->mgr  = &mgr->INetworkListManager_iface;
@@ -1409,6 +1509,9 @@ static ULONG WINAPI list_manager_Release(
         if (mgr->iface_change) CancelMibChangeNotify2( mgr->iface_change );
         if (mgr->addr_change) CancelMibChangeNotify2( mgr->addr_change );
         if (mgr->route_change) CancelMibChangeNotify2( mgr->route_change );
+#ifdef __REACTOS__
+        unwatch_nla_state( mgr );
+#endif
 
         connection_point_release( &mgr->events_cp );
         connection_point_release( &mgr->conn_mgr_cp );
@@ -1777,6 +1880,12 @@ static HRESULT WINAPI connection_QueryInterface(
     {
         *obj = &connection->INetworkConnectionCost_iface;
     }
+#ifdef __REACTOS__
+    else if (IsEqualIID( riid, &IID_IPropertyBag ))
+    {
+        *obj = &connection->IPropertyBag_iface;
+    }
+#endif
     else
     {
         WARN( "interface not supported %s\n", debugstr_guid(riid) );
@@ -2047,6 +2156,54 @@ static const INetworkConnectionCostVtbl connection_cost_vtbl =
     connection_cost_GetDataPlanStatus
 };
 
+#ifdef __REACTOS__
+static inline struct connection *impl_from_connection_IPropertyBag( IPropertyBag *iface )
+{
+    return CONTAINING_RECORD( iface, struct connection, IPropertyBag_iface );
+}
+
+static HRESULT WINAPI connection_bag_QueryInterface( IPropertyBag *iface, REFIID riid, void **obj )
+{
+    struct connection *connection = impl_from_connection_IPropertyBag( iface );
+    return INetworkConnection_QueryInterface( &connection->INetworkConnection_iface, riid, obj );
+}
+
+static ULONG WINAPI connection_bag_AddRef( IPropertyBag *iface )
+{
+    struct connection *connection = impl_from_connection_IPropertyBag( iface );
+    return INetworkConnection_AddRef( &connection->INetworkConnection_iface );
+}
+
+static ULONG WINAPI connection_bag_Release( IPropertyBag *iface )
+{
+    struct connection *connection = impl_from_connection_IPropertyBag( iface );
+    return INetworkConnection_Release( &connection->INetworkConnection_iface );
+}
+
+static HRESULT WINAPI connection_bag_Read( IPropertyBag *iface, LPCOLESTR name, VARIANT *var, IErrorLog *log )
+{
+    struct connection *connection = impl_from_connection_IPropertyBag( iface );
+
+    TRACE( "%p, %s, %p, %p\n", connection, debugstr_w(name), var, log );
+    return read_internet_property( name, var, connection->internet_flags_v4, connection->internet_flags_v6 );
+}
+
+static HRESULT WINAPI connection_bag_Write( IPropertyBag *iface, LPCOLESTR name, VARIANT *var )
+{
+    FIXME( "%p, %s, %p\n", iface, debugstr_w(name), var );
+    return E_NOTIMPL;
+}
+
+static const IPropertyBagVtbl connection_bag_vtbl =
+{
+    connection_bag_QueryInterface,
+    connection_bag_AddRef,
+    connection_bag_Release,
+    connection_bag_Read,
+    connection_bag_Write
+};
+#endif
+
 static struct connection *create_connection( struct list_manager *mgr, const GUID *id,
                                              const GUID *adapter_id )
 {
@@ -2056,6 +2213,9 @@ static struct connection *create_connection( struct list_manager *mgr, const GUI
 
     ret->INetworkConnection_iface.lpVtbl     = &connection_vtbl;
     ret->INetworkConnectionCost_iface.lpVtbl = &connection_cost_vtbl;
+#ifdef __REACTOS__
+    ret->IPropertyBag_iface.lpVtbl = &connection_bag_vtbl;
+#endif
     ret->refs = 1;
     ret->id   = *id;
     ret->adapter_id = *adapter_id;
@@ -2131,6 +2291,10 @@ struct adapter_state
     VARIANT_BOOL connected_to_internet_v6;
     VARIANT_BOOL connected_v4;
     VARIANT_BOOL connected_v6;
+#ifdef __REACTOS__
+    DWORD        internet_flags_v4;
+    DWORD        internet_flags_v6;
+#endif
 };
 
 static void get_adapter_state( const IP_ADAPTER_ADDRESSES *aa, struct adapter_state *state )
@@ -2145,6 +2309,44 @@ static void get_adapter_state( const IP_ADAPTER_ADDRESSES *aa, struct adapter_st
     if (has_ipv4_address( aa )) state->connected_v4 = VARIANT_TRUE;
     if (has_ipv4_gateway_address( aa )) state->connected_to_internet_v4 = VARIANT_TRUE;
 }
+
+#ifdef __REACTOS__
+static DWORD get_probe_result( const GUID *id, const WCHAR *family )
+{
+    WCHAR path[ARRAY_SIZE(NLA_CONNECTIVITY_KEY) + 40] = NLA_CONNECTIVITY_KEY L"\\";
+    DWORD value, size = sizeof(value), len = wcslen( path );
+
+    if (!StringFromGUID2( id, path + len, ARRAY_SIZE(path) - len )) return NlaProbeNotRun;
+    if (RegGetValueW( HKEY_LOCAL_MACHINE, path, family, RRF_RT_REG_DWORD, NULL, &value, &size )) return NlaProbeNotRun;
+    return value;
+}
+
+static void apply_probe_result( DWORD result, VARIANT_BOOL connected, VARIANT_BOOL *internet, DWORD *flags )
+{
+    *flags = 0;
+    switch (result)
+    {
+    case NlaProbeInternet:
+        *internet = connected;
+        break;
+    case NlaProbeCaptivePortal:
+        *internet = VARIANT_FALSE;
+        if (connected) *flags = NLM_INTERNET_CONNECTIVITY_WEBHIJACK;
+        break;
+    case NlaProbeNoInternet:
+        *internet = VARIANT_FALSE;
+        break;
+    }
+}
+
+static void apply_probe_state( const GUID *id, struct adapter_state *state )
+{
+    apply_probe_result( get_probe_result( id, NLA_CONNECTIVITY_IPV4 ), state->connected_v4,
+                        &state->connected_to_internet_v4, &state->internet_flags_v4 );
+    apply_probe_result( get_probe_result( id, NLA_CONNECTIVITY_IPV6 ), state->connected_v6,
+                        &state->connected_to_internet_v6, &state->internet_flags_v6 );
+}
+#endif
 
 static BOOL get_adapter_id( const IP_ADAPTER_ADDRESSES *aa, GUID *id )
 {
@@ -2337,6 +2539,9 @@ static void update_networks( struct list_manager *mgr, BOOL notify )
     {
         if (!get_adapter_id( aa, &id )) continue;
         get_adapter_state( aa, &state );
+#ifdef __REACTOS__
+        apply_probe_state( &id, &state );
+#endif
 
         if ((network = find_network( mgr, &id )))
         {
@@ -2344,7 +2549,12 @@ static void update_networks( struct list_manager *mgr, BOOL notify )
             if (network->connected_v4 == state.connected_v4 &&
                 network->connected_v6 == state.connected_v6 &&
                 network->connected_to_internet_v4 == state.connected_to_internet_v4 &&
-                network->connected_to_internet_v6 == state.connected_to_internet_v6)
+                network->connected_to_internet_v6 == state.connected_to_internet_v6
+#ifdef __REACTOS__
+                && network->internet_flags_v4 == state.internet_flags_v4 &&
+                network->internet_flags_v6 == state.internet_flags_v6
+#endif
+                )
                 continue;
         }
         else
@@ -2370,6 +2580,10 @@ static void update_networks( struct list_manager *mgr, BOOL notify )
         network->connected_v6 = state.connected_v6;
         network->connected_to_internet_v4 = state.connected_to_internet_v4;
         network->connected_to_internet_v6 = state.connected_to_internet_v6;
+#ifdef __REACTOS__
+        network->internet_flags_v4 = state.internet_flags_v4;
+        network->internet_flags_v6 = state.internet_flags_v6;
+#endif
 
         if (connection)
         {
@@ -2377,6 +2591,10 @@ static void update_networks( struct list_manager *mgr, BOOL notify )
             connection->connected_v6 = state.connected_v6;
             connection->connected_to_internet_v4 = state.connected_to_internet_v4;
             connection->connected_to_internet_v6 = state.connected_to_internet_v6;
+#ifdef __REACTOS__
+            connection->internet_flags_v4 = state.internet_flags_v4;
+            connection->internet_flags_v6 = state.internet_flags_v6;
+#endif
         }
 
         if (notify)
@@ -2467,6 +2685,65 @@ static void WINAPI route_change_callback( PVOID context, PMIB_IPFORWARD_ROW2 row
     INetworkListManager_Release( &mgr->INetworkListManager_iface );
 }
 
+#ifdef __REACTOS__
+static HMODULE nla_module;
+
+static DWORD WINAPI nla_watch_thread( void *context )
+{
+    struct list_manager *mgr = context;
+    HANDLE handles[2] = { mgr->nla_quit, mgr->nla_event };
+
+    for (;;)
+    {
+        if (RegNotifyChangeKeyValue( mgr->nla_key, TRUE, REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET,
+                                     mgr->nla_event, TRUE ))
+            break;
+        if (WaitForMultipleObjects( 2, handles, FALSE, INFINITE ) != WAIT_OBJECT_0 + 1) break;
+        if (!list_manager_acquire_callback( mgr )) break;
+        update_networks( mgr, TRUE );
+        if (!INetworkListManager_Release( &mgr->INetworkListManager_iface )) break;
+    }
+    FreeLibraryAndExitThread( nla_module, 0 );
+}
+
+static void watch_nla_state( struct list_manager *mgr )
+{
+    HMODULE module;
+
+    if (RegOpenKeyExW( HKEY_LOCAL_MACHINE, NLA_SERVICE_KEY, 0, KEY_NOTIFY, &mgr->nla_key ))
+    {
+        mgr->nla_key = NULL;
+        return;
+    }
+    if (!(mgr->nla_event = CreateEventW( NULL, FALSE, FALSE, NULL )) ||
+        !(mgr->nla_quit = CreateEventW( NULL, TRUE, FALSE, NULL )) ||
+        !GetModuleHandleExW( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (const WCHAR *)nla_watch_thread, &module ))
+    {
+        WARN( "failed to watch the Internet probe results, error %lu\n", GetLastError() );
+        return;
+    }
+    nla_module = module;
+    if (!(mgr->nla_thread = CreateThread( NULL, 0, nla_watch_thread, mgr, 0, &mgr->nla_thread_id )))
+    {
+        WARN( "failed to watch the Internet probe results, error %lu\n", GetLastError() );
+        FreeLibrary( module );
+    }
+}
+
+static void unwatch_nla_state( struct list_manager *mgr )
+{
+    if (mgr->nla_thread)
+    {
+        SetEvent( mgr->nla_quit );
+        if (GetCurrentThreadId() != mgr->nla_thread_id) WaitForSingleObject( mgr->nla_thread, INFINITE );
+        CloseHandle( mgr->nla_thread );
+    }
+    if (mgr->nla_quit) CloseHandle( mgr->nla_quit );
+    if (mgr->nla_event) CloseHandle( mgr->nla_event );
+    if (mgr->nla_key) RegCloseKey( mgr->nla_key );
+}
+#endif
+
 HRESULT list_manager_create( void **obj )
 {
     struct list_manager *mgr;
@@ -2503,6 +2780,9 @@ HRESULT list_manager_create( void **obj )
     error = NotifyRouteChange2( AF_UNSPEC, route_change_callback, mgr, FALSE,
                                 &mgr->route_change );
     if (error) WARN( "failed to register route notifications, error %lu\n", error );
+#ifdef __REACTOS__
+    watch_nla_state( mgr );
+#endif
 
     *obj = &mgr->INetworkListManager_iface;
     TRACE( "returning iface %p\n", *obj );
