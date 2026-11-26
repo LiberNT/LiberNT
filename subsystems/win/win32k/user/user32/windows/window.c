@@ -238,7 +238,7 @@ User32CreateWindowEx(DWORD dwExStyle,
     RtlInitLargeString(&WindowName, lpWindowName, Unicode);
 
     // HACK: The current implementation expects the Window name to be UNICODE
-    if (!Unicode)
+    if (!Unicode && WindowName.Buffer)
     {
         NTSTATUS Status;
         PSTR AnsiBuffer = WindowName.Buffer;

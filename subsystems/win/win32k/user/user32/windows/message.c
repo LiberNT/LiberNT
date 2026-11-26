@@ -448,7 +448,8 @@ MsgiKMToUMMessage(PMSG KMMsg, PMSG UMMsg)
         {
           CREATESTRUCTW *Cs = (CREATESTRUCTW *) KMMsg->lParam;
           PCHAR Class;
-          Cs->lpszName = (LPCWSTR) ((PCHAR) Cs + (DWORD_PTR) Cs->lpszName);
+          if (Cs->lpszName)
+            Cs->lpszName = (LPCWSTR) ((PCHAR) Cs + (DWORD_PTR) Cs->lpszName);
           Class = (PCHAR) Cs + (DWORD_PTR) Cs->lpszClass;
           if (L'A' == *((WCHAR *) Class))
             {
@@ -1015,6 +1016,10 @@ MsgiUnicodeToAnsiMessage(HWND hwnd, LPMSG AnsiMsg, LPMSG UnicodeMsg)
               name[2] = HIBYTE(CsW->lpszName[1]);
               name[3] = 0;
               CsA->lpszName = name;
+            }
+          else if (!CsW->lpszName)
+            {
+              CsA->lpszName = NULL;
             }
           else
             {

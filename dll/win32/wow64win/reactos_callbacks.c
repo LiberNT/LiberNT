@@ -526,7 +526,8 @@ static NTSTATUS WINAPI ros_wow64_window_proc(void *arg, ULONG size)
         {
             CREATESTRUCT32 *cs32 = (CREATESTRUCT32 *)(args32 + 1);
 
-            cs32->lpszName -= sizeof(CREATESTRUCTW) - sizeof(*cs32);
+            if (cs32->lpszName)
+                cs32->lpszName -= sizeof(CREATESTRUCTW) - sizeof(*cs32);
             cs32->lpszClass -= sizeof(CREATESTRUCTW) - sizeof(*cs32);
         }
         args32->lParamBufferSize = buffer_size;

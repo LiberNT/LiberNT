@@ -3000,7 +3000,15 @@ ProbeAndCaptureLargeString(
     }
     _SEH2_END
 
-    if (lstrTemp.Length != 0)
+    if (lstrTemp.Length == 0 && lstrTemp.Buffer)
+    {
+        pvBuffer = ExAllocatePoolZero(PagedPool, sizeof(WCHAR), TAG_STRING);
+        if (!pvBuffer)
+        {
+            return STATUS_NO_MEMORY;
+        }
+    }
+    else if (lstrTemp.Length != 0)
     {
         /* Allocate a buffer from paged pool */
         pvBuffer = ExAllocatePoolWithTag(PagedPool, lstrTemp.Length, TAG_STRING);
