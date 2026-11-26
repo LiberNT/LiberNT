@@ -281,6 +281,26 @@ NwifiMsmKeyFailureWorker(
 
 static
 VOID
+NTAPI
+NwifiMsmRefuseAssociationWorker(
+    _In_opt_ PVOID WorkItemContext,
+    _In_     NDIS_HANDLE NdisIoWorkItemHandle)
+{
+    PNWIFI_MSM Msm = (PNWIFI_MSM)WorkItemContext;
+    NDIS_STATUS Status;
+
+    ASSERT(Msm != NULL);
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    Status = NwifiDoRequest(Msm->Adapter, NdisRequestSetInformation,
+                            OID_DOT11_DISCONNECT_REQUEST, NULL, 0, NULL);
+    if (Status != NDIS_STATUS_SUCCESS)
+        DPRINT1("NWIFI: DISCONNECT_REQUEST for an unrequested association failed 0x%08X\n", Status);
+    NwifiMsmCompleteWorkItem(Msm, NdisIoWorkItemHandle);
+}
+
+static
+VOID
 NwifiMsmQueueKeyFailure(
     _In_ PNWIFI_MSM Msm,
     _In_ NWIFI_NOTIFICATION_CODE Code)
@@ -1055,11 +1075,15 @@ NwifiMsmIndicateStatus(
                 PDOT11_ASSOCIATION_START_PARAMETERS P =
                     (PDOT11_ASSOCIATION_START_PARAMETERS)Buffer;
                 NdisAcquireSpinLock(&Msm->Lock);
+                if (Msm->State == NwifiMsmIdle)
+                {
+                    NdisReleaseSpinLock(&Msm->Lock);
+                    DPRINT1("NWIFI: association start without a connect request\n");
+                    break;
+                }
                 RtlCopyMemory(Msm->CurrentBssid, P->MacAddr, IEEE80211_ADDR_LEN);
                 if (P->SSID.uSSIDLength != 0)
                     Msm->CurrentSsid = P->SSID;
-                if (Msm->State == NwifiMsmIdle)
-                    Msm->State = NwifiMsmAssociating;
                 NdisReleaseSpinLock(&Msm->Lock);
                 NwifiQueueNotification(Adapter->InterfaceIndex, NwifiNotifyAssociating, NDIS_STATUS_SUCCESS);
                 DPRINT("NWIFI: assoc start with %02x:%02x:%02x:%02x:%02x:%02x\n",
@@ -1082,6 +1106,14 @@ NwifiMsmIndicateStatus(
                     BOOLEAN Secure;
 
                     NdisAcquireSpinLock(&Msm->Lock);
+                    if (Msm->State == NwifiMsmIdle)
+                    {
+                        NdisReleaseSpinLock(&Msm->Lock);
+                        DPRINT1("NWIFI: refusing an association without a connect request\n");
+                        if (!NwifiMsmQueueWorkItem(Msm, NwifiMsmRefuseAssociationWorker, Msm))
+                            DPRINT1("NWIFI: cannot queue the disconnect of an unrequested association\n");
+                        break;
+                    }
                     RtlCopyMemory(Msm->CurrentBssid, P->MacAddr, IEEE80211_ADDR_LEN);
                     Msm->CurrentPhyType = NwifiPhyTypeFromId(0);
                     Secure = Msm->Connect.Secure;
