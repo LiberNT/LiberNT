@@ -1686,6 +1686,38 @@ done:
     SetRectEmpty(&swapchain->front_buffer_update);
 }
 
+#ifdef __REACTOS__
+/* Presented rectangles are in back buffer and client coordinates, unlike front buffer updates. */
+static void swapchain_gdi_present_window(struct wined3d_swapchain *swapchain, const RECT *src_rects,
+        const RECT *dst_rects, unsigned int rect_count, const RECT *scroll_rect)
+{
+    HDC src_dc = swapchain->front_buffer->dc_info[0].dc;
+    unsigned int i;
+
+    assert(!swapchain->composition);
+    if (swapchain->palette)
+        wined3d_palette_apply_to_dc(swapchain->palette, src_dc);
+    if (swapchain->front_buffer->resource.map_count)
+        ERR("Trying to blit a mapped surface.\n");
+
+    if (scroll_rect && !BitBlt(swapchain->dc, scroll_rect->left, scroll_rect->top,
+            scroll_rect->right - scroll_rect->left, scroll_rect->bottom - scroll_rect->top,
+            src_dc, scroll_rect->left, scroll_rect->top, SRCCOPY))
+        ERR("Failed to present the scrolled rectangle.\n");
+    for (i = 0; i < rect_count; ++i)
+    {
+        if (IsRectEmpty(&src_rects[i]) || IsRectEmpty(&dst_rects[i]))
+            continue;
+        if (!StretchBlt(swapchain->dc, dst_rects[i].left, dst_rects[i].top,
+                dst_rects[i].right - dst_rects[i].left, dst_rects[i].bottom - dst_rects[i].top,
+                src_dc, src_rects[i].left, src_rects[i].top,
+                src_rects[i].right - src_rects[i].left, src_rects[i].bottom - src_rects[i].top, SRCCOPY))
+            ERR("Failed to present %s to %s.\n", wine_dbgstr_rect(&src_rects[i]), wine_dbgstr_rect(&dst_rects[i]));
+    }
+    SetRectEmpty(&swapchain->front_buffer_update);
+}
+#endif
+
 static void swapchain_gdi_present(struct wined3d_swapchain *swapchain, const RECT *src_rects,
         const RECT *dst_rects, unsigned int rect_count, const RECT *scroll_rect, const POINT *scroll_offset,
         unsigned int swap_interval, uint32_t flags)
@@ -1741,6 +1773,11 @@ static void swapchain_gdi_present(struct wined3d_swapchain *swapchain, const REC
 
 #ifdef __REACTOS__
 present:
+    if (!swapchain->composition)
+    {
+        swapchain_gdi_present_window(swapchain, src_rects, dst_rects, rect_count, scroll_rect);
+        return;
+    }
 #endif
 #ifndef __REACTOS__
     SetRect(&swapchain->front_buffer_update, 0, 0,
