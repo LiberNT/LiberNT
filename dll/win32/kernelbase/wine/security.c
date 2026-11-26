@@ -193,9 +193,15 @@ static NTSTATUS open_file( LPCWSTR name, DWORD access, HANDLE *file )
 
     if ((status = RtlDosPathNameToNtPathName_U_WithStatus( name, &file_nameW, NULL, NULL ))) return status;
     InitializeObjectAttributes( &attr, &file_nameW, OBJ_CASE_INSENSITIVE, 0, NULL );
+#ifdef __REACTOS__
+    status = NtCreateFile( file, access, &attr, &io, NULL, 0,
+                           FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, FILE_OPEN,
+                           FILE_OPEN_FOR_BACKUP_INTENT, NULL, 0 );
+#else
     status = NtCreateFile( file, access|SYNCHRONIZE, &attr, &io, NULL, 0,
                            FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, FILE_OPEN,
                            FILE_OPEN_FOR_BACKUP_INTENT, NULL, 0 );
+#endif
     RtlFreeUnicodeString( &file_nameW );
     return status;
 }
