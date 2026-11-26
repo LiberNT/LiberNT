@@ -22,6 +22,8 @@
 #define DXGK_HANDOVER_VERSION 0x30
 #define DXGK_HANDOVER_CALLOUTS 32
 #define DXGK_HANDOVER_PROCESS_CALLOUT 2
+#define DXGK_HANDOVER_ENUM_ADAPTERS2 6
+#define DXGK_HANDOVER_CLOSE_ADAPTER 8
 #define DXGK_HANDOVER_GET_PATHS_MODALITY 15
 #define DXGK_HANDOVER_FUNCTIONALIZE_PATHS_MODALITY 16
 #define DXGK_HANDOVER_APPLY_PATHS_MODALITY 17
@@ -94,6 +96,8 @@ typedef LONG (__cdecl *PFN_DXGK_APPLY_PATHS_MODALITY)(ULONG, PDXGK_PATHS_MODALIT
 typedef LONG (__cdecl *PFN_DXGK_FINALIZE_PATHS_MODALITY)(PDXGK_PATHS_MODALITY, PVOID, PVOID);
 typedef LONG (__cdecl *PFN_DXGK_PERSIST_PATHS_MODALITY)(ULONG, PDXGK_PATHS_MODALITY, PVOID, ULONG_PTR);
 typedef ULONG (__cdecl *PFN_DXGK_FREE_PATHS_MODALITY)(PDXGK_PATHS_MODALITY);
+typedef LONG (__cdecl *PFN_DXGK_ENUM_ADAPTERS2)(D3DKMT_ENUMADAPTERS2 *, KPROCESSOR_MODE, BOOLEAN, KWAIT_REASON);
+typedef LONG (__cdecl *PFN_DXGK_CLOSE_ADAPTER)(const D3DKMT_CLOSEADAPTER *, KPROCESSOR_MODE);
 
 NTSTATUS
 NTAPI
@@ -422,6 +426,59 @@ BOOLEAN
 WddmHandOverIsActive(VOID)
 {
     return ReadPointerAcquire((PVOID volatile *)&g_DxgkProcessCallout) != NULL;
+}
+
+NTSTATUS
+WddmHandOverIsPresentSource(
+    _In_ LUID AdapterLuid,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _Out_ PBOOLEAN IsSource)
+{
+    PFN_DXGK_ENUM_ADAPTERS2 EnumAdapters2;
+    PFN_DXGK_CLOSE_ADAPTER CloseAdapter;
+    D3DKMT_ADAPTERINFO Adapters[16];
+    D3DKMT_ENUMADAPTERS2 Enum;
+    D3DKMT_CLOSEADAPTER Close;
+    NTSTATUS Status;
+    ULONG Index;
+
+    PAGED_CODE();
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(IsSource != NULL);
+
+    *IsSource = FALSE;
+    if (!WddmHandOverIsActive())
+        return STATUS_DEVICE_NOT_READY;
+    EnumAdapters2 = (PFN_DXGK_ENUM_ADAPTERS2)g_DxgkCallouts[DXGK_HANDOVER_ENUM_ADAPTERS2];
+    CloseAdapter = (PFN_DXGK_CLOSE_ADAPTER)g_DxgkCallouts[DXGK_HANDOVER_CLOSE_ADAPTER];
+    if (EnumAdapters2 == NULL || CloseAdapter == NULL)
+        return STATUS_NOT_SUPPORTED;
+
+    RtlZeroMemory(Adapters, sizeof(Adapters));
+    RtlZeroMemory(&Enum, sizeof(Enum));
+    Enum.NumAdapters = RTL_NUMBER_OF(Adapters);
+    Enum.pAdapters = Adapters;
+    /* FIXME: the meaning of the third argument is unknown; it is the value the system call passes */
+    Status = EnumAdapters2(&Enum, KernelMode, TRUE, Executive);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    ASSERT(Enum.NumAdapters <= RTL_NUMBER_OF(Adapters));
+    for (Index = 0; Index < Enum.NumAdapters && Index < RTL_NUMBER_OF(Adapters); Index++)
+    {
+        NTSTATUS CloseStatus;
+
+        if (Adapters[Index].AdapterLuid.LowPart == AdapterLuid.LowPart &&
+            Adapters[Index].AdapterLuid.HighPart == AdapterLuid.HighPart &&
+            VidPnSourceId < Adapters[Index].NumOfSources)
+        {
+            *IsSource = TRUE;
+        }
+        Close.hAdapter = Adapters[Index].hAdapter;
+        CloseStatus = CloseAdapter(&Close, KernelMode);
+        if (!NT_SUCCESS(CloseStatus))
+            DPRINT1("WddmHandOver: closing adapter 0x%x failed: 0x%08lx\n", Close.hAdapter, CloseStatus);
+    }
+    return STATUS_SUCCESS;
 }
 
 const VOID *

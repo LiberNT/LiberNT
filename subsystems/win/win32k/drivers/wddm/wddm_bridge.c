@@ -330,13 +330,27 @@ WddmBridgeUnboundService(
     return Services[ArgumentCount];
 }
 
+/* win32k serves these itself; a graphics kernel exports none of them */
+static const PCSTR WddmBridgeWin32kServices[] =
+{
+    "NtGdiDdDDICreateDCFromMemory",
+    "NtGdiDdDDIDestroyDCFromMemory",
+    "NtGdiDdDDIGetPresentQueueEvent",
+    "NtGdiDdDDISharedPrimaryLockNotification",
+    "NtGdiDdDDISharedPrimaryUnLockNotification",
+};
+
 static BOOLEAN
 WddmBridgeIsProviderService(
     _In_z_ PCSTR Name)
 {
-    /* The memory DC services are GDI's own on Windows as well */
-    if (strcmp(Name, "NtGdiDdDDICreateDCFromMemory") == 0 || strcmp(Name, "NtGdiDdDDIDestroyDCFromMemory") == 0)
-        return FALSE;
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(WddmBridgeWin32kServices); Index++)
+    {
+        if (strcmp(Name, WddmBridgeWin32kServices[Index]) == 0)
+            return FALSE;
+    }
     return strncmp(Name, "NtGdiDdDDI", 10) == 0 || strncmp(Name, "NtDxgk", 6) == 0;
 }
 

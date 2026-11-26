@@ -221,6 +221,18 @@ WddmHandOverIsActive(VOID)
 }
 
 NTSTATUS
+WddmHandOverIsPresentSource(
+    _In_ LUID AdapterLuid,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _Out_ PBOOLEAN IsSource)
+{
+    UNREFERENCED_PARAMETER(AdapterLuid);
+    UNREFERENCED_PARAMETER(VidPnSourceId);
+    *IsSource = FALSE;
+    return STATUS_DEVICE_NOT_READY;
+}
+
+NTSTATUS
 WddmHandOverInitGdiDevice(
     _In_ PDEVICE_OBJECT DeviceObject,
     _Inout_ struct _VIDEO_WIN32K_CALLBACKS *Callbacks)

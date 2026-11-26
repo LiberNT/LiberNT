@@ -18,6 +18,7 @@ BOOLEAN  WddmBridgeIsReady(VOID);
 BOOLEAN  WddmBridgeIsProviderBound(VOID);
 NTSTATUS WddmHandOverInit(_In_ PDEVICE_OBJECT DeviceObject);
 BOOLEAN  WddmHandOverIsActive(VOID);
+NTSTATUS WddmHandOverIsPresentSource(_In_ LUID AdapterLuid, _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId, _Out_ PBOOLEAN IsSource);
 struct _VIDEO_WIN32K_CALLBACKS;
 NTSTATUS WddmHandOverInitGdiDevice(_In_ PDEVICE_OBJECT DeviceObject, _Inout_ struct _VIDEO_WIN32K_CALLBACKS *Callbacks);
 VOID     WddmHandOverProcessCallout(_Inout_ PVOID *DxgProcess, _In_ BOOLEAN Create);
