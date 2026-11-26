@@ -302,7 +302,7 @@ static void TestPagingQueue(D3DKMT_HANDLE hDevice)
     ok(NT_SUCCESS(Status), "Paging queue destruction: %#lx\n", Status);
 }
 
-static void TestTrimNotification(const APPSMOKE_ADAPTER *Adapter)
+static void TestTrimNotification(const APPSMOKE_ADAPTER *Adapter, D3DKMT_HANDLE hDevice)
 {
     D3DKMT_UNREGISTERTRIMNOTIFICATION Unregister;
     D3DKMT_REGISTERTRIMNOTIFICATION Register;
@@ -310,6 +310,7 @@ static void TestTrimNotification(const APPSMOKE_ADAPTER *Adapter)
 
     memset(&Register, 0, sizeof(Register));
     Register.AdapterLuid = Adapter->Luid;
+    Register.hDevice = hDevice;
     Register.Callback = TrimCallback;
     Register.Context = &Register;
     Status = KmtCall("D3DKMTRegisterTrimNotification", &Register);
@@ -383,7 +384,7 @@ START_TEST(d3dkmt)
         {
             TestFence(Create.hDevice);
             TestPagingQueue(Create.hDevice);
-            TestTrimNotification(&Adapter);
+            TestTrimNotification(&Adapter, Create.hDevice);
 
             memset(&Memory, 0, sizeof(Memory));
             Memory.hAdapter = Adapter.hAdapter;
