@@ -5,9 +5,12 @@ add_definitions(
     -DNDIS_MINIPORT_DRIVER
     -DNDIS_LEGACY_DRIVER=1)
 
+include_directories(${REACTOS_SOURCE_DIR}/sdk/lib/drivers/rsna_supplicant)
+
 list(APPEND SOURCE
     vwifi.c
     engine.c
+    auth.c
     rxtx.c
     oid.c)
 
@@ -16,7 +19,7 @@ add_library(vwifi MODULE
     vwifi.rc)
 
 set_module_type(vwifi kernelmodedriver)
-target_link_libraries(vwifi ${PSEH_LIB})
+target_link_libraries(vwifi ${PSEH_LIB} rsna_supplicant)
 
 add_importlibs(vwifi ndis ntoskrnl hal)
 add_pch(vwifi vwifi.h "")
