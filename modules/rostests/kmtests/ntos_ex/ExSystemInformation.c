@@ -188,9 +188,29 @@ TestDeviceCounts(VOID)
     ok(Devices.NumberOfDisks != 0, "a system started from a disk reports no disk\n");
 }
 
+static
+VOID
+TestGdiDriverWithoutImageLength(VOID)
+{
+    SYSTEM_GDI_DRIVER_INFORMATION Info;
+    NTSTATUS Status;
+
+    RtlZeroMemory(&Info, sizeof(Info));
+    RtlInitUnicodeString(&Info.DriverName, L"\\SystemRoot\\System32\\drivers\\kmtest_no_such_gdi_driver.sys");
+    Status = ZwSetSystemInformation(SystemLoadGdiDriverInSystemSpace,
+                                    &Info,
+                                    FIELD_OFFSET(SYSTEM_GDI_DRIVER_INFORMATION, ImageLength));
+    trace("SystemLoadGdiDriverInSystemSpace without ImageLength returned 0x%08lx\n", Status);
+    ok(Status != STATUS_INFO_LENGTH_MISMATCH, "the information without ImageLength was refused for its length\n");
+    ok(!NT_SUCCESS(Status), "a driver image that does not exist was loaded\n");
+    ok_eq_pointer(Info.ImageAddress, NULL);
+    ok_eq_pointer(Info.SectionPointer, NULL);
+}
+
 START_TEST(ExSystemInformation)
 {
     TestLogicalProcessorInformation();
     TestPoolCounts();
     TestDeviceCounts();
+    TestGdiDriverWithoutImageLength();
 }

@@ -469,7 +469,8 @@ ExpSetLoadGdiDriver(
 
     PAGED_CODE();
 
-    if (Length != sizeof(SYSTEM_GDI_DRIVER_INFORMATION))
+    if ((Length != sizeof(SYSTEM_GDI_DRIVER_INFORMATION)) &&
+        (Length != FIELD_OFFSET(SYSTEM_GDI_DRIVER_INFORMATION, ImageLength)))
     {
         return STATUS_INFO_LENGTH_MISMATCH;
     }
@@ -479,7 +480,8 @@ ExpSetLoadGdiDriver(
         return STATUS_PRIVILEGE_NOT_HELD;
     }
 
-    Captured = *Information;
+    RtlZeroMemory(&Captured, sizeof(Captured));
+    RtlCopyMemory(&Captured, Information, Length);
 
     Status = ExpLoadGdiDriver(&Captured, InSessionSpace);
     if (!NT_SUCCESS(Status))
@@ -487,7 +489,7 @@ ExpSetLoadGdiDriver(
         return Status;
     }
 
-    *Information = Captured;
+    RtlCopyMemory(Information, &Captured, Length);
 
     return STATUS_SUCCESS;
 }
