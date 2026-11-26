@@ -243,7 +243,10 @@ public:
     HRESULT OpenRecordList(UINT slot);
     HRESULT PresentToDriver(UINT slot, UINT buffer, ID3D12Resource *source);
     HRESULT AcquireTearingSurface(UINT *surface);
+    HRESULT ConvertReadBack(ID3D12Resource *readback, UINT width_limit, UINT height_limit, BYTE *target, UINT target_pitch,
+            UINT target_width, UINT target_height);
     HRESULT WriteForeign(RECT *rect, ID3D12Resource *readback, UINT width_limit, UINT height_limit);
+    HRESULT WriteWindow(ID3D12Resource *readback, UINT width_limit, UINT height_limit);
     HRESULT PrepareExchange(UINT slot, UINT buffer);
     HRESULT StartWorker();
     void StopWorker();
@@ -1188,6 +1191,30 @@ HRESULT Native12SwapChain::RecordReadBack(UINT slot, UINT buffer)
     return S_OK;
 }
 
+HRESULT Native12SwapChain::ConvertReadBack(ID3D12Resource *readback, UINT width_limit, UINT height_limit, BYTE *target,
+        UINT target_pitch, UINT target_width, UINT target_height)
+{
+    void *mapped = NULL;
+    D3D12_RANGE range = {0, static_cast<SIZE_T>(readback_size)};
+    HRESULT hr = readback->Map(0, &range, &mapped);
+    if (FAILED(hr)) return hr;
+    const BYTE *source = static_cast<const BYTE *>(mapped) + readback_layout.Offset;
+    UINT width = readback_layout.Footprint.Width, height = readback_layout.Footprint.Height;
+    DXGI_FORMAT format = readback_layout.Footprint.Format;
+    if (format == DXGI_FORMAT_R16G16B16A16_FLOAT) InitOnceExecuteOnce(&native12_srgb_once, Native12InitSrgbTable, NULL, NULL);
+    /* FIXME: a zero-size source region presents the whole buffer; Windows fills the window with one texel */
+    if (width_limit && height_limit && (width_limit < width || height_limit < height))
+    {
+        width = width_limit;
+        height = height_limit;
+    }
+    hr = Native12ConvertForeign(format, source, readback_layout.Footprint.RowPitch, width, height,
+            target, target_pitch, target_width, target_height);
+    D3D12_RANGE written = {0, 0};
+    readback->Unmap(0, &written);
+    return hr;
+}
+
 HRESULT Native12SwapChain::WriteForeign(RECT *rect, ID3D12Resource *readback, UINT width_limit, UINT height_limit)
 {
     D3DKMT_LOCK lock_args = {};
@@ -1196,33 +1223,41 @@ HRESULT Native12SwapChain::WriteForeign(RECT *rect, ID3D12Resource *readback, UI
     lock_args.Flags.WriteOnly = 1;
     lock_args.Flags.LockEntire = 1;
     if (D3DKMTLock(&lock_args) < 0 || !lock_args.pData) return DXGI_ERROR_UNSUPPORTED;
-    void *mapped = NULL;
-    D3D12_RANGE range = {0, static_cast<SIZE_T>(readback_size)};
-    HRESULT hr = readback->Map(0, &range, &mapped);
-    if (SUCCEEDED(hr))
-    {
-        const BYTE *source = static_cast<const BYTE *>(mapped) + readback_layout.Offset;
-        BYTE *target = static_cast<BYTE *>(lock_args.pData);
-        UINT width = readback_layout.Footprint.Width, height = readback_layout.Footprint.Height;
-        DXGI_FORMAT format = readback_layout.Footprint.Format;
-        if (format == DXGI_FORMAT_R16G16B16A16_FLOAT) InitOnceExecuteOnce(&native12_srgb_once, Native12InitSrgbTable, NULL, NULL);
-        /* FIXME: a zero-size source region presents the whole buffer; Windows fills the window with one texel */
-        if (width_limit && height_limit && (width_limit < width || height_limit < height))
-        {
-            width = width_limit;
-            height = height_limit;
-        }
-        hr = Native12ConvertForeign(format, source, readback_layout.Footprint.RowPitch, width, height,
-                target, foreign_pitch, foreign_width, foreign_height);
-        D3D12_RANGE written = {0, 0};
-        readback->Unmap(0, &written);
-    }
+    HRESULT hr = ConvertReadBack(readback, width_limit, height_limit, static_cast<BYTE *>(lock_args.pData), foreign_pitch,
+            foreign_width, foreign_height);
     D3DKMT_UNLOCK unlock = {};
     unlock.hDevice = device->km_device;
     unlock.NumAllocations = 1;
     unlock.phAllocations = &foreign_allocation;
     D3DKMTUnlock(&unlock);
     if (SUCCEEDED(hr)) SetRect(rect, 0, 0, foreign_width, foreign_height);
+    return hr;
+}
+
+HRESULT Native12SwapChain::WriteWindow(ID3D12Resource *readback, UINT width_limit, UINT height_limit)
+{
+    RECT client;
+    if (!GetClientRect(window, &client) || client.right <= 0 || client.bottom <= 0) return S_OK;
+    UINT width = static_cast<UINT>(client.right), height = static_cast<UINT>(client.bottom);
+    if (width > ~0u / sizeof(UINT32) / height) return E_OUTOFMEMORY;
+    BYTE *pixels = static_cast<BYTE *>(HeapAlloc(GetProcessHeap(), 0, static_cast<SIZE_T>(width) * height * sizeof(UINT32)));
+    if (!pixels) return E_OUTOFMEMORY;
+    HRESULT hr = ConvertReadBack(readback, width_limit, height_limit, pixels, width * sizeof(UINT32), width, height);
+    if (SUCCEEDED(hr))
+    {
+        BITMAPINFO info = {};
+        info.bmiHeader.biSize = sizeof(info.bmiHeader);
+        info.bmiHeader.biWidth = static_cast<LONG>(width);
+        info.bmiHeader.biHeight = -static_cast<LONG>(height);
+        info.bmiHeader.biPlanes = 1;
+        info.bmiHeader.biBitCount = 32;
+        info.bmiHeader.biCompression = BI_RGB;
+        HDC dc = GetDC(window);
+        if (!dc || !SetDIBitsToDevice(dc, 0, 0, width, height, 0, 0, 0, height, pixels, &info, DIB_RGB_COLORS))
+            hr = E_FAIL;
+        if (dc) ReleaseDC(window, dc);
+    }
+    HeapFree(GetProcessHeap(), 0, pixels);
     return hr;
 }
 
@@ -1249,6 +1284,9 @@ HRESULT Native12SwapChain::PublishForeign(UINT slot)
     HANDLE shared = NULL;
     ULONGLONG update = 0;
     hr = get_surface(window, adapter_desc.AdapterLuid, NULL, 0, &format, &shared, &update);
+    /* The render adapter cannot make the compositor's window surface: draw the frame into the window instead */
+    if (hr == HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED))
+        return WriteWindow(record_readback[slot], records[slot].source_width, records[slot].source_height);
     /* FIXME: DWM composes only visible windows of the presenting process; it drops frames for the others */
     if (hr == S_FALSE || hr == E_ACCESSDENIED || hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND)
             || hr == HRESULT_FROM_WIN32(ERROR_NOT_READY)) return S_OK;
