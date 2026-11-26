@@ -53,7 +53,10 @@ START_TEST(RtlLocateExtendedFeature)
     /* The extended area points into the inaccessible page, so any read of it faults */
     Context = (PCONTEXT)Buffer;
     ContextEx = (TEST_CONTEXT_EX *)(Context + 1);
-    Context->ContextFlags = CONTEXT_ALL | CONTEXT_XSTATE;
+    Context->ContextFlags = CONTEXT_ALL;
+#ifdef CONTEXT_XSTATE
+    Context->ContextFlags |= CONTEXT_XSTATE;
+#endif
     ContextEx->All.Offset = -(LONG)sizeof(CONTEXT);
     ContextEx->All.Length = 2 * PAGE_SIZE;
     ContextEx->Legacy.Offset = -(LONG)sizeof(CONTEXT);
@@ -83,6 +86,7 @@ START_TEST(RtlLocateExtendedFeature)
         ok(Result == NULL, "feature %lu: %p for a disabled feature\n", Feature, Result);
         ok(Length == 0xdeadbeef, "feature %lu: length set to %lu for a disabled feature\n", Feature, Length);
 
+#ifdef CONTEXT_XSTATE
         Result = (PVOID)1;
         Length = 0xdeadbeef;
         Status = STATUS_SUCCESS;
@@ -98,6 +102,7 @@ START_TEST(RtlLocateExtendedFeature)
         ok(Status == STATUS_SUCCESS, "feature %lu: LocateXStateFeature read the context: %lx\n", Feature, Status);
         ok(Result == NULL, "feature %lu: LocateXStateFeature returned %p\n", Feature, Result);
         ok(Length == 0xdeadbeef, "feature %lu: LocateXStateFeature set length %lu\n", Feature, Length);
+#endif
     }
     ok(Tested != 0, "every extended feature is enabled\n");
 

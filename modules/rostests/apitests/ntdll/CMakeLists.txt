@@ -225,6 +225,7 @@ list(APPEND SOURCE
     RtlIsNameInExpression.c
     RtlIsNameLegalDOS8Dot3.c
     RtlLocale.c
+    RtlLocateExtendedFeature.c
     RtlMemoryStream.c
     PfxPrefixTable.c
     RtlAddressInSectionTable.c
@@ -271,10 +272,6 @@ if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
     list(APPEND SOURCE
         NtContinue.c
         UserModeException.c)
-endif()
-
-if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64")
-    list(APPEND SOURCE RtlLocateExtendedFeature.c)
 endif()
 
 if(ARCH STREQUAL "i386")
