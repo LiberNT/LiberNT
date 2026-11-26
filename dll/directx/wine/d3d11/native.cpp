@@ -8081,6 +8081,22 @@ struct NativePresentContext
     HRESULT result;
 };
 
+static HRESULT NativeDriverPresent(NativeDevice *device, const DXGI_DDI_ARG_PRESENT *args)
+{
+    if (device->dxgi_functions.pfnPresent) return device->dxgi_functions.pfnPresent(const_cast<DXGI_DDI_ARG_PRESENT *>(args));
+    DXGI_DDI_ARG_PRESENTSURFACE surface = {args->hSurfaceToPresent, args->SrcSubResourceIndex};
+    DXGI_DDI_ARG_PRESENT1 present = {};
+    present.hDevice = args->hDevice;
+    present.phSurfacesToPresent = &surface;
+    present.SurfacesToPresent = 1;
+    present.hDstResource = args->hDstResource;
+    present.DstSubResourceIndex = args->DstSubResourceIndex;
+    present.pDXGIContext = args->pDXGIContext;
+    present.Flags = args->Flags;
+    present.FlipInterval = args->FlipInterval;
+    return device->wddm20_dxgi.pfnPresent1(&present);
+}
+
 static HRESULT APIENTRY NativePresent(HANDLE runtime_device, DXGIDDICB_PRESENT *callback)
 {
     if (!callback || !callback->pDXGIContext) return E_INVALIDARG;
@@ -8816,7 +8832,7 @@ HRESULT STDMETHODCALLTYPE NativeDevice::create_swapchain(IDXGIFactory *factory, 
     *out = NULL;
     if (!factory || (window && !IsWindow(window)) || !requested || !fullscreen) return DXGI_ERROR_INVALID_CALL;
     if (output || (!fullscreen->Windowed && !window)) return DXGI_ERROR_UNSUPPORTED;
-    if (!dxgi_functions.pfnPresent) return DXGI_ERROR_UNSUPPORTED;
+    if (!dxgi_functions.pfnPresent && !(wddm20 && wddm20_dxgi.pfnPresent1)) return DXGI_ERROR_UNSUPPORTED;
     if (feature_level < D3D_FEATURE_LEVEL_10_0)
     {
         UINT support = 0;
@@ -9099,7 +9115,7 @@ HRESULT NativeSwapChain::PresentMeasured(UINT interval, UINT flags, const DXGI_P
     args.FlipInterval = static_cast<DXGI_DDI_FLIP_INTERVAL_TYPE>(interval);
     device->BeginCall();
     ULONGLONG trace_driver_start = NativeTraceNow();
-    HRESULT hr = device->dxgi_functions.pfnPresent(&args);
+    HRESULT hr = NativeDriverPresent(device, &args);
     trace_driver += NativeTraceNow() - trace_driver_start;
     if (FAILED(hr)) return hr;
     if (FAILED(device->operation_error)) return device->operation_error;

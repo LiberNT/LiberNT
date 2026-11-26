@@ -912,7 +912,26 @@ typedef struct DXGI_DDI_ARG_CHECKMULTIPLANEOVERLAYCOLORSPACESUPPORT DXGI_DDI_ARG
 typedef struct DXGI_DDI_ARG_CHECKPRESENTDURATIONSUPPORT DXGI_DDI_ARG_CHECKPRESENTDURATIONSUPPORT;
 typedef struct DXGI_DDI_ARG_GETMULTIPLANEOVERLAYCAPS DXGI_DDI_ARG_GETMULTIPLANEOVERLAYCAPS;
 typedef struct DXGI_DDI_ARG_GETMULTIPLANEOVERLAYGROUPCAPS DXGI_DDI_ARG_GETMULTIPLANEOVERLAYGROUPCAPS;
-typedef struct DXGI_DDI_ARG_PRESENT1 DXGI_DDI_ARG_PRESENT1;
+typedef struct DXGI_DDI_ARG_PRESENTSURFACE
+{
+    DXGI_DDI_HRESOURCE hSurface;
+    UINT SubResourceIndex;
+} DXGI_DDI_ARG_PRESENTSURFACE;
+typedef struct DXGI_DDI_ARG_PRESENT1
+{
+    DXGI_DDI_HDEVICE hDevice;
+    const DXGI_DDI_ARG_PRESENTSURFACE *phSurfacesToPresent;
+    UINT SurfacesToPresent;
+    DXGI_DDI_HRESOURCE hDstResource;
+    UINT DstSubResourceIndex;
+    void *pDXGIContext;
+    DXGI_DDI_PRESENT_FLAGS Flags;
+    DXGI_DDI_FLIP_INTERVAL_TYPE FlipInterval;
+    UINT Reserved;
+    const RECT *pDirtyRects;
+    UINT DirtyRects;
+    UINT BackBufferMultiplicity;
+} DXGI_DDI_ARG_PRESENT1;
 typedef struct DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY;
 typedef struct DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY1 DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY1;
 typedef struct _DXGI_DDI_ARG_OFFERRESOURCES
@@ -961,6 +980,7 @@ static_assert(sizeof(D3D11_1DDI_DEVICEFUNCS) == 155 * sizeof(void *), "D3D11.1 f
 static_assert(sizeof(D3DWDDM2_0DDI_DEVICEFUNCS) == 168 * sizeof(void *), "WDDM 2.0 function table");
 static_assert(sizeof(D3DWDDM2_0DDI_CORELAYER_DEVICECALLBACKS) == 42 * sizeof(void *), "WDDM 2.0 core callbacks");
 static_assert(sizeof(DXGI1_4_DDI_BASE_FUNCTIONS) == 21 * sizeof(void *), "DXGI 1.4 function table");
+static_assert(sizeof(DXGI_DDI_ARG_PRESENT1) == (sizeof(void *) == 8 ? 80 : 48), "DXGI present1 arguments");
 static_assert(sizeof(D3D11_1DDIARG_SIGNATURE_ENTRY2) == 20, "WDDM shader signature entry");
 static_assert(offsetof(D3DWDDM2_0DDI_CORELAYER_DEVICECALLBACKS, pfnCreateContextCb) == 40 * sizeof(void *), "Core callback extension");
 #ifdef _WIN64
