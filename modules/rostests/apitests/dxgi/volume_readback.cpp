@@ -32,7 +32,7 @@ static void check_copy(ID3D10Device1 *device, ID3D10Texture3D *source,
         unsigned int expected_level = level;
         unsigned int bad = 0, first_x = 0, first_y = 0, first_z = 0;
         BYTE first_value = 0, first_expected = 0;
-        /* WARP leaves the smallest level of a view that starts above level 0 as it was. */
+        /* The smallest level of a mip view that starts above level 0 may keep its contents. */
         bool either = uniform && generated_base && generated_base < desc->MipLevels && level == desc->MipLevels - 1;
         if (uniform && level >= generated_base)
             expected_level = generated_base;
