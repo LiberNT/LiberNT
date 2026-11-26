@@ -17,6 +17,7 @@ if(REACTOS_USE_WDDM)
 
     list(APPEND SOURCE
         wddm_bridge.c
+        dxgk_handover.c
         d3dkmt_stubs.c
         ntgdi_dxg.c)
 else()

@@ -6,6 +6,7 @@
  */
 
 #include <win32k.h>
+#include "drivers/wddm/wddm_bridge.h"
 DBG_DEFAULT_CHANNEL(UserMisc);
 
 BOOL FASTCALL RegisterControlAtoms(VOID);
@@ -421,6 +422,12 @@ NtUserInitialize(
         }
         gbGreInitialized = TRUE;
     }
+
+    UserLeave();
+    Status = WddmHandOverStartSession(&((PPROCESSINFO)PsGetCurrentProcessWin32Process())->DxgProcess);
+    UserEnterExclusive();
+    if (!NT_SUCCESS(Status))
+        ERR("The graphics kernel did not start the session: 0x%08lx\n", Status);
 
     /* Every session's CSRSS delivers the power callouts of the windows and services in that session */
     Status = IntInitWin32PowerManagement(hPowerRequestEvent);

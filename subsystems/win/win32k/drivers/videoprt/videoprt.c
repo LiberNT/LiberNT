@@ -277,15 +277,31 @@ IntVideoPortCreateAdapterDeviceObject(
     WCHAR DeviceBuffer[20];
     UNICODE_STRING DeviceName;
     PDEVICE_OBJECT DeviceObject_;
+    ULONG RegisteredMaxObjectNumber = (ULONG)-1;
+    ULONG NoValue = (ULONG)-1;
+    RTL_QUERY_REGISTRY_TABLE MaxObjectQuery[2];
 
     if (DeviceObject == NULL)
         DeviceObject = &DeviceObject_;
+
+    RtlZeroMemory(MaxObjectQuery, sizeof(MaxObjectQuery));
+    MaxObjectQuery[0].Flags = RTL_QUERY_REGISTRY_DIRECT | RTL_QUERY_REGISTRY_TYPECHECK;
+    MaxObjectQuery[0].Name = L"MaxObjectNumber";
+    MaxObjectQuery[0].EntryContext = &RegisteredMaxObjectNumber;
+    MaxObjectQuery[0].DefaultType = (REG_DWORD << RTL_QUERY_REGISTRY_TYPECHECK_SHIFT) | REG_DWORD;
+    MaxObjectQuery[0].DefaultData = &NoValue;
+    MaxObjectQuery[0].DefaultLength = sizeof(NoValue);
 
     /*
      * Find the first free device number that can be used for video device
      * object names and symlinks.
      */
     DeviceNumber = VideoPortMaxObjectNumber + 1;
+    if (NT_SUCCESS(RtlQueryRegistryValues(RTL_REGISTRY_DEVICEMAP, L"VIDEO", MaxObjectQuery, NULL, NULL)) &&
+        RegisteredMaxObjectNumber != (ULONG)-1 && RegisteredMaxObjectNumber >= DeviceNumber)
+    {
+        DeviceNumber = RegisteredMaxObjectNumber + 1;
+    }
     if (DeviceNumber == (ULONG)-1)
     {
         WARN_(VIDEOPRT, "Can't find free device number\n");
