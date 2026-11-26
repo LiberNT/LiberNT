@@ -171,20 +171,20 @@ static BOOL Mouse(rdpInput *input, UINT16 flags, UINT16 x, UINT16 y)
     BOOL down = (flags & PTR_FLAGS_DOWN) != 0;
     if (!InputReady(input)) return FALSE;
     event.type = INPUT_MOUSE;
-    if (x >= ctx->Width) x = ctx->Width - 1;
-    if (y >= ctx->Height) y = ctx->Height - 1;
-    event.mi.dx = MulDiv(x, 65535, ctx->Width - 1);
-    event.mi.dy = MulDiv(y, 65535, ctx->Height - 1);
-    event.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
     if (flags & (PTR_FLAGS_WHEEL | PTR_FLAGS_HWHEEL))
     {
         LONG delta = flags & 0x1ff;
         if (flags & PTR_FLAGS_WHEEL_NEGATIVE) delta -= 0x200;
         event.mi.mouseData = (DWORD)delta;
-        event.mi.dwFlags |= (flags & PTR_FLAGS_HWHEEL) ? MOUSEEVENTF_HWHEEL : MOUSEEVENTF_WHEEL;
+        event.mi.dwFlags = (flags & PTR_FLAGS_WHEEL) ? MOUSEEVENTF_WHEEL : MOUSEEVENTF_HWHEEL;
     }
     else
     {
+        if (x >= ctx->Width) x = ctx->Width - 1;
+        if (y >= ctx->Height) y = ctx->Height - 1;
+        event.mi.dx = MulDiv(x, 65535, ctx->Width - 1);
+        event.mi.dy = MulDiv(y, 65535, ctx->Height - 1);
+        event.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
         if (flags & PTR_FLAGS_BUTTON1) event.mi.dwFlags |= down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP;
         if (flags & PTR_FLAGS_BUTTON2) event.mi.dwFlags |= down ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP;
         if (flags & PTR_FLAGS_BUTTON3) event.mi.dwFlags |= down ? MOUSEEVENTF_MIDDLEDOWN : MOUSEEVENTF_MIDDLEUP;
@@ -276,6 +276,7 @@ static BOOL Activate(freerdp_peer *peer)
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)peer->context;
     POINTER_SYSTEM_UPDATE pointer = {0};
     if (!ctx->Authorized) return FALSE;
+    if (!freerdp_settings_set_bool(ctx->rdp.settings, FreeRDP_NoBitmapCompressionHeader, FALSE)) return FALSE;
     ctx->Active = TRUE;
     ctx->Refresh = TRUE;
     pointer.type = SYSPTR_NULL;
