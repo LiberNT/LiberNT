@@ -2340,10 +2340,27 @@ MiMapSectionView(
 
     if (Control->Image)
     {
+        ULONG64 SectionSize = ROUND_TO_PAGES((ULONG64)Section->SizeOfSection.QuadPart);
+
         if (Offset != 0)
             return STATUS_INVALID_PARAMETER_6;
 
-        Size = 0;
+        if (Size == 0)
+        {
+            Size = SectionSize;
+        }
+        else
+        {
+            if (Size > ~0ULL - (PAGE_SIZE - 1))
+                return STATUS_INVALID_VIEW_SIZE;
+
+            Size = ROUND_TO_PAGES(Size);
+            if (Size > SectionSize)
+                return STATUS_INVALID_VIEW_SIZE;
+        }
+
+        if (Size < Control->ImageSize)
+            CfgScp = FALSE;
 
         if (Base == 0 && !Space->IsSystem)
         {

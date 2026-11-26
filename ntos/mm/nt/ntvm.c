@@ -1172,9 +1172,12 @@ MiQueryImageInformation(
         else if (Vad->Type == MiVadImage)
         {
             PMI_CONTROL_AREA Control = Vad->Segment->FileContext;
+            ULONG64 MappedPages = Vad->Node.EndingVpn - Vad->Node.StartingVpn + 1 - (Vad->CfgScp ? 1 : 0);
+            ULONG64 ImagePages = (ULONG64)ROUND_TO_PAGES(Control->ImageSize) >> PAGE_SHIFT;
 
             Image.ImageBase = (PVOID)(ULONG_PTR)(Vad->Node.StartingVpn << PAGE_SHIFT);
             Image.SizeOfImage = (SIZE_T)Control->ImageSize;
+            Image.ImagePartialMap = (MappedPages < ImagePages) ? 1 : 0;
             Image.ImageNotExecutable = Vad->NoExecuteImage;
             Image.ImageExtensionPresent = Vad->CfgScp;
             /* TODO: ImageSigningLevel needs code integrity signing levels; it reports 0 */

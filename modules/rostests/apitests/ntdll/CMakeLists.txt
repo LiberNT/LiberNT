@@ -187,6 +187,7 @@ list(APPEND SOURCE
     ProcessPoolQuota.c
     ProcessUserModeIopl.c
     MemoryImageInformation.c
+    PartialImageMap.c
     ObjectQuotaLimit.c
     ObjectTypeIndex.c
     ObHandleRace.c
