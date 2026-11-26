@@ -2935,7 +2935,7 @@
 @ stub -arch=arm64 ReadTimeStampCounter
 @ stub -arch=win64 RtlAddAccessFilterAce
 @ stdcall RtlAddAtomToAtomTableEx(ptr wstr ptr long)
-@ stdcall -arch=win64 RtlAddMandatoryAce(ptr long long long long ptr)
+@ stdcall RtlAddMandatoryAce(ptr long long long long ptr)
 @ stub -arch=win64 RtlAddProcessTrustLabelAce
 @ stub -arch=win64 RtlAddResourceAttributeAce
 @ stdcall -arch=win64 RtlAreBitsClearEx(ptr int64 int64) RtlAreBitsClear64
