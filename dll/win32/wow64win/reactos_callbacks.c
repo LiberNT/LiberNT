@@ -507,6 +507,7 @@ static NTSTATUS WINAPI ros_wow64_window_proc(void *arg, ULONG size)
     {
         buffer_size = args64->lParamBufferSize;
         if (size != sizeof(*args64) + buffer_size) return ros_callback_bad_length();
+        if ((args64->Msg == WM_CREATE || args64->Msg == WM_NCCREATE) && buffer_size < sizeof(CREATESTRUCTW)) return ros_callback_bad_length();
     }
     else if (size != sizeof(*args64)) return ros_callback_bad_length();
     if (!(args32 = Wow64AllocateTemp(sizeof(*args32) + buffer_size + 64))) return NtCallbackReturn(NULL, 0, STATUS_NO_MEMORY);
@@ -521,6 +522,13 @@ static NTSTATUS WINAPI ros_wow64_window_proc(void *arg, ULONG size)
     if (args64->lParamBufferSize >= 0)
     {
         buffer_size = packed_message_64to32(args64->Msg, args64->wParam, args64 + 1, args32 + 1, buffer_size);
+        if (args64->Msg == WM_CREATE || args64->Msg == WM_NCCREATE)
+        {
+            CREATESTRUCT32 *cs32 = (CREATESTRUCT32 *)(args32 + 1);
+
+            cs32->lpszName -= sizeof(CREATESTRUCTW) - sizeof(*cs32);
+            cs32->lpszClass -= sizeof(CREATESTRUCTW) - sizeof(*cs32);
+        }
         args32->lParamBufferSize = buffer_size;
         len32 += buffer_size;
     }

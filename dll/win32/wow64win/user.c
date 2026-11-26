@@ -698,10 +698,6 @@ static size_t packed_message_64to32( UINT message, WPARAM wparam,
             const CREATESTRUCTW *cs64 = params64;
 
             createstruct_64to32( cs64, cs32 );
-#ifdef __REACTOS__
-            cs32->lpszName -= sizeof(*cs64) - sizeof(*cs32);
-            cs32->lpszClass -= sizeof(*cs64) - sizeof(*cs32);
-#endif
             size -= sizeof(*cs64);
             if (size) memmove( cs32 + 1, cs64 + 1, size );
             return sizeof(*cs32) + size;
