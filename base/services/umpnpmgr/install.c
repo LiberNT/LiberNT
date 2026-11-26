@@ -1374,6 +1374,10 @@ DeviceInstallThread(LPVOID lpParameter)
 
     // Step 1: install all drivers which were configured during the boot
 
+    /* Setup installs the in-box classes and components first, then lets devices install */
+    if (SetupIsActive())
+        WaitForSingleObject(hInstallEvent, INFINITE);
+
     DPRINT("Step 1: Installing devices configured during the boot\n");
 
     PWSTR deviceList;

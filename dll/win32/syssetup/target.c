@@ -1275,6 +1275,9 @@ ConfigureTargetSystem(
     Error = EnableTargetPlugPlay();
     if (Error != ERROR_SUCCESS)
         return Error;
+    Error = AllowSetupDeviceInstall();
+    if (Error != ERROR_SUCCESS && Error != ERROR_SERVICE_NOT_ACTIVE)
+        return Error;
 
     ReportTargetPhase(3);
     if (!Settings->Upgrade &&

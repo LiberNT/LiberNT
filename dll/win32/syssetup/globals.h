@@ -69,6 +69,9 @@ CreateTempDir(
 BOOL
 InstallSysSetupInfDevices(VOID);
 
+DWORD
+AllowSetupDeviceInstall(VOID);
+
 BOOL
 InstallSysSetupInfComponents(
     _In_ UINT Flags);

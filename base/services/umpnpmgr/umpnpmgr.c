@@ -114,6 +114,12 @@ ServiceControlHandler(DWORD dwControl,
                              &ServiceStatus);
             return ERROR_SUCCESS;
 
+        case PNP_CONTROL_SETUP_DEVICES_READY:
+            if (!SetupIsActive())
+                return ERROR_CALL_NOT_IMPLEMENTED;
+            SetEvent(hInstallEvent);
+            return ERROR_SUCCESS;
+
         case SERVICE_CONTROL_SHUTDOWN:
             DPRINT("  SERVICE_CONTROL_SHUTDOWN received\n");
             UpdateServiceStatus(SERVICE_STOP_PENDING, 1);
@@ -232,7 +238,7 @@ InitializePnPManager(VOID)
     /* We need this privilege for using CreateProcessAsUserW */
     RtlAdjustPrivilege(SE_ASSIGNPRIMARYTOKEN_PRIVILEGE, TRUE, FALSE, &OldValue);
 
-    hInstallEvent = CreateEventW(NULL, TRUE, SetupIsActive()/*FALSE*/, NULL);
+    hInstallEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (hInstallEvent == NULL)
     {
         dwError = GetLastError();

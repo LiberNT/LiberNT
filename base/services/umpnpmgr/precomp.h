@@ -27,6 +27,7 @@
 #include <setypes.h>
 #include <sddl.h>
 #include <umpnpmgr/sysguid.h>
+#include <umpnpmgr/pnpsetup.h>
 #include <wdmguid.h>
 #include <cfgmgr32.h>
 #include <regstr.h>

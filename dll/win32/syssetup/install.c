@@ -27,6 +27,7 @@
 #include <ndk/exfuncs.h>
 #include <ntsecapi.h>
 #include <strsafe.h>
+#include <umpnpmgr/pnpsetup.h>
 #define WIDL_using_Windows_System_Profile
 #include <windows.system.profile.h>
 
@@ -684,6 +685,33 @@ PnpServiceStatusChanged(PVOID pParameter)
     UNREFERENCED_PARAMETER(pParameter);
 }
 
+DWORD
+AllowSetupDeviceInstall(VOID)
+{
+    SC_HANDLE hSCManager, hService;
+    SERVICE_STATUS ServiceStatus;
+    DWORD Error = ERROR_SUCCESS;
+
+    hSCManager = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
+    if (hSCManager == NULL)
+        return GetLastError();
+
+    hService = OpenServiceW(hSCManager, L"PlugPlay", SERVICE_USER_DEFINED_CONTROL);
+    if (hService == NULL)
+    {
+        Error = GetLastError();
+        CloseServiceHandle(hSCManager);
+        return Error;
+    }
+
+    if (!ControlService(hService, PNP_CONTROL_SETUP_DEVICES_READY, &ServiceStatus))
+        Error = GetLastError();
+
+    CloseServiceHandle(hService);
+    CloseServiceHandle(hSCManager);
+    return Error;
+}
+
 static BOOL
 EnableUserModePnpManager(VOID)
 {
@@ -691,7 +719,7 @@ EnableUserModePnpManager(VOID)
     SC_HANDLE hService = NULL;
     SERVICE_STATUS_PROCESS ServiceStatus;
     BOOL bRet = FALSE;
-    DWORD BytesNeeded, WaitTime;
+    DWORD BytesNeeded, WaitTime, ErrorCode;
 
     hSCManager = OpenSCManagerW(NULL, NULL, SC_MANAGER_ENUMERATE_SERVICE);
     if (hSCManager == NULL)
@@ -762,6 +790,13 @@ EnableUserModePnpManager(VOID)
     {
         bRet = FALSE;
         DPRINT1("Failed to start PlugPlay service\n");
+        goto cleanup;
+    }
+
+    ErrorCode = AllowSetupDeviceInstall();
+    if (ErrorCode != ERROR_SUCCESS)
+    {
+        DPRINT1("PlugPlay refused the device installation (Error %lu)\n", ErrorCode);
         goto cleanup;
     }
 
