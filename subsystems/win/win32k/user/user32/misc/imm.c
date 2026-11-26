@@ -570,7 +570,6 @@ static VOID FASTCALL User32SetImeActivenessOfWindow(HWND hWnd, BOOL bActive)
 
 VOID FASTCALL CtfLoadThreadLayout(PIMEUI pimeui)
 {
-    IMM_FN(CtfImmTIMActivate)(pimeui->hKL);
     pimeui->hKL = GetKeyboardLayout(0);
     IMM_FN(ImmLoadIME)(pimeui->hKL);
     pimeui->hwndUI = NULL;
