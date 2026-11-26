@@ -237,6 +237,8 @@ WlanEnumInterfaces(IN HANDLE hClientHandle,
     if ((pReserved != NULL) || (ppInterfaceList == NULL) || (hClientHandle == NULL))
         return ERROR_INVALID_PARAMETER;
 
+    *ppInterfaceList = NULL;
+
     RpcTryExcept
     {
         dwResult = _RpcEnumInterfaces(hClientHandle, ppInterfaceList);
