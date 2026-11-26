@@ -25,6 +25,17 @@ NTSTATUS WddmHandOverStartSession(_Inout_ PVOID *CsrDxgProcess);
 ULONG    WddmBridgeGetInterfaceVersion(VOID);
 NTSTATUS WddmBridgeGetInterface(_Out_ PREACTOS_WIN32K_DXGKRNL_INTERFACE Interface);
 
+typedef struct _WDDM_BRIDGE_TRUSTED_BUFFER
+{
+    LIST_ENTRY Link;
+    PETHREAD Thread;
+    ULONG_PTR Start;
+    ULONG_PTR End;
+} WDDM_BRIDGE_TRUSTED_BUFFER, *PWDDM_BRIDGE_TRUSTED_BUFFER;
+
+VOID WddmBridgeTrustKernelBuffer(_Out_ PWDDM_BRIDGE_TRUSTED_BUFFER Trusted, _In_reads_bytes_(Size) CONST VOID *Buffer, _In_ SIZE_T Size);
+VOID WddmBridgeDistrustKernelBuffer(_Inout_ PWDDM_BRIDGE_TRUSTED_BUFFER Trusted);
+
 ULONG_PTR
 NTAPI
 DxgkEngDispatchNtGdiDdDDI(

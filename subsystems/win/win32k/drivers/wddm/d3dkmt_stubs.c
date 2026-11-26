@@ -361,23 +361,88 @@ WddmBridgeRejectBadBuffer(
     return (Status == STATUS_ACCESS_VIOLATION) ? STATUS_INVALID_PARAMETER : Status;
 }
 
-/*
- * A pointer this bridge receives is either a user-mode buffer (the caller came
- * straight from a thunk that has not captured yet) or win32k's own kernel copy
- * (the thunk already probed the user buffer and captured it). ExGetPreviousMode
- * still reports UserMode for the latter, because it describes who entered the
- * syscall, not where this pointer lives -- probing a kernel address on that
- * basis fails the whole call with STATUS_ACCESS_VIOLATION. Probe on the
- * pointer's own range instead. This is safe: a user-supplied pointer is always
- * a user address here (the thunk rejected anything else before copying).
- */
-FORCEINLINE
+static LIST_ENTRY WddmBridgeTrustedBuffers = { &WddmBridgeTrustedBuffers, &WddmBridgeTrustedBuffers };
+static KSPIN_LOCK WddmBridgeTrustedBuffersLock;
+
+VOID
+WddmBridgeTrustKernelBuffer(
+    _Out_ PWDDM_BRIDGE_TRUSTED_BUFFER Trusted,
+    _In_reads_bytes_(Size) CONST VOID *Buffer,
+    _In_ SIZE_T Size)
+{
+    KIRQL OldIrql;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    ASSERT(Trusted != NULL);
+    ASSERT(Buffer != NULL);
+    ASSERT((PVOID)Buffer > MmHighestUserAddress);
+    ASSERT(Size != 0);
+    ASSERT((ULONG_PTR)Buffer <= MAXULONG_PTR - Size);
+
+    Trusted->Thread = PsGetCurrentThread();
+    Trusted->Start = (ULONG_PTR)Buffer;
+    Trusted->End = (ULONG_PTR)Buffer + Size;
+    KeAcquireSpinLock(&WddmBridgeTrustedBuffersLock, &OldIrql);
+    InsertHeadList(&WddmBridgeTrustedBuffers, &Trusted->Link);
+    KeReleaseSpinLock(&WddmBridgeTrustedBuffersLock, OldIrql);
+}
+
+VOID
+WddmBridgeDistrustKernelBuffer(
+    _Inout_ PWDDM_BRIDGE_TRUSTED_BUFFER Trusted)
+{
+    KIRQL OldIrql;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    ASSERT(Trusted != NULL);
+    ASSERT(Trusted->Thread == PsGetCurrentThread());
+    ASSERT(Trusted->Start < Trusted->End);
+
+    KeAcquireSpinLock(&WddmBridgeTrustedBuffersLock, &OldIrql);
+    ASSERT(!IsListEmpty(&WddmBridgeTrustedBuffers));
+    RemoveEntryList(&Trusted->Link);
+    KeReleaseSpinLock(&WddmBridgeTrustedBuffersLock, OldIrql);
+}
+
+static BOOLEAN
+WddmBridgeIsTrustedKernelBuffer(
+    _In_ CONST VOID *Address,
+    _In_ SIZE_T Size)
+{
+    PETHREAD Thread = PsGetCurrentThread();
+    ULONG_PTR Start = (ULONG_PTR)Address;
+    PLIST_ENTRY Entry;
+    BOOLEAN Trusted = FALSE;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&WddmBridgeTrustedBuffersLock, &OldIrql);
+    for (Entry = WddmBridgeTrustedBuffers.Flink; Entry != &WddmBridgeTrustedBuffers; Entry = Entry->Flink)
+    {
+        PWDDM_BRIDGE_TRUSTED_BUFFER Buffer = CONTAINING_RECORD(Entry, WDDM_BRIDGE_TRUSTED_BUFFER, Link);
+
+        ASSERT(Buffer->Start < Buffer->End);
+        if (Buffer->Thread == Thread && Start >= Buffer->Start && Start < Buffer->End && Size <= Buffer->End - Start)
+        {
+            Trusted = TRUE;
+            break;
+        }
+    }
+    KeReleaseSpinLock(&WddmBridgeTrustedBuffersLock, OldIrql);
+    return Trusted;
+}
+
+/* For a user-mode caller only win32k's own copies registered as trusted escape the probe */
+static
 BOOLEAN
 WddmBridgeNeedsProbe(
-    _In_opt_ CONST VOID *Address)
+    _In_opt_ CONST VOID *Address,
+    _In_ SIZE_T Size)
 {
-    return (ExGetPreviousMode() != KernelMode) &&
-           (Address == NULL || (PVOID)Address <= MmHighestUserAddress);
+    if (ExGetPreviousMode() == KernelMode)
+        return FALSE;
+    if (Address == NULL || (PVOID)Address <= MmHighestUserAddress)
+        return TRUE;
+    return !WddmBridgeIsTrustedKernelBuffer(Address, Size);
 }
 
 static NTSTATUS
@@ -396,7 +461,7 @@ WddmBridgeSafeCopyFrom(
 
     _SEH2_TRY
     {
-        if (WddmBridgeNeedsProbe(Source))
+        if (WddmBridgeNeedsProbe(Source, Size))
             ProbeForRead(Source, Size, 1);
         RtlCopyMemory(Destination, Source, Size);
     }
@@ -425,7 +490,7 @@ WddmBridgeSafeCopyTo(
 
     _SEH2_TRY
     {
-        if (WddmBridgeNeedsProbe(Destination))
+        if (WddmBridgeNeedsProbe(Destination, Size))
             ProbeForWrite(Destination, Size, 1);
         RtlCopyMemory(Destination, Source, Size);
     }
@@ -451,7 +516,7 @@ WddmBridgeSafeProbeForWrite(
     if (Destination == NULL)
         return STATUS_INVALID_PARAMETER;
 
-    if (!WddmBridgeNeedsProbe(Destination))
+    if (!WddmBridgeNeedsProbe(Destination, Size))
         return STATUS_SUCCESS;
 
     _SEH2_TRY
