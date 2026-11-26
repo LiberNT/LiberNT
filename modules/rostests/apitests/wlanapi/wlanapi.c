@@ -188,6 +188,36 @@ static void WlanGetProfile_test(void)
     ok(ret == ERROR_INVALID_PARAMETER, "expected failure\n");
 }
 
+static void WlanEnumInterfacesIgnoresInput_test(void)
+{
+    PWLAN_INTERFACE_INFO_LIST Stale = (PWLAN_INTERFACE_INFO_LIST)(ULONG_PTR)0x0BAD0BAD;
+    PWLAN_INTERFACE_INFO_LIST List = Stale;
+    HANDLE ClientHandle = NULL;
+    DWORD NegotiatedVersion;
+    DWORD ret;
+
+    ret = WlanOpenHandle(WLAN_API_VERSION_2_0, NULL, &NegotiatedVersion, &ClientHandle);
+    if (ret == ERROR_SERVICE_NOT_ACTIVE)
+    {
+        skip("WlanSvc is not running\n");
+        return;
+    }
+    ok(ret == ERROR_SUCCESS, "WlanOpenHandle failed, error %lu\n", ret);
+    if (ret != ERROR_SUCCESS)
+        return;
+
+    /* The list pointer is output only: whatever the caller left in it is not read */
+    ret = WlanEnumInterfaces(ClientHandle, NULL, &List);
+    ok(ret == ERROR_SUCCESS, "WlanEnumInterfaces with a stale list pointer failed, error %lu\n", ret);
+    ok(List != Stale, "WlanEnumInterfaces kept the stale list pointer\n");
+    if (ret == ERROR_SUCCESS && List != NULL && List != Stale)
+    {
+        ok(List->dwNumberOfItems <= 64, "%lu interfaces\n", List->dwNumberOfItems);
+        WlanFreeMemory(List);
+    }
+    WlanCloseHandle(ClientHandle, NULL);
+}
+
 static void WlanEnumInterfaces_test(void)
 {
     DWORD ret;
@@ -200,6 +230,8 @@ static void WlanEnumInterfaces_test(void)
     /* invalid pInterfaceList */
     ret = WlanEnumInterfaces((HANDLE) -1, NULL, NULL);
     ok(ret == ERROR_INVALID_PARAMETER, "expected failure\n");
+
+    WlanEnumInterfacesIgnoresInput_test();
 }
 
 static void WlanGetInterfaceCapability_test(void)
