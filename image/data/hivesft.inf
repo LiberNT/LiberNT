@@ -9,9 +9,11 @@ HKLM,"SOFTWARE\Classes\Applications\notepad.exe\shell\open\command","",0x0002000
 HKLM,"SOFTWARE\Classes\Applications\mspaint.exe\shell\open\command","",0x00020000,"%SystemRoot%\system32\mspaint.exe ""%1"""
 HKLM,"SOFTWARE\Classes\Applications\wordpad.exe\shell\open\command","",0x00020000,"%SystemRoot%\system32\wordpad.exe ""%1"""
 HKLM,"SOFTWARE\Classes\Applications\mplay32.exe\shell\open\command","",0x00020000,"%SystemRoot%\system32\mplay32.exe ""%1"""
+HKLM,"SOFTWARE\Classes\Applications\iexplore.exe\shell\open\command","",0x00020000,"""%ProgramFiles%\Internet Explorer\iexplore.exe"" %1"
 
 ; Applications NoOpenWith
 HKLM,"SOFTWARE\Classes\Applications\accwiz.exe","NoOpenWith",0x00000000,""
+HKLM,"SOFTWARE\Classes\Applications\iexplore.exe","NoOpenWith",0x00000000,""
 HKLM,"SOFTWARE\Classes\Applications\artgalry.exe","NoOpenWith",0x00000000,""
 HKLM,"SOFTWARE\Classes\Applications\awdvstub.exe","NoOpenWith",0x00000000,""
 HKLM,"SOFTWARE\Classes\Applications\cag.exe","NoOpenWith",0x00000000,""
@@ -115,11 +117,21 @@ HKLM,"SOFTWARE\Classes\http","",0x00000000,"URL:HyperText Transfer Protocol"
 HKLM,"SOFTWARE\Classes\http\DefaultIcon","",0x00020000,"%SystemRoot%\system32\url.dll,0"
 HKLM,"SOFTWARE\Classes\http\Source Filter","",0x00000000,"{E436EBB6-524F-11CE-9F53-0020AF0BA770}"
 HKLM,"SOFTWARE\Classes\http","URL Protocol",0x00000000,""
+HKLM,"SOFTWARE\Classes\http\shell\open\command","",0x00020000,"""%ProgramFiles%\Internet Explorer\iexplore.exe"" ""%1"""
 
 HKLM,"SOFTWARE\Classes\https","",0x00000000,"URL:HyperText Transfer Protocol with Privacy"
 HKLM,"SOFTWARE\Classes\https\DefaultIcon","",0x00000000,"%SystemRoot%\system32\url.dll,0"
 HKLM,"SOFTWARE\Classes\https\Source Filter","",0x00000000,"{E436EBB6-524F-11CE-9F53-0020AF0BA770}"
 HKLM,"SOFTWARE\Classes\https","URL Protocol",0x00000000,""
+HKLM,"SOFTWARE\Classes\https\shell\open\command","",0x00020000,"""%ProgramFiles%\Internet Explorer\iexplore.exe"" ""%1"""
+
+HKLM,"SOFTWARE\Classes\IE.HTTP","",0x00000000,"URL:HyperText Transfer Protocol"
+HKLM,"SOFTWARE\Classes\IE.HTTP","URL Protocol",0x00000000,""
+HKLM,"SOFTWARE\Classes\IE.HTTP\DefaultIcon","",0x00020000,"%SystemRoot%\system32\url.dll,0"
+HKLM,"SOFTWARE\Classes\IE.HTTP\shell\open\command","",0x00020000,"""%ProgramFiles%\Internet Explorer\iexplore.exe"" %1"
+HKLM,"SOFTWARE\Classes\IE.HTTPS","",0x00000000,"URL:HyperText Transfer Protocol with Privacy"
+HKLM,"SOFTWARE\Classes\IE.HTTPS\DefaultIcon","",0x00020000,"%SystemRoot%\system32\url.dll,0"
+HKLM,"SOFTWARE\Classes\IE.HTTPS\shell\open\command","",0x00020000,"""%ProgramFiles%\Internet Explorer\iexplore.exe"" %1"
 ;see http
 
 HKLM,"SOFTWARE\Classes\ms-settings","",0x00000000,"URL:ms-settings"
@@ -130,6 +142,10 @@ HKLM,"SOFTWARE\Microsoft\Internet Explorer","Build",0x00000000,"99600"
 HKLM,"SOFTWARE\Microsoft\Internet Explorer","Version",0x00000000,"9.11.9600.18376"
 HKLM,"SOFTWARE\Microsoft\Internet Explorer","W2kVersion",0x00000000,"9.11.9600.18376"
 HKLM,"SOFTWARE\Microsoft\Internet Explorer","svcVersion",0x00000000,"11.0.9600.18376"
+HKLM,"SOFTWARE\Clients\StartMenuInternet","",0x00000000,"IEXPLORE.EXE"
+HKLM,"SOFTWARE\Clients\StartMenuInternet\IEXPLORE.EXE","",0x00000000,"Web Browser"
+HKLM,"SOFTWARE\Clients\StartMenuInternet\IEXPLORE.EXE\DefaultIcon","",0x00020000,"%ProgramFiles%\Internet Explorer\iexplore.exe,0"
+HKLM,"SOFTWARE\Clients\StartMenuInternet\IEXPLORE.EXE\shell\open\command","",0x00020000,"%ProgramFiles%\Internet Explorer\iexplore.exe"
 HKLM,"SOFTWARE\Policies",,0x00000012
 HKLM,"SOFTWARE\RegisteredApplications",,0x00000012
 
@@ -229,6 +245,8 @@ HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion","WallPaperDir",0x00020002,"%Sys
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\5.0\User Agent\Post Platform",".NET CLR 1.1.4322",0x00000000,""
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\5.0\User Agent\Post Platform",".NET CLR 2.0.50727",0x00000000,""
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths",,0x00000012
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\IEXPLORE.EXE",,0x00020000,"%ProgramFiles%\Internet Explorer\IEXPLORE.EXE"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\IEXPLORE.EXE","Path",0x00020000,"%ProgramFiles%\Internet Explorer;"
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\pbrush.exe",,0x00020000,"%SystemRoot%\system32\mspaint.exe"
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\pbrush.exe","Path",0x00020000,"%SystemRoot%\system32"
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\wordpad.exe",,0x00020000,"%SystemRoot%\system32\wordpad.exe"

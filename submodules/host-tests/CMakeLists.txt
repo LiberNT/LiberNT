@@ -29,6 +29,7 @@ option(HOST_TEST_DHCPCSVC "Build native DHCP client tests" ON)
 option(HOST_TEST_NLASVC "Build native network location awareness tests" ON)
 option(HOST_TEST_CAPTIVEPORTAL "Build native captive portal sign-in tests" ON)
 option(HOST_TEST_LNTWEB "Build native web view page script tests" ON)
+option(HOST_TEST_IEXPLORE "Build native web browser helper tests" ON)
 option(HOST_TEST_EXT4 "Build native ext4 driver core tests" ON)
 option(HOST_TEST_USB "Build native USB host controller tests" ON)
 option(HOST_TEST_STORPORT "Build native Storport tests" ON)
@@ -50,6 +51,10 @@ endif()
 
 if(BUILD_TESTING AND HOST_TEST_LNTWEB)
     add_subdirectory(lntweb)
+endif()
+
+if(BUILD_TESTING AND HOST_TEST_IEXPLORE)
+    add_subdirectory(iexplore)
 endif()
 
 if(BUILD_TESTING AND HOST_TEST_EXT4)

@@ -1,0 +1,26 @@
+/*
+ * PROJECT:     LiberNT Web Browser
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     English resources
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+STRINGTABLE
+BEGIN
+    IDS_APP_TITLE "Web Browser"
+    IDS_TITLE_FORMAT "%s - Web Browser"
+    IDS_BACK "Back"
+    IDS_FORWARD "Forward"
+    IDS_RELOAD "Reload"
+    IDS_LOADING "Loading..."
+    IDS_DONE "Done"
+    IDS_LOAD_FAILED "This page could not be opened."
+    IDS_CERTIFICATE "The security certificate of this site is not valid, so the page was not opened."
+    IDS_UNSUPPORTED "This address is not supported."
+    IDS_NO_VIEW "The web view is not part of this build of LiberNT, so web pages cannot be shown."
+    IDS_SAVED "Saved %s"
+    IDS_SAVE_FAILED "The file could not be saved."
+    IDS_ALL_FILES "All files"
+END
