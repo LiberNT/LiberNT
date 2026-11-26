@@ -7,6 +7,10 @@
  */
 
 #include <advapi32.h>
+
+#include <ndk/lpctypes.h>
+#include <ndk/lpcfuncs.h>
+#include <lsass/lsass.h>
 WINE_DEFAULT_DEBUG_CHANNEL(advapi);
 
 BOOL
@@ -118,6 +122,64 @@ C_ASSERT(sizeof(AdvapiTokenSourceName) == RTL_FIELD_SIZE(TOKEN_SOURCE, SourceNam
 
 HANDLE LsaHandle = NULL;
 ULONG AuthenticationPackage = 0;
+
+/*
+ * Log on a virtual account through lsass. There is no credential to check
+ * for a virtual account; lsass creates the logon session and mints the token.
+ * LiberNT-internal protocol extension, not a Windows API.
+ */
+static
+NTSTATUS
+LsapLogonVirtualUser(IN HANDLE LsaPortHandle,
+                     IN SECURITY_LOGON_TYPE LogonType,
+                     IN PSID UserSid,
+                     IN ULONG UserSidLength,
+                     IN PUNICODE_STRING UserName,
+                     IN PUNICODE_STRING LogonDomain,
+                     IN PTOKEN_SOURCE SourceContext,
+                     OUT PLUID LogonId,
+                     OUT PHANDLE Token)
+{
+    LSA_API_MSG ApiMessage;
+    SIZE_T BufferLength = sizeof(ApiMessage);
+    NTSTATUS Status;
+
+    RtlZeroMemory(&ApiMessage, sizeof(ApiMessage));
+
+    ApiMessage.ApiNumber = LSASS_REQUEST_LOGON_VIRTUAL_USER;
+    ApiMessage.h.u1.s1.DataLength = LSA_PORT_DATA_SIZE(ApiMessage.LogonVirtualUser);
+    ApiMessage.h.u1.s1.TotalLength = ApiMessage.h.u1.s1.DataLength + sizeof(ApiMessage.h);
+
+    ApiMessage.LogonVirtualUser.Request.LogonType = LogonType;
+    ApiMessage.LogonVirtualUser.Request.UserSid = UserSid;
+    ApiMessage.LogonVirtualUser.Request.UserSidLength = UserSidLength;
+    ApiMessage.LogonVirtualUser.Request.UserName = *UserName;
+    ApiMessage.LogonVirtualUser.Request.LogonDomain = *LogonDomain;
+    ApiMessage.LogonVirtualUser.Request.SourceContext = *SourceContext;
+
+    Status = ZwAlpcSendWaitReceivePort(LsaPortHandle,
+                                       ALPC_MSGFLG_SYNC_REQUEST,
+                                       &ApiMessage.h,
+                                       NULL,
+                                       &ApiMessage.h,
+                                       &BufferLength,
+                                       NULL,
+                                       NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        return Status;
+    }
+
+    if (!NT_SUCCESS(ApiMessage.Status))
+    {
+        return ApiMessage.Status;
+    }
+
+    *LogonId = ApiMessage.LogonVirtualUser.Reply.LogonId;
+    *Token = ApiMessage.LogonVirtualUser.Reply.Token;
+
+    return Status;
+}
 
 /* FUNCTIONS ***************************************************************/
 
@@ -1403,6 +1465,10 @@ LogonUserExW(
 }
 
 
+#ifndef LOGON32_PROVIDER_VIRTUAL
+#define LOGON32_PROVIDER_VIRTUAL 4
+#endif
+
 /*
  * @implemented
  */
@@ -1460,6 +1526,119 @@ LogonUserExExW(
 
     if (phToken != NULL)
         *phToken = NULL;
+
+    /*
+     * Virtual accounts are self-asserting machine-local identities: the
+     * registered sid-name mapping is the account, there is no password to
+     * validate. The logon goes through lsass, which creates the logon
+     * session the token references and mints the token itself; the kernel
+     * refuses tokens whose authentication id names no live logon session,
+     * and the session is also what the subsystem keys the process window
+     * station on.
+     */
+    if (dwLogonProvider == LOGON32_PROVIDER_VIRTUAL)
+    {
+        extern NTSTATUS LsapLookupSidNameMapping(IN PUNICODE_STRING DomainName,
+                                                 IN PUNICODE_STRING AccountName,
+                                                 OUT PSID *Sid);
+        UNICODE_STRING DomainName, UserName;
+        TOKEN_SOURCE TokenSource;
+        SECURITY_LOGON_TYPE VirtualLogonType;
+        PSID UserSid = NULL;
+        LUID LogonId;
+        HANDLE NewToken = NULL;
+        NTSTATUS VirtStatus;
+        BOOL VirtualSuccess = FALSE;
+
+        RtlInitUnicodeString(&DomainName, lpszDomain);
+        RtlInitUnicodeString(&UserName, lpszUsername);
+
+        VirtStatus = LsapLookupSidNameMapping(&DomainName, &UserName, &UserSid);
+        if (!NT_SUCCESS(VirtStatus))
+        {
+            ERR("Virtual account %wZ\\%wZ has no registered sid mapping (Status 0x%08lx)\n",
+                &DomainName, &UserName, VirtStatus);
+            SetLastError(RtlNtStatusToDosError(VirtStatus));
+            return FALSE;
+        }
+
+        switch (dwLogonType)
+        {
+            case LOGON32_LOGON_INTERACTIVE:
+                VirtualLogonType = Interactive;
+                break;
+
+            case LOGON32_LOGON_NETWORK:
+                VirtualLogonType = Network;
+                break;
+
+            case LOGON32_LOGON_BATCH:
+                VirtualLogonType = Batch;
+                break;
+
+            case LOGON32_LOGON_SERVICE:
+                VirtualLogonType = Service;
+                break;
+
+            case LOGON32_LOGON_NETWORK_CLEARTEXT:
+                VirtualLogonType = NetworkCleartext;
+                break;
+
+
+            default:
+                ERR("Invalid logon type: %ul\n", dwLogonType);
+                SetLastError(ERROR_INVALID_PARAMETER);
+                goto virtualdone;
+        }
+
+        if (LsaHandle == NULL)
+        {
+            VirtStatus = OpenLogonLsaHandle();
+            if (!NT_SUCCESS(VirtStatus))
+            {
+                ERR("OpenLogonLsaHandle failed (Status 0x%08lx)\n", VirtStatus);
+                SetLastError(RtlNtStatusToDosError(VirtStatus));
+                goto virtualdone;
+            }
+        }
+
+        RtlCopyMemory(TokenSource.SourceName, "VirtAcct", 8);
+        TokenSource.SourceIdentifier.HighPart = 0;
+        TokenSource.SourceIdentifier.LowPart = 0;
+
+        VirtStatus = LsapLogonVirtualUser(LsaHandle,
+                                          VirtualLogonType,
+                                          UserSid,
+                                          RtlLengthSid(UserSid),
+                                          &UserName,
+                                          &DomainName,
+                                          &TokenSource,
+                                          &LogonId,
+                                          &NewToken);
+        if (!NT_SUCCESS(VirtStatus))
+        {
+            ERR("LsapLogonVirtualUser failed (Status 0x%08lx)\n", VirtStatus);
+            SetLastError(RtlNtStatusToDosError(VirtStatus));
+            goto virtualdone;
+        }
+
+        if (phToken != NULL)
+        {
+            *phToken = NewToken;
+        }
+        else
+        {
+            NtClose(NewToken);
+        }
+        NewToken = NULL;
+        VirtualSuccess = TRUE;
+
+virtualdone:
+        if (UserSid != NULL) RtlFreeHeap(RtlGetProcessHeap(), 0, UserSid);
+        if (NewToken != NULL) NtClose(NewToken);
+
+        return VirtualSuccess;
+    }
 
     switch (dwLogonType)
     {
