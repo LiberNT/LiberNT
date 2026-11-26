@@ -1355,10 +1355,16 @@ NtGdiDdDDISetQueuedLimit(_Inout_ const D3DKMT_SETQUEUEDLIMIT* unnamedParam1)
 
 NTSTATUS
 APIENTRY
-NtGdiDdDDISetVidPnSourceOwner(_In_ const D3DKMT_SETVIDPNSOURCEOWNER* unnamedParam1)
+NtGdiDdDDISetVidPnSourceOwner(_In_ const D3DKMT_SETVIDPNSOURCEOWNER2* unnamedParam1)
 {
+    NTSTATUS Status;
+
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    D3DKMT_CALL_CALLBACK(RxgkIntPfnSetVidPnSourceOwner, unnamedParam1);
+    Status = D3dkmtValidateWddmThunk(unnamedParam1);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    return D3dkmtCallCaptured((PVOID)unnamedParam1, sizeof(*unnamedParam1),
+                              (PD3DKMT_ARGUMENT_CALLBACK)D3DKMTSetVidPnSourceOwner2, FALSE);
 }
 
 NTSTATUS
@@ -1595,15 +1601,6 @@ NtGdiDdDDIReclaimAllocations2(
 #else
     return STATUS_NOT_SUPPORTED;
 #endif
-}
-
-NTSTATUS
-APIENTRY
-NtGdiDdDDISetVidPnSourceOwner1(_In_ const D3DKMT_SETVIDPNSOURCEOWNER1* unnamedParam1)
-{
-    RETURN_STATUS_IF_NULL(unnamedParam1);
-    /* The bridge owns top-level capture and all field validation. */
-    D3DKMT_CALL_CALLBACK(RxgkIntPfnSetVidPnSourceOwner1, unnamedParam1);
 }
 
 NTSTATUS
@@ -2971,16 +2968,6 @@ NtGdiDdDDISetSyncRefreshCountWaitTarget(_In_ const struct _D3DKMT_SETSYNCREFRESH
 {
     D3DKMT_CALL_CALLBACK(RxgkIntPfnSetSyncRefreshCountWaitTarget,
                          unnamedParam1);
-}
-
-NTSTATUS
-APIENTRY
-NtGdiDdDDISetVidPnSourceOwner2(_In_ const struct _D3DKMT_SETVIDPNSOURCEOWNER2* unnamedParam1)
-{
-    NTSTATUS Status = D3dkmtValidateWddmThunk(unnamedParam1);
-    if (!NT_SUCCESS(Status))
-        return Status;
-    return D3DKMTSetVidPnSourceOwner2(unnamedParam1);
 }
 
 NTSTATUS

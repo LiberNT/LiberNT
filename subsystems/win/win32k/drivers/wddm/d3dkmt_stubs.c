@@ -4138,8 +4138,8 @@ D3DKMTSetVidPnSourceOwner2(
     Status = WddmBridgeSafeCopyFrom(&Captured, pData, sizeof(Captured));
     if (!NT_SUCCESS(Status))
         return Status;
+    /* A zero count is a release-all request; the arrays are then ignored. */
     if (Captured.Version1.Version0.VidPnSourceCount > D3DKMT_BRIDGE_MAX_ALLOCATIONS ||
-        (Captured.Version1.Version0.VidPnSourceCount == 0 && (Captured.Version1.Version0.pType != NULL || Captured.Version1.Version0.pVidPnSourceId != NULL || Captured.pVidPnSourceNtHandles != NULL)) ||
         (Captured.Version1.Version0.VidPnSourceCount != 0 && (Captured.Version1.Version0.pType == NULL || Captured.Version1.Version0.pVidPnSourceId == NULL)))
     {
         return STATUS_INVALID_PARAMETER;

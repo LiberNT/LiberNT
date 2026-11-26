@@ -4274,7 +4274,7 @@ W32KAPI
 NTSTATUS
 APIENTRY
 NtGdiDdDDISetVidPnSourceOwner(
-    _In_ const D3DKMT_SETVIDPNSOURCEOWNER* unnamedParam1);
+    _In_ const struct _D3DKMT_SETVIDPNSOURCEOWNER2* unnamedParam1);
 
 __kernel_entry
 W32KAPI
@@ -4444,13 +4444,6 @@ NtGdiDdDDISignalSynchronizationObjectFromCpu(
 struct _D3DKMT_SETVIDPNSOURCEOWNER1;
 struct _D3DKMT_WAITFORVERTICALBLANKEVENT2;
 struct _D3DKMT_CHECKVIDPNEXCLUSIVEOWNERSHIP;
-
-__kernel_entry
-W32KAPI
-NTSTATUS
-APIENTRY
-NtGdiDdDDISetVidPnSourceOwner1(
-    _In_ const struct _D3DKMT_SETVIDPNSOURCEOWNER1* unnamedParam1);
 
 __kernel_entry
 W32KAPI
@@ -5105,13 +5098,6 @@ NTSTATUS
 APIENTRY
 NtGdiDdDDISetSyncRefreshCountWaitTarget(
     _In_ const struct _D3DKMT_SETSYNCREFRESHCOUNTWAITTARGET* unnamedParam1);
-
-__kernel_entry
-W32KAPI
-NTSTATUS
-APIENTRY
-NtGdiDdDDISetVidPnSourceOwner2(
-    _In_ const struct _D3DKMT_SETVIDPNSOURCEOWNER2* unnamedParam1);
 
 __kernel_entry
 W32KAPI

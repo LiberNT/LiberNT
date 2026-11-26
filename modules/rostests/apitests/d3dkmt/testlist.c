@@ -40,6 +40,7 @@ extern void func_allocresidency(void);
 extern void func_allocreserve(void);
 extern void func_allocdestroy2(void);
 extern void func_displayext(void);
+extern void func_ownerabi(void);
 extern void func_presentext(void);
 extern void func_misc(void);
 extern void func_teardown(void);
@@ -139,6 +140,7 @@ const struct test winetest_testlist[] =
     { "allocreserve",  func_allocreserve },
     { "allocdestroy2", func_allocdestroy2 },
     { "displayext",    func_displayext },
+    { "ownerabi",      func_ownerabi },
     { "presentext",    func_presentext },
     { "misc",          func_misc },
     { "teardown",      func_teardown },

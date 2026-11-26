@@ -1645,6 +1645,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDISetQueuedLimit( UINT *args )
     return NtGdiDdDDISetQueuedLimit( desc );
 }
 
+#ifndef __REACTOS__
 NTSTATUS WINAPI wow64_NtGdiDdDDISetVidPnSourceOwner( UINT *args )
 {
     const struct
@@ -1664,6 +1665,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDISetVidPnSourceOwner( UINT *args )
 
     return NtGdiDdDDISetVidPnSourceOwner( &desc );
 }
+#endif
 
 NTSTATUS WINAPI wow64_NtGdiDdDDIShareObjects( UINT *args )
 {

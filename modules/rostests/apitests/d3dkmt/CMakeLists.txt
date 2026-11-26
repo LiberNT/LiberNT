@@ -50,6 +50,7 @@ list(APPEND SOURCE
     d3dkmt_syncext.c
     d3dkmt_allocext.c
     d3dkmt_displayext.c
+    d3dkmt_ownerabi.c
     d3dkmt_presentext.c
     d3dkmt_misc.c
     d3dkmt_teardown.c

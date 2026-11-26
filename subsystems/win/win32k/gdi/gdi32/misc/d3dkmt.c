@@ -189,3 +189,28 @@ D3DKMTWaitForSynchronizationObject(
     RtlCopyMemory(Wait.ObjectHandleArray, pData->ObjectHandleArray, sizeof(Wait.ObjectHandleArray));
     return NtGdiDdDDIWaitForSynchronizationObject(&Wait);
 }
+
+NTSTATUS
+APIENTRY
+D3DKMTSetVidPnSourceOwner(
+    _In_ CONST D3DKMT_SETVIDPNSOURCEOWNER *pData)
+{
+    D3DKMT_SETVIDPNSOURCEOWNER2 Owner;
+
+    RtlZeroMemory(&Owner, sizeof(Owner));
+    Owner.Version1.Version0 = *pData;
+    Owner.Version1.Flags.AllowOutputDuplication = 1;
+    return NtGdiDdDDISetVidPnSourceOwner(&Owner);
+}
+
+NTSTATUS
+APIENTRY
+D3DKMTSetVidPnSourceOwner1(
+    _In_ CONST D3DKMT_SETVIDPNSOURCEOWNER1 *pData)
+{
+    D3DKMT_SETVIDPNSOURCEOWNER2 Owner;
+
+    RtlZeroMemory(&Owner, sizeof(Owner));
+    Owner.Version1 = *pData;
+    return NtGdiDdDDISetVidPnSourceOwner(&Owner);
+}

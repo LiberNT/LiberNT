@@ -48,6 +48,7 @@ W32KAPI NTSTATUS WINAPI NtGdiDdDDIFreeGpuVirtualAddress(const D3DKMT_FREEGPUVIRT
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIInvalidateCache(const D3DKMT_INVALIDATECACHE *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIWaitForSynchronizationObjectFromGpu(const D3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMGPU *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDICreateAllocation(D3DKMT_CREATEALLOCATION *desc);
+W32KAPI NTSTATUS WINAPI NtGdiDdDDISetVidPnSourceOwner(const D3DKMT_SETVIDPNSOURCEOWNER2 *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIOpenResource(D3DKMT_OPENRESOURCE *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIOpenResourceFromNtHandle(D3DKMT_OPENRESOURCEFROMNTHANDLE *desc);
 W32KAPI BOOLEAN WINAPI NtGdiDdDDICheckExclusiveOwnership(void);
@@ -2553,4 +2554,37 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIExtractBundleObject(UINT *args)
     for (i = 0; i < desc.cObjects && i < ARRAY_SIZE(handles); i++)
         handles32[i] = HandleToUlong(handles[i]);
     return status;
+}
+
+NTSTATUS WINAPI wow64_NtGdiDdDDISetVidPnSourceOwner(UINT *args)
+{
+    const struct
+    {
+        D3DKMT_HANDLE hDevice;
+        ULONG pType;
+        ULONG pVidPnSourceId;
+        UINT VidPnSourceCount;
+        UINT Flags;
+        ULONG pVidPnSourceNtHandles;
+    } *desc32 = get_ptr(&args);
+    D3DKMT_SETVIDPNSOURCEOWNER2 desc;
+    const ULONG *handles32;
+    D3DKMT_PTR_TYPE *handles;
+    UINT i;
+
+    if (!desc32) return STATUS_INVALID_PARAMETER;
+    desc.Version1.Version0.hDevice = desc32->hDevice;
+    desc.Version1.Version0.pType = UlongToPtr(desc32->pType);
+    desc.Version1.Version0.pVidPnSourceId = UlongToPtr(desc32->pVidPnSourceId);
+    desc.Version1.Version0.VidPnSourceCount = desc32->VidPnSourceCount;
+    desc.Version1.Flags.Value = desc32->Flags;
+    desc.pVidPnSourceNtHandles = NULL;
+    if ((handles32 = UlongToPtr(desc32->pVidPnSourceNtHandles)) && desc32->VidPnSourceCount)
+    {
+        if (!(handles = Wow64AllocateTemp(desc32->VidPnSourceCount * sizeof(*handles))))
+            return STATUS_NO_MEMORY;
+        for (i = 0; i < desc32->VidPnSourceCount; i++) handles[i] = LongToHandle(handles32[i]);
+        desc.pVidPnSourceNtHandles = handles;
+    }
+    return NtGdiDdDDISetVidPnSourceOwner(&desc);
 }

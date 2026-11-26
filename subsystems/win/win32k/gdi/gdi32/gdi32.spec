@@ -733,7 +733,7 @@
 @ stdcall -version=0x600+ D3DKMTSetProcessSchedulingPriorityClass(ptr long) NtGdiDdDDISetProcessSchedulingPriorityClass
 @ stdcall -version=0x600+ D3DKMTSetQueuedLimit(ptr) NtGdiDdDDISetQueuedLimit
 @ stdcall -version=0xA00+ D3DKMTSetVidPnSourceHwProtection(ptr) NtGdiDdDDISetVidPnSourceHwProtection
-@ stdcall -version=0x600+ D3DKMTSetVidPnSourceOwner(ptr) NtGdiDdDDISetVidPnSourceOwner
+@ stdcall -version=0x600+ D3DKMTSetVidPnSourceOwner(ptr)
 @ stdcall -version=0x600+ D3DKMTSharedPrimaryLockNotification(ptr) NtGdiDdDDISharedPrimaryLockNotification
 @ stdcall -version=0x600+ D3DKMTSharedPrimaryUnLockNotification(ptr) NtGdiDdDDISharedPrimaryUnLockNotification
 @ stdcall -version=0x600+ D3DKMTSignalSynchronizationObject(ptr)
@@ -761,7 +761,7 @@
 @ stdcall -version=0xA00+ D3DKMTGetResourcePresentPrivateDriverData(ptr) NtGdiDdDDIGetResourcePresentPrivateDriverData
 @ stdcall -version=0x600+ D3DKMTWaitForSynchronizationObjectFromCpu(ptr) NtGdiDdDDIWaitForSynchronizationObjectFromCpu
 @ stdcall -version=0x600+ D3DKMTSignalSynchronizationObjectFromCpu(ptr) NtGdiDdDDISignalSynchronizationObjectFromCpu
-@ stdcall -version=0x600+ D3DKMTSetVidPnSourceOwner1(ptr) NtGdiDdDDISetVidPnSourceOwner1
+@ stdcall -version=0x600+ D3DKMTSetVidPnSourceOwner1(ptr)
 @ stdcall -version=0x600+ D3DKMTWaitForVerticalBlankEvent2(ptr) NtGdiDdDDIWaitForVerticalBlankEvent2
 @ stdcall -version=0x600+ D3DKMTCheckVidPnExclusiveOwnership(ptr) NtGdiDdDDICheckVidPnExclusiveOwnership
 @ stdcall -version=0x600+ D3DKMTEnumAdapters(ptr) NtGdiDdDDIEnumAdapters
@@ -825,7 +825,7 @@
 @ stdcall -version=0x600+ D3DKMTGetMultiPlaneOverlayCaps(ptr) NtGdiDdDDIGetMultiPlaneOverlayCaps
 @ stdcall -version=0x600+ D3DKMTQueryVidPnExclusiveOwnership(ptr) NtGdiDdDDIQueryVidPnExclusiveOwnership
 @ stdcall -version=0x600+ D3DKMTSetSyncRefreshCountWaitTarget(ptr) NtGdiDdDDISetSyncRefreshCountWaitTarget
-@ stdcall -version=0x600+ D3DKMTSetVidPnSourceOwner2(ptr) NtGdiDdDDISetVidPnSourceOwner2
+@ stdcall -version=0x600+ D3DKMTSetVidPnSourceOwner2(ptr) NtGdiDdDDISetVidPnSourceOwner
 @ stdcall -version=0x600+ D3DKMTSignalSynchronizationObjectFromGpu(ptr) NtGdiDdDDISignalSynchronizationObjectFromGpu
 @ stdcall -version=0x600+ D3DKMTWaitForSynchronizationObjectFromGpu(ptr) NtGdiDdDDIWaitForSynchronizationObjectFromGpu
 @ stdcall -version=0x600+ D3DKMTSignalSynchronizationObjectFromGpu2(ptr) NtGdiDdDDISignalSynchronizationObjectFromGpu2
