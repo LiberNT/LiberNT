@@ -17,6 +17,7 @@ list(APPEND SOURCE
     ComPlusPackageInstallStatus.c
     IntegratedDisplaySize.c
     Mailslot.c
+    GlobalMemoryStatusVirtual.c
     MessageWaitingIndicator.c
     TermsrvAppInstallMode.c
     ConsoleAlias.c

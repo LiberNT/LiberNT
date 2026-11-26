@@ -3,6 +3,7 @@
 #include <apitest.h>
 
 extern void func_ApiSetHosts(void);
+extern void func_GlobalMemoryStatusVirtual(void);
 extern void func_ActCtxWithXmlNamespaces(void);
 extern void func_ActCtxDependencyVersions(void);
 extern void func_AlternateComputerNames(void);
@@ -239,6 +240,7 @@ extern void func_FileSecurityCache(void);
 
 const struct test winetest_testlist[] =
 {
+    { "GlobalMemoryStatusVirtual", func_GlobalMemoryStatusVirtual },
     { "ApiSetHosts", func_ApiSetHosts },
     { "FileSecurityCache",                  func_FileSecurityCache },
     { "SetFileAllocationInfo", func_SetFileAllocationInfo },
