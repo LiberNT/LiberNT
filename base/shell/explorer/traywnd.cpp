@@ -3315,6 +3315,7 @@ ChangePos:
 #endif
         TrayVolume_StartWatch();
         TrayBrightness_StartWatch();
+        TrayNetwork_StartPortalWatch();
 
         /* Create the task band */
         hRet = CTaskBand_CreateInstance(this, m_StartButton.m_hWnd, IID_PPV_ARG(IDeskBand, &m_TaskBand));

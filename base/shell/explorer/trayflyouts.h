@@ -14,6 +14,7 @@ VOID TrayVolume_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor);
 VOID TrayVolume_SetCachedState(IN int nPercent, IN BOOL bMute);
 BOOL TrayVolume_HandleAppCommand(IN UINT uAppCmd);
 VOID TrayVolume_StartWatch(VOID);
+VOID TrayNetwork_StartPortalWatch(VOID);
 VOID TrayBrightness_StartWatch(VOID);
 HWND TrayMedia_FindSession(BOOL *pbPlaying);
 VOID TrayNetwork_Toggle(IN HWND hwndOwner, IN const RECT *prcAnchor);

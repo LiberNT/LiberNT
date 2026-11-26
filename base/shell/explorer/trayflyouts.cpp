@@ -3797,6 +3797,166 @@ VOID TrayVolume_StartWatch(VOID)
         CloseHandle(hThread);
 }
 
+#include <netlistmgr.h>
+
+#define TFY_PORTAL_MAX 16
+
+class CTfyPortalWatch :
+    public INetworkConnectionEvents
+{
+public:
+    HANDLE m_hChanged;
+
+    STDMETHODIMP QueryInterface(REFIID riid, void **ppv)
+    {
+        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_INetworkConnectionEvents))
+        {
+            *ppv = static_cast<INetworkConnectionEvents *>(this);
+            return S_OK;
+        }
+        *ppv = NULL;
+        return E_NOINTERFACE;
+    }
+
+    STDMETHODIMP_(ULONG) AddRef() { return 2; }
+    STDMETHODIMP_(ULONG) Release() { return 1; }
+
+    STDMETHODIMP NetworkConnectionConnectivityChanged(GUID connectionId, NLM_CONNECTIVITY newConnectivity)
+    {
+        SetEvent(m_hChanged);
+        return S_OK;
+    }
+
+    STDMETHODIMP NetworkConnectionPropertyChanged(GUID connectionId, NLM_CONNECTION_PROPERTY_CHANGE flags)
+    {
+        return S_OK;
+    }
+};
+
+static CTfyPortalWatch g_TfyPortalWatch;
+
+static BOOL
+TfyConnectionIsHotspot(INetworkConnection *pConnection)
+{
+    static const LPCWSTR s_Names[] = { NA_InternetConnectivityV4, NA_InternetConnectivityV6 };
+    CComPtr<IPropertyBag> pBag;
+
+    if (FAILED(pConnection->QueryInterface(IID_PPV_ARG(IPropertyBag, &pBag))))
+        return FALSE;
+    for (UINT i = 0; i < _countof(s_Names); i++)
+    {
+        VARIANT Value;
+        BOOL bHotspot;
+
+        VariantInit(&Value);
+        if (FAILED(pBag->Read(s_Names[i], &Value, NULL)))
+            continue;
+        bHotspot = (V_VT(&Value) == VT_UI4 || V_VT(&Value) == VT_I4) &&
+                   (V_UI4(&Value) & NLM_INTERNET_CONNECTIVITY_WEBHIJACK);
+        VariantClear(&Value);
+        if (bHotspot)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static VOID
+TfyOpenPortalSignIn(INetworkConnection *pConnection)
+{
+    CComPtr<INetwork> pNetwork;
+    CComBSTR Name;
+    WCHAR szPath[MAX_PATH], szCommand[MAX_PATH + 300];
+    STARTUPINFOW Startup = { sizeof(Startup) };
+    PROCESS_INFORMATION Process;
+    UINT cch = GetSystemDirectoryW(szPath, _countof(szPath));
+
+    if (cch == 0 || cch >= _countof(szPath) ||
+        FAILED(StringCchCatW(szPath, _countof(szPath), L"\\captiveportal.exe")) ||
+        FAILED(StringCchPrintfW(szCommand, _countof(szCommand), L"\"%s\"", szPath)))
+    {
+        return;
+    }
+    if (SUCCEEDED(pConnection->GetNetwork(&pNetwork)) && SUCCEEDED(pNetwork->GetName(&Name)) && Name.m_str &&
+        Name.m_str[0] && !wcschr(Name.m_str, L'"'))
+    {
+        StringCchPrintfW(szCommand, _countof(szCommand), L"\"%s\" \"%s\"", szPath, Name.m_str);
+    }
+    if (CreateProcessW(szPath, szCommand, NULL, NULL, FALSE, 0, NULL, NULL, &Startup, &Process))
+    {
+        CloseHandle(Process.hThread);
+        CloseHandle(Process.hProcess);
+    }
+}
+
+static DWORD WINAPI
+TfyPortalWatchThread(LPVOID lpParameter)
+{
+    CComPtr<INetworkListManager> pManager;
+    CComPtr<IConnectionPointContainer> pContainer;
+    CComPtr<IConnectionPoint> pPoint;
+    GUID Prompted[TFY_PORTAL_MAX];
+    UINT cPrompted = 0;
+    DWORD dwCookie;
+
+    CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    if (FAILED(CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_ALL,
+                                IID_PPV_ARG(INetworkListManager, &pManager))) ||
+        FAILED(pManager->QueryInterface(IID_PPV_ARG(IConnectionPointContainer, &pContainer))) ||
+        FAILED(pContainer->FindConnectionPoint(IID_INetworkConnectionEvents, &pPoint)) ||
+        FAILED(pPoint->Advise(&g_TfyPortalWatch, &dwCookie)))
+    {
+        return 0;
+    }
+
+    for (;;)
+    {
+        CComPtr<IEnumNetworkConnections> pEnum;
+        GUID Current[TFY_PORTAL_MAX];
+        UINT cCurrent = 0;
+
+        if (SUCCEEDED(pManager->GetNetworkConnections(&pEnum)))
+        {
+            for (;;)
+            {
+                CComPtr<INetworkConnection> pConnection;
+                ULONG cFetched = 0;
+                GUID Id;
+                BOOL bKnown = FALSE;
+
+                if (pEnum->Next(1, &pConnection, &cFetched) != S_OK || cFetched == 0)
+                    break;
+                if (!TfyConnectionIsHotspot(pConnection) || FAILED(pConnection->GetConnectionId(&Id)))
+                    continue;
+                for (UINT i = 0; i < cPrompted; i++)
+                    bKnown = bKnown || IsEqualGUID(Prompted[i], Id);
+                if (cCurrent < _countof(Current))
+                    Current[cCurrent++] = Id;
+                if (!bKnown)
+                    TfyOpenPortalSignIn(pConnection);
+            }
+        }
+        CopyMemory(Prompted, Current, cCurrent * sizeof(Current[0]));
+        cPrompted = cCurrent;
+
+        WaitForSingleObject(g_TfyPortalWatch.m_hChanged, INFINITE);
+    }
+}
+
+VOID TrayNetwork_StartPortalWatch(VOID)
+{
+    static LONG s_bStarted = FALSE;
+    HANDLE hThread;
+
+    if (InterlockedExchange(&s_bStarted, TRUE))
+        return;
+    g_TfyPortalWatch.m_hChanged = CreateEventW(NULL, FALSE, FALSE, NULL);
+    if (!g_TfyPortalWatch.m_hChanged)
+        return;
+    hThread = CreateThread(NULL, 0, TfyPortalWatchThread, NULL, 0, NULL);
+    if (hThread)
+        CloseHandle(hThread);
+}
+
 struct TFYAUDIODEV
 {
     WCHAR szId[256];
