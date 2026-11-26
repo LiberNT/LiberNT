@@ -1,23 +1,17 @@
+# PROJECT:     LiberNT Calculator
+# LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+# PURPOSE:     Build the calculator
+# COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
 
-list(APPEND SOURCE
-    convert.c
-    fun_ieee.c
-    rpn_ieee.c
-    utl_ieee.c
-    winmain.c
-    htmlhelp.c
-    theme.c
-    calc.h)
-
-file(GLOB calc_rc_deps res/*.*)
-add_rc_deps(resource.rc ${calc_rc_deps})
-add_executable(calc ${SOURCE} resource.rc)
+add_rc_deps(calc.rc
+    ${CMAKE_CURRENT_SOURCE_DIR}/calcres.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/lang/en-US.rc
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/calc.ico)
+add_executable(calc
+    number.c
+    engine.c
+    main.c
+    calc.rc)
 set_module_type(calc win32gui UNICODE)
-add_importlibs(calc advapi32 comctl32 user32 shell32 gdi32 msvcrt kernel32)
-
-if(MSVC)
-    add_importlibs(calc ntdll)
-endif()
-
-add_pch(calc calc.h SOURCE)
+add_importlibs(calc uxtheme comctl32 shell32 advapi32 user32 gdi32 msvcrt kernel32)
 add_cd_file(TARGET calc DESTINATION reactos/system32 FOR all)
