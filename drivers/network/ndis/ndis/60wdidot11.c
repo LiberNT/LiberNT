@@ -50,6 +50,7 @@ static NDIS_OID Ndis6WdiSupportedOids[] =
     OID_DOT11_CURRENT_PACKET_FILTER,
     OID_DOT11_CURRENT_PHY_TYPE,
     OID_DOT11_SUPPORTED_PHY_TYPES,
+    OID_DOT11_EXTSTA_CAPABILITY,
     OID_DOT11_NIC_POWER_STATE,
     OID_DOT11_HARDWARE_PHY_STATE,
     OID_DOT11_MAC_ADDRESS,
@@ -543,7 +544,10 @@ Ndis6WdiDot11ParseCapabilities(
     if (Ndis6WdiTlvFind(Tlvs, Length, WDI_TLV_STATION_ATTRIBUTES, &Container))
     {
         if (Ndis6WdiTlvFind(Container.Value, Container.Length, WDI_TLV_STATION_CAPABILITIES, &Tlv))
+        {
             Wdi->BssListCached = Ndis6WdiStationCapsBssListCached(Tlv.Value, Tlv.Length);
+            Wdi->HaveExtStaCapability = Ndis6WdiStationCapsExtSta(Tlv.Value, Tlv.Length, &Wdi->ExtStaCapability);
+        }
         if (Ndis6WdiTlvFind(Container.Value, Container.Length, WDI_TLV_UNICAST_ALGORITHM_LIST, &Tlv))
             Wdi->UnicastPairCount = Ndis6WdiParsePairs(&Tlv, Wdi->UnicastPairs);
         if (Ndis6WdiTlvFind(Container.Value, Container.Length, WDI_TLV_MULTICAST_DATA_ALGORITHM_LIST, &Tlv))
@@ -900,6 +904,10 @@ Ndis6WdiQuery(
         }
         case OID_DOT11_CURRENT_PHY_TYPE:
             return Ndis6WdiQueryUlong(Request, (ULONG)Dot11->CurrentPhyType);
+        case OID_DOT11_EXTSTA_CAPABILITY:
+            if (!Wdi->HaveExtStaCapability)
+                return NDIS_STATUS_NOT_SUPPORTED;
+            return Ndis6WdiQueryBuffer(Request, &Wdi->ExtStaCapability, sizeof(Wdi->ExtStaCapability));
         case OID_DOT11_SUPPORTED_PHY_TYPES:
         {
             UCHAR Buffer[FIELD_OFFSET(DOT11_SUPPORTED_PHY_TYPES, dot11PHYType) + NDIS6_WDI_MAX_PHY_TYPES * sizeof(DOT11_PHY_TYPE)];

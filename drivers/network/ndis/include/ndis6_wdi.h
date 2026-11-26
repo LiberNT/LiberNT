@@ -410,6 +410,8 @@ struct _NDIS6_WDI_ADAPTER
     BOOLEAN HardwareRadioOn;
     BOOLEAN SoftwareRadioOn;
     BOOLEAN BssListCached;
+    BOOLEAN HaveExtStaCapability;
+    DOT11_EXTSTA_CAPABILITY ExtStaCapability;
     BOOLEAN BssTransitionSupported;
     WDI_TXRX_CAPABILITIES TxRxCaps;
     UCHAR MaxNumPeers;

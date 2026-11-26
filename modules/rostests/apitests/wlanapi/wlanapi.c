@@ -234,6 +234,58 @@ static void WlanEnumInterfaces_test(void)
     WlanEnumInterfacesIgnoresInput_test();
 }
 
+static void WlanCheckInterfaceCapability(HANDLE ClientHandle, const GUID *Guid)
+{
+    PWLAN_INTERFACE_CAPABILITY Stale = (PWLAN_INTERFACE_CAPABILITY)(ULONG_PTR)0x0BAD0BAD;
+    PWLAN_INTERFACE_CAPABILITY Capability = Stale;
+    DWORD Index;
+    DWORD ret;
+
+    ret = WlanGetInterfaceCapability(ClientHandle, Guid, NULL, &Capability);
+    ok(ret == ERROR_SUCCESS, "WlanGetInterfaceCapability failed, error %lu\n", ret);
+    ok(Capability != Stale, "WlanGetInterfaceCapability kept the stale capability pointer\n");
+    if (ret != ERROR_SUCCESS || Capability == NULL || Capability == Stale)
+        return;
+
+    ok(Capability->interfaceType == wlan_interface_type_native_802_11, "interface type %d\n", Capability->interfaceType);
+    ok(Capability->dwNumberOfSupportedPhys >= 1 && Capability->dwNumberOfSupportedPhys <= WLAN_MAX_PHY_INDEX,
+       "%lu supported PHYs\n", Capability->dwNumberOfSupportedPhys);
+    for (Index = 0; Index < Capability->dwNumberOfSupportedPhys && Index < WLAN_MAX_PHY_INDEX; Index++)
+        ok(Capability->dot11PhyTypes[Index] != dot11_phy_type_unknown, "PHY %lu is unknown\n", Index);
+    ok(Capability->dwMaxDesiredSsidListSize >= 1, "desired SSID list size %lu\n", Capability->dwMaxDesiredSsidListSize);
+    ok(Capability->dwMaxDesiredBssidListSize >= 1, "desired BSSID list size %lu\n", Capability->dwMaxDesiredBssidListSize);
+    WlanFreeMemory(Capability);
+}
+
+static void WlanGetInterfaceCapabilityLive_test(void)
+{
+    PWLAN_INTERFACE_INFO_LIST InterfaceList = NULL;
+    HANDLE ClientHandle = NULL;
+    DWORD NegotiatedVersion;
+    DWORD ret;
+
+    ret = WlanOpenHandle(WLAN_API_VERSION_2_0, NULL, &NegotiatedVersion, &ClientHandle);
+    if (ret == ERROR_SERVICE_NOT_ACTIVE)
+    {
+        skip("WlanSvc is not running\n");
+        return;
+    }
+    ok(ret == ERROR_SUCCESS, "WlanOpenHandle failed, error %lu\n", ret);
+    if (ret != ERROR_SUCCESS)
+        return;
+
+    ret = WlanEnumInterfaces(ClientHandle, NULL, &InterfaceList);
+    ok(ret == ERROR_SUCCESS, "WlanEnumInterfaces failed, error %lu\n", ret);
+    if (ret == ERROR_SUCCESS && InterfaceList != NULL && InterfaceList->dwNumberOfItems != 0)
+        WlanCheckInterfaceCapability(ClientHandle, &InterfaceList->InterfaceInfo[0].InterfaceGuid);
+    else if (ret == ERROR_SUCCESS)
+        skip("No wireless interface is available\n");
+
+    if (InterfaceList != NULL)
+        WlanFreeMemory(InterfaceList);
+    WlanCloseHandle(ClientHandle, NULL);
+}
+
 static void WlanGetInterfaceCapability_test(void)
 {
     DWORD ret;
@@ -250,6 +302,8 @@ static void WlanGetInterfaceCapability_test(void)
     /* invalid pInterfaceCapability */
     ret = WlanGetInterfaceCapability((HANDLE) -1, &InterfaceGuid, NULL, NULL);
     ok(ret == ERROR_INVALID_PARAMETER, "expected failure\n");
+
+    WlanGetInterfaceCapabilityLive_test();
 }
 
 static void WlanQueryInterface_test(void)

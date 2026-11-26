@@ -434,6 +434,9 @@ DWORD NwifiDisconnect(ULONG InterfaceIndex, ULONG64 UpperLuid,
                       const DOT11_MAC_ADDRESS *pMac);
 DWORD NwifiGetAuthCipherPairs(ULONG InterfaceIndex, ULONG64 UpperLuid,
                               PNWIFI_AUTH_CIPHER_PAIRS *ppPairs);
+DWORD NwifiQueryCapability(ULONG InterfaceIndex, ULONG64 UpperLuid,
+                           const DOT11_MAC_ADDRESS *pMac,
+                           PNWIFI_INTERFACE_CAPABILITY pCapability);
 DWORD NwifiQueryState(ULONG InterfaceIndex, ULONG64 UpperLuid,
                       const DOT11_MAC_ADDRESS *pMac, PNWIFI_LINK_STATE pState);
 VOID  NwifiStartNotifyWorker(VOID);
