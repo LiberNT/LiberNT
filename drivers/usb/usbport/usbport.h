@@ -1417,6 +1417,8 @@ USBPORT_PdoInternalDeviceControl(
   IN PIRP Irp);
 
 VOID USBPORT_FreeDumpContext(_In_opt_ PUSBPORT_DUMP_CONTEXT DumpContext);
+VOID USBPORT_DetachDumpEndpoint(_Inout_opt_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ PUSBPORT_ENDPOINT Endpoint);
+VOID USBPORT_RetargetDumpContext(_Inout_opt_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ PUSBPORT_DEVICE_HANDLE OldDeviceHandle, _In_opt_ PUSBPORT_DEVICE_HANDLE NewDeviceHandle);
 
 NTSTATUS
 NTAPI

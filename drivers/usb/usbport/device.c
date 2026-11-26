@@ -2728,6 +2728,11 @@ USBPORT_RemoveDevice(IN PDEVICE_OBJECT FdoDevice,
 
     USBPORT_ClosePipe(DeviceHandle, FdoDevice, &DeviceHandle->PipeHandle);
 
+    KeAcquireSpinLock(&FdoExtension->EndpointListSpinLock, &OldIrql);
+    USBPORT_RetargetDumpContext(FdoExtension->Aux.DumpContext, DeviceHandle, NULL);
+    USBPORT_RetargetDumpContext(FdoExtension->Aux.KeyboardContext, DeviceHandle, NULL);
+    KeReleaseSpinLock(&FdoExtension->EndpointListSpinLock, OldIrql);
+
     if (DeviceHandle->DeviceAddress)
     {
         USBPORT_FreeUsbAddress(FdoDevice, DeviceHandle->DeviceAddress);
@@ -3009,6 +3014,11 @@ USBPORT_RestoreDevice(IN PDEVICE_OBJECT FdoDevice,
     USBPORT_NotifyMiniportRemoveDevice(FdoDevice, OldDeviceHandle);
 
     USBPORT_ClosePipe(OldDeviceHandle, FdoDevice, &OldDeviceHandle->PipeHandle);
+
+    KeAcquireSpinLock(&FdoExtension->EndpointListSpinLock, &OldIrql);
+    USBPORT_RetargetDumpContext(FdoExtension->Aux.DumpContext, OldDeviceHandle, NT_SUCCESS(Status) ? NewDeviceHandle : NULL);
+    USBPORT_RetargetDumpContext(FdoExtension->Aux.KeyboardContext, OldDeviceHandle, NT_SUCCESS(Status) ? NewDeviceHandle : NULL);
+    KeReleaseSpinLock(&FdoExtension->EndpointListSpinLock, OldIrql);
 
     if (OldDeviceHandle->DeviceAddress != 0)
         USBPORT_FreeUsbAddress(FdoDevice, OldDeviceHandle->DeviceAddress);
