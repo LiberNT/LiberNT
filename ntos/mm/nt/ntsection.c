@@ -1965,6 +1965,18 @@ MiCreateSectionWithMode(
     if (!MiProtectionFromWin32(SectionPageProtection, &Protection) || !MI_PROT_IS_ACCESSIBLE(Protection))
         return STATUS_INVALID_PAGE_PROTECTION;
 
+    if (AllocationAttributes & SEC_PARTITION_OWNER_HANDLE)
+    {
+        if (FileHandle != (HANDLE)(LONG_PTR)MEMORY_CURRENT_PARTITION_HANDLE &&
+            FileHandle != (HANDLE)(LONG_PTR)MEMORY_SYSTEM_PARTITION_HANDLE)
+        {
+            /* TODO: sections owned by a partition other than the system partition */
+            return STATUS_NOT_SUPPORTED;
+        }
+
+        FileHandle = NULL;
+    }
+
     if (File != NULL && (AllocationAttributes & SEC_IMAGE))
         return STATUS_INVALID_PARAMETER_6;
 

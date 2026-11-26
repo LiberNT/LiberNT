@@ -105,6 +105,7 @@ extern "C" {
 //
 // Section Flags for NtCreateSection
 //
+#define SEC_PARTITION_OWNER_HANDLE                          0x40000
 #define SEC_NO_CHANGE                                       0x400000
 #define SEC_FILE                                            0x800000
 #define SEC_IMAGE                                           0x1000000

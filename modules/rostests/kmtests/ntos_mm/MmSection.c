@@ -597,6 +597,40 @@ TestCreateSection(
 
 static
 VOID
+TestPartitionOwnedSection(
+    _In_ HANDLE PartitionHandle)
+{
+    LARGE_INTEGER MaximumSize;
+    PVOID SectionObject = NULL;
+    PVOID Base = NULL;
+    SIZE_T ViewSize = 0;
+    NTSTATUS Status;
+
+    MaximumSize.QuadPart = PAGE_SIZE;
+    Status = MmCreateSection(&SectionObject, 0, NULL, &MaximumSize, PAGE_READWRITE,
+                             SEC_COMMIT | SEC_PARTITION_OWNER_HANDLE, PartitionHandle, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    ok(SectionObject != NULL, "no section object was returned\n");
+    Status = MmMapViewInSystemSpace(SectionObject, &Base, &ViewSize);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        ok(ViewSize >= PAGE_SIZE, "view size %Iu\n", ViewSize);
+        ok_eq_ulong(*(volatile ULONG *)Base, 0UL);
+        *(volatile ULONG *)Base = 0x5EC7A11;
+        ok_eq_ulong(*(volatile ULONG *)Base, 0x5EC7A11UL);
+        Status = MmUnmapViewInSystemSpace(Base);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+    }
+
+    ObDereferenceObject(SectionObject);
+}
+
+static
+VOID
 TestPhysicalMemorySection(VOID)
 {
     NTSTATUS Status;
@@ -1151,4 +1185,10 @@ START_TEST(MmSection)
         ZwClose(FileHandle1);
 
     TestPhysicalMemorySection();
+}
+
+START_TEST(MmSectionPartition)
+{
+    TestPartitionOwnedSection((HANDLE)(LONG_PTR)MEMORY_CURRENT_PARTITION_HANDLE);
+    TestPartitionOwnedSection((HANDLE)(LONG_PTR)MEMORY_SYSTEM_PARTITION_HANDLE);
 }
