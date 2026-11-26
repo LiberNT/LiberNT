@@ -233,7 +233,8 @@ DwmGpuSceneOcclusion(const DWM_WIN *Windows, ULONG Count,
         Occlusion[Count + 1] = Cover;
         if (Captures && DwmGpuDamageIntersects(&Cover, &Capture))
             SetRectEmpty(&Cover);
-        if (Captures || Window->AnimFlags != 0 ||
+        if (Captures || Window->Generation == 0 || Window->BaseUpdateId == 0 ||
+            Window->AnimFlags != 0 ||
             (Window->LayerFlags & DWM_LWA_COLORKEY) ||
             (Window->LayerFlags & (DWM_WINDOW_PREMULTIPLIED_ALPHA | DWM_WINDOW_FRAME_ALPHA)) ||
             (Window->BlurFlags & DWM_BLUR_ENABLE) ||

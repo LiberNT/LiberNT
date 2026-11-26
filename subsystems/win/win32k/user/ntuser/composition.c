@@ -897,6 +897,13 @@ IntCompositionTopLevel(_In_ PWND Wnd)
     return ancestor;
 }
 
+static BOOL
+IntCompositionHasNoRedirectionBitmap(_In_ PWND TopWnd)
+{
+    ASSERT(TopWnd != NULL);
+    return (TopWnd->ExStyle & WS_EX_NOREDIRECTIONBITMAP) != 0;
+}
+
 static REDIRECT_ENTRY *
 IntCompositionFind(_In_ PWND Wnd)
 {
@@ -1107,6 +1114,19 @@ IntCompositionFreeSurface(_Inout_ PWND_REDIRECT r, _In_ BOOL PreserveDx)
     r->FrontScaled = FALSE;
     r->FrontOffset.x = r->FrontOffset.y = 0;
 }
+
+#if DBG
+static BOOL
+IntCompositionFrontStateAbsent(_In_ const WND_REDIRECT *r)
+{
+    return r->psurfFront == NULL && r->hbmpFront == NULL &&
+           r->FrontSection == NULL && r->FrontView == NULL &&
+           r->FrontGlobalShare == 0 && r->Generation == 0 &&
+           r->BaseGeneration == 0 && r->BaseUpdateId == 0 &&
+           r->BasePreviousUpdateId == 0 && !r->FrontValid &&
+           !r->FrontHeld;
+}
+#endif
 
 #define DWM_DX_LAYER_COORDINATE_LIMIT 0x1000000
 #define DWM_DX_LAYER_DIMENSION_LIMIT 16384
@@ -1381,6 +1401,9 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
     ULONG Stride, Bytes;
     WND_REDIRECT Old;
     BOOL bHold;
+    BOOL NoRedirection = IntCompositionHasNoRedirectionBitmap(Wnd);
+
+    ASSERT(!NoRedirection || IntCompositionFrontStateAbsent(r));
 
     if ((Wnd->style & WS_MINIMIZE) && r->psurf != NULL)
         return r->psurf;
@@ -1429,8 +1452,9 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
     }
     r->AllocFailTime = 0;
 
-    bHold = r->FrontValid && r->psurfFront != NULL && IntCompositionIsCompositable(Wnd);
-    if (!bHold)
+    bHold = !NoRedirection && r->FrontValid && r->psurfFront != NULL &&
+            IntCompositionIsCompositable(Wnd);
+    if (!bHold && !NoRedirection)
     {
         psurfNewFront = IntCompositionCreateSharedBuffer(cx, cy,
                                                          IntCompositionDeviceBuffers(),
@@ -1440,7 +1464,7 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
                                                          &cbFrontViewNew,
                                                          &FrontGlobalShareNew);
     }
-    if (!bHold && psurfNewFront == NULL)
+    if (!bHold && !NoRedirection && psurfNewFront == NULL)
     {
         SURFACE_ShareUnlockSurface(psurfNew);
         EngDeleteSurface((HSURF)hbmpNew);
@@ -1484,7 +1508,7 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
     }
     IntCompositionUnlockDevice(ppdev);
 
-    if (r->psurf == NULL && psurfNew->ppal != NULL)
+    if (!NoRedirection && r->psurf == NULL && psurfNew->ppal != NULL)
     {
         PBRUSH Brush = BRUSH_ShareLockBrush(IntGetSysColorBrush(COLOR_WINDOW));
 
@@ -1527,19 +1551,33 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
          * Keep that publication and its consumed event until the producer
          * replaces or unregisters it after DWM's fence. */
         IntCompositionFreeSurface(r, TRUE);
+        ASSERT(!NoRedirection || (psurfNewFront == NULL && hbmpNewFront == NULL &&
+                                  pFrontSectionNew == NULL && FrontGlobalShareNew == 0));
         r->psurfFront = psurfNewFront;
         r->hbmpFront = hbmpNewFront;
         r->FrontSection = pFrontSectionNew;
         r->FrontView = pFrontViewNew;
         r->FrontViewSize = cbFrontViewNew;
         ASSERT(UserIsEnteredExclusive());
-        r->Generation = ++g_FrontGeneration;
-        r->FrontGlobalShare = FrontGlobalShareNew;
-        r->BaseGeneration = FrontGlobalShareNew != 0 ? r->Generation : 0;
-        r->BaseUpdateId = 0;
-        r->BaseDirtyRect.left = r->BaseDirtyRect.top = 0;
-        r->BaseDirtyRect.right = cx;
-        r->BaseDirtyRect.bottom = cy;
+        if (!NoRedirection)
+        {
+            r->Generation = ++g_FrontGeneration;
+            r->FrontGlobalShare = FrontGlobalShareNew;
+            r->BaseGeneration = FrontGlobalShareNew != 0 ? r->Generation : 0;
+            r->BaseUpdateId = 0;
+            r->BaseDirtyRect.left = r->BaseDirtyRect.top = 0;
+            r->BaseDirtyRect.right = cx;
+            r->BaseDirtyRect.bottom = cy;
+        }
+        else
+        {
+            r->Generation = 0;
+            r->FrontGlobalShare = 0;
+            r->BaseGeneration = 0;
+            r->BaseUpdateId = 0;
+            r->BasePreviousUpdateId = 0;
+            RECTL_vSetEmptyRect(&r->BaseDirtyRect);
+        }
         r->FrontValid = FALSE;
         r->FrontCx = cx;
         r->FrontCy = cy;
@@ -1564,6 +1602,11 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
     r->PhysCy = cy;
     if (bHold)
         IntCompositionFreeSurface(&Old, TRUE);
+    ASSERT(!NoRedirection ||
+           (r->psurfFront == NULL && r->hbmpFront == NULL && r->FrontSection == NULL &&
+            r->FrontView == NULL && r->FrontGlobalShare == 0 && r->Generation == 0 &&
+            r->BaseGeneration == 0 && r->BaseUpdateId == 0 && !r->FrontValid &&
+            !r->FrontHeld && r->FrontCx == cx && r->FrontCy == cy));
     return r->psurf;
 }
 
@@ -2782,6 +2825,8 @@ IntCompositionPublishHeld(_Inout_ REDIRECT_ENTRY *Entry, _In_ LONGLONG Now,
     UINT64 Fence;
     BOOL Copied;
 
+    if (IntCompositionHasNoRedirectionBitmap(Entry->Wnd))
+        return FALSE;
     if (!Redirect->FrontHeld || Redirect->psurf == NULL ||
         !IntCompositionIsCompositable(Entry->Wnd) ||
         IntCompositionPaintOpen(Entry, Now))
@@ -3075,6 +3120,7 @@ IntCompositionCopyRect(_Inout_ PWND_REDIRECT r, _In_ const RECTL *prc)
 
     if (prc->left >= prc->right || prc->top >= prc->bottom)
         return;
+    ASSERT(r->psurf != NULL && r->psurfFront != NULL);
 
     Source.x = prc->left;
     Source.y = prc->top;
@@ -3091,6 +3137,7 @@ IntCompositionExchangeBuffers(_Inout_ PWND_REDIRECT r)
     ULONG Generation;
     RECTL Rect;
 
+    ASSERT(r->psurf != NULL && r->psurfFront != NULL);
     Pointer = r->psurf->SurfObj.pvBits;
     r->psurf->SurfObj.pvBits = r->psurfFront->SurfObj.pvBits;
     r->psurfFront->SurfObj.pvBits = Pointer;
@@ -3284,6 +3331,8 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
 
         if (e == NULL)
             continue;
+        ASSERT(e->Wnd == NULL || !IntCompositionHasNoRedirectionBitmap(e->Wnd) ||
+               IntCompositionFrontStateAbsent(&e->Redirect));
         if (IntCompositionPublishHeld(e, now, TRUE))
             InterlockedExchange(&g_CompositionDamaged, TRUE);
         else if (e->Redirect.FrontHeld)
@@ -3315,10 +3364,27 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
         BOOL EntryDamaged;
         BOOL Held;
         BOOL HiddenMinimized = FALSE;
+        BOOL NoRedirection;
         RECTL Shown;
 
-        if (e == NULL || e->Redirect.cx <= 0 || e->Redirect.cy <= 0)
+        if (e == NULL)
             continue;
+        NoRedirection = IntCompositionHasNoRedirectionBitmap(w);
+        ASSERT(!NoRedirection || IntCompositionFrontStateAbsent(&e->Redirect));
+        if (NoRedirection)
+        {
+            if (w->rcWindow.right <= w->rcWindow.left ||
+                w->rcWindow.bottom <= w->rcWindow.top ||
+                e->Redirect.DxGlobalShare == 0 ||
+                e->Redirect.DxPublishedUpdateId == 0)
+            {
+                continue;
+            }
+        }
+        else if (e->Redirect.cx <= 0 || e->Redirect.cy <= 0)
+        {
+            continue;
+        }
         if (w->style & WS_MINIMIZE)
         {
             PWND Desktop = UserGetDesktopWindow();
@@ -3336,6 +3402,7 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
          * device lock is acquired on the first actual copy and then held for
          * the remainder of the snapshot, serializing it against redirected
          * GDI drawing. */
+        if (!NoRedirection)
         {
             BOOL bBusy = IntCompositionPaintOpen(e, now);
             BOOL bBackingDrawn =
@@ -3452,9 +3519,13 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
          * BaseUpdateId 0 until one exists, and publish the completed GPU layer
          * independently. This applies to both linear OpenGL publications and
          * opaque native textures. Never copy an unfinished GDI BACK here. */
-        if ((!e->Redirect.FrontValid && !DxPublished) || e->Redirect.psurfFront == NULL ||
-            (e->Redirect.FrontSection == NULL &&
-             e->Redirect.FrontGlobalShare == 0))
+        if (NoRedirection)
+        {
+            ASSERT(DxPublished);
+        }
+        else if ((!e->Redirect.FrontValid && !DxPublished) || e->Redirect.psurfFront == NULL ||
+                 (e->Redirect.FrontSection == NULL &&
+                  e->Redirect.FrontGlobalShare == 0))
         {
             if (PaintDeferred)
                 PaintDamageDeferred = TRUE;
@@ -3482,11 +3553,13 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
         IntCompositionHeldRect(&e->Redirect, (PRECTL)&w->rcWindow, &Shown);
         g_DwmFrameWindows[count].x = Shown.left;
         g_DwmFrameWindows[count].y = Shown.top;
-        g_DwmFrameWindows[count].cx = (Held || e->Redirect.Virtual) ? e->Redirect.FrontCx : e->Redirect.cx;
-        g_DwmFrameWindows[count].cy = (Held || e->Redirect.Virtual) ? e->Redirect.FrontCy : e->Redirect.cy;
+        g_DwmFrameWindows[count].cx = NoRedirection ? w->rcWindow.right - w->rcWindow.left :
+            (Held || e->Redirect.Virtual ? e->Redirect.FrontCx : e->Redirect.cx);
+        g_DwmFrameWindows[count].cy = NoRedirection ? w->rcWindow.bottom - w->rcWindow.top :
+            (Held || e->Redirect.Virtual ? e->Redirect.FrontCy : e->Redirect.cy);
         g_DwmFrameWindows[count].SurfaceId = (ULONG)(e - g_Redirects);
-        g_DwmFrameWindows[count].Generation = e->Redirect.Generation;
-        g_DwmFrameWindows[count].Stride =
+        g_DwmFrameWindows[count].Generation = NoRedirection ? 0 : e->Redirect.Generation;
+        g_DwmFrameWindows[count].Stride = NoRedirection ? 0 :
             (ULONG)e->Redirect.psurfFront->SurfObj.lDelta;
         g_DwmFrameWindows[count].Damaged = wasDamaged ? 1 : 0;
         g_DwmFrameWindows[count].DxGlobalShare = e->Redirect.DxGlobalShare;
@@ -3512,21 +3585,23 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
         g_DwmFrameWindows[count].DxPitch = e->Redirect.DxInfo.Pitch;
         g_DwmFrameWindows[count].DxFormat = e->Redirect.DxInfo.Format;
         g_DwmFrameWindows[count].BaseGlobalShare =
-            e->Redirect.FrontGlobalShare;
+            NoRedirection ? 0 : e->Redirect.FrontGlobalShare;
         g_DwmFrameWindows[count].BaseGeneration =
-            e->Redirect.BaseGeneration;
+            NoRedirection ? 0 : e->Redirect.BaseGeneration;
         g_DwmFrameWindows[count].BaseUpdateId =
-            e->Redirect.BaseUpdateId;
+            NoRedirection ? 0 : e->Redirect.BaseUpdateId;
         g_DwmFrameWindows[count].BasePreviousUpdateId =
-            e->Redirect.BasePreviousUpdateId;
+            NoRedirection ? 0 : e->Redirect.BasePreviousUpdateId;
         g_DwmFrameWindows[count].BaseDirtyRect =
             e->Redirect.BaseDirtyRect;
-        g_DwmFrameWindows[count].BaseWidth = (ULONG)e->Redirect.FrontCx;
-        g_DwmFrameWindows[count].BaseHeight = (ULONG)e->Redirect.FrontCy;
-        g_DwmFrameWindows[count].BasePitch =
+        if (NoRedirection)
+            RECTL_vSetEmptyRect(&g_DwmFrameWindows[count].BaseDirtyRect);
+        g_DwmFrameWindows[count].BaseWidth = NoRedirection ? 0 : (ULONG)e->Redirect.FrontCx;
+        g_DwmFrameWindows[count].BaseHeight = NoRedirection ? 0 : (ULONG)e->Redirect.FrontCy;
+        g_DwmFrameWindows[count].BasePitch = NoRedirection ? 0 :
             (ULONG)e->Redirect.psurfFront->SurfObj.lDelta;
         g_DwmFrameWindows[count].BaseFormat =
-            DWM_DX_FORMAT_B8G8R8A8_UNORM;
+            NoRedirection ? 0 : DWM_DX_FORMAT_B8G8R8A8_UNORM;
         g_DwmFrameWindows[count].BlurFlags = e->BlurFlags;
         g_DwmFrameWindows[count].BlurRectBase = blurRectCount;
         g_DwmFrameWindows[count].BlurRectCount = 0;
@@ -3546,7 +3621,18 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
         g_DwmFrameWindows[count].CornerRadius = IntCompositionCornerRadius(w);
         {
             const RECTL *Client = Held ? &e->Redirect.rcFrontClient : &e->Redirect.rcClient;
+            RECTL LiveClient;
 
+            if (NoRedirection)
+            {
+                LiveClient.left = max(w->rcClient.left - w->rcWindow.left, 0);
+                LiveClient.top = max(w->rcClient.top - w->rcWindow.top, 0);
+                LiveClient.right = min(w->rcClient.right - w->rcWindow.left,
+                                       w->rcWindow.right - w->rcWindow.left);
+                LiveClient.bottom = min(w->rcClient.bottom - w->rcWindow.top,
+                                        w->rcWindow.bottom - w->rcWindow.top);
+                Client = &LiveClient;
+            }
             g_DwmFrameWindows[count].ClientX = Client->left;
             g_DwmFrameWindows[count].ClientY = Client->top;
             g_DwmFrameWindows[count].ClientWidth = Client->right - Client->left;
@@ -4306,6 +4392,11 @@ IntCompositionExportDxLayer(
                      Redirect->Virtual ? Redirect->PhysCy : Redirect->cy};
     RECTL Client, Clip;
 
+    if (Backing.right <= 0 || Backing.bottom <= 0)
+    {
+        Backing.right = TopWnd->rcWindow.right - TopWnd->rcWindow.left;
+        Backing.bottom = TopWnd->rcWindow.bottom - TopWnd->rcWindow.top;
+    }
     RtlZeroMemory(Visible, sizeof(*Visible));
     if (SourceWnd == NULL)
         return;
@@ -4369,6 +4460,8 @@ IntCompositionIssueGdiUpdate(
     _In_ BOOLEAN SupersedeUnadmitted,
     _Out_ PULONGLONG UpdateId)
 {
+    if (IntCompositionHasNoRedirectionBitmap(TopWnd))
+        return STATUS_NOT_SUPPORTED;
     if (IntCompositionEnsureSurface(TopWnd, &Entry->Redirect) == NULL ||
         Entry->Redirect.BackGlobalShare == 0)
     {
@@ -4933,6 +5026,8 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
             PPDEVOBJ ppdev;
             RECT DirtyRect;
 
+            if (IntCompositionHasNoRedirectionBitmap(TopWnd))
+                return STATUS_NOT_SUPPORTED;
             if (Request.UpdateId == 0 ||
                 Request.UpdateId != Entry->Redirect.GdiIssuedUpdateId ||
                 Request.UpdateId <= Entry->Redirect.GdiConsumedUpdateId ||

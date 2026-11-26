@@ -1364,7 +1364,8 @@ DwmGpuComposeLayerMeasured(const DWM_WIN *Window, const BYTE *Pixels,
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     }
 
-    if (!Client && Window->DxGlobalShare != 0 && Window->DxUpdateId != 0 &&
+    if (!Client && Window->Generation != 0 && Window->BaseUpdateId != 0 &&
+        Window->DxGlobalShare != 0 && Window->DxUpdateId != 0 &&
         Window->AnimFlags == 0 && Alpha >= 1.0f &&
         !(Window->LayerFlags & DWM_LWA_COLORKEY) &&
         !Premultiplied &&
@@ -1430,8 +1431,12 @@ DwmGpuComposeWindowMeasured(const DWM_WIN *Window, const BYTE *Pixels,
                     LONG OriginX, LONG OriginY)
 {
     DWM_WIN Client;
-    if (!DwmGpuComposeLayer(Window, Pixels, OriginX, OriginY, FALSE))
+    if ((Window->SurfaceId == (ULONG)-1 ||
+         (Window->Generation != 0 && Window->BaseUpdateId != 0)) &&
+        !DwmGpuComposeLayer(Window, Pixels, OriginX, OriginY, FALSE))
+    {
         return FALSE;
+    }
 
     /* Any later client-layer capture includes this window's base pixels. */
     g_composeBlurOwnerValid = FALSE;

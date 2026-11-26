@@ -1286,7 +1286,7 @@ Texture *UploadGdi(const DWM_WIN *Window, const BYTE *Pixels)
 
 ClientSource *ImportClientSource(const DWM_WIN *Window)
 {
-    if (Window->Generation == 0)
+    if (Window->DxGeneration == 0)
         return NULL;
     ClientSource *Found = NULL, *Available = NULL, *Oldest = NULL, *OwnerOldest = NULL;
     ULONG OwnerCount = 0;
@@ -2210,7 +2210,8 @@ OpaqueClientRect(const DWM_WIN *Window, RECT *Rect)
 {
     DWM_GPU_WINDOW_GEOMETRY Owner, Client;
 
-    if (Window->DxGlobalShare == 0 || Window->DxUpdateId == 0 || Window->AnimFlags != 0 ||
+    if (Window->Generation == 0 || Window->BaseUpdateId == 0 ||
+        Window->DxGlobalShare == 0 || Window->DxUpdateId == 0 || Window->AnimFlags != 0 ||
         ((Window->LayerFlags & DWM_LWA_ALPHA) && Window->Alpha < 255) ||
         (Window->LayerFlags & (DWM_LWA_COLORKEY | DWM_WINDOW_PREMULTIPLIED_ALPHA |
                                DWM_WINDOW_DX_PREMULTIPLIED_ALPHA)) ||
