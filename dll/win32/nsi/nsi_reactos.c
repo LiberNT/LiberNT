@@ -423,7 +423,7 @@ static void fill_ip_interface(UINT index, struct nsi_ip_interface_key *key, stru
         rw->dad_transmits = loopback ? 0 : have_info ? info.DadTransmits : 3;
         rw->router_discovery_behaviour = have_info ? info.RouterDiscoveryBehavior : RouterDiscoveryDhcp;
         rw->link_local_address_behavior = LinkLocalDelayed;
-        rw->link_local_address_timeout = have_info ? info.LinkLocalAddressTimeout : 6500;
+        rw->link_local_address_timeout = have_info ? info.LinkLocalAddressTimeout : 60000;
         rw->mtu = loopback ? ~0u : have_info ? info.Mtu : mtu;
         rw->site_prefix_len = have_info ? info.SitePrefixLength : 64;
         fill_zone_indices(rw->zone_indices, index, loopback);

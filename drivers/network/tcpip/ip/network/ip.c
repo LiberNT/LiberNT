@@ -245,7 +245,7 @@ PIP_INTERFACE IPCreateInterface(
     IF->DadTransmits = 3;
     IF->RouterDiscoveryBehavior = 2;
     IF->PathMtuDiscoveryTimeout = 600000;
-    IF->LinkLocalAddressTimeout = 6500;
+    IF->LinkLocalAddressTimeout = 60000;
     IF->SitePrefixLength = 64;
     IF->Address       = BindInfo->Address;
     IF->AddressLength = BindInfo->AddressLength;
