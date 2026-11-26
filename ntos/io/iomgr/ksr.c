@@ -151,6 +151,14 @@ KsrMdlToMemoryRuns(
                                      MemoryRunCount);
 }
 
+NTSTATUS
+NTAPI
+KsrFreePersistedMemoryBlock(VOID)
+{
+    /* FIXME: the parameters are INFO_NEEDED; no provider frees a persisted block, so nothing is freed */
+    return STATUS_NOT_SUPPORTED;
+}
+
 /* INTERNAL FUNCTIONS ********************************************************/
 
 NTSTATUS
@@ -194,6 +202,8 @@ IopResolveKsrApiSetRoutine(
         return KsrEnumeratePersistedMemory;
     if (!strcmp(RoutineName, "KsrMdlToMemoryRuns"))
         return KsrMdlToMemoryRuns;
+    if (!strcmp(RoutineName, "KsrFreePersistedMemoryBlock"))
+        return KsrFreePersistedMemoryBlock;
 
     return NULL;
 }

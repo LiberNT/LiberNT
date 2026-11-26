@@ -5,3 +5,4 @@
 @ stdcall -arch=win64 KsrGetFirmwareInformation(ptr)
 @ stdcall -arch=win64 KsrEnumeratePersistedMemory(ptr ptr ptr)
 @ stdcall -arch=win64 KsrMdlToMemoryRuns(ptr ptr long ptr)
+@ stdcall -arch=win64 KsrFreePersistedMemoryBlock()

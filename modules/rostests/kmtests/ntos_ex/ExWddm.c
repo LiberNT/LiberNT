@@ -400,6 +400,11 @@ KsrMdlToMemoryRuns(
     _Out_writes_(MemoryRunCapacity) PULONGLONG MemoryRuns,
     _In_ ULONG MemoryRunCapacity,
     _Out_ PULONG MemoryRunCount);
+
+/* FIXME: the parameters are INFO_NEEDED, so the routine is only bound, never called */
+NTSTATUS
+NTAPI
+KsrFreePersistedMemoryBlock(VOID);
 #endif
 
 #define DEFINE_LKMD_CALLBACK(Number) \
@@ -1760,7 +1765,10 @@ START_TEST(ExWddmFault)
 #ifdef KMT_KSR_APISET
 START_TEST(ExWddmKsrLoad)
 {
+    PVOID volatile Routine = (PVOID)KsrFreePersistedMemoryBlock;
+
     ok(TRUE, "KSR API-set import table resolved\n");
+    ok(Routine != NULL, "KsrFreePersistedMemoryBlock is not bound\n");
 }
 
 START_TEST(ExWddmKsr)
