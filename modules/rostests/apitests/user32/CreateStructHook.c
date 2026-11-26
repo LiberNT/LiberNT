@@ -134,11 +134,11 @@ START_TEST(CreateStructHook)
     if (!ClassAtom)
         return;
 
-    CreateAndCheck(MAKEINTATOM(ClassAtom), NULL, __LINE__);
-    CreateAndCheck(MAKEINTATOM(ClassAtom), L"Window title", __LINE__);
+    CreateAndCheck((LPCWSTR)MAKEINTATOM(ClassAtom), NULL, __LINE__);
+    CreateAndCheck((LPCWSTR)MAKEINTATOM(ClassAtom), L"Window title", __LINE__);
     CreateAndCheck(ClassName, NULL, __LINE__);
     CreateAndCheck(ClassName, L"Window title", __LINE__);
-    CreateAndCheck(MAKEINTATOM(ClassAtom), L"", __LINE__);
+    CreateAndCheck((LPCWSTR)MAKEINTATOM(ClassAtom), L"", __LINE__);
     CreateAndCheck(ClassName, L"", __LINE__);
 
     UnregisterClassW(ClassName, GetModuleHandleW(NULL));
