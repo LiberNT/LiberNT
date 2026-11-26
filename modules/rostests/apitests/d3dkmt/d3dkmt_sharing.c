@@ -736,6 +736,126 @@ Cleanup:
         CloseAdapter(hAdapter);
 }
 
+/* D3DKMT_OPENRESOURCEFROMNTHANDLE carries version 2 allocation entries: every entry of a multi-allocation resource is filled in its own slot */
+static void Test_SharedResource_NtHandleMultiAllocation(void)
+{
+    PFN_D3DKMTCreateAllocation pCreate = (PFN_D3DKMTCreateAllocation)LoadD3DKMTProc("D3DKMTCreateAllocation");
+    PFND3DKMT_SHAREOBJECTS pShare = (PFND3DKMT_SHAREOBJECTS)LoadD3DKMTProc("D3DKMTShareObjects");
+    PFND3DKMT_QUERYRESOURCEINFOFROMNTHANDLE pQuery = (PFND3DKMT_QUERYRESOURCEINFOFROMNTHANDLE)LoadD3DKMTProc("D3DKMTQueryResourceInfoFromNtHandle");
+    PFND3DKMT_OPENRESOURCEFROMNTHANDLE pOpen = (PFND3DKMT_OPENRESOURCEFROMNTHANDLE)LoadD3DKMTProc("D3DKMTOpenResourceFromNtHandle");
+    UINT AllocationPrivate[2] = { 4096, 8192 };
+    UINT RuntimePrivate = 0x52554E33;
+    D3DDDI_ALLOCATIONINFO AllocationInfo[2];
+    D3DDDI_OPENALLOCATIONINFO2 OpenInfo[2];
+    D3DKMT_CREATEALLOCATION Create;
+    D3DKMT_QUERYRESOURCEINFOFROMNTHANDLE Query;
+    D3DKMT_OPENRESOURCEFROMNTHANDLE Open;
+    struct { ULONG Length; HANDLE RootDirectory; PVOID ObjectName; ULONG Attributes; PVOID SecurityDescriptor; PVOID SecurityQualityOfService; } Attributes;
+    BYTE RuntimeCopy[64], ResourceCopy[64], TotalCopy[256];
+    D3DKMT_HANDLE hAdapter, hCreatorDevice = 0, hOpenerDevice = 0;
+    HANDLE hNtHandle = NULL;
+    NTSTATUS Status;
+    UINT Index;
+
+    if (pCreate == NULL || pShare == NULL || pQuery == NULL || pOpen == NULL)
+    {
+        skip("NT handle sharing entry points are not all exported\n");
+        return;
+    }
+    hAdapter = OpenAdapterFromDisplay1();
+    if (hAdapter == 0)
+    {
+        skip("No display adapter for NT handle sharing\n");
+        return;
+    }
+    hCreatorDevice = CreateTestDevice(hAdapter);
+    hOpenerDevice = CreateTestDevice(hAdapter);
+    if (hCreatorDevice == 0 || hOpenerDevice == 0)
+    {
+        skip("Two logical devices are required for NT handle sharing\n");
+        goto Cleanup;
+    }
+
+    memset(AllocationInfo, 0, sizeof(AllocationInfo));
+    for (Index = 0; Index < ARRAYSIZE(AllocationInfo); ++Index)
+    {
+        AllocationInfo[Index].pPrivateDriverData = &AllocationPrivate[Index];
+        AllocationInfo[Index].PrivateDriverDataSize = sizeof(AllocationPrivate[Index]);
+    }
+    memset(&Create, 0, sizeof(Create));
+    Create.hDevice = hCreatorDevice;
+    Create.pPrivateRuntimeData = &RuntimePrivate;
+    Create.PrivateRuntimeDataSize = sizeof(RuntimePrivate);
+    Create.NumAllocations = ARRAYSIZE(AllocationInfo);
+    Create.pAllocationInfo = AllocationInfo;
+    Create.Flags.CreateResource = 1;
+    Create.Flags.CreateShared = 1;
+    Create.Flags.NtSecuritySharing = 1;
+    Status = pCreate(&Create);
+    if (!NT_SUCCESS(Status))
+    {
+        skip("Synthetic NT-shared multi-allocation resource was refused 0x%08lX\n", (long)Status);
+        goto Cleanup;
+    }
+    memset(&Attributes, 0, sizeof(Attributes));
+    Attributes.Length = sizeof(Attributes);
+    Status = pShare(1, &Create.hResource, (POBJECT_ATTRIBUTES)&Attributes, GENERIC_ALL, &hNtHandle);
+    ok(Status == STATUS_SUCCESS && hNtHandle != NULL, "ShareObjects returned 0x%08lX handle %p\n", (long)Status, hNtHandle);
+    if (!NT_SUCCESS(Status) || hNtHandle == NULL)
+        goto Cleanup;
+
+    memset(&Query, 0, sizeof(Query));
+    Query.hDevice = hOpenerDevice;
+    Query.hNtHandle = hNtHandle;
+    Status = pQuery(&Query);
+    ok(Status == STATUS_SUCCESS, "QueryResourceInfoFromNtHandle returned 0x%08lX\n", (long)Status);
+    ok(Query.NumAllocations == ARRAYSIZE(OpenInfo), "QueryResourceInfoFromNtHandle reported %u allocations\n", Query.NumAllocations);
+    if (!NT_SUCCESS(Status) || Query.NumAllocations != ARRAYSIZE(OpenInfo) || Query.PrivateRuntimeDataSize > sizeof(RuntimeCopy) ||
+        Query.ResourcePrivateDriverDataSize > sizeof(ResourceCopy) || Query.TotalPrivateDriverDataSize > sizeof(TotalCopy))
+    {
+        goto Cleanup;
+    }
+
+    memset(OpenInfo, 0, sizeof(OpenInfo));
+    memset(&Open, 0, sizeof(Open));
+    Open.hDevice = hOpenerDevice;
+    Open.hNtHandle = hNtHandle;
+    Open.NumAllocations = ARRAYSIZE(OpenInfo);
+    Open.pOpenAllocationInfo2 = OpenInfo;
+    Open.pPrivateRuntimeData = RuntimeCopy;
+    Open.PrivateRuntimeDataSize = Query.PrivateRuntimeDataSize;
+    Open.pResourcePrivateDriverData = ResourceCopy;
+    Open.ResourcePrivateDriverDataSize = Query.ResourcePrivateDriverDataSize;
+    Open.pTotalPrivateDriverDataBuffer = TotalCopy;
+    Open.TotalPrivateDriverDataBufferSize = Query.TotalPrivateDriverDataSize;
+    Status = pOpen(&Open);
+    ok(Status == STATUS_SUCCESS, "OpenResourceFromNtHandle returned 0x%08lX\n", (long)Status);
+    if (!NT_SUCCESS(Status))
+        goto Cleanup;
+    ok(Open.hResource != 0, "OpenResourceFromNtHandle returned no resource\n");
+    for (Index = 0; Index < ARRAYSIZE(OpenInfo); ++Index)
+    {
+        ok(OpenInfo[Index].hAllocation != 0, "entry %u has no allocation handle\n", Index);
+        ok(OpenInfo[Index].PrivateDriverDataSize == sizeof(AllocationPrivate[Index]), "entry %u private data size %u\n", Index, OpenInfo[Index].PrivateDriverDataSize);
+        ok(OpenInfo[Index].pPrivateDriverData != NULL &&
+           (const BYTE *)OpenInfo[Index].pPrivateDriverData >= TotalCopy &&
+           (const BYTE *)OpenInfo[Index].pPrivateDriverData + OpenInfo[Index].PrivateDriverDataSize <= TotalCopy + Query.TotalPrivateDriverDataSize,
+           "entry %u private data %p is outside the caller's buffer\n", Index, OpenInfo[Index].pPrivateDriverData);
+        if (OpenInfo[Index].pPrivateDriverData != NULL && OpenInfo[Index].PrivateDriverDataSize == sizeof(UINT))
+            ok(*(const UINT *)OpenInfo[Index].pPrivateDriverData == AllocationPrivate[Index], "entry %u private data 0x%x\n", Index, *(const UINT *)OpenInfo[Index].pPrivateDriverData);
+    }
+    ok(OpenInfo[0].hAllocation != OpenInfo[1].hAllocation, "both entries carry allocation 0x%lx\n", (ULONG)OpenInfo[0].hAllocation);
+
+Cleanup:
+    if (hNtHandle != NULL)
+        CloseHandle(hNtHandle);
+    if (hOpenerDevice != 0)
+        DestroyTestDevice(hOpenerDevice);
+    if (hCreatorDevice != 0)
+        DestroyTestDevice(hCreatorDevice);
+    CloseAdapter(hAdapter);
+}
+
 /* Exercise the buffered bridge with nonzero runtime/resource data and three
  * distinct allocation-private slices. Native drivers may reject the synthetic
  * allocation metadata; ReactOS test miniports accept it and must preserve every
@@ -1161,5 +1281,6 @@ START_TEST(sharing)
     Test_OpenQuery_RealDevice_BadHandles();
     Test_SharedPrimary_OpenRoundTrip();
     Test_SharedResource_MultiAllocationRoundTrip();
+    Test_SharedResource_NtHandleMultiAllocation();
     Test_GetSharedPrimaryHandle_Positive();
 }

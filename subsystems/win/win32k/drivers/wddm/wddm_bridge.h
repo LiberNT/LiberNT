@@ -71,6 +71,10 @@ WddmBridgeSetCompositorSourceOwner(
 NTSTATUS
 WddmBridgeRegisterDwmProcess(VOID);
 
+NTSTATUS
+D3dkmtBridgeOpenResourceEntries2(
+    _Inout_ D3DKMT_OPENRESOURCE *pData);
+
 /* Cached device object pointer (set by WddmBridgeInit) */
 extern PFILE_OBJECT   g_DxgkrnlFileObject;
 extern PDEVICE_OBJECT g_DxgkrnlDeviceObject;

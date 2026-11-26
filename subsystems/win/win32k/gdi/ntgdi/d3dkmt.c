@@ -2069,7 +2069,7 @@ NtGdiDdDDIOpenResourceFromNtHandle(_Inout_ struct _D3DKMT_OPENRESOURCEFROMNTHAND
     OpenResource.TotalPrivateDriverDataBufferSize =
         Captured.TotalPrivateDriverDataBufferSize;
 
-    Status = D3DKMTOpenResource(&OpenResource);
+    Status = D3dkmtBridgeOpenResourceEntries2(&OpenResource);
     if (!NT_SUCCESS(Status))
         return Status;
 
