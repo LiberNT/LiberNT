@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Tests that the IP interface of a Wi-Fi card is the card itself
+ * PURPOSE:     Tests that the IP interface of a Wi-Fi card is the card itself, and the capabilities it reports
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -190,6 +190,28 @@ TestAdapterIdentity(HANDLE Client, const GUID *Interface, HDEVINFO Devices, SP_D
     HeapFree(GetProcessHeap(), 0, Addresses);
 }
 
+static VOID
+TestCapability(HANDLE Client, const GUID *Interface)
+{
+    PWLAN_INTERFACE_CAPABILITY Capability = NULL;
+    DWORD Error;
+
+    Error = WlanGetInterfaceCapability(Client, Interface, NULL, &Capability);
+    ok(Error == ERROR_SUCCESS, "WlanGetInterfaceCapability failed: %lu\n", Error);
+    if (Error != ERROR_SUCCESS || Capability == NULL)
+        return;
+
+    ok(Capability->interfaceType == wlan_interface_type_native_802_11, "Interface type %d\n",
+       Capability->interfaceType);
+    ok(!Capability->bDot11DSupported, "802.11d is reported as supported\n");
+    ok(Capability->dwMaxDesiredSsidListSize == 1, "Desired SSID list size %lu\n", Capability->dwMaxDesiredSsidListSize);
+    ok(Capability->dwMaxDesiredBssidListSize == 1, "Desired BSSID list size %lu\n",
+       Capability->dwMaxDesiredBssidListSize);
+    ok(Capability->dwNumberOfSupportedPhys == 1, "%lu supported PHYs\n", Capability->dwNumberOfSupportedPhys);
+    ok(Capability->dot11PhyTypes[0] == dot11_phy_type_erp, "PHY type %d\n", Capability->dot11PhyTypes[0]);
+    WlanFreeMemory(Capability);
+}
+
 START_TEST(WlanAdapterIdentity)
 {
     SP_DEVINFO_DATA Device;
@@ -212,7 +234,10 @@ START_TEST(WlanAdapterIdentity)
     if (InstallVwifi(&Devices, &Device))
     {
         if (WaitInterface(Client, Devices, &Device, &Interface))
+        {
             TestAdapterIdentity(Client, &Interface, Devices, &Device);
+            TestCapability(Client, &Interface);
+        }
         else
             ok(FALSE, "No wireless interface appeared for the vwifi adapter\n");
         RemoveVwifi(Devices, &Device);
