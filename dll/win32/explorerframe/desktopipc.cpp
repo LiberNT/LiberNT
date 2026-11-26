@@ -585,6 +585,36 @@ BOOL WINAPI SHCreateFromDesktop(_In_ PEXPLORER_CMDLINE_PARSE_RESULTS parseResult
         }
     }
 
+    if (!(parseResults->dwFlags & SH_EXPLORER_CMDLINE_FLAG_SELECT) && !parseResults->pidlRoot)
+    {
+        SHELLEXECUTEINFOW sei = { sizeof(sei) };
+        SHFILEINFOW sfi = { 0 };
+
+        sei.nShow = parseResults->nCmdShow ? parseResults->nCmdShow : SW_SHOWNORMAL;
+        if (pidl)
+        {
+            sfi.dwAttributes = SFGAO_FOLDER;
+            if (SHGetFileInfoW((PCWSTR)pidl, 0, &sfi, sizeof(sfi), SHGFI_PIDL | SHGFI_ATTRIBUTES | SHGFI_ATTR_SPECIFIED) &&
+                !(sfi.dwAttributes & SFGAO_FOLDER))
+            {
+                sei.fMask = SEE_MASK_INVOKEIDLIST;
+                sei.lpIDList = pidl;
+            }
+        }
+        else if (strPath && (UrlIsW(strPath, URLIS_URL) || !StrCmpNIW(strPath, L"shell:", 6) || !StrCmpNW(strPath, L"::{", 3)))
+        {
+            sei.lpFile = strPath;
+        }
+
+        if (sei.lpIDList || sei.lpFile)
+        {
+            BOOL bRet = ShellExecuteExW(&sei);
+            ILFree(pidl);
+            SHDestroyIETHREADPARAM(parameters);
+            return bRet;
+        }
+    }
+
     // HACK! This shouldn't happen! SHExplorerParseCmdLine needs fixing.
     if (!pidl)
     {
