@@ -174,6 +174,11 @@ Arm64DropToEl1KeepState:
     lsr x0, x0, #2
     cmp x0, #2
     b.ne .Lloader_keep_state_done
+    /* EL1 runs uncached until it enables its MMU: write EL2's dirty lines back now, or a later set/way clean stores them over EL1's uncached writes */
+    mov x17, x30
+    mov x0, #0
+    bl __asm_dcache_all
+    mov x30, x17
     mov x3, #0x80000000
     movk x3, #0x300, lsl #32
     msr hcr_el2, x3
