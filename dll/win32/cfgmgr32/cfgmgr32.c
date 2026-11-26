@@ -509,7 +509,7 @@ static LSTATUS enum_class_property_keys( HKEY hkey, DEVPROPKEY *buffer, ULONG *s
         else buffer[count - 1] = *desc->key;
     }
 
-    if (!open_key( hkey, L"Properties", KEY_ENUMERATE_SUB_KEYS, TRUE, &props_key ))
+    if (!open_key( hkey, L"Properties", KEY_QUERY_VALUE, TRUE, &props_key ))
     {
         WCHAR name[MAX_PATH];
         for (ULONG i = 0, len = ARRAY_SIZE(name); !RegEnumValueW( props_key, i, name, &len, 0, NULL, NULL, NULL ); i++, len = ARRAY_SIZE(name))
@@ -537,7 +537,7 @@ static LSTATUS enum_class_property_keys( HKEY hkey, DEVPROPKEY *buffer, ULONG *s
         }
     }
 
-    if (!open_key( hkey, L"Properties", KEY_ENUMERATE_SUB_KEYS, TRUE, &props_key ))
+    if (!open_key( hkey, L"Properties", KEY_QUERY_VALUE, TRUE, &props_key ))
     {
         WCHAR name[MAX_PATH];
         for (ULONG i = 0, len = ARRAY_SIZE(name); !RegEnumValueW( props_key, i, name, &len, 0, NULL, NULL, NULL ); i++, len = ARRAY_SIZE(name))
@@ -610,14 +610,16 @@ static LSTATUS enum_class_device_interfaces( HKEY root, struct device_interface 
     {
         WCHAR *tmp, instance[MAX_PATH], path[MAX_PATH];
 
-        if ((err = open_key( root, iface->name, KEY_ENUMERATE_SUB_KEYS | KEY_QUERY_VALUE, TRUE, &iface_key ))) continue;
+        if (iface->name[0] != '#') continue;
+        if (open_key( root, iface->name, KEY_ENUMERATE_SUB_KEYS | KEY_QUERY_VALUE, TRUE, &iface_key )) continue;
 
-        if (!(err = query_value( iface_key, L"DeviceInstance", instance, ARRAY_SIZE(instance) )) &&
+        if (!query_value( iface_key, L"DeviceInstance", instance, ARRAY_SIZE(instance) ) &&
             (!instance_id || !wcsicmp( instance_id, instance )))
         {
             for (tmp = wcschr( instance, '\\' ); tmp; tmp = wcschr( tmp, '\\' )) *tmp = '#';
             for (UINT j = 0; !err && !(err = RegEnumKeyW( iface_key, j, iface->refstr, ARRAY_SIZE(iface->refstr) )); j++)
             {
+                if (iface->refstr[0] != '#') continue;
 #ifdef __REACTOS__
                 ULONG len = (iface->refstr[0] == '#' && iface->refstr[1]) ?
                     swprintf( path, ARRAY_SIZE(path), L"\\\\?\\%s#%s\\%s", instance, iface->class, iface->refstr + 1 ) :
@@ -649,9 +651,9 @@ LSTATUS enum_device_interfaces_filtered( BOOL all, const GUID *class_guid, const
 
     for (UINT i = 0; !err && !(err = RegEnumKeyW( root, i, iface.class, ARRAY_SIZE(iface.class) )); i++)
     {
-        if ((err = guid_from_string( iface.class, &iface.class_guid ))) continue;
+        if (guid_from_string( iface.class, &iface.class_guid )) continue;
         if (class_guid && !IsEqualGUID( class_guid, &iface.class_guid )) continue;
-        if ((err = open_key( root, iface.class, KEY_ENUMERATE_SUB_KEYS, TRUE, &class_key ))) continue;
+        if (open_key( root, iface.class, KEY_ENUMERATE_SUB_KEYS, TRUE, &class_key )) continue;
         err = enum_class_device_interfaces( class_key, &iface, (DEVINSTID_W)instance_id, all, callback, context );
         RegCloseKey( class_key );
     }
@@ -671,8 +673,8 @@ LSTATUS enum_device_interfaces( BOOL all, enum_objects_cb callback, void *contex
 
     for (UINT i = 0; !err && !(err = RegEnumKeyW( root, i, iface.class, ARRAY_SIZE(iface.class) )); i++)
     {
-        if ((err = guid_from_string( iface.class, &iface.class_guid ))) continue;
-        if ((err = open_key( root, iface.class, KEY_ENUMERATE_SUB_KEYS, TRUE, &class_key ))) continue;
+        if (guid_from_string( iface.class, &iface.class_guid )) continue;
+        if (open_key( root, iface.class, KEY_ENUMERATE_SUB_KEYS, TRUE, &class_key )) continue;
         err = enum_class_device_interfaces( class_key, &iface, NULL, all, callback, context );
         RegCloseKey( class_key );
     }
@@ -1780,8 +1782,14 @@ CONFIGRET WINAPI CM_Enumerate_Classes_Ex( ULONG index, GUID *class, ULONG flags,
     else root = cache_root_key( HKEY_LOCAL_MACHINE, device_classesW, NULL );
     if (root == (HKEY)-1) return CR_NO_SUCH_REGISTRY_KEY;
 
-    if ((err = RegEnumKeyW( root, index, buffer, ARRAY_SIZE(buffer) ))) return map_error( err );
-    return map_error( guid_from_string( buffer, class ) );
+    for (ULONG i = 0, found = 0; ; i++)
+    {
+        err = RegEnumKeyW( root, i, buffer, ARRAY_SIZE(buffer) );
+        if (err == ERROR_MORE_DATA) continue;
+        if (err) return map_error( err );
+        if (guid_from_string( buffer, class )) continue;
+        if (found++ == index) return CR_SUCCESS;
+    }
 }
 
 /***********************************************************************
