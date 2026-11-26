@@ -14,3 +14,4 @@
 #include <winbase.h>
 #include <winternl.h>
 #include <d3dkmthk.h>
+#include <pseh/pseh2.h>

@@ -4548,20 +4548,6 @@ __kernel_entry
 W32KAPI
 NTSTATUS
 APIENTRY
-NtGdiDdDDICreateAllocation2(
-    _Inout_ struct _D3DKMT_CREATEALLOCATION* unnamedParam1);
-
-__kernel_entry
-W32KAPI
-NTSTATUS
-APIENTRY
-NtGdiDdDDIOpenResource2(
-    _Inout_ struct _D3DKMT_OPENRESOURCE* unnamedParam1);
-
-__kernel_entry
-W32KAPI
-NTSTATUS
-APIENTRY
 NtGdiDdDDIOpenSynchronizationObject(
     _Inout_ struct _D3DKMT_OPENSYNCHRONIZATIONOBJECT* unnamedParam1);
 

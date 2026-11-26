@@ -48,9 +48,7 @@ W32KAPI NTSTATUS WINAPI NtGdiDdDDIFreeGpuVirtualAddress(const D3DKMT_FREEGPUVIRT
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIInvalidateCache(const D3DKMT_INVALIDATECACHE *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIWaitForSynchronizationObjectFromGpu(const D3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMGPU *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDICreateAllocation(D3DKMT_CREATEALLOCATION *desc);
-W32KAPI NTSTATUS WINAPI NtGdiDdDDICreateAllocation2(D3DKMT_CREATEALLOCATION *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIOpenResource(D3DKMT_OPENRESOURCE *desc);
-W32KAPI NTSTATUS WINAPI NtGdiDdDDIOpenResource2(D3DKMT_OPENRESOURCE *desc);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIOpenResourceFromNtHandle(D3DKMT_OPENRESOURCEFROMNTHANDLE *desc);
 W32KAPI BOOLEAN WINAPI NtGdiDdDDICheckExclusiveOwnership(void);
 W32KAPI NTSTATUS WINAPI NtGdiDdDDIGetProcessSchedulingPriorityClass(HANDLE process, D3DKMT_SCHEDULINGPRIORITYCLASS *priority);
@@ -1390,42 +1388,6 @@ NTSTATUS WINAPI wow64_NtGdiDdDDICreateAllocation(UINT *args)
 {
     D3DKMT_CREATEALLOCATION32 *desc32 = get_ptr(&args);
     D3DKMT_CREATESTANDARDALLOCATION standard;
-    D3DDDI_ALLOCATIONINFO32 *allocs32;
-    D3DKMT_CREATEALLOCATION desc;
-    NTSTATUS status;
-    UINT i;
-
-    if (!desc32) return STATUS_INVALID_PARAMETER;
-    create_allocation_32to64(desc32, &desc, &standard);
-    allocs32 = ULongToPtr(desc32->pAllocationInfo);
-    if (allocs32 && desc32->NumAllocations)
-    {
-        desc.pAllocationInfo = Wow64AllocateTemp((SIZE_T)desc32->NumAllocations * sizeof(*desc.pAllocationInfo));
-        if (!desc.pAllocationInfo) return STATUS_NO_MEMORY;
-        memset(desc.pAllocationInfo, 0, (SIZE_T)desc32->NumAllocations * sizeof(*desc.pAllocationInfo));
-        for (i = 0; i < desc32->NumAllocations; i++)
-        {
-            desc.pAllocationInfo[i].hAllocation = allocs32[i].hAllocation;
-            desc.pAllocationInfo[i].pSystemMem = ULongToPtr(allocs32[i].pSystemMem);
-            desc.pAllocationInfo[i].pPrivateDriverData = ULongToPtr(allocs32[i].pPrivateDriverData);
-            desc.pAllocationInfo[i].PrivateDriverDataSize = allocs32[i].PrivateDriverDataSize;
-            desc.pAllocationInfo[i].VidPnSourceId = allocs32[i].VidPnSourceId;
-            desc.pAllocationInfo[i].Flags.Value = allocs32[i].Flags;
-        }
-    }
-
-    status = NtGdiDdDDICreateAllocation(&desc);
-    desc32->hResource = desc.hResource;
-    desc32->hGlobalShare = desc.hGlobalShare;
-    for (i = 0; desc.pAllocationInfo && i < desc32->NumAllocations; i++)
-        allocs32[i].hAllocation = desc.pAllocationInfo[i].hAllocation;
-    return status;
-}
-
-NTSTATUS WINAPI wow64_NtGdiDdDDICreateAllocation2(UINT *args)
-{
-    D3DKMT_CREATEALLOCATION32 *desc32 = get_ptr(&args);
-    D3DKMT_CREATESTANDARDALLOCATION standard;
     D3DDDI_ALLOCATIONINFO2_32 *allocs32;
     D3DKMT_CREATEALLOCATION desc;
     NTSTATUS status;
@@ -1452,7 +1414,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDICreateAllocation2(UINT *args)
         }
     }
 
-    status = NtGdiDdDDICreateAllocation2(&desc);
+    status = NtGdiDdDDICreateAllocation(&desc);
     desc32->hResource = desc.hResource;
     desc32->hGlobalShare = desc.hGlobalShare;
     for (i = 0; desc.pAllocationInfo2 && i < desc32->NumAllocations; i++)
@@ -1464,42 +1426,6 @@ NTSTATUS WINAPI wow64_NtGdiDdDDICreateAllocation2(UINT *args)
 }
 
 NTSTATUS WINAPI wow64_NtGdiDdDDIOpenResource(UINT *args)
-{
-    D3DKMT_OPENRESOURCE32 *desc32 = get_ptr(&args);
-    D3DDDI_OPENALLOCATIONINFO32 *allocs32;
-    D3DKMT_OPENRESOURCE desc;
-    NTSTATUS status;
-    UINT i;
-
-    if (!desc32) return STATUS_INVALID_PARAMETER;
-    open_resource_32to64(desc32, &desc);
-    allocs32 = ULongToPtr(desc32->pOpenAllocationInfo);
-    if (allocs32 && desc32->NumAllocations)
-    {
-        desc.pOpenAllocationInfo = Wow64AllocateTemp((SIZE_T)desc32->NumAllocations * sizeof(*desc.pOpenAllocationInfo));
-        if (!desc.pOpenAllocationInfo) return STATUS_NO_MEMORY;
-        memset(desc.pOpenAllocationInfo, 0, (SIZE_T)desc32->NumAllocations * sizeof(*desc.pOpenAllocationInfo));
-        for (i = 0; i < desc32->NumAllocations; i++)
-        {
-            desc.pOpenAllocationInfo[i].hAllocation = allocs32[i].hAllocation;
-            desc.pOpenAllocationInfo[i].pPrivateDriverData = ULongToPtr(allocs32[i].pPrivateDriverData);
-            desc.pOpenAllocationInfo[i].PrivateDriverDataSize = allocs32[i].PrivateDriverDataSize;
-        }
-    }
-
-    status = NtGdiDdDDIOpenResource(&desc);
-    desc32->TotalPrivateDriverDataBufferSize = desc.TotalPrivateDriverDataBufferSize;
-    desc32->hResource = desc.hResource;
-    for (i = 0; desc.pOpenAllocationInfo && i < desc32->NumAllocations; i++)
-    {
-        allocs32[i].hAllocation = desc.pOpenAllocationInfo[i].hAllocation;
-        allocs32[i].pPrivateDriverData = PtrToUlong(desc.pOpenAllocationInfo[i].pPrivateDriverData);
-        allocs32[i].PrivateDriverDataSize = desc.pOpenAllocationInfo[i].PrivateDriverDataSize;
-    }
-    return status;
-}
-
-NTSTATUS WINAPI wow64_NtGdiDdDDIOpenResource2(UINT *args)
 {
     D3DKMT_OPENRESOURCE32 *desc32 = get_ptr(&args);
     D3DDDI_OPENALLOCATIONINFO2_32 *allocs32;
@@ -1524,7 +1450,7 @@ NTSTATUS WINAPI wow64_NtGdiDdDDIOpenResource2(UINT *args)
         }
     }
 
-    status = NtGdiDdDDIOpenResource2(&desc);
+    status = NtGdiDdDDIOpenResource(&desc);
     desc32->TotalPrivateDriverDataBufferSize = desc.TotalPrivateDriverDataBufferSize;
     desc32->hResource = desc.hResource;
     for (i = 0; desc.pOpenAllocationInfo2 && i < desc32->NumAllocations; i++)

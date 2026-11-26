@@ -777,8 +777,6 @@
     SVC_(GdiDdDDICheckVidPnExclusiveOwnership, 1)
     SVC_(GdiDdDDIEnumAdapters, 1)
     SVC_(GdiDdDDIOpenAdapterFromLuid, 1)
-    SVC_(GdiDdDDICreateAllocation2, 1)
-    SVC_(GdiDdDDIOpenResource2, 1)
     SVC_(GdiDdDDIOpenSynchronizationObject, 1)
     SVC_(GdiDdDDICreateKeyedMutex, 1)
     SVC_(GdiDdDDIOpenKeyedMutex, 1)

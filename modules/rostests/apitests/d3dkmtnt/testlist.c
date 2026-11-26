@@ -18,6 +18,7 @@ extern void func_synclife(void);
 extern void func_queryregistry(void);
 extern void func_gdi32names(void);
 extern void func_win32unames(void);
+extern void func_allocabi(void);
 
 const struct test winetest_testlist[] =
 {
@@ -31,5 +32,6 @@ const struct test winetest_testlist[] =
     { "queryregistry", func_queryregistry },
     { "gdi32names",   func_gdi32names },
     { "win32unames",  func_win32unames },
+    { "allocabi",     func_allocabi },
     { 0, 0 }
 };

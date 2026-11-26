@@ -1631,36 +1631,46 @@ Cleanup:
     return Status;
 }
 
-/* The caller's entries are D3DDDI_OPENALLOCATIONINFO or, for an NT handle open, D3DDDI_OPENALLOCATIONINFO2; dxgkrnl takes the first */
+/* Of a D3DDDI_OPENALLOCATIONINFO2 entry only the leading D3DDDI_OPENALLOCATIONINFO fields are read and written */
+#define D3DKMT_BRIDGE_OPEN_ENTRY2_FIELDS FIELD_OFFSET(D3DDDI_OPENALLOCATIONINFO2, GpuVirtualAddress)
+
 static NTSTATUS
-D3dkmtBridgeNarrowOpenEntries(
-    _In_reads_bytes_opt_(Count * EntrySize) PVOID Entries,
+D3dkmtBridgeCaptureOpenEntries2(
+    _In_reads_opt_(Count) CONST D3DDDI_OPENALLOCATIONINFO2 *UserEntries,
     _In_ UINT Count,
-    _In_ SIZE_T EntrySize,
     _Outptr_result_maybenull_ D3DDDI_OPENALLOCATIONINFO **OpenAllocationInfo)
 {
-    D3DDDI_OPENALLOCATIONINFO2 *Entries2 = Entries;
+    D3DDDI_OPENALLOCATIONINFO2 Entry;
     D3DDDI_OPENALLOCATIONINFO *Narrow;
+    SIZE_T Size;
+    NTSTATUS Status;
     UINT Index;
 
-    ASSERT(EntrySize == sizeof(D3DDDI_OPENALLOCATIONINFO) || EntrySize == sizeof(D3DDDI_OPENALLOCATIONINFO2));
-    ASSERT(Count == 0 || Entries != NULL);
-    if (EntrySize == sizeof(D3DDDI_OPENALLOCATIONINFO) || Count == 0)
-    {
-        *OpenAllocationInfo = Entries;
+    *OpenAllocationInfo = NULL;
+    if (Count == 0)
         return STATUS_SUCCESS;
-    }
-    Narrow = ExAllocatePoolWithTag(NonPagedPool, (SIZE_T)Count * sizeof(*Narrow), TAG_WDDM_BRIDGE);
+    if (Count > D3DKMT_BRIDGE_MAX_ALLOCATIONS || UserEntries == NULL)
+        return STATUS_INVALID_PARAMETER;
+    Status = WddmBridgeSizeForCount(Count, sizeof(*Narrow), &Size);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Narrow = ExAllocatePoolWithTag(NonPagedPool, Size, TAG_WDDM_BRIDGE);
     if (Narrow == NULL)
-    {
-        *OpenAllocationInfo = NULL;
         return STATUS_INSUFFICIENT_RESOURCES;
-    }
     for (Index = 0; Index < Count; ++Index)
     {
-        Narrow[Index].hAllocation = Entries2[Index].hAllocation;
-        Narrow[Index].pPrivateDriverData = Entries2[Index].pPrivateDriverData;
-        Narrow[Index].PrivateDriverDataSize = Entries2[Index].PrivateDriverDataSize;
+        RtlZeroMemory(&Entry, sizeof(Entry));
+        Status = WddmBridgeSafeCopyFrom(&Entry, &UserEntries[Index], D3DKMT_BRIDGE_OPEN_ENTRY2_FIELDS);
+        if (NT_SUCCESS(Status))
+            Status = WddmBridgeSafeProbeForWrite((PVOID)&UserEntries[Index], D3DKMT_BRIDGE_OPEN_ENTRY2_FIELDS);
+        if (!NT_SUCCESS(Status))
+        {
+            ExFreePoolWithTag(Narrow, TAG_WDDM_BRIDGE);
+            return Status;
+        }
+        Narrow[Index].hAllocation = Entry.hAllocation;
+        Narrow[Index].pPrivateDriverData = Entry.pPrivateDriverData;
+        Narrow[Index].PrivateDriverDataSize = Entry.PrivateDriverDataSize;
     }
     *OpenAllocationInfo = Narrow;
     return STATUS_SUCCESS;
@@ -1669,28 +1679,32 @@ D3dkmtBridgeNarrowOpenEntries(
 static NTSTATUS
 D3dkmtBridgeReturnOpenEntries(
     _Out_writes_bytes_(Count * EntrySize) PVOID UserEntries,
-    _Inout_updates_bytes_(Count * EntrySize) PVOID Entries,
     _In_reads_(Count) CONST D3DDDI_OPENALLOCATIONINFO *OpenAllocationInfo,
     _In_ UINT Count,
     _In_ SIZE_T EntrySize)
 {
-    D3DDDI_OPENALLOCATIONINFO2 *Entries2 = Entries;
+    D3DDDI_OPENALLOCATIONINFO2 *UserEntries2 = UserEntries;
+    D3DDDI_OPENALLOCATIONINFO2 Entry;
+    NTSTATUS Status;
     UINT Index;
 
     ASSERT(Count != 0);
-    ASSERT(EntrySize == sizeof(D3DDDI_OPENALLOCATIONINFO) || (Entries != (PVOID)OpenAllocationInfo && EntrySize == sizeof(D3DDDI_OPENALLOCATIONINFO2)));
-    if (EntrySize == sizeof(D3DDDI_OPENALLOCATIONINFO2))
+    ASSERT(OpenAllocationInfo != NULL);
+    ASSERT(EntrySize == sizeof(D3DDDI_OPENALLOCATIONINFO) || EntrySize == sizeof(D3DDDI_OPENALLOCATIONINFO2));
+    if (EntrySize == sizeof(D3DDDI_OPENALLOCATIONINFO))
+        return WddmBridgeSafeCopyTo(UserEntries, OpenAllocationInfo, (SIZE_T)Count * EntrySize);
+    for (Index = 0; Index < Count; ++Index)
     {
-        for (Index = 0; Index < Count; ++Index)
-        {
-            Entries2[Index].hAllocation = OpenAllocationInfo[Index].hAllocation;
-            Entries2[Index].pPrivateDriverData = OpenAllocationInfo[Index].pPrivateDriverData;
-            Entries2[Index].PrivateDriverDataSize = OpenAllocationInfo[Index].PrivateDriverDataSize;
-            /* TODO: report the GPU virtual address of the opened allocation */
-            Entries2[Index].GpuVirtualAddress = 0;
-        }
+        RtlZeroMemory(&Entry, sizeof(Entry));
+        Entry.hAllocation = OpenAllocationInfo[Index].hAllocation;
+        Entry.pPrivateDriverData = OpenAllocationInfo[Index].pPrivateDriverData;
+        Entry.PrivateDriverDataSize = OpenAllocationInfo[Index].PrivateDriverDataSize;
+        /* TODO: report the GPU virtual address of an opened allocation that has one */
+        Status = WddmBridgeSafeCopyTo(&UserEntries2[Index], &Entry, D3DKMT_BRIDGE_OPEN_ENTRY2_FIELDS);
+        if (!NT_SUCCESS(Status))
+            return Status;
     }
-    return WddmBridgeSafeCopyTo(UserEntries, Entries, (SIZE_T)Count * EntrySize);
+    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -1736,9 +1750,16 @@ D3dkmtBridgeOpenResource(
     ResourcePrivateDriverDataCapacity = Captured.ResourcePrivateDriverDataSize;
     TotalPrivateDriverDataCapacity = Captured.TotalPrivateDriverDataBufferSize;
 
-    Status = WddmBridgeCaptureArray(UserOpenAllocationInfo, AllocationCapacity, EntrySize, D3DKMT_BRIDGE_MAX_ALLOCATIONS, TRUE, TRUE, &CapturedEntries, &OpenAllocationInfoSize);
-    if (NT_SUCCESS(Status))
-        Status = D3dkmtBridgeNarrowOpenEntries(CapturedEntries, AllocationCapacity, EntrySize, &OpenAllocationInfo);
+    ASSERT(EntrySize == sizeof(D3DDDI_OPENALLOCATIONINFO) || EntrySize == sizeof(D3DDDI_OPENALLOCATIONINFO2));
+    if (EntrySize == sizeof(D3DDDI_OPENALLOCATIONINFO2))
+    {
+        Status = D3dkmtBridgeCaptureOpenEntries2(UserOpenAllocationInfo, AllocationCapacity, &OpenAllocationInfo);
+    }
+    else
+    {
+        Status = WddmBridgeCaptureArray(UserOpenAllocationInfo, AllocationCapacity, EntrySize, D3DKMT_BRIDGE_MAX_ALLOCATIONS, TRUE, TRUE, &CapturedEntries, &OpenAllocationInfoSize);
+        OpenAllocationInfo = CapturedEntries;
+    }
     if (!NT_SUCCESS(Status))
         goto Cleanup;
     Status = WddmBridgeCaptureArray(UserPrivateRuntimeData, PrivateRuntimeDataCapacity, sizeof(UCHAR), D3DKMT_BRIDGE_MAX_PRIVATE_BYTES, TRUE, TRUE, &PrivateRuntimeData, &PrivateRuntimeDataSize);
@@ -1818,7 +1839,7 @@ D3dkmtBridgeOpenResource(
     if (NT_SUCCESS(Status) && Captured.TotalPrivateDriverDataBufferSize != 0)
         Status = WddmBridgeSafeCopyTo(UserTotalPrivateDriverData, TotalPrivateDriverData, Captured.TotalPrivateDriverDataBufferSize);
     if (NT_SUCCESS(Status) && Captured.NumAllocations != 0)
-        Status = D3dkmtBridgeReturnOpenEntries(UserOpenAllocationInfo, CapturedEntries, OpenAllocationInfo, Captured.NumAllocations, EntrySize);
+        Status = D3dkmtBridgeReturnOpenEntries(UserOpenAllocationInfo, OpenAllocationInfo, Captured.NumAllocations, EntrySize);
     if (NT_SUCCESS(Status))
     {
         Captured.pOpenAllocationInfo = UserOpenAllocationInfo;

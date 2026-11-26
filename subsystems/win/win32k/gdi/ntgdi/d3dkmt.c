@@ -883,7 +883,7 @@ APIENTRY
 NtGdiDdDDICreateAllocation(_Inout_ D3DKMT_CREATEALLOCATION* unnamedParam1)
 {
     RETURN_STATUS_IF_NULL(unnamedParam1);
-    D3DKMT_CALL_CALLBACK(RxgkIntPfnCreateAllocation, unnamedParam1);
+    D3DKMT_CALL_CALLBACK(RxgkIntPfnCreateAllocation2, unnamedParam1);
 }
 
 NTSTATUS
@@ -1112,12 +1112,26 @@ NtGdiDdDDILock(_Inout_ D3DKMT_LOCK* unnamedParam1)
     D3DKMT_CALL_CALLBACK(RxgkIntPfnLock, unnamedParam1);
 }
 
+static NTSTATUS
+APIENTRY
+D3dkmtOpenResourceEntries2(
+    _Inout_ PVOID Argument)
+{
+    return D3dkmtBridgeOpenResourceEntries2((D3DKMT_OPENRESOURCE *)Argument);
+}
+
 NTSTATUS
 APIENTRY
 NtGdiDdDDIOpenResource(_Inout_ D3DKMT_OPENRESOURCE* unnamedParam1)
 {
-    RETURN_STATUS_IF_NULL(unnamedParam1);
-    D3DKMT_CALL_CALLBACK(RxgkIntPfnOpenResource, unnamedParam1);
+    NTSTATUS Status;
+
+    Status = D3dkmtValidateWddmThunk(unnamedParam1);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (DxgAdapterCallbacks.RxgkIntPfnOpenResource == NULL)
+        return STATUS_PROCEDURE_NOT_FOUND;
+    return D3dkmtCallCaptured(unnamedParam1, sizeof(*unnamedParam1), D3dkmtOpenResourceEntries2, FALSE);
 }
 
 NTSTATUS
@@ -1373,24 +1387,6 @@ NtGdiDdDDICheckVidPnExclusiveOwnership(_In_ const D3DKMT_CHECKVIDPNEXCLUSIVEOWNE
         return Status;
 
     return D3DKMTCheckVidPnExclusiveOwnership(unnamedParam1);
-}
-
-NTSTATUS
-APIENTRY
-NtGdiDdDDICreateAllocation2(_Inout_ D3DKMT_CREATEALLOCATION* unnamedParam1)
-{
-    RETURN_STATUS_IF_NULL(unnamedParam1);
-    /* The bridge captures the complete top-level structure before validating
-     * any field and preserves INFO2 identity before accessing the array. */
-    D3DKMT_CALL_CALLBACK(RxgkIntPfnCreateAllocation2, unnamedParam1);
-}
-
-NTSTATUS
-APIENTRY
-NtGdiDdDDIOpenResource2(_Inout_ D3DKMT_OPENRESOURCE* unnamedParam1)
-{
-    RETURN_STATUS_IF_NULL(unnamedParam1);
-    D3DKMT_CALL_CALLBACK(RxgkIntPfnOpenResource, unnamedParam1);
 }
 
 NTSTATUS

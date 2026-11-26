@@ -9,14 +9,95 @@
 
 NTSTATUS
 APIENTRY
+D3DKMTCreateAllocation(
+    _Inout_ D3DKMT_CREATEALLOCATION *pData)
+{
+    D3DKMT_CREATEALLOCATION Create = *pData;
+    D3DDDI_ALLOCATIONINFO *Info = Create.pAllocationInfo;
+    D3DDDI_ALLOCATIONINFO2 *Info2 = NULL;
+    NTSTATUS Status;
+    UINT Count = 0;
+    UINT Index;
+
+    if (Info != NULL && Create.NumAllocations != 0)
+    {
+        Count = Create.NumAllocations;
+        if ((SIZE_T)Count > MAXSIZE_T / sizeof(*Info2))
+            return STATUS_INVALID_PARAMETER;
+        Info2 = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Count * sizeof(*Info2));
+        if (Info2 == NULL)
+            return STATUS_NO_MEMORY;
+        for (Index = 0; Index < Count; ++Index)
+        {
+            Info2[Index].hAllocation = Info[Index].hAllocation;
+            Info2[Index].pSystemMem = Info[Index].pSystemMem;
+            Info2[Index].pPrivateDriverData = Info[Index].pPrivateDriverData;
+            Info2[Index].PrivateDriverDataSize = Info[Index].PrivateDriverDataSize;
+            Info2[Index].VidPnSourceId = Info[Index].VidPnSourceId;
+            Info2[Index].Flags.Value = Info[Index].Flags.Value;
+        }
+    }
+    Create.pAllocationInfo2 = Info2;
+    Status = NtGdiDdDDICreateAllocation(&Create);
+    if (NT_SUCCESS(Status))
+    {
+        pData->hResource = Create.hResource;
+        pData->hGlobalShare = Create.hGlobalShare;
+        for (Index = 0; Index < Count; ++Index)
+            Info[Index].hAllocation = Info2[Index].hAllocation;
+    }
+    if (Info2 != NULL)
+        HeapFree(GetProcessHeap(), 0, Info2);
+    return Status;
+}
+
+NTSTATUS
+APIENTRY
 D3DKMTOpenResource(
     _Inout_ D3DKMT_OPENRESOURCE *pData)
 {
-    const volatile UCHAR *Descriptor = (const volatile UCHAR *)pData;
+    D3DKMT_OPENRESOURCE Open;
+    D3DDDI_OPENALLOCATIONINFO *Info;
+    D3DDDI_OPENALLOCATIONINFO2 *Info2 = NULL;
+    NTSTATUS Status;
+    UINT Count = 0;
+    UINT Index;
 
-    (VOID)Descriptor[0];
-    (VOID)Descriptor[sizeof(*pData) - 1];
-    return NtGdiDdDDIOpenResource(pData);
+    if (pData == NULL)
+        return STATUS_INVALID_PARAMETER;
+    Open = *pData;
+    Info = Open.pOpenAllocationInfo;
+    if (Info != NULL && Open.NumAllocations != 0)
+    {
+        Count = Open.NumAllocations;
+        if ((SIZE_T)Count > MAXSIZE_T / sizeof(*Info2))
+            return STATUS_INVALID_PARAMETER;
+        Info2 = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Count * sizeof(*Info2));
+        if (Info2 == NULL)
+            return STATUS_NO_MEMORY;
+        for (Index = 0; Index < Count; ++Index)
+        {
+            Info2[Index].hAllocation = Info[Index].hAllocation;
+            Info2[Index].pPrivateDriverData = Info[Index].pPrivateDriverData;
+            Info2[Index].PrivateDriverDataSize = Info[Index].PrivateDriverDataSize;
+        }
+    }
+    Open.pOpenAllocationInfo2 = Info2;
+    Status = NtGdiDdDDIOpenResource(&Open);
+    if (NT_SUCCESS(Status))
+    {
+        for (Index = 0; Index < Open.NumAllocations && Index < Count; ++Index)
+        {
+            Info[Index].hAllocation = Info2[Index].hAllocation;
+            Info[Index].pPrivateDriverData = Info2[Index].pPrivateDriverData;
+            Info[Index].PrivateDriverDataSize = Info2[Index].PrivateDriverDataSize;
+        }
+        Open.pOpenAllocationInfo = Info;
+        *pData = Open;
+    }
+    if (Info2 != NULL)
+        HeapFree(GetProcessHeap(), 0, Info2);
+    return Status;
 }
 
 NTSTATUS

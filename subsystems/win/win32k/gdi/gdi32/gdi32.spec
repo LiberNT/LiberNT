@@ -661,7 +661,7 @@
 @ stdcall -version=0x600+ D3DKMTCloseAdapter(ptr) NtGdiDdDDICloseAdapter
 @ stdcall -version=0x600+ D3DKMTConfigureSharedResource(ptr) NtGdiDdDDIConfigureSharedResource
 @ stdcall -version=0xA00+ D3DKMTConnectDoorbell(ptr) NtDxgkConnectDoorbell
-@ stdcall -version=0x600+ D3DKMTCreateAllocation(ptr) NtGdiDdDDICreateAllocation
+@ stdcall -version=0x600+ D3DKMTCreateAllocation(ptr)
 @ stdcall -version=0x600+ D3DKMTCreateContext(ptr) NtGdiDdDDICreateContext
 @ stdcall -version=0x600+ D3DKMTCreateDCFromMemory(ptr)
 @ stdcall -version=0x600+ D3DKMTCreateDevice(ptr) NtGdiDdDDICreateDevice
@@ -766,8 +766,8 @@
 @ stdcall -version=0x600+ D3DKMTCheckVidPnExclusiveOwnership(ptr) NtGdiDdDDICheckVidPnExclusiveOwnership
 @ stdcall -version=0x600+ D3DKMTEnumAdapters(ptr) NtGdiDdDDIEnumAdapters
 @ stdcall -version=0x600+ D3DKMTOpenAdapterFromLuid(ptr) NtGdiDdDDIOpenAdapterFromLuid
-@ stdcall -version=0x600+ D3DKMTCreateAllocation2(ptr) NtGdiDdDDICreateAllocation2
-@ stdcall -version=0x600+ D3DKMTOpenResource2(ptr) NtGdiDdDDIOpenResource2
+@ stdcall -version=0x600+ D3DKMTCreateAllocation2(ptr) NtGdiDdDDICreateAllocation
+@ stdcall -version=0x600+ D3DKMTOpenResource2(ptr) NtGdiDdDDIOpenResource
 @ stdcall -version=0x600+ D3DKMTOpenSynchronizationObject(ptr) NtGdiDdDDIOpenSynchronizationObject
 @ stdcall -version=0x600+ D3DKMTCreateKeyedMutex(ptr) NtGdiDdDDICreateKeyedMutex
 @ stdcall -version=0x600+ D3DKMTOpenKeyedMutex(ptr) NtGdiDdDDIOpenKeyedMutex

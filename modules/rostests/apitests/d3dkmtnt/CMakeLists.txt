@@ -11,9 +11,10 @@ list(APPEND SOURCE
     queryregistry.c
     gdi32names.c
     win32unames.c
+    allocabi.c
     testlist.c)
 add_executable(d3dkmtnt_apitest ${SOURCE})
-target_link_libraries(d3dkmtnt_apitest wine)
+target_link_libraries(d3dkmtnt_apitest wine ${PSEH_LIB})
 set_module_type(d3dkmtnt_apitest win32cui)
 add_importlibs(d3dkmtnt_apitest msvcrt kernel32 ntdll)
 add_rostests_file(TARGET d3dkmtnt_apitest)
