@@ -618,7 +618,8 @@ ScControlService(PACTIVE_SERVICE lpService,
 static BOOL
 ScServiceDispatcher(HANDLE hPipe,
                     PSCM_CONTROL_PACKET ControlPacket,
-                    DWORD dwBufferSize)
+                    DWORD dwBufferSize,
+                    PBOOL Accepted)
 {
     DWORD Count;
     BOOL bResult;
@@ -647,6 +648,7 @@ ScServiceDispatcher(HANDLE hPipe,
             ERR("Pipe read failed (Error: %lu)\n", GetLastError());
             return FALSE;
         }
+        *Accepted = TRUE;
 
         lpServiceName = (LPWSTR)((PBYTE)ControlPacket + ControlPacket->dwServiceNameOffset);
         TRACE("Service: %S\n", lpServiceName);
@@ -1112,6 +1114,7 @@ StartServiceCtrlDispatcherA(const SERVICE_TABLE_ENTRYA *lpServiceStartTable)
     PSCM_CONTROL_PACKET ControlPacket;
     DWORD dwBufSize;
     BOOL bRet = TRUE;
+    BOOL Accepted = FALSE;
 
     TRACE("StartServiceCtrlDispatcherA(%p)\n",
           lpServiceStartTable);
@@ -1176,7 +1179,12 @@ StartServiceCtrlDispatcherA(const SERVICE_TABLE_ENTRYA *lpServiceStartTable)
     ScCreateStatusBinding();
 
     /* Call the dispatcher loop */
-    ScServiceDispatcher(hPipe, ControlPacket, dwBufSize);
+    ScServiceDispatcher(hPipe, ControlPacket, dwBufSize, &Accepted);
+    if (!Accepted)
+    {
+        dwError = ERROR_FAILED_SERVICE_CONTROLLER_CONNECT;
+        bRet = FALSE;
+    }
 
 
     ScDestroyStatusBinding();
@@ -1218,6 +1226,7 @@ StartServiceCtrlDispatcherW(const SERVICE_TABLE_ENTRYW *lpServiceStartTable)
     PSCM_CONTROL_PACKET ControlPacket;
     DWORD dwBufSize;
     BOOL bRet = TRUE;
+    BOOL Accepted = FALSE;
 
     TRACE("StartServiceCtrlDispatcherW(%p)\n",
           lpServiceStartTable);
@@ -1282,7 +1291,12 @@ StartServiceCtrlDispatcherW(const SERVICE_TABLE_ENTRYW *lpServiceStartTable)
     ScCreateStatusBinding();
 
     /* Call the dispatcher loop */
-    ScServiceDispatcher(hPipe, ControlPacket, dwBufSize);
+    ScServiceDispatcher(hPipe, ControlPacket, dwBufSize, &Accepted);
+    if (!Accepted)
+    {
+        dwError = ERROR_FAILED_SERVICE_CONTROLLER_CONNECT;
+        bRet = FALSE;
+    }
 
     ScDestroyStatusBinding();
 

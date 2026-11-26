@@ -2106,7 +2106,10 @@ ScmWaitForServiceConnect(PSERVICE Service)
     DWORD dwProcessId = 0;
     DWORD dwError = ERROR_SUCCESS;
     BOOL bResult;
-    OVERLAPPED Overlapped = {0};
+    OVERLAPPED Overlapped;
+    DWORD dwStart = GetTickCount();
+    DWORD dwRemaining;
+    ULONG ClientProcessId;
 #if 0
     LPCWSTR lpLogStrings[3];
     WCHAR szBuffer1[20];
@@ -2114,6 +2117,15 @@ ScmWaitForServiceConnect(PSERVICE Service)
 #endif
 
     DPRINT("ScmWaitForServiceConnect()\n");
+
+Retry:
+    if (GetTickCount() - dwStart >= PipeTimeout)
+        return ERROR_SERVICE_REQUEST_TIMEOUT;
+    dwRemaining = PipeTimeout - (GetTickCount() - dwStart);
+    RtlZeroMemory(&Overlapped, sizeof(Overlapped));
+    dwRead = 0;
+    dwProcessId = 0;
+    ClientProcessId = 0;
 
     bResult = ConnectNamedPipe(Service->lpImage->hControlPipe,
                                &Overlapped);
@@ -2136,7 +2148,7 @@ ScmWaitForServiceConnect(PSERVICE Service)
             dwError = WaitForMultipleObjects(WaitCount,
                                              WaitHandles,
                                              FALSE,
-                                             PipeTimeout);
+                                             dwRemaining);
             DPRINT("WaitForMultipleObjects() returned %lu\n", dwError);
 
             if (dwError == WAIT_TIMEOUT || dwError == WAIT_OBJECT_0 + 1)
@@ -2220,7 +2232,7 @@ ScmWaitForServiceConnect(PSERVICE Service)
             dwError = WaitForMultipleObjects(WaitCount,
                                              WaitHandles,
                                              FALSE,
-                                             PipeTimeout);
+                                             dwRemaining);
             if (dwError == WAIT_TIMEOUT || dwError == WAIT_OBJECT_0 + 1)
             {
                 bResult = CancelIo(Service->lpImage->hControlPipe);
@@ -2276,7 +2288,8 @@ ScmWaitForServiceConnect(PSERVICE Service)
     {
         Service->lpImage->dwProcessId = dwProcessId;
     }
-    else if (dwProcessId != Service->lpImage->dwProcessId)
+    else if (!GetNamedPipeClientProcessId(Service->lpImage->hControlPipe, &ClientProcessId) ||
+             ClientProcessId != Service->lpImage->dwProcessId)
     {
 #if 0
         _ultow(Service->lpImage->dwProcessId, szBuffer1, 10);
@@ -2292,7 +2305,10 @@ ScmWaitForServiceConnect(PSERVICE Service)
                     lpLogStrings);
 #endif
 
-        DPRINT1("Log EVENT_SERVICE_DIFFERENT_PID_CONNECTED by %S\n", Service->lpDisplayName);
+        DPRINT1("Process %lu connected to the control pipe of %S instead of process %lu\n",
+                ClientProcessId, Service->lpDisplayName, Service->lpImage->dwProcessId);
+        DisconnectNamedPipe(Service->lpImage->hControlPipe);
+        goto Retry;
     }
 
     DPRINT("ScmWaitForServiceConnect() done\n");

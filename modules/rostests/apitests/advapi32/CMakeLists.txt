@@ -59,6 +59,7 @@ list(APPEND SOURCE
     SetSecurityInfoAcl.c
     ServiceArgs.c
     ServiceCrash.c
+    ServiceControlPipe.c
     ServiceEnv.c
     ServiceRegistryState.c
     ServiceNetwork.c

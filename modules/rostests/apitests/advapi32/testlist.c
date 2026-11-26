@@ -59,6 +59,7 @@ extern void func_SaferRules(void);
 extern void func_SeclogonCaller(void);
 extern void func_SetSecurityInfoAcl(void);
 extern void func_ServiceArgs(void);
+extern void func_ServiceControlPipe(void);
 extern void func_ServiceCrash(void);
 extern void func_ServiceEnv(void);
 extern void func_ServiceRegistryState(void);
@@ -131,6 +132,7 @@ const struct test winetest_testlist[] =
     { "SeclogonCaller", func_SeclogonCaller },
     { "SetSecurityInfoAcl", func_SetSecurityInfoAcl },
     { "ServiceArgs", func_ServiceArgs },
+    { "ServiceControlPipe", func_ServiceControlPipe },
     { "ServiceCrash", func_ServiceCrash },
     { "ServiceEnv", func_ServiceEnv },
     { "ServiceRegistryState", func_ServiceRegistryState },
