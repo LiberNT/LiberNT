@@ -18,6 +18,7 @@ extern void func_DevicePdoName(void);
 extern void func_DeviceDisablePersist(void);
 extern void func_DevicePowerOnDisable(void);
 extern void func_DeviceRemoveVeto(void);
+extern void func_GenericButtonStart(void);
 extern void func_HostBridgeStart(void);
 extern void func_InboxClasses(void);
 extern void func_InterruptAffinityPolicy(void);
@@ -66,6 +67,7 @@ const struct test winetest_testlist[] =
     { "DeviceDisablePersist", func_DeviceDisablePersist },
     { "DevicePowerOnDisable", func_DevicePowerOnDisable },
     { "DeviceRemoveVeto", func_DeviceRemoveVeto },
+    { "GenericButtonStart", func_GenericButtonStart },
     { "HostBridgeStart", func_HostBridgeStart },
     { "InboxClasses", func_InboxClasses },
     { "InterruptAffinityPolicy", func_InterruptAffinityPolicy },

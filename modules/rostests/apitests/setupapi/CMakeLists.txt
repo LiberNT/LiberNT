@@ -18,6 +18,7 @@ list(APPEND SOURCE
     DeviceDisablePersist.c
     DevicePowerOnDisable.c
     DeviceRemoveVeto.c
+    GenericButtonStart.c
     HostBridgeStart.c
     InboxClasses.c
     InterruptAffinityPolicy.c
