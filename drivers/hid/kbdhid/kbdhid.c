@@ -29,7 +29,7 @@ KbdHid_DispatchInputData(
     IN PKEYBOARD_INPUT_DATA InputData)
 {
     KIRQL OldIrql;
-    ULONG InputDataConsumed;
+    ULONG InputDataConsumed = 0;
 
     if (!DeviceExtension->ClassService)
         return;
