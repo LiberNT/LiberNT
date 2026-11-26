@@ -5,6 +5,7 @@ list(APPEND SOURCE
     fc.c
     script.c
     tree.c
+    where.c
     testlist.c)
 
 add_executable(cmd_apitest ${SOURCE})

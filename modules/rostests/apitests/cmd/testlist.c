@@ -10,6 +10,7 @@ extern void func_fc(void);
 extern void func_pushd(void);
 extern void func_script(void);
 extern void func_tree(void);
+extern void func_where(void);
 
 const struct test winetest_testlist[] =
 {
@@ -22,5 +23,6 @@ const struct test winetest_testlist[] =
     { "pushd", func_pushd },
     { "script", func_script },
     { "tree", func_tree },
+    { "where", func_where },
     { 0, 0 }
 };
