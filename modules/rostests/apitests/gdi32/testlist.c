@@ -10,6 +10,7 @@ extern void func_BeginPath(void);
 extern void func_CjkFaceNames(void);
 extern void func_CombineRgn(void);
 extern void func_CombineTransform(void);
+extern void func_CreateDC(void);
 extern void func_CreateBitmap(void);
 extern void func_CreateBitmapIndirect(void);
 extern void func_CreateCompatibleDC(void);
@@ -100,6 +101,7 @@ const struct test winetest_testlist[] =
     { "CjkFaceNames", func_CjkFaceNames },
     { "CombineRgn", func_CombineRgn },
     { "CombineTransform", func_CombineTransform },
+    { "CreateDC", func_CreateDC },
     { "CreateBitmap", func_CreateBitmap },
     { "CreateBitmapIndirect", func_CreateBitmapIndirect },
     { "CreateCompatibleDC", func_CreateCompatibleDC },

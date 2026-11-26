@@ -1166,7 +1166,7 @@ EngpGetPDEV(
 
             /* Compare the name */
             RtlInitUnicodeString(&ustrCurrent, pGraphicsDevice->szWinDeviceName);
-            if (RtlEqualUnicodeString(pustrDeviceName, &ustrCurrent, FALSE))
+            if (RtlEqualUnicodeString(pustrDeviceName, &ustrCurrent, TRUE))
             {
                 /* Found! */
                 ppdev = gpmdev->dev[i].ppdev;

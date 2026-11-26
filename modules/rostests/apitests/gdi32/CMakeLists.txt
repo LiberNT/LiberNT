@@ -10,6 +10,7 @@ list(APPEND SOURCE
     CjkFaceNames.c
     CombineRgn.c
     CombineTransform.c
+    CreateDC.c
     CreateBitmap.c
     CreateBitmapIndirect.c
     CreateCompatibleDC.c

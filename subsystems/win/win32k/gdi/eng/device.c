@@ -1012,7 +1012,7 @@ EngpFindGraphicsDevice(
         {
             /* Compare the device name */
             RtlInitUnicodeString(&ustrCurrent, pGraphicsDevice->szWinDeviceName);
-            if (RtlEqualUnicodeString(&ustrCurrent, pustrDevice, FALSE))
+            if (RtlEqualUnicodeString(&ustrCurrent, pustrDevice, TRUE))
             {
                 break;
             }
