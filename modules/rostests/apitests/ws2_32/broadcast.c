@@ -1,17 +1,54 @@
 /*
- * PROJECT:     ReactOS api tests
+ * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
- * PURPOSE:     Test for local delivery of UDP broadcasts
+ * PURPOSE:     Test UDP broadcast delivery and limited-broadcast source address
  * COPYRIGHT:   Copyright 2026 Justin Miller <justinmiller100@gmail.com>
+ *              Copyright 2026 jewchud <kz2hb7hpvp@privaterelay.appleid.com>
  */
 
 #include "ws2_32.h"
 #include <iphlpapi.h>
 
 static
+BOOLEAN
+ReceiveBroadcast(
+    _In_ SOCKET RecvSock,
+    _In_ ULONG Destination,
+    _Out_writes_bytes_(BufferSize) PCHAR Buffer,
+    _In_ INT BufferSize,
+    _Out_ PULONG SourceAddress)
+{
+    fd_set Fds;
+    struct timeval Timeout = { 2, 0 };
+    SOCKADDR_IN From;
+    INT FromLen = sizeof(From);
+    INT Result;
+
+    *SourceAddress = 0xFFFFFFFF;
+
+    FD_ZERO(&Fds);
+    FD_SET(RecvSock, &Fds);
+    Result = select(0, &Fds, NULL, NULL, &Timeout);
+    ok(Result == 1, "select returned %d for 0x%08lx\n", Result, ntohl(Destination));
+    if (Result != 1)
+        return FALSE;
+
+    ZeroMemory(&From, sizeof(From));
+    Result = recvfrom(RecvSock, Buffer, BufferSize, 0, (SOCKADDR *)&From, &FromLen);
+    ok(Result == 4 && !memcmp(Buffer, "ping", 4), "recvfrom returned %d\n", Result);
+    if (Result != 4)
+        return FALSE;
+
+    *SourceAddress = From.sin_addr.s_addr;
+    return TRUE;
+}
+
+static
 VOID
 TestBroadcastLoopback(
-    _In_ ULONG Destination)
+    _In_ ULONG Destination,
+    _In_ ULONG UnicastInterface,
+    _In_ BOOLEAN ExpectUnspecifiedSource)
 {
     SOCKET RecvSock;
     SOCKET SendSock;
@@ -19,8 +56,7 @@ TestBroadcastLoopback(
     INT AddrLen = sizeof(Addr);
     BOOL Enable = TRUE;
     CHAR Buffer[16];
-    fd_set Fds;
-    struct timeval Timeout = { 2, 0 };
+    ULONG SourceAddress;
     INT Result;
 
     RecvSock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -46,21 +82,25 @@ TestBroadcastLoopback(
     }
 
     Result = setsockopt(SendSock, SOL_SOCKET, SO_BROADCAST, (PCHAR)&Enable, sizeof(Enable));
-    ok(Result == 0, "setsockopt failed, error %d\n", WSAGetLastError());
+    ok(Result == 0, "setsockopt(SO_BROADCAST) failed, error %d\n", WSAGetLastError());
+
+    if (UnicastInterface)
+    {
+        Result = setsockopt(SendSock, IPPROTO_IP, IP_UNICAST_IF, (PCHAR)&UnicastInterface,
+                            sizeof(UnicastInterface));
+        ok(Result == 0, "setsockopt(IP_UNICAST_IF) failed, error %d\n", WSAGetLastError());
+    }
 
     Addr.sin_addr.s_addr = Destination;
     Result = sendto(SendSock, "ping", 4, 0, (SOCKADDR *)&Addr, sizeof(Addr));
     ok(Result == 4, "sendto returned %d, error %d\n", Result, WSAGetLastError());
 
-    FD_ZERO(&Fds);
-    FD_SET(RecvSock, &Fds);
-    Result = select(0, &Fds, NULL, NULL, &Timeout);
-    ok(Result == 1, "select returned %d for 0x%08lx\n", Result, ntohl(Destination));
-
-    if (Result == 1)
+    if (ReceiveBroadcast(RecvSock, Destination, Buffer, sizeof(Buffer), &SourceAddress) &&
+        ExpectUnspecifiedSource)
     {
-        Result = recv(RecvSock, Buffer, sizeof(Buffer), 0);
-        ok(Result == 4 && !memcmp(Buffer, "ping", 4), "recv returned %d\n", Result);
+        ok(SourceAddress == htonl(INADDR_ANY),
+           "limited broadcast source 0x%08lx, expected 0.0.0.0 (unicast-if %lu)\n",
+           ntohl(SourceAddress), ntohl(UnicastInterface));
     }
 
     closesocket(SendSock);
@@ -102,10 +142,46 @@ GetDirectedBroadcast(VOID)
     return Broadcast;
 }
 
+static
+ULONG
+GetUnicastInterface(VOID)
+{
+    PMIB_IPADDRTABLE Table;
+    ULONG TableSize = 0;
+    ULONG Interface = 0;
+    ULONG Index;
+
+    if (GetIpAddrTable(NULL, &TableSize, FALSE) != ERROR_INSUFFICIENT_BUFFER)
+        return 0;
+
+    Table = HeapAlloc(GetProcessHeap(), 0, TableSize);
+    if (!Table)
+        return 0;
+
+    if (GetIpAddrTable(Table, &TableSize, FALSE) == NO_ERROR)
+    {
+        for (Index = 0; Index < Table->dwNumEntries; Index++)
+        {
+            if (Table->table[Index].dwAddr == 0 ||
+                Table->table[Index].dwAddr == htonl(INADDR_LOOPBACK))
+            {
+                continue;
+            }
+
+            Interface = htonl(Table->table[Index].dwIndex);
+            break;
+        }
+    }
+
+    HeapFree(GetProcessHeap(), 0, Table);
+    return Interface;
+}
+
 START_TEST(broadcast)
 {
     WSADATA WsaData;
     ULONG Directed;
+    ULONG UnicastInterface;
 
     if (WSAStartup(MAKEWORD(2, 2), &WsaData) != 0)
     {
@@ -113,13 +189,19 @@ START_TEST(broadcast)
         return;
     }
 
-    TestBroadcastLoopback(htonl(INADDR_BROADCAST));
+    TestBroadcastLoopback(htonl(INADDR_BROADCAST), 0, TRUE);
 
     Directed = GetDirectedBroadcast();
     if (Directed)
-        TestBroadcastLoopback(Directed);
+        TestBroadcastLoopback(Directed, 0, FALSE);
     else
         skip("No configured adapter for directed broadcast\n");
+
+    UnicastInterface = GetUnicastInterface();
+    if (UnicastInterface)
+        TestBroadcastLoopback(htonl(INADDR_BROADCAST), UnicastInterface, TRUE);
+    else
+        skip("No configured adapter for IP_UNICAST_IF broadcast\n");
 
     WSACleanup();
 }
