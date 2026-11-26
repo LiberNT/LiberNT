@@ -49,6 +49,7 @@ typedef struct _GENBTN_EXTENSION
     ULONG PendingEvents;
     volatile LONG DpcEvents;
     ULONG Capabilities;
+    ULONG ControlCount;
     ULONG ButtonCount;
     GENBTN_BUTTON Buttons[GENBTN_MAX_BUTTONS];
     UNICODE_STRING InterfaceName;
@@ -237,8 +238,15 @@ GenBtnParseDescriptor(
     if (Values[0] != GENBTN_CONTROL)
         return;
 
+    Extension->ControlCount++;
     Event = GenBtnUsageEvent(Values[3], Values[4]);
-    if (Event == 0 || Extension->ButtonCount >= GENBTN_MAX_BUTTONS)
+    if (Event == 0)
+    {
+        /* TODO: report controls outside the system buttons (wireless radio, consumer keys) through a HID collection */
+        DPRINT1("GENBTN: control usage %02lx:%02lx on interrupt %lu is not reported\n", Values[3], Values[4], Values[1]);
+        return;
+    }
+    if (Extension->ButtonCount >= GENBTN_MAX_BUTTONS)
         return;
 
     Button = &Extension->Buttons[Extension->ButtonCount++];
@@ -444,6 +452,11 @@ GenBtnStart(
     ULONG OutputLength;
     NTSTATUS Status;
 
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(!Extension->Started);
+    ASSERT(Extension->InterfaceName.Buffer == NULL);
+
+    Extension->ControlCount = 0;
     Extension->ButtonCount = 0;
     Extension->Capabilities = 0;
     Status = GenBtnEvaluateDsd(Extension, &Output, &OutputLength);
@@ -454,10 +467,18 @@ GenBtnStart(
     }
     GenBtnParseDsd(Extension, Output);
     ExFreePoolWithTag(Output, GENBTN_TAG);
-    if (Extension->ButtonCount == 0)
+    ASSERT(Extension->ButtonCount <= Extension->ControlCount);
+    ASSERT(Extension->ButtonCount <= GENBTN_MAX_BUTTONS);
+    if (Extension->ControlCount == 0)
         return STATUS_DEVICE_CONFIGURATION_ERROR;
 
     Extension->Started = TRUE;
+    /* FIXME: controls on an Interrupt() resource are connected; Windows fails the start of such a device (problem 10) */
+    if (Extension->ButtonCount == 0)
+    {
+        DPRINT1("GENBTN: %lu controls, no system button\n", Extension->ControlCount);
+        return STATUS_SUCCESS;
+    }
     Status = GenBtnConnect(Extension, Stack->Parameters.StartDevice.AllocatedResourcesTranslated);
     if (!NT_SUCCESS(Status))
     {
