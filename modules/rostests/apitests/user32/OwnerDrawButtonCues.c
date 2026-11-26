@@ -37,7 +37,7 @@ CheckCues(HWND Button, WORD Action, WORD Flags, LRESULT Expected, BOOL CuesForce
     SendMessageW(Button, WM_UPDATEUISTATE, MAKEWPARAM(Action, Flags), 0);
     UiState = SendMessageW(Button, WM_QUERYUISTATE, 0, 0) & (UISF_HIDEFOCUS | UISF_HIDEACCEL);
     if (!CuesForced)
-        ok(UiState == Expected, "UI state %Ix after action %u flags 0x%x, expected %Ix\n", UiState, Action, Flags, Expected);
+        ok(UiState == Expected, "UI state %Ix after action %u flags 0x%x, expected %Ix\n", (UINT_PTR)UiState, Action, Flags, (UINT_PTR)Expected);
 
     DrawCount = 0;
     ItemState = 0;
@@ -48,7 +48,7 @@ CheckCues(HWND Button, WORD Action, WORD Flags, LRESULT Expected, BOOL CuesForce
 
     Cues = ((UiState & UISF_HIDEFOCUS) ? ODS_NOFOCUSRECT : 0) | ((UiState & UISF_HIDEACCEL) ? ODS_NOACCEL : 0);
     ok((ItemState & (ODS_NOFOCUSRECT | ODS_NOACCEL)) == Cues,
-       "itemState 0x%x for UI state %Ix, expected cue flags 0x%x\n", ItemState, UiState, Cues);
+       "itemState 0x%x for UI state %Ix, expected cue flags 0x%x\n", ItemState, (UINT_PTR)UiState, Cues);
 }
 
 static HWND
