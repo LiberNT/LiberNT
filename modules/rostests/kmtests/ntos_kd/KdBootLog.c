@@ -391,7 +391,7 @@ START_TEST(KdBootLog)
     Status = RtlStringCbPrintfA(Marker, sizeof(Marker), "KMT_BOOTLOG_%I64x",
                                 KeQueryInterruptTime());
     ok_eq_hex(Status, STATUS_SUCCESS);
-    DbgPrint("%s\n", Marker);
+    DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "%s\n", Marker);
 
     Interval.QuadPart = -10000LL * 250;
     for (Try = 0; Try < 20 && !Found; Try++)
