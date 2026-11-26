@@ -121,6 +121,21 @@ ULONG AuthenticationPackage = 0;
 
 /* FUNCTIONS ***************************************************************/
 
+BOOL
+WINAPI
+LogonUserExExW(
+    _In_ PCWSTR lpszUsername,
+    _In_opt_ PCWSTR lpszDomain,
+    _In_opt_ PCWSTR lpszPassword,
+    _In_ DWORD dwLogonType,
+    _In_ DWORD dwLogonProvider,
+    _In_opt_ PTOKEN_GROUPS pTokenGroups,
+    _Out_opt_ PHANDLE phToken,
+    _Out_opt_ PSID *ppLogonSid,
+    _Out_opt_ PVOID *ppProfileBuffer,
+    _Out_opt_ LPDWORD pdwProfileLength,
+    _Out_opt_ PQUOTA_LIMITS pQuotaLimits);
+
 static
 NTSTATUS
 OpenLogonLsaHandle(VOID)
@@ -1374,9 +1389,9 @@ LogonUserExW(
     _Out_opt_ LPDWORD pdwProfileLength,
     _Out_opt_ PQUOTA_LIMITS pQuotaLimits)
 {
-    return LogonUserExExW((LPWSTR)lpszUsername,
-                          (LPWSTR)lpszDomain,
-                          (LPWSTR)lpszPassword,
+    return LogonUserExExW(lpszUsername,
+                          lpszDomain,
+                          lpszPassword,
                           dwLogonType,
                           dwLogonProvider,
                           NULL,
@@ -1394,9 +1409,9 @@ LogonUserExW(
 BOOL
 WINAPI
 LogonUserExExW(
-    _In_ LPWSTR lpszUsername,
-    _In_opt_ LPWSTR lpszDomain,
-    _In_opt_ LPWSTR lpszPassword,
+    _In_ PCWSTR lpszUsername,
+    _In_opt_ PCWSTR lpszDomain,
+    _In_opt_ PCWSTR lpszPassword,
     _In_ DWORD dwLogonType,
     _In_ DWORD dwLogonProvider,
     _In_opt_ PTOKEN_GROUPS pTokenGroups,
@@ -1466,10 +1481,6 @@ LogonUserExExW(
 
         case LOGON32_LOGON_NETWORK_CLEARTEXT:
             LogonType = NetworkCleartext;
-            break;
-
-        case LOGON32_LOGON_NEW_CREDENTIALS:
-            LogonType = NewCredentials;
             break;
 
        default:
