@@ -125,7 +125,7 @@ TestExports(
     *Function = pKernelBaseLoadAppInitDlls;
     if (!pKernelBaseLoadAppInitDlls)
         return;
-    ok(pKernel32LoadAppInitDlls == pKernelBaseLoadAppInitDlls,
+    ok(pKernel32LoadAppInitDlls != NULL && pKernel32LoadAppInitDlls != pKernelBaseLoadAppInitDlls,
        "kernel32 LoadAppInitDlls %p, kernelbase %p\n", pKernel32LoadAppInitDlls, pKernelBaseLoadAppInitDlls);
 
     ok_hex(CallLoadAppInitDlls(pKernelBaseLoadAppInitDlls), STATUS_SUCCESS);
