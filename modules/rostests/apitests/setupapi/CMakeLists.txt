@@ -14,6 +14,7 @@ list(APPEND SOURCE
     HalDeviceIds.c
     DevicePdoName.c
     DisableableParents.c
+    DeviceDisablePersist.c
     DevicePowerOnDisable.c
     DeviceRemoveVeto.c
     HostBridgeStart.c

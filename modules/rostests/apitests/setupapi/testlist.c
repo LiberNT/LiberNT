@@ -14,6 +14,7 @@ extern void func_DriverFeatureScore(void);
 extern void func_DriverFilesNeedReboot(void);
 extern void func_DriverPackageSignerScore(void);
 extern void func_DevicePdoName(void);
+extern void func_DeviceDisablePersist(void);
 extern void func_DevicePowerOnDisable(void);
 extern void func_DeviceRemoveVeto(void);
 extern void func_HostBridgeStart(void);
@@ -59,6 +60,7 @@ const struct test winetest_testlist[] =
     { "DriverFilesNeedReboot", func_DriverFilesNeedReboot },
     { "DriverPackageSignerScore", func_DriverPackageSignerScore },
     { "DevicePdoName", func_DevicePdoName },
+    { "DeviceDisablePersist", func_DeviceDisablePersist },
     { "DevicePowerOnDisable", func_DevicePowerOnDisable },
     { "DeviceRemoveVeto", func_DeviceRemoveVeto },
     { "HostBridgeStart", func_HostBridgeStart },

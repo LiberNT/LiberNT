@@ -970,6 +970,12 @@ PiAttachDeviceDrivers(
         return STATUS_SUCCESS;
     }
 
+    if (PiGetDwordValue(InstanceKey, L"ConfigFlags", 0) & CONFIGFLAG_DISABLED)
+    {
+        PiSetDevNodeProblem(DeviceNode, CM_PROB_DISABLED);
+        return STATUS_SUCCESS;
+    }
+
     RtlZeroMemory(&List, sizeof(List));
     List.FunctionIndex = MAXULONG;
 
