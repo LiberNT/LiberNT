@@ -1670,7 +1670,7 @@ LdrpInsertMemoryTableEntry(IN PLDR_DATA_TABLE_ENTRY LdrEntry)
     LdrEntry->DdagNode->State = LdrModulesMapped;
 
     /* Insert into hash table */
-    i = LDR_GET_HASH_ENTRY(LdrEntry->BaseDllName.Buffer[0]);
+    i = LdrEntry->BaseNameHashValue & (LDR_HASH_TABLE_ENTRIES - 1);
     InsertTailList(&LdrpHashTable[i], &LdrEntry->HashLinks);
 
     /* Insert into other lists */
@@ -2129,7 +2129,8 @@ lookinhash:
         /* FIXME: if we get redirected dll it means that we also get a full path so we need to find its filename for the hash lookup */
 
         /* Get hash index */
-        HashIndex = LDR_GET_HASH_ENTRY(DllName->Buffer[0]);
+        RtlHashUnicodeString(DllName, TRUE, HASH_STRING_ALGORITHM_X65599, &HashIndex);
+        HashIndex &= (LDR_HASH_TABLE_ENTRIES - 1);
 
         /* Traverse that list */
         ListHead = &LdrpHashTable[HashIndex];

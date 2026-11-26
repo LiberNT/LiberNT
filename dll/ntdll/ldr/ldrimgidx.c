@@ -22,6 +22,32 @@ static PLDRP_IMAGE_RANGE LdrpImageRanges;
 static ULONG LdrpImageRangeCount;
 static ULONG LdrpImageRangeCapacity;
 static BOOLEAN LdrpImageRangesIncomplete;
+static RTL_RB_TREE LdrpModuleBaseAddressIndex;
+
+static
+VOID
+LdrpInsertBaseAddressIndexNode(
+    _Inout_ PLDR_DATA_TABLE_ENTRY Entry)
+{
+    PRTL_BALANCED_NODE Parent = LdrpModuleBaseAddressIndex.Root;
+    BOOLEAN Right = FALSE;
+
+    while (Parent != NULL)
+    {
+        PLDR_DATA_TABLE_ENTRY Existing = CONTAINING_RECORD(Parent,
+                                                           LDR_DATA_TABLE_ENTRY,
+                                                           BaseAddressIndexNode);
+        Right = ((ULONG_PTR)Entry->DllBase >= (ULONG_PTR)Existing->DllBase);
+        if (Parent->Children[Right] == NULL)
+            break;
+        Parent = Parent->Children[Right];
+    }
+
+    RtlRbInsertNodeEx(&LdrpModuleBaseAddressIndex,
+                      Parent,
+                      Right,
+                      &Entry->BaseAddressIndexNode);
+}
 
 /* Number of ranges that start at or below Address */
 static
@@ -76,6 +102,9 @@ LdrpInsertImageRange(
 
     ASSERT(End > Base);
 
+    LdrpInsertBaseAddressIndexNode(Entry);
+    Entry->Flags |= LDRP_IN_INDEXES;
+
     if (LdrpImageRangesIncomplete)
         return;
 
@@ -100,7 +129,7 @@ LdrpInsertImageRange(
     LdrpImageRanges[Index].End = End;
     LdrpImageRanges[Index].Entry = Entry;
     LdrpImageRangeCount++;
-    Entry->Flags |= LDRP_IN_INDEXES | LDRP_IN_EXCEPTION_TABLE;
+    Entry->Flags |= LDRP_IN_EXCEPTION_TABLE;
 }
 
 _Requires_exclusive_lock_held_(LdrpModuleDatatableLock)
@@ -108,7 +137,15 @@ VOID
 LdrpRemoveImageRange(
     _In_ PLDR_DATA_TABLE_ENTRY Entry)
 {
-    ULONG Index = LdrpCountRangesAtOrBelow((ULONG_PTR)Entry->DllBase);
+    ULONG Index;
+
+    if (Entry->Flags & LDRP_IN_INDEXES)
+    {
+        RtlRbRemoveNode(&LdrpModuleBaseAddressIndex, &Entry->BaseAddressIndexNode);
+        Entry->Flags &= ~LDRP_IN_INDEXES;
+    }
+
+    Index = LdrpCountRangesAtOrBelow((ULONG_PTR)Entry->DllBase);
 
     if ((Index == 0) || (LdrpImageRanges[Index - 1].Entry != Entry))
     {
@@ -119,7 +156,7 @@ LdrpRemoveImageRange(
 
     Index--;
     LdrpImageRangeCount--;
-    Entry->Flags &= ~(LDRP_IN_INDEXES | LDRP_IN_EXCEPTION_TABLE);
+    Entry->Flags &= ~LDRP_IN_EXCEPTION_TABLE;
     RtlMoveMemory(&LdrpImageRanges[Index],
                   &LdrpImageRanges[Index + 1],
                   (LdrpImageRangeCount - Index) * sizeof(LDRP_IMAGE_RANGE));
