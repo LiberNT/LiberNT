@@ -861,6 +861,76 @@ NtGdiDdDDIOpenAdapterFromHdc(_Inout_ D3DKMT_OPENADAPTERFROMHDC* unnamedParam1)
 }
 
 
+/* A graphics kernel without the bridge asks win32k to open the adapter of a DC's display */
+LONG
+__cdecl
+D3dkmtHandOverOpenAdapterFromHdc(
+    _Inout_ D3DKMT_OPENADAPTERFROMHDC *Open)
+{
+    D3DKMT_OPENADAPTERFROMHDC Captured;
+    PDEVICE_OBJECT DisplayDevice = NULL;
+    NTSTATUS CloseStatus;
+    NTSTATUS Status;
+    PDC Dc;
+
+    PAGED_CODE();
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    if (Open == NULL)
+        return STATUS_INVALID_PARAMETER;
+    _SEH2_TRY
+    {
+        if (ExGetPreviousMode() != KernelMode)
+            ProbeForRead(Open, sizeof(*Open), 1);
+        Captured = *Open;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return STATUS_INVALID_PARAMETER);
+    }
+    _SEH2_END;
+    if (Captured.hDc == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    Dc = DC_LockDc(Captured.hDc);
+    if (Dc == NULL)
+        return STATUS_INVALID_PARAMETER;
+    if (Dc->ppdev != NULL && Dc->ppdev->pGraphicsDevice != NULL)
+        DisplayDevice = Dc->ppdev->pGraphicsDevice->DeviceObject;
+    if (DisplayDevice != NULL)
+        ObReferenceObject(DisplayDevice);
+    DC_UnlockDc(Dc);
+    if (DisplayDevice == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    Status = WddmHandOverOpenAdapter(DisplayDevice, &Captured.hAdapter, &Captured.AdapterLuid, &Captured.VidPnSourceId);
+    ObDereferenceObject(DisplayDevice);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    ASSERT(Captured.hAdapter != 0);
+
+    _SEH2_TRY
+    {
+        if (ExGetPreviousMode() != KernelMode)
+            ProbeForWrite(Open, sizeof(*Open), 1);
+        Open->hAdapter = Captured.hAdapter;
+        Open->AdapterLuid = Captured.AdapterLuid;
+        Open->VidPnSourceId = Captured.VidPnSourceId;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = STATUS_INVALID_PARAMETER;
+    }
+    _SEH2_END;
+    if (!NT_SUCCESS(Status))
+    {
+        CloseStatus = WddmHandOverCloseAdapter(Captured.hAdapter);
+        if (!NT_SUCCESS(CloseStatus))
+            DPRINT1("D3DKMT: closing adapter 0x%x failed: 0x%08lx\n", Captured.hAdapter, CloseStatus);
+    }
+    return Status;
+}
+
 NTSTATUS
 APIENTRY
 NtGdiDdDDIOpenAdapterFromDeviceName(_Inout_ D3DKMT_OPENADAPTERFROMDEVICENAME* unnamedParam1)

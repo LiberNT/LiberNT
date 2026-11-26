@@ -22,6 +22,7 @@
 #define DXGK_HANDOVER_VERSION 0x30
 #define DXGK_HANDOVER_CALLOUTS 32
 #define DXGK_HANDOVER_PROCESS_CALLOUT 2
+#define DXGK_HANDOVER_OPEN_ADAPTER 5
 #define DXGK_HANDOVER_ENUM_ADAPTERS2 6
 #define DXGK_HANDOVER_CLOSE_ADAPTER 8
 #define DXGK_HANDOVER_GET_PATHS_MODALITY 15
@@ -96,6 +97,24 @@ typedef LONG (__cdecl *PFN_DXGK_APPLY_PATHS_MODALITY)(ULONG, PDXGK_PATHS_MODALIT
 typedef LONG (__cdecl *PFN_DXGK_FINALIZE_PATHS_MODALITY)(PDXGK_PATHS_MODALITY, PVOID, PVOID);
 typedef LONG (__cdecl *PFN_DXGK_PERSIST_PATHS_MODALITY)(ULONG, PDXGK_PATHS_MODALITY, PVOID, ULONG_PTR);
 typedef ULONG (__cdecl *PFN_DXGK_FREE_PATHS_MODALITY)(PDXGK_PATHS_MODALITY);
+
+/* The graphics kernel finds the adapter from the display device of the DC */
+typedef struct _DXGK_OPEN_ADAPTER
+{
+    PDEVICE_OBJECT DisplayDevice;
+    D3DKMT_HANDLE hAdapter;
+    LUID AdapterLuid;
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId;
+    /* FIXME: the members after the outputs are INFO_NEEDED and left zero */
+    UCHAR Reserved[0x28];
+} DXGK_OPEN_ADAPTER, *PDXGK_OPEN_ADAPTER;
+
+C_ASSERT(FIELD_OFFSET(DXGK_OPEN_ADAPTER, hAdapter) == 0x08 || sizeof(PVOID) != 8);
+C_ASSERT(FIELD_OFFSET(DXGK_OPEN_ADAPTER, AdapterLuid) == 0x0C || sizeof(PVOID) != 8);
+C_ASSERT(FIELD_OFFSET(DXGK_OPEN_ADAPTER, VidPnSourceId) == 0x14 || sizeof(PVOID) != 8);
+C_ASSERT(sizeof(DXGK_OPEN_ADAPTER) == 0x40 || sizeof(PVOID) != 8);
+
+typedef LONG (__cdecl *PFN_DXGK_OPEN_ADAPTER)(PDXGK_OPEN_ADAPTER);
 typedef LONG (__cdecl *PFN_DXGK_ENUM_ADAPTERS2)(D3DKMT_ENUMADAPTERS2 *, KPROCESSOR_MODE, BOOLEAN, KWAIT_REASON);
 typedef LONG (__cdecl *PFN_DXGK_CLOSE_ADAPTER)(const D3DKMT_CLOSEADAPTER *, KPROCESSOR_MODE);
 
@@ -215,7 +234,7 @@ static const DXGKWIN32KENG_INTERFACE g_DxgkEngineInterface =
         /* 44 */ (PVOID)EngNeutral, (PVOID)EngQueryWin32Info, (PVOID)EngNeutral, (PVOID)EngNeutral,
         /* 48 */ (PVOID)EngNeutral, (PVOID)EngGetMonitorUniquenessPointer, (PVOID)EngNeutral, (PVOID)EngNeutral,
         /* 52 */ (PVOID)EngNotSupported, (PVOID)EngNotSupported, (PVOID)EngNeutral, (PVOID)EngNotSupported,
-        /* 56 */ (PVOID)EngNotSupported, (PVOID)EngNotSupported, (PVOID)EngNotSupported,
+        /* 56 */ (PVOID)EngNotSupported, (PVOID)EngNotSupported, (PVOID)D3dkmtHandOverOpenAdapterFromHdc,
     }
 };
 
@@ -429,16 +448,70 @@ WddmHandOverIsActive(VOID)
 }
 
 NTSTATUS
+WddmHandOverOpenAdapter(
+    _In_ PDEVICE_OBJECT DisplayDevice,
+    _Out_ D3DKMT_HANDLE *hAdapter,
+    _Out_ LUID *AdapterLuid,
+    _Out_ D3DDDI_VIDEO_PRESENT_SOURCE_ID *VidPnSourceId)
+{
+    PFN_DXGK_OPEN_ADAPTER OpenAdapter;
+    DXGK_OPEN_ADAPTER Request;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(DisplayDevice != NULL);
+
+    *hAdapter = 0;
+    RtlZeroMemory(AdapterLuid, sizeof(*AdapterLuid));
+    *VidPnSourceId = D3DDDI_ID_UNINITIALIZED;
+    if (!WddmHandOverIsActive())
+        return STATUS_DEVICE_NOT_READY;
+    OpenAdapter = (PFN_DXGK_OPEN_ADAPTER)g_DxgkCallouts[DXGK_HANDOVER_OPEN_ADAPTER];
+    if (OpenAdapter == NULL)
+        return STATUS_NOT_SUPPORTED;
+
+    RtlZeroMemory(&Request, sizeof(Request));
+    Request.DisplayDevice = DisplayDevice;
+    Status = OpenAdapter(&Request);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    ASSERT(Request.hAdapter != 0);
+    *hAdapter = Request.hAdapter;
+    *AdapterLuid = Request.AdapterLuid;
+    *VidPnSourceId = Request.VidPnSourceId;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+WddmHandOverCloseAdapter(
+    _In_ D3DKMT_HANDLE hAdapter)
+{
+    PFN_DXGK_CLOSE_ADAPTER CloseAdapter;
+    D3DKMT_CLOSEADAPTER Close;
+
+    PAGED_CODE();
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(hAdapter != 0);
+
+    if (!WddmHandOverIsActive())
+        return STATUS_DEVICE_NOT_READY;
+    CloseAdapter = (PFN_DXGK_CLOSE_ADAPTER)g_DxgkCallouts[DXGK_HANDOVER_CLOSE_ADAPTER];
+    if (CloseAdapter == NULL)
+        return STATUS_NOT_SUPPORTED;
+    Close.hAdapter = hAdapter;
+    return CloseAdapter(&Close, KernelMode);
+}
+
+NTSTATUS
 WddmHandOverIsPresentSource(
     _In_ LUID AdapterLuid,
     _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
     _Out_ PBOOLEAN IsSource)
 {
     PFN_DXGK_ENUM_ADAPTERS2 EnumAdapters2;
-    PFN_DXGK_CLOSE_ADAPTER CloseAdapter;
     D3DKMT_ADAPTERINFO Adapters[16];
     D3DKMT_ENUMADAPTERS2 Enum;
-    D3DKMT_CLOSEADAPTER Close;
     NTSTATUS Status;
     ULONG Index;
 
@@ -450,8 +523,7 @@ WddmHandOverIsPresentSource(
     if (!WddmHandOverIsActive())
         return STATUS_DEVICE_NOT_READY;
     EnumAdapters2 = (PFN_DXGK_ENUM_ADAPTERS2)g_DxgkCallouts[DXGK_HANDOVER_ENUM_ADAPTERS2];
-    CloseAdapter = (PFN_DXGK_CLOSE_ADAPTER)g_DxgkCallouts[DXGK_HANDOVER_CLOSE_ADAPTER];
-    if (EnumAdapters2 == NULL || CloseAdapter == NULL)
+    if (EnumAdapters2 == NULL || g_DxgkCallouts[DXGK_HANDOVER_CLOSE_ADAPTER] == NULL)
         return STATUS_NOT_SUPPORTED;
 
     RtlZeroMemory(Adapters, sizeof(Adapters));
@@ -473,10 +545,9 @@ WddmHandOverIsPresentSource(
         {
             *IsSource = TRUE;
         }
-        Close.hAdapter = Adapters[Index].hAdapter;
-        CloseStatus = CloseAdapter(&Close, KernelMode);
+        CloseStatus = WddmHandOverCloseAdapter(Adapters[Index].hAdapter);
         if (!NT_SUCCESS(CloseStatus))
-            DPRINT1("WddmHandOver: closing adapter 0x%x failed: 0x%08lx\n", Close.hAdapter, CloseStatus);
+            DPRINT1("WddmHandOver: closing adapter 0x%x failed: 0x%08lx\n", Adapters[Index].hAdapter, CloseStatus);
     }
     return STATUS_SUCCESS;
 }
