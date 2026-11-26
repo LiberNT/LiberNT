@@ -269,6 +269,7 @@ WddmHandOverProcessCallout(
     *DxgProcess = NULL;
 }
 
+/* TODO: the end of a session is not reported to the graphics kernel */
 NTSTATUS
 WddmHandOverStartSession(
     _Inout_ PVOID *CsrDxgProcess)
