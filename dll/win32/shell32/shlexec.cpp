@@ -2676,8 +2676,8 @@ static BOOL SHELL_execute(LPSHELLEXECUTEINFOW sei, SHELL_ExecuteW32 execfunc)
     DWORD wcmdLen = _countof(wcmdBuffer);
     CHeapPtr<WCHAR, CLocalAllocator> wcmdAlloc;
 
-    /* Only execute if it has an executable extension */
-    if (PathIsExeW(lpFile) && (!sei_tmp.lpVerb || !*sei_tmp.lpVerb || bVerbResolved))
+    /* Only execute if it has an executable extension (and is not a URL) */
+    if (!PathIsURLW(lpFile) && PathIsExeW(lpFile) && (!sei_tmp.lpVerb || !*sei_tmp.lpVerb || bVerbResolved))
     {
         WCHAR wszExePath[MAX_PATH];
         LPCWSTR SearchPaths[] = { sei_tmp.lpDirectory, NULL };
