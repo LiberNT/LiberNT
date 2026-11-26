@@ -27,7 +27,10 @@
 #define CP_PAGE_CLASS_NAME L"LiberNTCaptivePortalPage"
 #define CP_MUTEX_NAME L"Local\\LiberNTCaptivePortal"
 #define CP_PARAMETERS_KEY L"SYSTEM\\CurrentControlSet\\Services\\NlaSvc\\Parameters\\Internet"
-#define CP_USER_AGENT L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) LiberNT-NetworkSignIn/1.0"
+#define CP_USER_AGENT_TEXT "Mozilla/5.0 (Windows NT 10.0; Win64; x64) LiberNT-NetworkSignIn/1.0"
+#define CP_WIDEN_(Text) L##Text
+#define CP_WIDEN(Text) CP_WIDEN_(Text)
+#define CP_USER_AGENT CP_WIDEN(CP_USER_AGENT_TEXT)
 #define CP_URL_LENGTH 4096
 #define CP_TEXT_LENGTH 256
 #define CP_MAX_BODY (4 * 1024 * 1024)
@@ -86,6 +89,8 @@ typedef struct _CP_RESPONSE
     WCHAR ContentType[CP_TEXT_LENGTH];
     char *Body;
     SIZE_T Length;
+    BOOL WantHeaders;
+    char *Headers;
 } CP_RESPONSE;
 
 typedef struct _CP_PROBE
@@ -216,14 +221,14 @@ BodyIsProbeContent(const char *Body, SIZE_T Length)
 }
 
 static DWORD
-HttpFetch(HINTERNET Session, PCWSTR Url, BOOL Post, const char *Body, DWORD BodyLength, PCWSTR ContentType,
-          BOOL FollowRedirects, CP_RESPONSE *Response)
+HttpFetch(HINTERNET Session, PCWSTR Url, PCWSTR Method, const char *Body, DWORD BodyLength, PCWSTR ContentType,
+          PCWSTR ExtraHeaders, BOOL FollowRedirects, CP_RESPONSE *Response)
 {
     URL_COMPONENTSW Parts;
     WCHAR Host[CP_TEXT_LENGTH], Path[CP_URL_LENGTH], Headers[CP_TEXT_LENGTH + 32];
     HINTERNET Connect = NULL, Request = NULL;
     DWORD Error = NO_ERROR, Size, Option, PathLength;
-    PCWSTR Hash;
+    PCWSTR Hash, Send = NULL;
 
     ZeroMemory(&Parts, sizeof(Parts));
     Parts.dwStructSize = sizeof(Parts);
@@ -265,7 +270,7 @@ HttpFetch(HINTERNET Session, PCWSTR Url, BOOL Post, const char *Body, DWORD Body
     Connect = WinHttpConnect(Session, Host, Parts.nPort, 0);
     if (Connect)
     {
-        Request = WinHttpOpenRequest(Connect, Post ? L"POST" : L"GET", Path, NULL, WINHTTP_NO_REFERER,
+        Request = WinHttpOpenRequest(Connect, Method, Path, NULL, WINHTTP_NO_REFERER,
                                      WINHTTP_DEFAULT_ACCEPT_TYPES,
                                      Parts.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0);
     }
@@ -287,9 +292,13 @@ HttpFetch(HINTERNET Session, PCWSTR Url, BOOL Post, const char *Body, DWORD Body
     }
 
     Headers[0] = 0;
-    if (Post && ContentType && ContentType[0])
+    if (Body && ContentType && ContentType[0])
         StringCchPrintfW(Headers, ARRAYSIZE(Headers), L"Content-Type: %s\r\n", ContentType);
-    if (!WinHttpSendRequest(Request, Headers[0] ? Headers : WINHTTP_NO_ADDITIONAL_HEADERS, Headers[0] ? (DWORD)-1 : 0,
+    if (ExtraHeaders && ExtraHeaders[0])
+        Send = ExtraHeaders;
+    else if (Headers[0])
+        Send = Headers;
+    if (!WinHttpSendRequest(Request, Send ? Send : WINHTTP_NO_ADDITIONAL_HEADERS, Send ? (DWORD)-1 : 0,
                             (LPVOID)Body, BodyLength, BodyLength, 0) ||
         !WinHttpReceiveResponse(Request, NULL))
     {
@@ -312,6 +321,22 @@ HttpFetch(HINTERNET Session, PCWSTR Url, BOOL Post, const char *Body, DWORD Body
     Size = sizeof(Response->Url);
     if (!WinHttpQueryOption(Request, WINHTTP_OPTION_URL, Response->Url, &Size))
         StringCchCopyW(Response->Url, ARRAYSIZE(Response->Url), Url);
+    if (Response->WantHeaders)
+    {
+        PWSTR Raw;
+
+        Size = 0;
+        WinHttpQueryHeaders(Request, WINHTTP_QUERY_RAW_HEADERS_CRLF, WINHTTP_HEADER_NAME_BY_INDEX, NULL, &Size,
+                            WINHTTP_NO_HEADER_INDEX);
+        Raw = Size ? malloc(Size + sizeof(WCHAR)) : NULL;
+        if (Raw && WinHttpQueryHeaders(Request, WINHTTP_QUERY_RAW_HEADERS_CRLF, WINHTTP_HEADER_NAME_BY_INDEX, Raw,
+                                       &Size, WINHTTP_NO_HEADER_INDEX))
+        {
+            Raw[Size / sizeof(WCHAR)] = 0;
+            Response->Headers = WideToUtf8(Raw);
+        }
+        free(Raw);
+    }
 
     for (;;)
     {
@@ -364,8 +389,8 @@ NavigateThread(LPVOID Context)
     if (Response)
     {
         Response->Sequence = Request->Sequence;
-        Response->Error = HttpFetch(PageSession, Request->Url, Request->Post, Request->Body, Request->BodyLength,
-                                    Request->ContentType, TRUE, Response);
+        Response->Error = HttpFetch(PageSession, Request->Url, Request->Post ? L"POST" : L"GET", Request->Body,
+                                    Request->BodyLength, Request->ContentType, NULL, TRUE, Response);
         if (!PostMessageW(MainWindow, WM_CP_PAGE, 0, (LPARAM)Response))
         {
             free(Response->Body);
@@ -387,7 +412,7 @@ ProbeThread(LPVOID Context)
 
     if (Response)
     {
-        if (HttpFetch(ProbeSession, Probe.Url, FALSE, NULL, 0, NULL, FALSE, Response) == NO_ERROR &&
+        if (HttpFetch(ProbeSession, Probe.Url, L"GET", NULL, 0, NULL, NULL, FALSE, Response) == NO_ERROR &&
             Response->Status == HTTP_STATUS_OK)
         {
             Reached = BodyIsProbeContent(Response->Body ? Response->Body : "", Response->Length);
@@ -961,7 +986,7 @@ HostFetch(PVOID Context, PCSTR Url, PSTR *Data, SIZE_T *Length)
 
     UNREFERENCED_PARAMETER(Context);
 
-    if (Response && Wide && HttpFetch(PageSession, Wide, FALSE, NULL, 0, NULL, TRUE, Response) == NO_ERROR &&
+    if (Response && Wide && HttpFetch(PageSession, Wide, L"GET", NULL, 0, NULL, NULL, TRUE, Response) == NO_ERROR &&
         Response->Status >= 200 && Response->Status < 300 && Response->Body)
     {
         *Data = Response->Body;
@@ -974,6 +999,45 @@ HostFetch(PVOID Context, PCSTR Url, PSTR *Data, SIZE_T *Length)
     free(Response);
     free(Wide);
     return Fetched;
+}
+
+static BOOL CALLBACK
+HostRequest(PVOID Context, PCSTR Method, PCSTR Url, PCSTR Headers, PCSTR Body, SIZE_T BodyLength, ULONG *Status,
+            PSTR *ResponseHeaders, PSTR *Data, SIZE_T *Length)
+{
+    CP_RESPONSE *Response = calloc(1, sizeof(*Response));
+    PWSTR WideUrl = Utf8ToWide(Url), WideMethod = Utf8ToWide(Method);
+    PWSTR WideHeaders = (Headers && Headers[0]) ? Utf8ToWide(Headers) : NULL;
+    BOOL Done = FALSE;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    if (Response && WideUrl && WideMethod && WideMethod[0] && (!Headers || !Headers[0] || WideHeaders) &&
+        BodyLength <= CP_MAX_BODY)
+    {
+        Response->WantHeaders = TRUE;
+        if (HttpFetch(PageSession, WideUrl, WideMethod, Body, (DWORD)BodyLength, NULL, WideHeaders, TRUE, Response) ==
+            NO_ERROR)
+        {
+            *Status = Response->Status;
+            *ResponseHeaders = Response->Headers;
+            *Data = Response->Body;
+            *Length = Response->Length;
+            Response->Headers = NULL;
+            Response->Body = NULL;
+            Done = TRUE;
+        }
+    }
+    if (Response)
+    {
+        free(Response->Body);
+        free(Response->Headers);
+    }
+    free(Response);
+    free(WideUrl);
+    free(WideMethod);
+    free(WideHeaders);
+    return Done;
 }
 
 static VOID CALLBACK
@@ -1476,7 +1540,8 @@ MainProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
                                          WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_CLIPCHILDREN | WS_TABSTOP, 0, 0, 0, 0,
                                          Hwnd, NULL, Instance, NULL);
             {
-                static const LNTWEB_HOST Host = { sizeof(LNTWEB_HOST), NULL, HostFetch, HostFree, HostNavigate };
+                static const LNTWEB_HOST Host = { sizeof(LNTWEB_HOST), NULL, HostFetch, HostFree, HostNavigate,
+                                                  HostRequest, CP_USER_AGENT_TEXT };
                 HMODULE Web = LoadLibraryW(L"lntweb.dll");
                 PFN_LNTWEB_CREATE CreateView = Web ? (PFN_LNTWEB_CREATE)GetProcAddress(Web, "LntWebCreate") : NULL;
 
