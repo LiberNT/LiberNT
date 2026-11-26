@@ -211,7 +211,14 @@ static HRESULT SH32_GetStorageClassObject(REFCLSID clsid, REFIID riid, void **ob
     typedef HRESULT (WINAPI *get_class_object_func)(REFCLSID, REFIID, void **);
     get_class_object_func get_class_object;
     HMODULE module = GetModuleHandleW(L"windows.storage.dll");
+    WCHAR path[MAX_PATH];
+    UINT length;
 
+    if (!module && (length = GetSystemDirectoryW(path, ARRAY_SIZE(path))) && length < ARRAY_SIZE(path) - 20)
+    {
+        lstrcpyW(path + length, L"\\windows.storage.dll");
+        module = LoadLibraryW(path);
+    }
     if (!module || !(get_class_object = (get_class_object_func)GetProcAddress(module, "DllGetClassObject")))
         return CLASS_E_CLASSNOTAVAILABLE;
     return get_class_object(clsid, riid, obj);
