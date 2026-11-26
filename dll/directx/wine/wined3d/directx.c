@@ -4122,6 +4122,22 @@ static BOOL wined3d_adapter_create_output(struct wined3d_adapter *adapter, const
     return TRUE;
 }
 
+#if defined(__REACTOS__) && defined(REACTOS_WINE_WDDM)
+static BOOL wined3d_display_has_wddm_owner(const WCHAR *device_name)
+{
+    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME open_adapter_desc;
+    D3DKMT_CLOSEADAPTER close_adapter_desc;
+
+    memset(&open_adapter_desc, 0, sizeof(open_adapter_desc));
+    lstrcpynW(open_adapter_desc.DeviceName, device_name, ARRAY_SIZE(open_adapter_desc.DeviceName));
+    if (D3DKMTOpenAdapterFromGdiDisplayName(&open_adapter_desc))
+        return FALSE;
+    close_adapter_desc.hAdapter = open_adapter_desc.hAdapter;
+    D3DKMTCloseAdapter(&close_adapter_desc);
+    return TRUE;
+}
+#endif
+
 BOOL wined3d_adapter_init(struct wined3d_adapter *adapter, unsigned int ordinal, const LUID *luid,
         const struct wined3d_adapter_ops *adapter_ops)
 {
@@ -4167,6 +4183,11 @@ BOOL wined3d_adapter_init(struct wined3d_adapter *adapter, unsigned int ordinal,
         /* Detached outputs are not enumerated */
         if (!(display_device.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP))
             continue;
+
+#if defined(__REACTOS__) && defined(REACTOS_WINE_WDDM)
+        if (!wined3d_display_has_wddm_owner(display_device.DeviceName))
+            continue;
+#endif
 
         if (display_device.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE)
             primary_idx = adapter->output_count;

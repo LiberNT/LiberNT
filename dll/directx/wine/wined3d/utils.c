@@ -5741,7 +5741,11 @@ BOOL wined3d_get_primary_adapter_luid(LUID *luid)
         return FALSE;
 
     if (D3DKMTOpenAdapterFromGdiDisplayName(&open_adapter_param))
+#if defined(__REACTOS__) && defined(REACTOS_WINE_WDDM)
+        return wined3d_get_first_wddm_adapter_luid(luid);
+#else
         return FALSE;
+#endif
 
     *luid = open_adapter_param.AdapterLuid;
     close_adapter_param.hAdapter = open_adapter_param.hAdapter;

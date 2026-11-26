@@ -40,6 +40,7 @@ add_executable(dxgi_apitest
     sampler_default.cpp
     umd_version.cpp
     software_adapter.cpp
+    render_only.cpp
     testlist.c)
 
 target_include_directories(dxgi_apitest PRIVATE ${REACTOS_SOURCE_DIR}/base/system/dwm)
