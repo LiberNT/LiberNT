@@ -491,6 +491,7 @@ ClearPage(VOID)
 static CP_CONTROL *
 AddControl(PCWSTR Class, PCWSTR Text, DWORD Style, size_t Item, CP_ROLE Role, HFONT Font)
 {
+    DWORD ExStyle = 0;
     CP_CONTROL *Control;
     HWND Hwnd;
 
@@ -504,7 +505,9 @@ AddControl(PCWSTR Class, PCWSTR Text, DWORD Style, size_t Item, CP_ROLE Role, HF
         Controls = Grown;
         ControlCapacity = Capacity;
     }
-    Hwnd = CreateWindowExW(0, Class, Text ? Text : L"", WS_CHILD | WS_VISIBLE | Style, 0, 0, 0, 0, PageWindow,
+    if (Role == CpRoleEdit || Role == CpRoleTextArea || Role == CpRoleAddress)
+        ExStyle = WS_EX_CLIENTEDGE;
+    Hwnd = CreateWindowExW(ExStyle, Class, Text ? Text : L"", WS_CHILD | WS_VISIBLE | Style, 0, 0, 0, 0, PageWindow,
                            (HMENU)(UINT_PTR)(CP_ID_BASE + ControlCount), Instance, NULL);
     if (!Hwnd)
         return NULL;
@@ -525,7 +528,7 @@ AddMessage(UINT Id, PCWSTR Address)
     LoadText(Id, Text, ARRAYSIZE(Text));
     AddControl(WC_STATICW, Text, SS_LEFT | SS_NOPREFIX, (size_t)-1, CpRoleText, TextFont);
     if (Address && Address[0])
-        AddControl(WC_EDITW, Address, WS_BORDER | WS_TABSTOP | ES_READONLY | ES_AUTOHSCROLL, (size_t)-1, CpRoleAddress,
+        AddControl(WC_EDITW, Address, WS_TABSTOP | ES_READONLY | ES_AUTOHSCROLL, (size_t)-1, CpRoleAddress,
                    TextFont);
 }
 
@@ -611,7 +614,7 @@ BuildControls(VOID)
                 }
                 else if (IsTextInput(Item))
                 {
-                    DWORD Style = WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL;
+                    DWORD Style = WS_TABSTOP | ES_AUTOHSCROLL;
 
                     if (strcmp(Item->Type, "password") == 0)
                         Style |= ES_PASSWORD;
@@ -668,7 +671,7 @@ BuildControls(VOID)
             case HtmlItemTextArea:
                 Text = Utf8ToWide(Item->Value);
                 Control = AddControl(WC_EDITW, Text,
-                                     WS_BORDER | WS_TABSTOP | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN,
+                                     WS_TABSTOP | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN,
                                      Index, CpRoleTextArea, TextFont);
                 free(Text);
                 break;
@@ -1475,6 +1478,7 @@ MainProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
 
         case WM_CTLCOLORSTATIC:
             SetBkMode((HDC)WParam, TRANSPARENT);
+            SetTextColor((HDC)WParam, GetSysColor(COLOR_BTNTEXT));
             return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);
 
         case WM_DESTROY:
