@@ -533,6 +533,7 @@ MouHid_Create(
     {
         /* request pending */
         KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = Irp->IoStatus.Status;
     }
 
     /* check for success */

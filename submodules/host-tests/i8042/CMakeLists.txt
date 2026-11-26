@@ -26,4 +26,7 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME input.kbdhid_consumed
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/kbdhid-consumed-test.py
             --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
+    add_test(NAME input.hid_create_status
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/hid-create-status-test.py
+            --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
 endif()
