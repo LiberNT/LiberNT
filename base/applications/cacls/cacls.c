@@ -783,6 +783,9 @@ EditDenyUserAccess(PDACL_EDIT Edit, LPCTSTR User)
         return FALSE;
     }
 
+    /* Windows drops the account's existing allow entries when a deny is
+       written; otherwise the allow would keep winning for the account. */
+    EditRemoveUserAces(Edit, Sid, TRUE);
     return EditAppendAce(Edit, ACCESS_DENIED_ACE_TYPE, FILE_ALL_ACCESS, Sid);
 }
 
@@ -936,7 +939,11 @@ ChangeFileACL(LPCTSTR FilePath, LPCTSTR File)
     }
 
     if (Ok && (OptionG || OptionP || OptionD || OptionR))
+    {
         Ok = EditStoreDacl(FullPath, &Edit);
+        if (Ok)
+            ConPrintf(StdOut, L"processed file: %s\n", FullPath);
+    }
 
     EditFree(&Edit);
     return Ok;
