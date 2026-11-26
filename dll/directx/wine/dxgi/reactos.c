@@ -362,11 +362,11 @@ static unsigned int dxgi_get_wddm_adapter_priority(const D3DKMT_ADAPTERINFO *ada
 
     /* A software display fallback must not hide a separately started hardware
      * render adapter from clients which select the first DXGI adapter. */
-    if (!adapter_type.RenderSupported)
-        return 3;
     if (adapter_type.SoftwareDevice)
         return 2;
-    return 0;
+    if (adapter_type.RenderSupported)
+        return 0;
+    return 1;
 }
 
 DXGI_GPU_PREFERENCE dxgi_get_user_gpu_preference(void)
@@ -396,13 +396,50 @@ DXGI_GPU_PREFERENCE dxgi_get_user_gpu_preference(void)
     }
 }
 
+enum dxgi_wddm_output_class
+{
+    DXGI_WDDM_OUTPUTS_PRIMARY,
+    DXGI_WDDM_OUTPUTS_OTHER,
+    DXGI_WDDM_OUTPUTS_NONE,
+};
+
 struct dxgi_wddm_candidate
 {
     unsigned int index;
+    enum dxgi_wddm_output_class outputs;
     unsigned int priority;
     BOOL integrated;
     ULONGLONG dedicated_memory;
 };
+
+static void dxgi_classify_wddm_outputs(const D3DKMT_ADAPTERINFO *adapters, struct dxgi_wddm_candidate *candidates,
+        unsigned int count)
+{
+    enum dxgi_wddm_output_class output_class;
+    DISPLAY_DEVICEW device;
+    unsigned int i;
+    LUID owner;
+    DWORD d;
+
+    for (i = 0; i < count; ++i)
+        candidates[i].outputs = DXGI_WDDM_OUTPUTS_NONE;
+    memset(&device, 0, sizeof(device));
+    device.cb = sizeof(device);
+    for (d = 0; EnumDisplayDevicesW(NULL, d, &device, 0); ++d)
+    {
+        if (!(device.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP)
+                || !dxgi_get_wddm_display_owner(device.DeviceName, &owner))
+            continue;
+        output_class = (device.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) ? DXGI_WDDM_OUTPUTS_PRIMARY
+                : DXGI_WDDM_OUTPUTS_OTHER;
+        for (i = 0; i < count; ++i)
+        {
+            assert(candidates[i].index == i);
+            if (dxgi_luid_equal(&adapters[i].AdapterLuid, &owner) && output_class < candidates[i].outputs)
+                candidates[i].outputs = output_class;
+        }
+    }
+}
 
 static void dxgi_describe_wddm_candidate(const D3DKMT_ADAPTERINFO *adapter, struct dxgi_wddm_candidate *candidate)
 {
@@ -424,10 +461,11 @@ static void dxgi_describe_wddm_candidate(const D3DKMT_ADAPTERINFO *adapter, stru
         candidate->dedicated_memory = segments.DedicatedVideoMemorySize;
 }
 
-/* TODO: with no user GPU preference Windows enumerates the adapter that scans out the primary display first */
 static BOOL dxgi_wddm_candidate_precedes(const struct dxgi_wddm_candidate *a, const struct dxgi_wddm_candidate *b,
         DXGI_GPU_PREFERENCE preference)
 {
+    if (a->outputs != b->outputs)
+        return a->outputs < b->outputs;
     if (a->priority != b->priority)
         return a->priority < b->priority;
     if (a->priority || preference == DXGI_GPU_PREFERENCE_UNSPECIFIED)
@@ -493,10 +531,15 @@ HRESULT dxgi_get_wddm_adapter(struct dxgi_factory *factory, UINT wddm_adapter_id
     }
     for (i = 0; i < enum_adapters.NumAdapters; ++i)
     {
-        struct dxgi_wddm_candidate candidate = {0};
+        candidates[i].index = i;
+        dxgi_describe_wddm_candidate(&adapters[i], &candidates[i]);
+    }
+    if (preference == DXGI_GPU_PREFERENCE_UNSPECIFIED)
+        dxgi_classify_wddm_outputs(adapters, candidates, enum_adapters.NumAdapters);
+    for (i = 1; i < enum_adapters.NumAdapters; ++i)
+    {
+        struct dxgi_wddm_candidate candidate = candidates[i];
 
-        candidate.index = i;
-        dxgi_describe_wddm_candidate(&adapters[i], &candidate);
         for (j = i; j && dxgi_wddm_candidate_precedes(&candidate, &candidates[j - 1], preference); --j)
             candidates[j] = candidates[j - 1];
         candidates[j] = candidate;

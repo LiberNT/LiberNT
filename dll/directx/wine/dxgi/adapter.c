@@ -245,7 +245,8 @@ static HRESULT dxgi_adapter_get_desc(struct dxgi_adapter *adapter, DXGI_ADAPTER_
     desc->ComputePreemptionGranularity = 0; /* FIXME */
 
 #if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
-    if (!adapter->factory->software && !(adapter_id.vendor_id == 0x1414 && adapter_id.device_id == 0x008c))
+    if (!adapter->factory->software
+            && (adapter->wddm_foreign || !(adapter_id.vendor_id == 0x1414 && adapter_id.device_id == 0x008c)))
         dxgi_get_wddm_adapter_desc(desc->AdapterLuid, desc);
 #endif
 

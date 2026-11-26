@@ -47,6 +47,7 @@ extern void func_sampler_default(void);
 extern void func_umd_version(void);
 extern void func_software_adapter(void);
 extern void func_first_adapter(void);
+extern void func_adapter_topology(void);
 
 const struct test winetest_testlist[] =
 {
@@ -96,5 +97,6 @@ const struct test winetest_testlist[] =
     { "umd_version", func_umd_version },
     { "software_adapter", func_software_adapter },
     { "first_adapter", func_first_adapter },
+    { "adapter_topology", func_adapter_topology },
     { 0, 0 }
 };

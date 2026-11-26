@@ -42,6 +42,7 @@ add_executable(dxgi_apitest
     software_adapter.cpp
     render_only.cpp
     first_adapter.cpp
+    adapter_topology.cpp
     testlist.c)
 
 target_include_directories(dxgi_apitest PRIVATE ${REACTOS_SOURCE_DIR}/base/system/dwm)
