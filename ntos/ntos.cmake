@@ -360,7 +360,6 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/ps/psuserprocess.c
     ${REACTOS_SOURCE_DIR}/ntos/ps/psw32callout.c
     ${REACTOS_SOURCE_DIR}/ntos/rtl/avltree.c
-    ${REACTOS_SOURCE_DIR}/ntos/rtl/rbtree.c
     ${REACTOS_SOURCE_DIR}/ntos/rtl/guid.c
     ${REACTOS_SOURCE_DIR}/ntos/rtl/rtlsupp.c
     ${REACTOS_SOURCE_DIR}/ntos/rtl/locale.c

@@ -450,6 +450,24 @@ RtlRealPredecessor(
     _In_ PRTL_SPLAY_LINKS Links
 );
 
+NTSYSAPI
+VOID
+NTAPI
+RtlRbInsertNodeEx(
+    _Inout_ PRTL_RB_TREE Tree,
+    _In_opt_ PRTL_BALANCED_NODE Parent,
+    _In_ BOOLEAN Right,
+    _Out_ PRTL_BALANCED_NODE Node
+);
+
+NTSYSAPI
+VOID
+NTAPI
+RtlRbRemoveNode(
+    _Inout_ PRTL_RB_TREE Tree,
+    _Inout_ PRTL_BALANCED_NODE Node
+);
+
 #define RtlIsLeftChild(Links) \
     (RtlLeftChild(RtlParent(Links)) == (PRTL_SPLAY_LINKS)(Links))
 

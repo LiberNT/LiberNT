@@ -90,6 +90,7 @@ list(APPEND SOURCE
     propvar.c
     random.c
     rangelist.c
+    rbtree.c
     regquery.c
     registry.c
     res.c

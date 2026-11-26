@@ -1,11 +1,11 @@
 /*
- * PROJECT:     LiberNT Kernel
+ * PROJECT:     LiberNT Run-Time Library
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Red-black tree insertion and removal on RTL_BALANCED_NODE
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-#include <ntoskrnl.h>
+#include <rtl.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -75,7 +75,7 @@ RtlRbInsertNodeEx(
     _Inout_ PRTL_RB_TREE Tree,
     _In_opt_ PRTL_BALANCED_NODE Parent,
     _In_ BOOLEAN Right,
-    _Inout_ PRTL_BALANCED_NODE Node)
+    _Out_ PRTL_BALANCED_NODE Node)
 {
     PRTL_BALANCED_NODE Grand, Uncle;
     ULONG Side;
@@ -126,7 +126,7 @@ VOID
 NTAPI
 RtlRbRemoveNode(
     _Inout_ PRTL_RB_TREE Tree,
-    _In_ PRTL_BALANCED_NODE Node)
+    _Inout_ PRTL_BALANCED_NODE Node)
 {
     PRTL_BALANCED_NODE Child, Parent, Sibling, Next;
     BOOLEAN RemovedRed;
