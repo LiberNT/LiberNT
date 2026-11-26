@@ -70,7 +70,7 @@ static DWORD WINAPI ActivationThread(LPVOID pv)
 
     ok_no_apartment();
     hwnd = CreateHiddenWindow();
-    todo_ros ok_no_apartment();
+    ok_no_apartment();
     ok(ImmSetActiveContext(NULL, NULL, TRUE), "ImmSetActiveContext failed\n");
     ok_apartment(APTTYPE_MAINSTA);
     ok(CoInitialize(NULL) == S_OK, "CoInitialize did not return S_OK\n");

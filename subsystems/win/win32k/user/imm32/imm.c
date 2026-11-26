@@ -1186,6 +1186,9 @@ ImmSetActiveContext(
         return FALSE;
     }
 
+    if (fActive && IS_CICERO_MODE() && !IS_16BIT_MODE())
+        CtfImmTIMActivate(GetKeyboardLayout(0));
+
     pClientImc = ImmLockClientImc(hIMC);
 
     if (!fActive)

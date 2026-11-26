@@ -1139,7 +1139,6 @@ CtfImmTIMActivate(_In_ HKL hKL)
     if (!ImmLoadIME(hKL))
         Imm32TF_InvalidAssemblyListCacheIfExist();
 
-    /* FIXME: Windows starts the apartment when the input context activates, not at IME window creation */
     CtfImmCoInitialize();
 
     if ((GetWin32ClientInfo()->CI_flags & CI_CTFCOINIT) &&
