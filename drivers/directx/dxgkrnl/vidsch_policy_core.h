@@ -112,6 +112,19 @@ VidSchPolicyCompletionAlreadyRetired(
            (LONG)(LastCompletedFenceId - FenceId) >= 0;
 }
 
+/* After an engine reset the miniport's last completed fence is the reset's LastAbortedFenceId, so a notification may name a
+ * fence past the last successful completion but within the terminal boundary: it completes nothing new. */
+FORCEINLINE
+BOOLEAN
+VidSchPolicyFenceAbortedByReset(
+    _In_ ULONG FenceId,
+    _In_ ULONG LastCompletedFenceId,
+    _In_ ULONG LastTerminalFenceId)
+{
+    return FenceId != 0 && LastTerminalFenceId != 0 && (LONG)(LastTerminalFenceId - FenceId) >= 0 &&
+           (LastCompletedFenceId == 0 || (LONG)(FenceId - LastCompletedFenceId) > 0);
+}
+
 /* A packet an engine reset aborted: after the last completed fence and up to the last aborted one, in signed 32-bit fence distance. */
 FORCEINLINE
 BOOLEAN

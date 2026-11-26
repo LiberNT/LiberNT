@@ -4191,6 +4191,7 @@ VidSchNotifyInterrupt(
     VIDSCH_ENGINE_STATE EngineState = VidSchEngineError;
     DXGMMS2_FENCE_SNAPSHOT_V1 FenceSnapshot;
     ULONG CurrentCompletedFence;
+    ULONG TerminalFence;
     ULONG FenceId = 0;
     ULONG LastSubmittedFence;
     ULONG NodeOrdinal = 0;
@@ -4299,6 +4300,13 @@ VidSchNotifyInterrupt(
     if ((!PreemptionNotification && FenceId == 0) || LastSubmittedFence == 0 || (FenceId != 0 && !VidSchpFenceReached(LastSubmittedFence, FenceId)))
         VidSchpBugCheckInvalidFence(Adapter, FenceId, LastSubmittedFence);
     CurrentCompletedFence = (ULONG)InterlockedCompareExchange((volatile LONG *)&Adapter->NodeLastCompletedFenceId[NodeOrdinal], 0, 0);
+    TerminalFence = (ULONG)InterlockedCompareExchange((volatile LONG *)&Adapter->NodeLastTerminalFenceId[NodeOrdinal], 0, 0);
+    if (VidSchPolicyFenceAbortedByReset(FenceId, CurrentCompletedFence, TerminalFence))
+    {
+        if (!PreemptionNotification)
+            return;
+        FenceId = 0;
+    }
     if (VidSchPolicyCompletionAlreadyRetired(PreemptionNotification, FenceId, CurrentCompletedFence))
         return;
     if ((!PreemptionNotification && !DxgkIsSubmittedFenceIdentity(Adapter, NodeOrdinal, FenceId)) || (PreemptionNotification && FenceId != 0 && !VidSchpFenceReached(CurrentCompletedFence, FenceId) && !DxgkIsSubmittedFenceIdentity(Adapter, NodeOrdinal, FenceId)))
