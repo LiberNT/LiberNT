@@ -3,6 +3,7 @@ list(APPEND SOURCE
     BufferedRecv.c
     BusyLoopback.c
     CloseCompletion.c
+    DuplicateSocketInherit.c
     GetAddrInfoEx.c
     MulticastInterface.c
     ReuseDelivery.c
