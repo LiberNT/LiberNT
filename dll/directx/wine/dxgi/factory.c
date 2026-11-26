@@ -771,9 +771,39 @@ void dxgi_factory_unlock(const struct dxgi_factory *factory)
 #ifdef __REACTOS__
 static struct wined3d *dxgi_cached_wined3d;
 static BOOL dxgi_wined3d_initialized;
+static BOOL dxgi_cached_wined3d_renders;
 /* Protected by the recursive WineD3D mutex. ICD pixel-format initialization
  * can call CreateDXGIFactory again while the outer factory probes WGL. */
 static DWORD dxgi_wined3d_initializing_thread;
+
+static void dxgi_init_cached_wined3d(void)
+{
+    unsigned int flags = 0;
+
+    if (dxgi_wined3d_initialized)
+        return;
+
+#ifdef REACTOS_DXGI_D3DKMT_ADAPTER_ORDER
+    /* A native driver renders; a cached OpenGL context would only pin the driver's device across a GPU reset. */
+    if (dxgi_wddm_adapters_have_d3d11_umd())
+        flags = WINED3D_NO3D;
+#endif
+    dxgi_wined3d_initializing_thread = GetCurrentThreadId();
+    dxgi_cached_wined3d = wined3d_create(flags);
+    dxgi_wined3d_initializing_thread = 0;
+    dxgi_wined3d_initialized = dxgi_cached_wined3d != NULL;
+    dxgi_cached_wined3d_renders = dxgi_wined3d_initialized && !(flags & WINED3D_NO3D);
+}
+
+static BOOL dxgi_wined3d_is_basic_render_driver(struct wined3d *wined3d)
+{
+    struct wined3d_adapter_identifier adapter_id = {0};
+    struct wined3d_adapter *adapter;
+
+    return (adapter = wined3d_get_adapter(wined3d, 0))
+            && SUCCEEDED(wined3d_adapter_get_identifier(adapter, 0, &adapter_id))
+            && adapter_id.vendor_id == 0x1414 && adapter_id.device_id == 0x008c;
+}
 
 static BOOL dxgi_is_icd_initializing(void)
 {
@@ -820,18 +850,7 @@ static HRESULT dxgi_factory_init(struct dxgi_factory *factory, BOOL extended)
     }
     else
     {
-        if (!dxgi_wined3d_initialized)
-        {
-            dxgi_wined3d_initializing_thread = GetCurrentThreadId();
-#ifdef REACTOS_DXGI_D3DKMT_ADAPTER_ORDER
-            /* A native driver renders; a cached OpenGL context would only pin the driver's device across a GPU reset. */
-            dxgi_cached_wined3d = wined3d_create(dxgi_wddm_adapters_have_d3d11_umd() ? WINED3D_NO3D : 0);
-#else
-            dxgi_cached_wined3d = wined3d_create(0);
-#endif
-            dxgi_wined3d_initializing_thread = 0;
-            dxgi_wined3d_initialized = dxgi_cached_wined3d != NULL;
-        }
+        dxgi_init_cached_wined3d();
         factory->wined3d = dxgi_cached_wined3d;
         if (factory->wined3d)
             wined3d_incref(factory->wined3d);
@@ -854,12 +873,17 @@ static HRESULT dxgi_factory_init(struct dxgi_factory *factory, BOOL extended)
 #ifdef __REACTOS__
 static struct wined3d *dxgi_create_software_rasterizer(void)
 {
-    struct wined3d_adapter_identifier adapter_id = {0};
-    struct wined3d_adapter *adapter;
     struct wined3d *wined3d;
 
     if (dxgi_is_icd_initializing() || dxgi_wined3d_initializing_thread == GetCurrentThreadId())
         return NULL;
+
+    dxgi_init_cached_wined3d();
+    if (dxgi_cached_wined3d_renders && dxgi_wined3d_is_basic_render_driver(dxgi_cached_wined3d))
+    {
+        wined3d_incref(dxgi_cached_wined3d);
+        return dxgi_cached_wined3d;
+    }
 
     dxgi_wined3d_initializing_thread = GetCurrentThreadId();
     wined3d = wined3d_create(0);
@@ -867,8 +891,7 @@ static struct wined3d *dxgi_create_software_rasterizer(void)
     if (!wined3d)
         return NULL;
 
-    if ((adapter = wined3d_get_adapter(wined3d, 0)) && SUCCEEDED(wined3d_adapter_get_identifier(adapter, 0, &adapter_id))
-            && adapter_id.vendor_id == 0x1414 && adapter_id.device_id == 0x008c)
+    if (dxgi_wined3d_is_basic_render_driver(wined3d))
         return wined3d;
 
     wined3d_decref(wined3d);
