@@ -189,7 +189,7 @@ CmpGetCallbackObjectContext(
         Context = CONTAINING_RECORD(Entry,
                                     CM_CALLBACK_OBJECT_CONTEXT,
                                     ListEntry);
-        if (Context->Cookie != Cookie) continue;
+        if (Context->Name != NULL || Context->Cookie != Cookie) continue;
 
         Value = Context->Context;
         break;
@@ -598,7 +598,6 @@ CmUnRegisterCallback(
 
     CmpCleanupFilterContexts(Entry);
 
-    if (Entry->LastName != NULL) ExFreePool(Entry->LastName);
     if (Entry->Altitude.Buffer != NULL) ExFreePool(Entry->Altitude.Buffer);
     ExFreePool(Entry);
     return STATUS_SUCCESS;
@@ -646,7 +645,7 @@ CmSetCallbackObjectContext(
         Context = CONTAINING_RECORD(Entry,
                                     CM_CALLBACK_OBJECT_CONTEXT,
                                     ListEntry);
-        if (Context->Cookie != (ULONGLONG)Cookie->QuadPart) continue;
+        if (Context->Name != NULL || Context->Cookie != (ULONGLONG)Cookie->QuadPart) continue;
 
         if (OldContext != NULL) *OldContext = Context->Context;
         Context->Context = NewContext;
@@ -707,9 +706,17 @@ CmpCleanupKeyBodyContexts(
                                     CM_CALLBACK_OBJECT_CONTEXT,
                                     ListEntry);
 
-        RemoveEntryList(&Context->FilterListEntry);
+        if (Context->Name == NULL)
+            RemoveEntryList(&Context->FilterListEntry);
 
         ExReleasePushLockExclusive(&CmpContextListLock);
+
+        if (Context->Name != NULL)
+        {
+            ExFreePool(Context->Name);
+            ExFreePool(Context);
+            continue;
+        }
 
         RtlZeroMemory(&Cleanup, sizeof(Cleanup));
         Cleanup.Object = KeyBody;
@@ -801,8 +808,8 @@ CmCallbackReleaseKeyObjectIDEx(
 
 /*
  * The older call, which hands back a name the driver never releases. The name
- * belongs to the driver's own registration and lives until that driver asks
- * for another one, which is as long as a callback can read it.
+ * stays with the key object until the key is closed, so callbacks running at
+ * the same time on other keys cannot take it away from each other.
  */
 NTSTATUS
 NTAPI
@@ -812,36 +819,78 @@ CmCallbackGetKeyObjectID(
     _Out_opt_ PULONG_PTR ObjectID,
     _Outptr_opt_ PCUNICODE_STRING *ObjectName)
 {
-    PCM_CALLBACK_ENTRY Entry;
-    PUNICODE_STRING Previous;
+    PCM_CALLBACK_OBJECT_CONTEXT Context, Cached;
+    PCM_KEY_BODY KeyBody = Object;
+    PUNICODE_STRING Name;
+    PLIST_ENTRY ListEntry;
     NTSTATUS Status;
 
     PAGED_CODE();
 
-    Status = CmCallbackGetKeyObjectIDEx(Cookie,
-                                        Object,
-                                        ObjectID,
-                                        ObjectName,
-                                        0);
+    Status = CmCallbackGetKeyObjectIDEx(Cookie, Object, ObjectID, NULL, 0);
     if (!NT_SUCCESS(Status) || ObjectName == NULL) return Status;
 
-    ExAcquirePushLockExclusive(&CmpCallbackListLock);
+    ExAcquirePushLockShared(&CmpCallbackListLock);
+    Status = CmpFindCallbackByCookie((ULONGLONG)Cookie->QuadPart) ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
+    ExReleasePushLockShared(&CmpCallbackListLock);
+    if (!NT_SUCCESS(Status)) return Status;
 
-    Entry = CmpFindCallbackByCookie((ULONGLONG)Cookie->QuadPart);
-    if (Entry == NULL)
+    Cached = NULL;
+    ExAcquirePushLockShared(&CmpContextListLock);
+    for (ListEntry = KeyBody->ContextListHead.Flink;
+         ListEntry != &KeyBody->ContextListHead;
+         ListEntry = ListEntry->Flink)
     {
-        ExReleasePushLockExclusive(&CmpCallbackListLock);
-        CmCallbackReleaseKeyObjectIDEx(*ObjectName);
-        *ObjectName = NULL;
-        return STATUS_INVALID_PARAMETER;
+        Context = CONTAINING_RECORD(ListEntry, CM_CALLBACK_OBJECT_CONTEXT, ListEntry);
+        if (Context->Name != NULL)
+        {
+            Cached = Context;
+            break;
+        }
+    }
+    ExReleasePushLockShared(&CmpContextListLock);
+    if (Cached != NULL)
+    {
+        *ObjectName = Cached->Name;
+        return STATUS_SUCCESS;
     }
 
-    Previous = Entry->LastName;
-    Entry->LastName = (PUNICODE_STRING)*ObjectName;
+    CmpLockRegistry();
+    Name = KeyBody->KeyControlBlock ? CmpConstructName(KeyBody->KeyControlBlock) : NULL;
+    CmpUnlockRegistry();
+    if (Name == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
-    ExReleasePushLockExclusive(&CmpCallbackListLock);
+    Context = ExAllocatePoolZero(NonPagedPool, sizeof(CM_CALLBACK_OBJECT_CONTEXT), TAG_CM);
+    if (Context == NULL)
+    {
+        ExFreePool(Name);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    Context->KeyBody = KeyBody;
+    Context->Name = Name;
 
-    if (Previous != NULL) ExFreePool(Previous);
+    ExAcquirePushLockExclusive(&CmpContextListLock);
+    for (ListEntry = KeyBody->ContextListHead.Flink;
+         ListEntry != &KeyBody->ContextListHead;
+         ListEntry = ListEntry->Flink)
+    {
+        Cached = CONTAINING_RECORD(ListEntry, CM_CALLBACK_OBJECT_CONTEXT, ListEntry);
+        if (Cached->Name != NULL) break;
+        Cached = NULL;
+    }
+    if (Cached == NULL)
+        InsertTailList(&KeyBody->ContextListHead, &Context->ListEntry);
+    ExReleasePushLockExclusive(&CmpContextListLock);
+
+    if (Cached != NULL)
+    {
+        ExFreePool(Name);
+        ExFreePool(Context);
+        Context = Cached;
+    }
+
+    ASSERT(Context->Name != NULL && Context->KeyBody == KeyBody);
+    *ObjectName = Context->Name;
     return STATUS_SUCCESS;
 }
 

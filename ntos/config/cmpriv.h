@@ -32,7 +32,6 @@ typedef struct _CM_CALLBACK_ENTRY
     PVOID Context;
     PVOID Driver;
     EX_RUNDOWN_REF Rundown;
-    PUNICODE_STRING LastName;
     BOOLEAN Legacy;
 } CM_CALLBACK_ENTRY, *PCM_CALLBACK_ENTRY;
 
@@ -62,6 +61,7 @@ typedef struct _CM_CALLBACK_OBJECT_CONTEXT
     struct _CM_KEY_BODY *KeyBody;
     ULONGLONG Cookie;
     PVOID Context;
+    PUNICODE_STRING Name;
 } CM_CALLBACK_OBJECT_CONTEXT, *PCM_CALLBACK_OBJECT_CONTEXT;
 
 extern LIST_ENTRY CmpContextListHead;
