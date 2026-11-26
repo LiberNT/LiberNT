@@ -1,0 +1,26 @@
+/*
+ * PROJECT:     LiberNT Captive Portal Sign-in
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     English resources
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+STRINGTABLE
+BEGIN
+    IDS_TITLE "Sign in to %s"
+    IDS_TITLE_DEFAULT "Sign in to the network"
+    IDS_CANCEL "Cancel"
+    IDS_DONE "Done"
+    IDS_LOADING "Loading..."
+    IDS_NOT_CONNECTED "Not connected to the Internet yet"
+    IDS_CONNECTED "Connected to the Internet"
+    IDS_ALREADY "This network is already connected to the Internet."
+    IDS_LOAD_FAILED "The sign-in page could not be opened."
+    IDS_CERTIFICATE "The security certificate of the sign-in page is not valid, so the page was not opened."
+    IDS_SCRIPT "This sign-in page needs JavaScript, which this window does not run. Open this address in a web browser:"
+    IDS_UNSUPPORTED "This page cannot be shown here."
+    IDS_SUBMIT "Submit"
+    IDS_EMPTY "The sign-in page is empty."
+END
