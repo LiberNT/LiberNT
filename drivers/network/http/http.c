@@ -9,7 +9,7 @@
 #include "http_sys.h"
 
 #define NDEBUG
-#include <reactos/debug.h>
+#include <libernt/debug.h>
 
 static HANDLE g_HttpDirectoryHandle;
 static PDEVICE_OBJECT g_ReqQueueDeviceObject;

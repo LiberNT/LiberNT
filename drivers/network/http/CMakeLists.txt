@@ -1,7 +1,7 @@
 
 include_directories(
     BEFORE .
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/drivers
     ${CMAKE_CURRENT_SOURCE_DIR}/llhttp/include)
 
 list(APPEND SOURCE
@@ -21,7 +21,7 @@ set_source_files_properties(
     llhttp/src/api.c
     llhttp/src/http.c
     llhttp/src/llhttp.c
-    PROPERTIES COMPILE_DEFINITIONS "LIBERNT_KERNEL;NDEBUG")
+    PROPERTIES COMPILE_DEFINITIONS "LIBERNT_KERNEL;NDEBUG=")
 set_module_type(http kernelmodedriver)
 add_importlibs(http ntoskrnl netio hal)
 add_cd_file(TARGET http DESTINATION reactos/system32/drivers FOR all)
