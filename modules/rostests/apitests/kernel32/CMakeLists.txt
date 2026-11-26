@@ -51,6 +51,7 @@ list(APPEND SOURCE
     CreateDirectoryRoot.c
     CreateProcess.c
     ProcessImageRename.c
+    PipeRelisten.c
     DefaultActCtx.c
     DeleteFileCase.c
     DeleteFileOpenHandle.c

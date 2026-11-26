@@ -50,6 +50,7 @@ extern void func_CreateAfterMissingName(void);
 extern void func_CreateDirectoryRoot(void);
 extern void func_CreateProcess(void);
 extern void func_ProcessImageRename(void);
+extern void func_PipeRelisten(void);
 extern void func_DefaultActCtx(void);
 extern void func_DeleteFileCase(void);
 extern void func_DeleteFileOpenHandle(void);
@@ -289,6 +290,7 @@ const struct test winetest_testlist[] =
     { "CreateDirectoryRoot",         func_CreateDirectoryRoot },
     { "CreateProcess",               func_CreateProcess },
     { "ProcessImageRename",          func_ProcessImageRename },
+    { "PipeRelisten",                func_PipeRelisten },
     { "DefaultActCtx",               func_DefaultActCtx },
     { "DeleteFileCase",              func_DeleteFileCase },
     { "DeleteFileOpenHandle",        func_DeleteFileOpenHandle },
