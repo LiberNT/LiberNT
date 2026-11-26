@@ -144,6 +144,7 @@ list(APPEND SOURCE
     NtQuerySection.c
     NtQuerySecurityObject.c
     NtSetSecurityObjectStatus.c
+    PipeMailslotSecurity.c
     NtQuerySystemEnvironmentValue.c
     NtQueryLicenseValue.c
     NtQuerySystemInformation.c

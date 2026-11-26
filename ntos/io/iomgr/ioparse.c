@@ -1232,7 +1232,6 @@ IopParseDeviceEx(
         else
         {
             TargetDevice = IoGetAttachedDevice(DeviceObject);
-            DirectOpen = TRUE;
         }
     }
     else
@@ -1250,7 +1249,6 @@ IopParseDeviceEx(
         else
         {
             TargetDevice = IoGetAttachedDevice(DeviceObject);
-            DirectOpen = TRUE;
         }
     }
 

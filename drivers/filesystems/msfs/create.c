@@ -130,6 +130,11 @@ MsfsCreateMailslot(PDEVICE_OBJECT DeviceObject,
     PLIST_ENTRY current_entry;
     PMSFS_FCB current = NULL;
     PMAILSLOT_CREATE_PARAMETERS Buffer;
+    PACCESS_STATE AccessState;
+    PSECURITY_SUBJECT_CONTEXT SubjectContext;
+    PSECURITY_DESCRIPTOR SecurityDescriptor = NULL;
+    PSECURITY_DESCRIPTOR CachedSecurityDescriptor = NULL;
+    NTSTATUS Status;
 
     DPRINT("MsfsCreateMailslot(DeviceObject %p Irp %p)\n", DeviceObject, Irp);
 
@@ -186,8 +191,42 @@ MsfsCreateMailslot(PDEVICE_OBJECT DeviceObject,
 
     Fcb->ReferenceCount = 0;
     Fcb->MemoryReferences = 1;
+    Fcb->SecurityDescriptor = NULL;
     InitializeListHead(&Fcb->CcbListHead);
     KeInitializeSpinLock(&Fcb->CcbListLock);
+
+    AccessState = IoStack->Parameters.CreateMailslot.SecurityContext->AccessState;
+    SubjectContext = &AccessState->SubjectSecurityContext;
+    SeLockSubjectContext(SubjectContext);
+    Status = SeAssignSecurity(NULL,
+                              AccessState->SecurityDescriptor,
+                              &SecurityDescriptor,
+                              FALSE,
+                              SubjectContext,
+                              IoGetFileObjectGenericMapping(),
+                              PagedPool);
+    SeUnlockSubjectContext(SubjectContext);
+    if (NT_SUCCESS(Status))
+    {
+        Status = ObLogSecurityDescriptor(SecurityDescriptor,
+                                         &CachedSecurityDescriptor,
+                                         1);
+        ExFreePoolWithTag(SecurityDescriptor, 0);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Fcb->Name.Buffer, 'NFsM');
+        ExFreePoolWithTag(Fcb, 'fFsM');
+        ExFreePoolWithTag(Ccb, 'cFsM');
+
+        Irp->IoStatus.Status = Status;
+        Irp->IoStatus.Information = 0;
+
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+        return Status;
+    }
+    Fcb->SecurityDescriptor = CachedSecurityDescriptor;
 
     Fcb->MaxMessageSize = Buffer->MaximumMessageSize;
     Fcb->MailslotQuota = Buffer->MailslotQuota;
@@ -226,6 +265,7 @@ MsfsCreateMailslot(PDEVICE_OBJECT DeviceObject,
 
     if (current_entry != &DeviceExtension->FcbListHead)
     {
+        ObDereferenceSecurityDescriptor(Fcb->SecurityDescriptor, 1);
         ExFreePoolWithTag(Fcb->Name.Buffer, 'NFsM');
         ExFreePoolWithTag(Fcb, 'fFsM');
         ExFreePoolWithTag(Ccb, 'cFsM');
@@ -382,6 +422,11 @@ MsfsClose(PDEVICE_OBJECT DeviceObject,
     {
         DPRINT("ReferenceCount == 0: Deleting mailslot data\n");
         RemoveEntryList(&Fcb->FcbListEntry);
+        if (Fcb->SecurityDescriptor != NULL)
+        {
+            ObDereferenceSecurityDescriptor(Fcb->SecurityDescriptor, 1);
+            Fcb->SecurityDescriptor = NULL;
+        }
         ExFreePoolWithTag(Fcb->Name.Buffer, 'NFsM');
         MsfsDereferenceFcb(Fcb);
     }

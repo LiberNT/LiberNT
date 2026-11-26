@@ -44,10 +44,10 @@ DriverEntry(PDRIVER_OBJECT DriverObject,
 //        MsfsDirectoryControl;
 //    DriverObject->MajorFunction[IRP_MJ_FLUSH_BUFFERS] = MsfsFlushBuffers;
 //    DriverObject->MajorFunction[IRP_MJ_SHUTDOWN] = MsfsShutdown;
-//    DriverObject->MajorFunction[IRP_MJ_QUERY_SECURITY] =
-//        MsfsQuerySecurity;
-//    DriverObject->MajorFunction[IRP_MJ_SET_SECURITY] =
-//        MsfsSetSecurity;
+    DriverObject->MajorFunction[IRP_MJ_QUERY_SECURITY] =
+        MsfsQuerySecurity;
+    DriverObject->MajorFunction[IRP_MJ_SET_SECURITY] =
+        MsfsSetSecurity;
     DriverObject->MajorFunction[IRP_MJ_FILE_SYSTEM_CONTROL] =
         MsfsFileSystemControl;
 

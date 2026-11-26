@@ -363,6 +363,12 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
     /* Initialize the Volume Control Block (VCB) */
     NpVcb = DeviceObject->DeviceExtension;
     NpInitializeVcb();
+    Status = NpCreateDefaultPipeSecurityDescriptor(&NpVcb->DefaultPipeSecurityDescriptor);
+    if (!NT_SUCCESS(Status))
+    {
+        IoDeleteDevice(DeviceObject);
+        return Status;
+    }
     Status = NpCreateRootDcb();
     ASSERT(Status == STATUS_SUCCESS);
     return STATUS_SUCCESS;
