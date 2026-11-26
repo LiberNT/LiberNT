@@ -542,6 +542,7 @@ typedef struct _DWM_DX_SHARED_SURFACE_INFO
 /* SourceWidth x SourceHeight at the texture origin is stretched over the client. */
 #define DWM_DX_PUBLISH_SOURCE_REGION 0x00000010u
 
+#define DWM_DX_UPDATE_PREMULTIPLIED 0x00000100u
 #define DWM_DX_UPDATE_CANCEL     0x80000000u
 
 /* Fixed-width NtUser exchange used by dwmapi, OpenGL32 and dwm.exe. Window is

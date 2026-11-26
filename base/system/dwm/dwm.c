@@ -3819,10 +3819,13 @@ DwmBlitWindowAnimated(ULONG *comp, LONG scrW,
             return;
     }
 
-    DwmBlitScaled(comp, scrW, clipL, clipT, clipR, clipB,
-                  pix, w->cx, w->cy, w->Stride,
-                  dstX, dstY, drawCx, drawCy, alpha, w,
-                  backdropBase, w->CornerRadius);
+    if (pix != NULL)
+    {
+        DwmBlitScaled(comp, scrW, clipL, clipT, clipR, clipB,
+                      pix, w->cx, w->cy, w->Stride,
+                      dstX, dstY, drawCx, drawCy, alpha, w,
+                      backdropBase, w->CornerRadius);
+    }
 
     if (dxpix != NULL && w->DxWidth != 0 && w->DxHeight != 0)
     {
@@ -3837,11 +3840,27 @@ DwmBlitWindowAnimated(ULONG *comp, LONG scrW,
             return;
         if (cx < 1) cx = 1;
         if (cy < 1) cy = 1;
-        DwmBlitScaled(comp, scrW, clipL, clipT, clipR, clipB,
-                      dxpix, (LONG)w->DxSourceWidth, (LONG)w->DxSourceHeight, dxPitch,
-                      dstX + (LONG)((LONGLONG)w->DxClientX * drawCx / w->cx),
-                      dstY + (LONG)((LONGLONG)w->DxClientY * drawCy / w->cy),
-                      cx, cy, alpha, NULL, NULL, 0);
+        {
+            const DWM_WIN *material = NULL;
+            DWM_WIN dxWindow;
+
+            if (w->LayerFlags & DWM_WINDOW_DX_PREMULTIPLIED_ALPHA)
+            {
+                dxWindow = *w;
+                dxWindow.LayerFlags &= ~(DWM_WINDOW_FRAME_ALPHA | DWM_LWA_COLORKEY |
+                                         DWM_WINDOW_PREMULTIPLIED_ALPHA);
+                dxWindow.LayerFlags |= DWM_WINDOW_PREMULTIPLIED_ALPHA;
+                dxWindow.BackdropType = 0;
+                dxWindow.BackdropRegion = 0;
+                dxWindow.BlurFlags = 0;
+                material = &dxWindow;
+            }
+            DwmBlitScaled(comp, scrW, clipL, clipT, clipR, clipB,
+                          dxpix, (LONG)w->DxSourceWidth, (LONG)w->DxSourceHeight, dxPitch,
+                          dstX + (LONG)((LONGLONG)w->DxClientX * drawCx / w->cx),
+                          dstY + (LONG)((LONGLONG)w->DxClientY * drawCy / w->cy),
+                          cx, cy, alpha, material, NULL, 0);
+        }
     }
 }
 
@@ -4999,6 +5018,15 @@ DwmComposeLoop(HANDLE hStopEvent)
                         client.Stride = dxPitch;
                         if (client.BackdropRegion == DWM_BACKDROP_REGION_NONCLIENT)
                             client.BackdropType = 0;
+                        if (wins[i].LayerFlags & DWM_WINDOW_DX_PREMULTIPLIED_ALPHA)
+                        {
+                            client.LayerFlags &= ~(DWM_WINDOW_FRAME_ALPHA | DWM_LWA_COLORKEY |
+                                                   DWM_WINDOW_PREMULTIPLIED_ALPHA);
+                            client.LayerFlags |= DWM_WINDOW_PREMULTIPLIED_ALPHA;
+                            client.BackdropType = 0;
+                            client.BackdropRegion = 0;
+                            client.BlurFlags = 0;
+                        }
                         if (ClipL < ClipR && ClipT < ClipB &&
                             (wins[i].DxSourceWidth != wins[i].DxDrawWidth ||
                              wins[i].DxSourceHeight != wins[i].DxDrawHeight))
@@ -5007,7 +5035,10 @@ DwmComposeLoop(HANDLE hStopEvent)
                                           dxpix, (LONG)wins[i].DxSourceWidth, (LONG)wins[i].DxSourceHeight,
                                           dxPitch, client.x - g_originX, client.y - g_originY,
                                           (LONG)wins[i].DxDrawWidth, (LONG)wins[i].DxDrawHeight,
-                                          255, NULL, NULL, 0);
+                                          (wins[i].LayerFlags & DWM_WINDOW_DX_PREMULTIPLIED_ALPHA) &&
+                                          (client.LayerFlags & DWM_LWA_ALPHA) ? client.Alpha : 255,
+                                          (wins[i].LayerFlags & DWM_WINDOW_DX_PREMULTIPLIED_ALPHA) ?
+                                          &client : NULL, NULL, 0);
                         }
                         else if (ClipL < ClipR && ClipT < ClipB)
                         {

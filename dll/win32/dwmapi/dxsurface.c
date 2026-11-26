@@ -59,6 +59,7 @@ typedef struct _DWM_DX_SURFACE
     D3DKMT_HANDLE hAllocation;
     D3DKMT_HANDLE hGlobalShare;
     HANDLE ReadyEvent;
+    ULONG Generation;
     DWM_DX_SHARED_SURFACE_INFO Info;
 } DWM_DX_SURFACE;
 
@@ -535,14 +536,16 @@ DwmDxRegisterSurface(HWND Window,
     Surface->hAllocation = Allocation.hAllocation;
     Surface->hGlobalShare = Create.hGlobalShare;
     Surface->ReadyEvent = ReadyEvent;
+    Surface->Generation = Exchange.Generation;
     Surface->Info = RuntimeInfo;
     return STATUS_SUCCESS;
 }
 
 static NTSTATUS
-DwmDxReregisterSurface(const DWM_DX_SURFACE *Surface)
+DwmDxReregisterSurface(DWM_DX_SURFACE *Surface)
 {
     DWM_DX_SURFACE_EXCHANGE Exchange;
+    NTSTATUS Status;
 
     RtlZeroMemory(&Exchange, sizeof(Exchange));
     Exchange.StructSize = sizeof(Exchange);
@@ -552,8 +555,11 @@ DwmDxReregisterSurface(const DWM_DX_SURFACE *Surface)
     Exchange.GlobalShare = Surface->hGlobalShare;
     Exchange.Info = Surface->Info;
     Exchange.ReadyEvent = (ULONGLONG)(ULONG_PTR)Surface->ReadyEvent;
-    return (NTSTATUS)NtUserCallOneParam((DWORD_PTR)&Exchange,
-                                        DWM_ROUTINE_DXSURFACE);
+    Status = (NTSTATUS)NtUserCallOneParam((DWORD_PTR)&Exchange,
+                                          DWM_ROUTINE_DXSURFACE);
+    if (NT_SUCCESS(Status))
+        Surface->Generation = Exchange.Generation;
+    return Status;
 }
 
 static NTSTATUS
@@ -645,6 +651,161 @@ DwmDxIssueGdiSurface(HWND Window,
     return STATUS_SUCCESS;
 }
 
+static VOID
+DwmDxCloseAdapter(D3DKMT_HANDLE Adapter)
+{
+    D3DKMT_CLOSEADAPTER CloseAdapter;
+
+    if (Adapter == 0)
+        return;
+    RtlZeroMemory(&CloseAdapter, sizeof(CloseAdapter));
+    CloseAdapter.hAdapter = Adapter;
+    (void)D3DKMTCloseAdapter(&CloseAdapter);
+}
+
+static NTSTATUS
+DwmDxAdapterLuidForWindow(HWND Window, LUID *AdapterLuid)
+{
+    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME OpenDisplayAdapter;
+    D3DKMT_OPENADAPTERFROMHDC OpenAdapter;
+    MONITORINFOEXW MonitorInfo;
+    HMONITOR Monitor;
+    NTSTATUS Status = STATUS_NOT_FOUND;
+    HDC WindowDc;
+
+    AdapterLuid->LowPart = 0;
+    AdapterLuid->HighPart = 0;
+    Monitor = MonitorFromWindow(Window, MONITOR_DEFAULTTONEAREST);
+    if (Monitor != NULL)
+    {
+        RtlZeroMemory(&MonitorInfo, sizeof(MonitorInfo));
+        MonitorInfo.cbSize = sizeof(MonitorInfo);
+        if (GetMonitorInfoW(Monitor, (MONITORINFO *)&MonitorInfo) &&
+            MonitorInfo.szDevice[0] != UNICODE_NULL)
+        {
+            RtlZeroMemory(&OpenDisplayAdapter, sizeof(OpenDisplayAdapter));
+            lstrcpynW(OpenDisplayAdapter.DeviceName, MonitorInfo.szDevice,
+                      ARRAYSIZE(OpenDisplayAdapter.DeviceName));
+            Status = D3DKMTOpenAdapterFromGdiDisplayName(&OpenDisplayAdapter);
+            if (NT_SUCCESS(Status) && OpenDisplayAdapter.hAdapter != 0)
+            {
+                *AdapterLuid = OpenDisplayAdapter.AdapterLuid;
+                DwmDxCloseAdapter(OpenDisplayAdapter.hAdapter);
+                return STATUS_SUCCESS;
+            }
+        }
+    }
+
+    WindowDc = GetDC(Window);
+    if (WindowDc == NULL)
+        return NT_SUCCESS(Status) ? STATUS_INVALID_DEVICE_STATE : Status;
+    RtlZeroMemory(&OpenAdapter, sizeof(OpenAdapter));
+    OpenAdapter.hDc = WindowDc;
+    Status = D3DKMTOpenAdapterFromHdc(&OpenAdapter);
+    ReleaseDC(Window, WindowDc);
+    if (!NT_SUCCESS(Status) || OpenAdapter.hAdapter == 0)
+        return NT_SUCCESS(Status) ? STATUS_NOT_FOUND : Status;
+    *AdapterLuid = OpenAdapter.AdapterLuid;
+    DwmDxCloseAdapter(OpenAdapter.hAdapter);
+    return STATUS_SUCCESS;
+}
+
+static HRESULT
+DwmDxPrepareSurface(HWND Window,
+                    const LUID *AdapterLuid,
+                    ULONG Width,
+                    ULONG Height,
+                    DWM_DX_SURFACE **ResultSurface,
+                    BOOL *Registered)
+{
+    DWM_DX_SURFACE NewSurface;
+    DWM_DX_SURFACE *Surface = NULL, *FreeSurface = NULL;
+    ULONG Index;
+    NTSTATUS Status;
+
+    *ResultSurface = NULL;
+    *Registered = FALSE;
+    for (Index = 0; Index < DWM_DX_MAX_SURFACES; ++Index)
+    {
+        if (g_DxSurfaces[Index].Window != NULL &&
+            !IsWindow(g_DxSurfaces[Index].Window))
+        {
+            DwmDxDestroySurface(&g_DxSurfaces[Index]);
+        }
+        if (g_DxSurfaces[Index].Window == Window)
+            Surface = &g_DxSurfaces[Index];
+        if (g_DxSurfaces[Index].Window == NULL && FreeSurface == NULL)
+            FreeSurface = &g_DxSurfaces[Index];
+    }
+
+    if (Surface != NULL)
+    {
+        DWM_DX_DEVICE *Device = &g_DxDevices[Surface->DeviceIndex];
+
+        if (Surface->Width != Width || Surface->Height != Height ||
+            !DwmDxLuidEqual(&Device->Luid, AdapterLuid))
+        {
+            if (Surface->ReadyEvent != NULL &&
+                WaitForSingleObject(Surface->ReadyEvent, 0) == WAIT_TIMEOUT)
+            {
+                return S_FALSE;
+            }
+            FreeSurface = Surface;
+            Surface = NULL;
+        }
+    }
+
+    if (Surface == NULL)
+    {
+        if (FreeSurface == NULL)
+            return E_OUTOFMEMORY;
+        RtlZeroMemory(&NewSurface, sizeof(NewSurface));
+        Status = DwmDxRegisterSurface(Window, AdapterLuid, &NewSurface,
+                                      Width, Height);
+        if (!NT_SUCCESS(Status))
+            return DwmDxStatusToHresult(Status);
+        DwmDxDestroySurface(FreeSurface);
+        *FreeSurface = NewSurface;
+        Surface = FreeSurface;
+        *Registered = TRUE;
+    }
+
+    *ResultSurface = Surface;
+    return S_OK;
+}
+
+static NTSTATUS
+DwmDxIssueLinearSurface(DWM_DX_SURFACE *Surface,
+                        const LUID *AdapterLuid,
+                        ULONG Width,
+                        ULONG Height,
+                        BOOL Registered,
+                        ULONGLONG *UpdateId)
+{
+    DWM_DX_SURFACE NewSurface;
+    NTSTATUS Status;
+
+    Status = DwmDxIssueSurface(Surface, AdapterLuid, UpdateId);
+    if (Status == STATUS_INVALID_PARAMETER && !Registered &&
+        NT_SUCCESS(DwmDxReregisterSurface(Surface)))
+    {
+        Status = DwmDxIssueSurface(Surface, AdapterLuid, UpdateId);
+    }
+    if (Status == STATUS_INVALID_PARAMETER && !Registered)
+    {
+        RtlZeroMemory(&NewSurface, sizeof(NewSurface));
+        Status = DwmDxRegisterSurface(Surface->Window, AdapterLuid, &NewSurface,
+                                      Width, Height);
+        if (NT_SUCCESS(Status))
+        {
+            DwmDxDestroySurface(Surface);
+            *Surface = NewSurface;
+            Status = DwmDxIssueSurface(Surface, AdapterLuid, UpdateId);
+        }
+    }
+    return Status;
+}
+
 HRESULT WINAPI
 DwmpDxGetWindowSharedSurface(HWND Window,
                              LUID AdapterLuid,
@@ -654,12 +815,12 @@ DwmpDxGetWindowSharedSurface(HWND Window,
                              HANDLE *SharedSurface,
                              ULONGLONG *UpdateId)
 {
-    DWM_DX_SURFACE NewSurface;
-    DWM_DX_SURFACE *Surface = NULL, *FreeSurface = NULL;
+    DWM_DX_SURFACE *Surface;
     RECT ClientRect;
-    ULONG Width, Height, Index;
-    BOOL Registered = FALSE;
+    ULONG Width, Height;
+    BOOL Registered;
     NTSTATUS Status;
+    HRESULT Result;
 
     UNREFERENCED_PARAMETER(Monitor);
 
@@ -704,81 +865,17 @@ DwmpDxGetWindowSharedSurface(HWND Window,
         return E_INVALIDARG;
     }
 
-    Surface = NULL;
     EnterCriticalSection(&g_DxLock);
-    for (Index = 0; Index < DWM_DX_MAX_SURFACES; ++Index)
+    Result = DwmDxPrepareSurface(Window, &AdapterLuid, Width, Height,
+                                 &Surface, &Registered);
+    if (Result != S_OK)
     {
-        if (g_DxSurfaces[Index].Window != NULL &&
-            !IsWindow(g_DxSurfaces[Index].Window))
-        {
-            DwmDxDestroySurface(&g_DxSurfaces[Index]);
-        }
-        if (g_DxSurfaces[Index].Window == Window)
-            Surface = &g_DxSurfaces[Index];
-        if (g_DxSurfaces[Index].Window == NULL && FreeSurface == NULL)
-            FreeSurface = &g_DxSurfaces[Index];
+        LeaveCriticalSection(&g_DxLock);
+        return Result;
     }
 
-    if (Surface != NULL)
-    {
-        DWM_DX_DEVICE *Device = &g_DxDevices[Surface->DeviceIndex];
-
-        if (Surface->Width != Width || Surface->Height != Height ||
-            !DwmDxLuidEqual(&Device->Luid, &AdapterLuid))
-        {
-            if (Surface->ReadyEvent != NULL &&
-                WaitForSingleObject(Surface->ReadyEvent, 0) == WAIT_TIMEOUT)
-            {
-                LeaveCriticalSection(&g_DxLock);
-                return S_FALSE;
-            }
-
-            FreeSurface = Surface;
-            Surface = NULL;
-        }
-    }
-
-    if (Surface == NULL)
-    {
-        if (FreeSurface == NULL)
-        {
-            LeaveCriticalSection(&g_DxLock);
-            return E_OUTOFMEMORY;
-        }
-
-        RtlZeroMemory(&NewSurface, sizeof(NewSurface));
-        Status = DwmDxRegisterSurface(Window, &AdapterLuid, &NewSurface,
-                                      Width, Height);
-        if (!NT_SUCCESS(Status))
-        {
-            LeaveCriticalSection(&g_DxLock);
-            return DwmDxStatusToHresult(Status);
-        }
-
-        DwmDxDestroySurface(FreeSurface);
-        *FreeSurface = NewSurface;
-        Surface = FreeSurface;
-        Registered = TRUE;
-    }
-
-    Status = DwmDxIssueSurface(Surface, &AdapterLuid, UpdateId);
-    if (Status == STATUS_INVALID_PARAMETER && !Registered &&
-        NT_SUCCESS(DwmDxReregisterSurface(Surface)))
-    {
-        Status = DwmDxIssueSurface(Surface, &AdapterLuid, UpdateId);
-    }
-    if (Status == STATUS_INVALID_PARAMETER && !Registered)
-    {
-        RtlZeroMemory(&NewSurface, sizeof(NewSurface));
-        Status = DwmDxRegisterSurface(Window, &AdapterLuid, &NewSurface,
-                                      Width, Height);
-        if (NT_SUCCESS(Status))
-        {
-            DwmDxDestroySurface(Surface);
-            *Surface = NewSurface;
-            Status = DwmDxIssueSurface(Surface, &AdapterLuid, UpdateId);
-        }
-    }
+    Status = DwmDxIssueLinearSurface(Surface, &AdapterLuid, Width, Height,
+                                     Registered, UpdateId);
     if (Status == STATUS_DEVICE_BUSY)
     {
         LeaveCriticalSection(&g_DxLock);
@@ -797,12 +894,13 @@ DwmpDxGetWindowSharedSurface(HWND Window,
     return S_OK;
 }
 
-HRESULT WINAPI
-DwmpDxUpdateWindowSharedSurface(HWND Window,
-                                ULONGLONG UpdateId,
-                                DWORD Flags,
-                                HMONITOR Monitor,
-                                const RECT *UpdateRect)
+static HRESULT
+DwmDxUpdateWindowSharedSurfaceInternal(HWND Window,
+                                       ULONGLONG UpdateId,
+                                       DWORD Flags,
+                                       HMONITOR Monitor,
+                                       const RECT *UpdateRect,
+                                       BOOL AllowPremultiplied)
 {
     DWM_DX_SURFACE_EXCHANGE Exchange;
     NTSTATUS Status;
@@ -810,7 +908,8 @@ DwmpDxUpdateWindowSharedSurface(HWND Window,
     UNREFERENCED_PARAMETER(Monitor);
 
     if (!IsWindow(Window) || UpdateId == 0 ||
-        ((Flags & DWM_DX_UPDATE_CANCEL) == 0 && UpdateRect == NULL))
+        ((Flags & DWM_DX_UPDATE_CANCEL) == 0 && UpdateRect == NULL) ||
+        ((Flags & DWM_DX_UPDATE_PREMULTIPLIED) != 0 && !AllowPremultiplied))
     {
         return E_INVALIDARG;
     }
@@ -844,6 +943,314 @@ DwmpDxUpdateWindowSharedSurface(HWND Window,
     return DwmDxStatusToHresult(Status);
 }
 
+HRESULT WINAPI
+DwmpDxUpdateWindowSharedSurface(HWND Window,
+                                ULONGLONG UpdateId,
+                                DWORD Flags,
+                                HMONITOR Monitor,
+                                const RECT *UpdateRect)
+{
+    return DwmDxUpdateWindowSharedSurfaceInternal(Window, UpdateId, Flags,
+                                                  Monitor, UpdateRect, FALSE);
+}
+
+HRESULT WINAPI
+DwmpDxPublishWindowPixels(HWND Window,
+                          const RECT *DestRect,
+                          const void *Bits,
+                          UINT Pitch,
+                          DWORD Flags)
+{
+    DWM_DX_SURFACE *Surface;
+    D3DKMT_LOCK Lock;
+    D3DKMT_UNLOCK Unlock;
+    RECT ClientRect, Dest;
+    LUID AdapterLuid;
+    ULONGLONG UpdateId = 0;
+    const BYTE *Source;
+    ULONG Width, Height, CopyWidth, CopyHeight;
+    ULONG XOffset, YOffset, Row, Column;
+    BOOL Registered;
+    NTSTATUS Status;
+    HRESULT Result;
+
+    if (Window == NULL || DestRect == NULL || Bits == NULL ||
+        (Flags & ~DWM_DX_PUBLISH_PREMULTIPLIED) != 0 ||
+        DestRect->left >= DestRect->right ||
+        DestRect->top >= DestRect->bottom)
+    {
+        return E_INVALIDARG;
+    }
+    if (!InitOnceExecuteOnce(&g_DxInitOnce, DwmDxInitialize, NULL, NULL))
+        return E_FAIL;
+    if (!IsWindow(Window) || !GetClientRect(Window, &ClientRect))
+        return E_INVALIDARG;
+    if (ClientRect.right <= ClientRect.left ||
+        ClientRect.bottom <= ClientRect.top)
+    {
+        return S_FALSE;
+    }
+
+    Width = (ULONG)(ClientRect.right - ClientRect.left);
+    Height = (ULONG)(ClientRect.bottom - ClientRect.top);
+    if (Width > ~(ULONG)0 / sizeof(ULONG) ||
+        Height > ~(ULONG)0 / (Width * sizeof(ULONG)))
+    {
+        return E_INVALIDARG;
+    }
+
+    Dest.left = max(DestRect->left, ClientRect.left);
+    Dest.top = max(DestRect->top, ClientRect.top);
+    Dest.right = min(DestRect->right, ClientRect.right);
+    Dest.bottom = min(DestRect->bottom, ClientRect.bottom);
+    if (Dest.left >= Dest.right || Dest.top >= Dest.bottom)
+        return S_FALSE;
+    XOffset = (ULONG)(Dest.left - DestRect->left);
+    YOffset = (ULONG)(Dest.top - DestRect->top);
+    CopyWidth = (ULONG)(Dest.right - Dest.left);
+    CopyHeight = (ULONG)(Dest.bottom - Dest.top);
+    if (CopyWidth > Pitch / sizeof(ULONG))
+        return E_INVALIDARG;
+    Source = (const BYTE *)Bits + (SIZE_T)YOffset * Pitch +
+             (SIZE_T)XOffset * sizeof(ULONG);
+
+    Status = DwmDxAdapterLuidForWindow(Window, &AdapterLuid);
+    if (!NT_SUCCESS(Status))
+        return DwmDxStatusToHresult(Status);
+
+    EnterCriticalSection(&g_DxLock);
+    Result = DwmDxPrepareSurface(Window, &AdapterLuid, Width, Height,
+                                 &Surface, &Registered);
+    if (Result == S_OK && !Registered && Surface->ReadyEvent != NULL &&
+        WaitForSingleObject(Surface->ReadyEvent, 0) == WAIT_TIMEOUT)
+    {
+        HANDLE BusyEvent = NULL;
+
+        (void)DuplicateHandle(GetCurrentProcess(), Surface->ReadyEvent,
+                              GetCurrentProcess(), &BusyEvent,
+                              0, FALSE, DUPLICATE_SAME_ACCESS);
+        LeaveCriticalSection(&g_DxLock);
+        if (BusyEvent != NULL)
+        {
+            (void)WaitForSingleObject(BusyEvent, 100);
+            CloseHandle(BusyEvent);
+        }
+        EnterCriticalSection(&g_DxLock);
+        Result = DwmDxPrepareSurface(Window, &AdapterLuid, Width, Height,
+                                     &Surface, &Registered);
+    }
+    if (Result == S_OK)
+        Status = DwmDxIssueLinearSurface(Surface, &AdapterLuid, Width, Height,
+                                         Registered, &UpdateId);
+    if (Result == S_OK && Status == STATUS_DEVICE_BUSY)
+    {
+        HANDLE BusyEvent = NULL;
+
+        if (Surface->ReadyEvent != NULL)
+        {
+            (void)DuplicateHandle(GetCurrentProcess(), Surface->ReadyEvent,
+                                  GetCurrentProcess(), &BusyEvent,
+                                  0, FALSE, DUPLICATE_SAME_ACCESS);
+        }
+        LeaveCriticalSection(&g_DxLock);
+        if (BusyEvent != NULL)
+        {
+            (void)WaitForSingleObject(BusyEvent, 100);
+            CloseHandle(BusyEvent);
+        }
+        EnterCriticalSection(&g_DxLock);
+        Result = DwmDxPrepareSurface(Window, &AdapterLuid, Width, Height,
+                                     &Surface, &Registered);
+        if (Result == S_OK)
+            Status = DwmDxIssueLinearSurface(Surface, &AdapterLuid, Width, Height,
+                                             Registered, &UpdateId);
+    }
+    if (Result != S_OK)
+    {
+        LeaveCriticalSection(&g_DxLock);
+        return Result;
+    }
+    if (Status == STATUS_DEVICE_BUSY)
+    {
+        LeaveCriticalSection(&g_DxLock);
+        return S_FALSE;
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        DwmDxReportFailure("issue_pixels", Status);
+        LeaveCriticalSection(&g_DxLock);
+        return DwmDxStatusToHresult(Status);
+    }
+
+    RtlZeroMemory(&Lock, sizeof(Lock));
+    Lock.hDevice = g_DxDevices[Surface->DeviceIndex].hDevice;
+    Lock.hAllocation = Surface->hAllocation;
+    Lock.Flags.WriteOnly = 1;
+    Lock.Flags.LockEntire = 1;
+    Status = D3DKMTLock(&Lock);
+    if (NT_SUCCESS(Status) && Lock.pData == NULL)
+        Status = STATUS_INVALID_DEVICE_STATE;
+    if (NT_SUCCESS(Status))
+    {
+        BYTE *Target = (BYTE *)Lock.pData;
+
+        RtlZeroMemory(Target, (SIZE_T)Surface->Info.Pitch * Surface->Height);
+        Target += (SIZE_T)(Dest.top - ClientRect.top) * Surface->Info.Pitch +
+                  (SIZE_T)(Dest.left - ClientRect.left) * sizeof(ULONG);
+        for (Row = 0; Row < CopyHeight; ++Row)
+        {
+            const BYTE *SourceRow = Source + (SIZE_T)Row * Pitch;
+            BYTE *TargetRow = Target + (SIZE_T)Row * Surface->Info.Pitch;
+
+            if (Flags & DWM_DX_PUBLISH_PREMULTIPLIED)
+            {
+                RtlCopyMemory(TargetRow, SourceRow, CopyWidth * sizeof(ULONG));
+            }
+            else
+            {
+                for (Column = 0; Column < CopyWidth; ++Column)
+                {
+                    ULONG Pixel;
+
+                    RtlCopyMemory(&Pixel, SourceRow + Column * sizeof(ULONG), sizeof(Pixel));
+                    Pixel |= 0xff000000u;
+                    RtlCopyMemory(TargetRow + Column * sizeof(ULONG), &Pixel, sizeof(Pixel));
+                }
+            }
+        }
+
+        RtlZeroMemory(&Unlock, sizeof(Unlock));
+        Unlock.hDevice = g_DxDevices[Surface->DeviceIndex].hDevice;
+        Unlock.NumAllocations = 1;
+        Unlock.phAllocations = &Surface->hAllocation;
+        Status = D3DKMTUnlock(&Unlock);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        DwmDxReportFailure("lock_pixels", Status);
+        (void)DwmDxUpdateWindowSharedSurfaceInternal(Window, UpdateId,
+                                                     DWM_DX_UPDATE_CANCEL,
+                                                     NULL, NULL, TRUE);
+        LeaveCriticalSection(&g_DxLock);
+        return DwmDxStatusToHresult(Status);
+    }
+
+    {
+        RECT FullRect;
+
+        FullRect.left = 0;
+        FullRect.top = 0;
+        FullRect.right = (LONG)Width;
+        FullRect.bottom = (LONG)Height;
+        Result = DwmDxUpdateWindowSharedSurfaceInternal(Window, UpdateId,
+                                                        DWM_DX_UPDATE_PREMULTIPLIED,
+                                                        NULL, &FullRect, TRUE);
+    }
+    if (Result != S_OK)
+    {
+        (void)DwmDxUpdateWindowSharedSurfaceInternal(Window, UpdateId,
+                                                     DWM_DX_UPDATE_CANCEL,
+                                                     NULL, NULL, TRUE);
+    }
+    LeaveCriticalSection(&g_DxLock);
+    return Result;
+}
+
+HRESULT WINAPI
+DwmpDxRetireWindowPixels(HWND Window)
+{
+    DWM_DX_SURFACE_EXCHANGE Exchange;
+    DWM_DX_SURFACE *Surface = NULL;
+    D3DKMT_HANDLE GlobalShare;
+    ULONG Index;
+    NTSTATUS Status;
+
+    if (Window == NULL)
+        return E_INVALIDARG;
+    if (!InitOnceExecuteOnce(&g_DxInitOnce, DwmDxInitialize, NULL, NULL))
+        return E_FAIL;
+
+    EnterCriticalSection(&g_DxLock);
+    for (Index = 0; Index < DWM_DX_MAX_SURFACES; ++Index)
+    {
+        if (g_DxSurfaces[Index].Window == Window)
+        {
+            Surface = &g_DxSurfaces[Index];
+            break;
+        }
+    }
+    if (Surface == NULL)
+    {
+        LeaveCriticalSection(&g_DxLock);
+        return S_FALSE;
+    }
+
+    RtlZeroMemory(&Exchange, sizeof(Exchange));
+    Exchange.StructSize = sizeof(Exchange);
+    Exchange.Action = DWM_DX_SURFACE_UNREGISTER;
+    Exchange.Window = (ULONGLONG)(ULONG_PTR)Window;
+    Exchange.AdapterLuid = g_DxDevices[Surface->DeviceIndex].Luid;
+    Exchange.GlobalShare = Surface->hGlobalShare;
+    Exchange.Generation = Surface->Generation;
+    GlobalShare = Surface->hGlobalShare;
+    Status = (NTSTATUS)NtUserCallOneParam((DWORD_PTR)&Exchange,
+                                          DWM_ROUTINE_DXSURFACE);
+    if (Status == STATUS_DEVICE_BUSY)
+    {
+        HANDLE BusyEvent = NULL;
+
+        if (Surface->ReadyEvent != NULL)
+        {
+            (void)DuplicateHandle(GetCurrentProcess(), Surface->ReadyEvent,
+                                  GetCurrentProcess(), &BusyEvent,
+                                  0, FALSE, DUPLICATE_SAME_ACCESS);
+        }
+        LeaveCriticalSection(&g_DxLock);
+        if (BusyEvent != NULL)
+        {
+            (void)WaitForSingleObject(BusyEvent, 100);
+            CloseHandle(BusyEvent);
+        }
+        EnterCriticalSection(&g_DxLock);
+        Surface = NULL;
+        for (Index = 0; Index < DWM_DX_MAX_SURFACES; ++Index)
+        {
+            if (g_DxSurfaces[Index].Window == Window &&
+                g_DxSurfaces[Index].hGlobalShare == GlobalShare)
+            {
+                Surface = &g_DxSurfaces[Index];
+                break;
+            }
+        }
+        if (Surface == NULL)
+        {
+            LeaveCriticalSection(&g_DxLock);
+            return S_OK;
+        }
+        Exchange.AdapterLuid = g_DxDevices[Surface->DeviceIndex].Luid;
+        Exchange.GlobalShare = Surface->hGlobalShare;
+        Exchange.Generation = Surface->Generation;
+        Status = (NTSTATUS)NtUserCallOneParam((DWORD_PTR)&Exchange,
+                                              DWM_ROUTINE_DXSURFACE);
+    }
+    if (Status == STATUS_DEVICE_BUSY)
+    {
+        TRACE("Retiring window %p surface while DWM still owns an update; leaving it registered\n", Window);
+        LeaveCriticalSection(&g_DxLock);
+        return S_FALSE;
+    }
+
+    if (NT_SUCCESS(Status) || Status == STATUS_NOT_FOUND)
+    {
+        DwmDxDestroySurface(Surface);
+        LeaveCriticalSection(&g_DxLock);
+        return S_OK;
+    }
+
+    LeaveCriticalSection(&g_DxLock);
+    return DwmDxStatusToHresult(Status);
+}
+
 /*
  * ReactOS extension: publishes a producer-owned client buffer, retained.
  * DWM samples it in place and sets ReleaseEvent once no frame reads it.
@@ -864,7 +1271,8 @@ DwmpDxPublishWindowSurface(HWND Window,
 
     if (!IsWindow(Window) || SharedSurface == NULL ||
         (ULONG_PTR)SharedSurface > MAXULONG || ReleaseEvent == NULL ||
-        Width == 0 || Height == 0 || (Flags & ~DWM_DX_PUBLISH_SCANOUT) != 0)
+        Width == 0 || Height == 0 ||
+        (Flags & ~(DWM_DX_PUBLISH_SCANOUT | DWM_DX_PUBLISH_PREMULTIPLIED)) != 0)
     {
         return E_INVALIDARG;
     }
