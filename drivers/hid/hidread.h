@@ -65,13 +65,12 @@ HidReadReserve(
 }
 
 static VOID
-HidReadSubmit(
-    PHID_READ_STATE Read)
+HidReadSubmitLocked(
+    PHID_READ_STATE Read,
+    KIRQL OldIrql)
 {
     PIO_STACK_LOCATION Stack;
-    KIRQL OldIrql;
 
-    KeAcquireSpinLock(&Read->Lock, &OldIrql);
     for (;;)
     {
         ASSERT(Read->Submitting && Read->Active && !Read->InFlight);
@@ -110,6 +109,16 @@ HidReadSubmit(
     KeReleaseSpinLock(&Read->Lock, OldIrql);
 }
 
+static inline VOID
+HidReadSubmit(
+    PHID_READ_STATE Read)
+{
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Read->Lock, &OldIrql);
+    HidReadSubmitLocked(Read, OldIrql);
+}
+
 static inline BOOLEAN
 HidReadBeginCompletion(
     PHID_READ_STATE Read,
@@ -132,7 +141,6 @@ HidReadEndCompletion(
     BOOLEAN Continue)
 {
     KIRQL OldIrql;
-    BOOLEAN Submit = FALSE;
 
     KeAcquireSpinLock(&Read->Lock, &OldIrql);
     ASSERT(Read->Active && !Read->InFlight);
@@ -148,12 +156,11 @@ HidReadEndCompletion(
     }
     else
     {
-        Read->Submitting = Submit = TRUE;
+        Read->Submitting = TRUE;
+        HidReadSubmitLocked(Read, OldIrql);
+        return STATUS_MORE_PROCESSING_REQUIRED;
     }
     KeReleaseSpinLock(&Read->Lock, OldIrql);
-
-    if (Submit)
-        HidReadSubmit(Read);
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
