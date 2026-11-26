@@ -11,6 +11,7 @@
 #include <winbase_undoc.h>
 #include "dcomposition.h"
 #include "composition.h"
+#include "drivers/wddm/wddm_bridge.h"
 
 #define NDEBUG
 #include <debug.h>
@@ -354,6 +355,8 @@ InitProcessCallback(PEPROCESS Process)
         goto error;
     }
 
+    WddmHandOverProcessCallout(&ppiCurrent->DxgProcess, TRUE);
+
     return STATUS_SUCCESS;
 
 error:
@@ -390,6 +393,8 @@ ExitProcessCallback(PEPROCESS Process)
     }
     ASSERT(*pppi == ppiCurrent);
     *pppi = ppiCurrent->ppiNext;
+
+    WddmHandOverProcessCallout(&ppiCurrent->DxgProcess, FALSE);
 
     /* Retire compositor ownership and channel mappings before GDI teardown. */
     IntCompositionCleanupProcess(Process);

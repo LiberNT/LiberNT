@@ -786,7 +786,10 @@ WddmBridgeInit(VOID)
     {
         DPRINT1("WddmBridgeInit: interface exchange failed with 0x%08lX\n", Status);
         if (Status == STATUS_INVALID_DEVICE_REQUEST)
+        {
             WddmBridgeBindProviderServices(FileObject, DeviceObject);
+            WddmHandOverInit(DeviceObject);
+        }
         ObDereferenceObject(FileObject);
         g_WddmBridgeStatus = Status;
         WddmBridgeReleaseLock();

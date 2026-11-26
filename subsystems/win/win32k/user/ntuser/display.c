@@ -163,7 +163,7 @@ InitVideo(VOID)
     if (gbBaseVideo)
         ERR("VGA mode requested.\n");
 
-    if (WddmBridgeIsProviderBound())
+    if (WddmBridgeIsProviderBound() && !WddmHandOverIsActive())
     {
         UNICODE_STRING FirmwareDisplay = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\uefifb");
 

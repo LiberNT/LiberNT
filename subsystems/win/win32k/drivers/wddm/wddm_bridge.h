@@ -16,6 +16,10 @@ NTSTATUS WddmBridgeGetStatus(VOID);
 NTSTATUS WddmBridgeRequireReady(VOID);
 BOOLEAN  WddmBridgeIsReady(VOID);
 BOOLEAN  WddmBridgeIsProviderBound(VOID);
+NTSTATUS WddmHandOverInit(_In_ PDEVICE_OBJECT DeviceObject);
+BOOLEAN  WddmHandOverIsActive(VOID);
+VOID     WddmHandOverProcessCallout(_Inout_ PVOID *DxgProcess, _In_ BOOLEAN Create);
+NTSTATUS WddmHandOverStartSession(_Inout_ PVOID *CsrDxgProcess);
 ULONG    WddmBridgeGetInterfaceVersion(VOID);
 NTSTATUS WddmBridgeGetInterface(_Out_ PREACTOS_WIN32K_DXGKRNL_INTERFACE Interface);
 

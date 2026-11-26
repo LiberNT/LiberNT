@@ -193,6 +193,29 @@ WddmBridgeIsProviderBound(VOID)
     return FALSE;
 }
 
+BOOLEAN
+WddmHandOverIsActive(VOID)
+{
+    return FALSE;
+}
+
+VOID
+WddmHandOverProcessCallout(
+    _Inout_ PVOID *DxgProcess,
+    _In_ BOOLEAN Create)
+{
+    UNREFERENCED_PARAMETER(DxgProcess);
+    UNREFERENCED_PARAMETER(Create);
+}
+
+NTSTATUS
+WddmHandOverStartSession(
+    _Inout_ PVOID *CsrDxgProcess)
+{
+    UNREFERENCED_PARAMETER(CsrDxgProcess);
+    return STATUS_SUCCESS;
+}
+
 VOID
 WddmBridgeInitCallbacks(
     _Out_ PREACTOS_WIN32K_DXGKRNL_INTERFACE Interface)

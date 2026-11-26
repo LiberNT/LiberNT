@@ -287,6 +287,9 @@ if(USE_DIBLIB)
 endif()
 
 add_importlibs(win32k ntoskrnl hal ftfd hidparse)
+if(REACTOS_USE_WDDM)
+    add_importlibs(win32k watchdog)
+endif()
 add_pch(win32k pch.h SOURCE)
 add_cd_file(TARGET win32k DESTINATION reactos/system32 FOR all)
 
