@@ -176,7 +176,7 @@ START_TEST(ExportStubs)
         ok(OldProtect == PAGE_READWRITE, "old protection %#lx\n", OldProtect);
         ok(VirtualQuery(Memory, &Info, sizeof(Info)) == sizeof(Info), "VirtualQuery failed with %lu\n", GetLastError());
         ok(Info.Protect == PAGE_READONLY, "protection %#lx\n", Info.Protect);
-        ok(Info.RegionSize == 0x1000, "region size %#Ix\n", Info.RegionSize);
+        ok(Info.RegionSize == 0x1000, "region size %#Ix\n", (UINT_PTR)Info.RegionSize);
         ok(Memory[0] == 0x5A && Memory[0xFFFF] == 0xA5, "contents changed\n");
         ok(pVirtualFree(Memory, 0, MEM_RELEASE), "VirtualFree through the export walk failed with %lu\n", GetLastError());
         ok(VirtualQuery(Memory, &Info, sizeof(Info)) == sizeof(Info), "VirtualQuery after release failed with %lu\n", GetLastError());
