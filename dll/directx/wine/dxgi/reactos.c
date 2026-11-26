@@ -340,11 +340,11 @@ static unsigned int dxgi_get_wddm_adapter_priority(const D3DKMT_ADAPTERINFO *ada
 
     /* A software display fallback must not hide a separately started hardware
      * render adapter from clients which select the first DXGI adapter. */
+    if (!adapter_type.RenderSupported)
+        return 3;
     if (adapter_type.SoftwareDevice)
         return 2;
-    if (adapter_type.RenderSupported)
-        return 0;
-    return 1;
+    return 0;
 }
 
 DXGI_GPU_PREFERENCE dxgi_get_user_gpu_preference(void)
