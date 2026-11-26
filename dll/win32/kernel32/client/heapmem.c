@@ -1352,10 +1352,11 @@ BOOL
 NTAPI
 GlobalMemoryStatusEx(LPMEMORYSTATUSEX lpBuffer)
 {
-    SYSTEM_PERFORMANCE_INFORMATION PerformanceInfo;
-    VM_COUNTERS VmCounters;
-    QUOTA_LIMITS QuotaLimits;
-    ULONGLONG PageFile, PhysicalMemory;
+    SYSTEM_PERFORMANCE_INFORMATION Performance;
+    SYSTEM_BASIC_INFORMATION Basic;
+    VM_COUNTERS Counters;
+    QUOTA_LIMITS Quota;
+    ULONGLONG PageSize, CommitLeft, QuotaLeft;
     NTSTATUS Status;
 
     if (lpBuffer->dwLength != sizeof(*lpBuffer))
@@ -1364,77 +1365,39 @@ GlobalMemoryStatusEx(LPMEMORYSTATUSEX lpBuffer)
         return FALSE;
     }
 
-    /* Query performance information */
-    Status = NtQuerySystemInformation(SystemPerformanceInformation,
-                                      &PerformanceInfo,
-                                      sizeof(PerformanceInfo),
-                                      NULL);
+    /* The user address range is the calling process's own; a WoW64 process sees its 2 GB or 4 GB limit here. */
+    Status = NtQuerySystemInformation(SystemBasicInformation, &Basic, sizeof(Basic), NULL);
+    if (NT_SUCCESS(Status))
+        Status = NtQuerySystemInformation(SystemPerformanceInformation, &Performance, sizeof(Performance), NULL);
+    if (NT_SUCCESS(Status))
+        Status = NtQueryInformationProcess(NtCurrentProcess(), ProcessQuotaLimits, &Quota, sizeof(Quota), NULL);
+    if (NT_SUCCESS(Status))
+        Status = NtQueryInformationProcess(NtCurrentProcess(), ProcessVmCounters, &Counters, sizeof(Counters), NULL);
     if (!NT_SUCCESS(Status))
     {
         BaseSetLastNTError(Status);
         return FALSE;
     }
 
-    /* Calculate memory load */
-    lpBuffer->dwMemoryLoad = ((DWORD)(BaseStaticServerData->SysInfo.NumberOfPhysicalPages -
-                                      PerformanceInfo.AvailablePages) * 100) /
-                                      BaseStaticServerData->SysInfo.NumberOfPhysicalPages;
+    ASSERT(Basic.NumberOfPhysicalPages != 0);
+    ASSERT(Basic.MaximumUserModeAddress > Basic.MinimumUserModeAddress);
+    PageSize = Basic.PageSize;
+    lpBuffer->dwMemoryLoad = (DWORD)(((ULONGLONG)(Basic.NumberOfPhysicalPages - min(Performance.AvailablePages,
+                                                                                    Basic.NumberOfPhysicalPages)) * 100) /
+                                     Basic.NumberOfPhysicalPages);
+    lpBuffer->ullTotalPhys = (ULONGLONG)Basic.NumberOfPhysicalPages * PageSize;
+    lpBuffer->ullAvailPhys = (ULONGLONG)Performance.AvailablePages * PageSize;
 
-    /* Save physical memory */
-    PhysicalMemory = (ULONGLONG)BaseStaticServerData->SysInfo.NumberOfPhysicalPages *
-                     BaseStaticServerData->SysInfo.PageSize;
-    lpBuffer->ullTotalPhys = PhysicalMemory;
+    lpBuffer->ullTotalPageFile = min((ULONGLONG)Quota.PagefileLimit, (ULONGLONG)Performance.CommitLimit) * PageSize;
+    CommitLeft = Performance.CommitLimit > Performance.CommittedPages ?
+                 Performance.CommitLimit - Performance.CommittedPages : 0;
+    QuotaLeft = Quota.PagefileLimit > Counters.PagefileUsage ? Quota.PagefileLimit - Counters.PagefileUsage : 0;
+    lpBuffer->ullAvailPageFile = min(CommitLeft, QuotaLeft) * PageSize;
 
-    /* Now save available physical memory */
-    PhysicalMemory = (ULONGLONG)PerformanceInfo.AvailablePages *
-                     BaseStaticServerData->SysInfo.PageSize;
-    lpBuffer->ullAvailPhys = PhysicalMemory;
-
-    /* Query VM and Quota Limits */
-    Status = NtQueryInformationProcess(NtCurrentProcess(),
-                                       ProcessQuotaLimits,
-                                       &QuotaLimits,
-                                       sizeof(QUOTA_LIMITS),
-                                       NULL);
-    if (!NT_SUCCESS(Status))
-    {
-        BaseSetLastNTError(Status);
-        return FALSE;
-    }
-
-    Status = NtQueryInformationProcess(NtCurrentProcess(),
-                                       ProcessVmCounters,
-                                       &VmCounters,
-                                       sizeof(VM_COUNTERS),
-                                       NULL);
-    if (!NT_SUCCESS(Status))
-    {
-        BaseSetLastNTError(Status);
-        return FALSE;
-    }
-
-    /* Save the commit limit */
-    lpBuffer->ullTotalPageFile = min(QuotaLimits.PagefileLimit,
-                                     PerformanceInfo.CommitLimit);
-    lpBuffer->ullTotalPageFile *= BaseStaticServerData->SysInfo.PageSize;
-
-    /* Calculate how many pages are left */
-    PageFile = PerformanceInfo.CommitLimit - PerformanceInfo.CommittedPages;
-
-    /* Save the total */
-    lpBuffer->ullAvailPageFile = min(PageFile,
-                                     QuotaLimits.PagefileLimit -
-                                     VmCounters.PagefileUsage);
-    lpBuffer->ullAvailPageFile *= BaseStaticServerData->SysInfo.PageSize;
-
-    /* Now calculate the total virtual space */
-    lpBuffer->ullTotalVirtual = (BaseStaticServerData->SysInfo.MaximumUserModeAddress -
-                                 BaseStaticServerData->SysInfo.MinimumUserModeAddress) + 1;
-
-    /* And finally the available virtual space */
-    lpBuffer->ullAvailVirtual = lpBuffer->ullTotalVirtual - VmCounters.VirtualSize;
+    lpBuffer->ullTotalVirtual = (ULONGLONG)(Basic.MaximumUserModeAddress - Basic.MinimumUserModeAddress) + 1;
+    lpBuffer->ullAvailVirtual = lpBuffer->ullTotalVirtual > Counters.VirtualSize ?
+                                lpBuffer->ullTotalVirtual - Counters.VirtualSize : 0;
     lpBuffer->ullAvailExtendedVirtual = 0;
-
     return TRUE;
 }
 
