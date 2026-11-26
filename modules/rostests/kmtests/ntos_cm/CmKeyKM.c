@@ -587,3 +587,50 @@ START_TEST(CmKeyKM)
     TestNewHiveRootSecurity();
     TestMachineRootFlush();
 }
+
+static
+VOID
+TestStableKeyUnderVolatileParent(
+    _In_ PCWSTR ParentName,
+    _In_ PCWSTR ChildName,
+    _In_ BOOLEAN MakeParent,
+    _In_ NTSTATUS ExpectedStatus)
+{
+    HANDLE Parent = NULL;
+    HANDLE Child = NULL;
+    ULONG Disposition = 0;
+    UNICODE_STRING Name;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    NTSTATUS Status;
+
+    RtlInitUnicodeString(&Name, ParentName);
+    InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
+    if (MakeParent)
+        Status = ZwCreateKey(&Parent, KEY_ALL_ACCESS, &ObjectAttributes, 0, NULL, REG_OPTION_VOLATILE, NULL);
+    else
+        Status = ZwOpenKey(&Parent, KEY_ALL_ACCESS, &ObjectAttributes);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    RtlInitUnicodeString(&Name, ChildName);
+    InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, Parent, NULL);
+    Status = ZwCreateKey(&Child, KEY_ALL_ACCESS, &ObjectAttributes, 0, NULL, REG_OPTION_NON_VOLATILE, &Disposition);
+    ok(Status == ExpectedStatus, "a stable key under %ls: 0x%08lx, expected 0x%08lx\n", ParentName, Status, ExpectedStatus);
+    if (NT_SUCCESS(Status))
+    {
+        ok_eq_ulong(Disposition, (ULONG)REG_CREATED_NEW_KEY);
+        ZwDeleteKey(Child);
+        ZwClose(Child);
+    }
+
+    if (MakeParent)
+        ZwDeleteKey(Parent);
+    ZwClose(Parent);
+}
+
+START_TEST(CmVolatileParent)
+{
+    TestStableKeyUnderVolatileParent(L"\\Registry\\Machine\\HARDWARE\\DEVICEMAP", L"KmtStableChild", FALSE, STATUS_SUCCESS);
+    TestStableKeyUnderVolatileParent(L"\\Registry\\Machine\\SOFTWARE\\KmtVolatileParent", L"KmtStableChild", TRUE, STATUS_CHILD_MUST_BE_VOLATILE);
+}

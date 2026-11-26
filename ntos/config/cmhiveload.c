@@ -312,7 +312,6 @@ CmpFindLoadedHive(
 }
 
 /* FIXME: the hardware tree lives in the master hive instead of a volatile hive of its own */
-static
 BOOLEAN
 CmpIsHardwareTree(
     _In_ PCM_KEY_CONTROL_BLOCK Kcb)

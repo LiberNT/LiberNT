@@ -424,7 +424,11 @@ CmpDoCreate(
     if (HvGetCellType(Cell) == Volatile && StorageType == Stable &&
         CmpTransParentStorage(ParentKcb, Transaction, Volatile) != Stable)
     {
-        return STATUS_CHILD_MUST_BE_VOLATILE;
+        if (Hive != &CmiVolatileHive->Hive || !CmpIsHardwareTree(ParentKcb))
+            return STATUS_CHILD_MUST_BE_VOLATILE;
+
+        /* FIXME: the hardware tree is kept in volatile storage of the master hive, so its stable keys are made volatile */
+        StorageType = Volatile;
     }
 
     /*
