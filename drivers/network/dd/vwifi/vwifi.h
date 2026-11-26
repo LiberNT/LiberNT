@@ -142,6 +142,7 @@ typedef struct _VWIFI_ADAPTER
     /* Scan OID pending async completion via NdisMOidRequestComplete.
      * Guarded by Lock; at most one scan outstanding. */
     PNDIS_OID_REQUEST PendingScanOid;
+    PNDIS_OID_REQUEST PendingDisconnectOid;
 
     /* Statistics. */
     ULONG64 TxOkCount;
@@ -171,6 +172,7 @@ NDIS_TIMER_FUNCTION       VWifiEngineTimerDpc;
 NDIS_IO_WORKITEM_FUNCTION VWifiEngineWorker;
 BOOLEAN VWifiScheduleJob(IN PVWIFI_ADAPTER Adapter, IN VWIFI_JOB Job, IN ULONG DelayMs);
 VOID VWifiCompletePendingScan(IN PVWIFI_ADAPTER Adapter, IN NDIS_STATUS Status);
+VOID VWifiCompletePendingDisconnect(IN PVWIFI_ADAPTER Adapter, IN NDIS_STATUS Status);
 LONG VWifiFindDesiredBss(IN PVWIFI_ADAPTER Adapter);
 VOID VWifiInitFakeBssList(IN PVWIFI_ADAPTER Adapter);
 ULONG VWifiBuildBssList(IN PVWIFI_ADAPTER Adapter, OUT PUCHAR Buffer, IN ULONG BufferLength,

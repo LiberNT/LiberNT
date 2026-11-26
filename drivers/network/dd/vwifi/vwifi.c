@@ -236,6 +236,7 @@ VWifiMiniportHaltEx(
     }
 
     VWifiCompletePendingScan(Adapter, NDIS_STATUS_FAILURE);
+    VWifiCompletePendingDisconnect(Adapter, NDIS_STATUS_FAILURE);
 
     if (Adapter->EngineWorkItem)
     {
@@ -277,6 +278,7 @@ VWifiMiniportPauseEx(
     }
 
     VWifiCompletePendingScan(Adapter, NDIS_STATUS_FAILURE);
+    VWifiCompletePendingDisconnect(Adapter, NDIS_STATUS_FAILURE);
 
     return NDIS_STATUS_SUCCESS;
 }
