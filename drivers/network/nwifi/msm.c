@@ -940,8 +940,12 @@ NDIS_STATUS
 NwifiMsmDisconnect(
     _In_ PNWIFI_MSM Msm)
 {
+    NDIS_STATUS Status;
+
     NwifiSupplicantStop(Msm);
-    return NwifiMsmDisconnectLower(Msm, NwifiNotifyDisconnected, NDIS_STATUS_SUCCESS);
+    Status = NwifiMsmDisconnectLower(Msm, NwifiNotifyDisconnected, NDIS_STATUS_SUCCESS);
+    /* A miniport that is not connected fails OID_DOT11_DISCONNECT_REQUEST with NDIS_STATUS_INVALID_STATE. */
+    return (Status == NDIS_STATUS_INVALID_STATE) ? NDIS_STATUS_SUCCESS : Status;
 }
 
 static
