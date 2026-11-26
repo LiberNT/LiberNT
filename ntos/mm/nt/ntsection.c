@@ -3432,6 +3432,8 @@ NtQuerySection(
 
             if (Section->Control->FileObject != NULL)
                 Basic->Attributes = (Basic->Attributes & ~(SEC_COMMIT | SEC_RESERVE)) | SEC_FILE;
+            if (Section->Control->Image)
+                Basic->Attributes &= ~SEC_NOCACHE;
         }
         else if (!Section->Control->Image)
         {
