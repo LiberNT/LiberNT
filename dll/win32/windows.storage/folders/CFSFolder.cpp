@@ -1321,6 +1321,23 @@ HRESULT WINAPI CFSFolder::BindToStorage(
     return E_NOTIMPL;
 }
 
+ULONGLONG CFSFolder::_GetItemSize(PCUITEMID_CHILD pidl)
+{
+    WCHAR szName[MAX_PATH], szPath[MAX_PATH];
+    WIN32_FILE_ATTRIBUTE_DATA Data;
+    LPCWSTR pszName;
+
+    if (!(_ILGetFSType(pidl) & PT_FS_FILE_FLAG))
+        return 0;
+    pszName = GetItemFileName(pidl, szName, _countof(szName));
+    if (m_sPathTarget && pszName && PathCombineW(szPath, m_sPathTarget, pszName) &&
+        GetFileAttributesExW(szPath, GetFileExInfoStandard, &Data))
+    {
+        return ((ULONGLONG)Data.nFileSizeHigh << 32) | Data.nFileSizeLow;
+    }
+    return _ILGetFileSize(pidl, NULL, 0);
+}
+
 /**************************************************************************
 *  CFSFolder::CompareIDs
 */
@@ -1349,13 +1366,11 @@ HRESULT WINAPI CFSFolder::CompareIDs(LPARAM lParam,
             result = CompareUiStrings(pszName1, pszName2, lParam);
             break;
         case SHFSF_COL_SIZE:
-            if (pData1->u.file.dwFileSize > pData2->u.file.dwFileSize)
-                result = 1;
-            else if (pData1->u.file.dwFileSize < pData2->u.file.dwFileSize)
-                result = -1;
-            else
-                result = 0;
+        {
+            ULONGLONG Size1 = _GetItemSize(pidl1), Size2 = _GetItemSize(pidl2);
+            result = Size1 > Size2 ? 1 : Size1 < Size2 ? -1 : 0;
             break;
+        }
         case SHFSF_COL_TYPE:
         {
             SHFILEINFOW info1, info2;
@@ -1968,8 +1983,8 @@ HRESULT WINAPI CFSFolder::GetDetailsEx(PCUITEMID_CHILD pidl, const SHCOLUMNID *p
             case PID_STG_NAME: // Handled directly here for faster performance
                 return SHELL_GetDetailsOfAsStringVariant(static_cast<IShellFolder2*>(this), pidl, SHFSF_COL_NAME, pv);
             case PID_STG_SIZE:
-                V_VT(pv) = VT_UI4;
-                V_UI4(pv) = _ILGetFileSize(pidl, NULL, 0);
+                V_VT(pv) = VT_UI8;
+                V_UI8(pv) = _GetItemSize(pidl);
                 return S_OK;
             case PID_STG_ATTRIBUTES:
                 V_VT(pv) = VT_UI4;
@@ -2018,7 +2033,10 @@ HRESULT WINAPI CFSFolder::GetDetailsOf(PCUITEMID_CHILD pidl,
                 hr = GetDisplayNameOf(pidl, SHGDN_NORMAL | SHGDN_INFOLDER, &psd->str);
                 break;
             case SHFSF_COL_SIZE:
-                _ILGetFileSize(pidl, psd->str.pOleStr, MAX_PATH);
+                if (_ILGetFSType(pidl) & PT_FS_FILE_FLAG)
+                    StrFormatKBSizeW(_GetItemSize(pidl), psd->str.pOleStr, MAX_PATH);
+                else
+                    *psd->str.pOleStr = UNICODE_NULL;
                 break;
             case SHFSF_COL_TYPE:
                 GetItemDescription(pidl, psd->str.pOleStr, MAX_PATH);
