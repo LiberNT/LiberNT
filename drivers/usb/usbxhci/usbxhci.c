@@ -1557,9 +1557,6 @@ XHCI_ConfigurePortLpm(
     _Inout_ PXHCI_EXTENSION Extension,
     _In_ USHORT Port)
 {
-    ULONG U1Timeout;
-    ULONG U2Timeout;
-
     if (!Extension)
         return;
 
@@ -1571,22 +1568,8 @@ XHCI_ConfigurePortLpm(
     if (!XHCI_PortIsSuperSpeed(Extension, Port))
         return;
 
-    /*
-     * Use the hardware-advertised maximum exit latencies from HCS3 as a
-     * conservative baseline for per-port U1/U2 timeouts.  These fields
-     * describe the host controller's contribution; the actual link exit
-     * latencies also depend on downstream hubs and devices, but larger
-     * timeout values are always safe (they simply reduce LPM aggressiveness).
-     */
-    U1Timeout = Extension->MaxU1ExitLatency;
-    U2Timeout = Extension->MaxU2ExitLatency;
-
-    if (U1Timeout > 0xFF)
-        U1Timeout = 0xFF;
-    if (U2Timeout > 0xFFFF)
-        U2Timeout = 0xFFFF;
-
-    XHCI_SetPortLpmTimeouts(Extension, Port, U1Timeout, U2Timeout);
+    /* TODO: U1/U2 need SET_SEL, per-device exit latencies, the slot Max Exit Latency and no-LPM device quirks; until then timeouts of 0 keep them disabled */
+    XHCI_SetPortLpmTimeouts(Extension, Port, 0, 0);
 }
 
 static
@@ -1680,68 +1663,6 @@ XHCI_ResumePorts(
     }
 
     XHCI_ConfigureAllPortsLpm(Extension);
-}
-
-static
-VOID
-XHCI_ApplyEndpointLpmPolicy(
-    _Inout_ PXHCI_EXTENSION Extension,
-    _In_ const USBPORT_ENDPOINT_PROPERTIES *EndpointProperties)
-{
-    ULONG LpmInfo;
-    ULONG U1Timeout;
-    ULONG U2Timeout;
-    UCHAR U1ExitLatency;
-    USHORT U2ExitLatency;
-    BOOLEAN AllowU1;
-    BOOLEAN AllowU2;
-
-    if (!Extension || !EndpointProperties)
-        return;
-
-    if (EndpointProperties->DeviceSpeed != UsbSuperSpeed)
-        return;
-
-    LpmInfo = EndpointProperties->Reserved3;
-    if ((LpmInfo & USBPORT_EP_LPM_VALID) == 0)
-        return;
-
-    if (Extension->Quirks & XHCI_QUIRK_LIMIT_U1U2)
-        return;
-
-    if (Extension->MaxU1ExitLatency == 0 && Extension->MaxU2ExitLatency == 0)
-        return;
-
-    AllowU1 = (LpmInfo & USBPORT_EP_LPM_ALLOW_U1) != 0;
-    AllowU2 = (LpmInfo & USBPORT_EP_LPM_ALLOW_U2) != 0;
-    U1ExitLatency = (UCHAR)((LpmInfo & USBPORT_EP_LPM_U1_MASK) >> USBPORT_EP_LPM_U1_SHIFT);
-    U2ExitLatency = (USHORT)((LpmInfo & USBPORT_EP_LPM_U2_MASK) >> USBPORT_EP_LPM_U2_SHIFT);
-
-    U1Timeout = 0;
-    U2Timeout = 0;
-
-    if (AllowU1 && Extension->MaxU1ExitLatency != 0)
-    {
-        U1Timeout = (U1ExitLatency != 0) ? U1ExitLatency : 1;
-        if (U1Timeout > Extension->MaxU1ExitLatency)
-            U1Timeout = Extension->MaxU1ExitLatency;
-        if (U1Timeout > 0xFF)
-            U1Timeout = 0xFF;
-    }
-
-    if (AllowU2 && Extension->MaxU2ExitLatency != 0)
-    {
-        U2Timeout = (U2ExitLatency != 0) ? U2ExitLatency : 1;
-        if (U2Timeout > Extension->MaxU2ExitLatency)
-            U2Timeout = Extension->MaxU2ExitLatency;
-        if (U2Timeout > 0xFFFF)
-            U2Timeout = 0xFFFF;
-    }
-
-    XHCI_SetPortLpmTimeouts(Extension,
-                            EndpointProperties->PortNumber,
-                            U1Timeout,
-                            U2Timeout);
 }
 
 static
@@ -13828,7 +13749,6 @@ XHCI_PerformEndpointOpen(PXHCI_EXTENSION Extension,
     XHCI_InitEndpointTransferState(XhciEndpoint);
     XhciEndpoint->Extension = Extension;
     XhciEndpoint->EndpointProperties = *EndpointProperties;
-    XHCI_ApplyEndpointLpmPolicy(Extension, EndpointProperties);
     IsDefaultPipe = (EndpointProperties->EndpointAddress == 0 &&
                      EndpointProperties->TransferType == USBPORT_TRANSFER_TYPE_CONTROL);
 
