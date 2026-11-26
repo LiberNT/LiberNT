@@ -996,6 +996,23 @@ VolumeCheck::KeepListEntry(_In_ void* Context, _In_ const AttributeListEx* Entry
 void
 VolumeCheck::CheckAttributeLists()
 {
+    PULONG FirstExtension = new(PagedPool, TAG_NTFS) ULONG[(ULONG)RecordCount];
+    PULONG NextExtension = new(PagedPool, TAG_NTFS) ULONG[(ULONG)RecordCount];
+
+    if (FirstExtension && NextExtension)
+    {
+        for (ULONGLONG Number = 0; Number < RecordCount; Number++)
+            FirstExtension[Number] = MAXULONG;
+        for (ULONGLONG Number = RecordCount; Number-- > 0;)
+        {
+            if (ExtensionOwner[Number] == 0)
+                continue;
+            ASSERT(ExtensionOwner[Number] - 1 < RecordCount);
+            NextExtension[Number] = FirstExtension[ExtensionOwner[Number] - 1];
+            FirstExtension[ExtensionOwner[Number] - 1] = (ULONG)Number;
+        }
+    }
+
     for (ULONGLONG Number = 0; Number < RecordCount; Number++)
     {
         ListFilterContext Filter = { this, Number };
@@ -1009,6 +1026,30 @@ VolumeCheck::CheckAttributeLists()
         if (!NT_SUCCESS(V->MFT->GetFileRecord((ULONG)Number, &File)))
             continue;
 
+        /* An extension that still names this file as its base keeps its attributes listed, even when a torn update left the list pointing elsewhere. */
+        for (ULONG Extension = FirstExtension && NextExtension ? FirstExtension[Number] : MAXULONG;
+             Extension != MAXULONG;
+             Extension = NextExtension[Extension])
+        {
+            PFileRecord ExtensionFile;
+            ULONG Missing;
+
+            ASSERT(ExtensionOwner[Extension] == (ULONG)Number + 1);
+            if (!NT_SUCCESS(V->MFT->GetFileRecord(Extension, &ExtensionFile)))
+                continue;
+            if (NT_SUCCESS(File->RestoreAttributeListEntries(ExtensionFile, KeepListEntry, &Filter, FALSE, &Missing)) && Missing)
+            {
+                Event(NtfsCheckAttributeListBad, Number, Missing);
+                if (RepairRecords &&
+                    NT_SUCCESS(File->RestoreAttributeListEntries(ExtensionFile, KeepListEntry, &Filter, TRUE, &Missing)))
+                {
+                    Out->Errors--;
+                    Out->RepairedAttributeLists++;
+                    Event(NtfsCheckAttributeListFixed, Number, Missing);
+                }
+            }
+            delete ExtensionFile;
+        }
         Status = File->FilterAttributeList(KeepListEntry, &Filter, FALSE, &Dropped, &DroppedNames, &DroppedData);
         if (NT_SUCCESS(Status) && Dropped)
         {
@@ -1023,8 +1064,12 @@ VolumeCheck::CheckAttributeLists()
                     Event(NtfsCheckDataAttributeInserted, Number, 0);
             }
         }
+
+        /* TODO: verify that the listed segments of each non-resident attribute cover it without a gap; a lost extension record still leaves a hole */
         delete File;
     }
+    delete[] FirstExtension;
+    delete[] NextExtension;
     if (RepairRecords)
         V->FlushVolume();
 }
