@@ -32,6 +32,7 @@ HRESULT d3d11_native_on12_create_device(IUnknown *device, UINT flags,
         D3D_FEATURE_LEVEL *obtained_feature_level);
 HRESULT d3d11_native_create_device(IDXGIAdapter *adapter, UINT flags,
         const D3D_FEATURE_LEVEL *levels, UINT count, ID3D11Device **out);
+BOOL d3d11_native_adapter_is_software_render(IDXGIAdapter *adapter);
 #endif
 
 static const char *debug_d3d_driver_type(D3D_DRIVER_TYPE driver_type)
@@ -339,8 +340,11 @@ static HRESULT d3d11_create_device(IDXGIAdapter *adapter, D3D_DRIVER_TYPE driver
         levels = ARRAY_SIZE(default_feature_levels);
     }
 #if defined(__REACTOS__) && defined(REACTOS_D3D11_NATIVE_UMD)
-    hr = driver_type != D3D_DRIVER_TYPE_HARDWARE && driver_type != D3D_DRIVER_TYPE_UNKNOWN ? DXGI_ERROR_UNSUPPORTED
-            : d3d11_native_create_device(adapter, flags, feature_levels, levels, &device);
+    if (driver_type == D3D_DRIVER_TYPE_HARDWARE || driver_type == D3D_DRIVER_TYPE_UNKNOWN
+            || (driver_type == D3D_DRIVER_TYPE_WARP && d3d11_native_adapter_is_software_render(adapter)))
+        hr = d3d11_native_create_device(adapter, flags, feature_levels, levels, &device);
+    else
+        hr = DXGI_ERROR_UNSUPPORTED;
     if (hr == DXGI_ERROR_UNSUPPORTED)
 #endif
         hr = D3D11CoreCreateDevice(factory, adapter, flags, feature_levels, levels, &device);

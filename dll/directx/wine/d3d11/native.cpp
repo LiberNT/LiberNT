@@ -5385,6 +5385,26 @@ void STDMETHODCALLTYPE NativeContext::Flush() { if (deferred) return; NativeLock
 D3D11_DEVICE_CONTEXT_TYPE STDMETHODCALLTYPE NativeContext::GetType() { return deferred ? D3D11_DEVICE_CONTEXT_DEFERRED : D3D11_DEVICE_CONTEXT_IMMEDIATE; }
 UINT STDMETHODCALLTYPE NativeContext::GetContextFlags() { return 0; }
 
+extern "C" BOOL d3d11_native_adapter_is_software_render(IDXGIAdapter *adapter)
+{
+    DXGI_ADAPTER_DESC desc;
+    if (FAILED(adapter->GetDesc(&desc))) return FALSE;
+    D3DKMT_OPENADAPTERFROMLUID open = {};
+    open.AdapterLuid = desc.AdapterLuid;
+    if (!NT_SUCCESS(D3DKMTOpenAdapterFromLuid(&open))) return FALSE;
+    D3DKMT_ADAPTERTYPE type = {};
+    D3DKMT_QUERYADAPTERINFO query = {};
+    query.hAdapter = open.hAdapter;
+    query.Type = KMTQAITYPE_ADAPTERTYPE;
+    query.pPrivateDriverData = &type;
+    query.PrivateDriverDataSize = sizeof(type);
+    NTSTATUS status = D3DKMTQueryAdapterInfo(&query);
+    D3DKMT_CLOSEADAPTER close = {};
+    close.hAdapter = open.hAdapter;
+    D3DKMTCloseAdapter(&close);
+    return NT_SUCCESS(status) && type.RenderSupported && type.SoftwareDevice;
+}
+
 extern "C" HRESULT d3d11_native_create_device(IDXGIAdapter *adapter, UINT flags,
         const D3D_FEATURE_LEVEL *levels, UINT count, ID3D11Device **out)
 {
