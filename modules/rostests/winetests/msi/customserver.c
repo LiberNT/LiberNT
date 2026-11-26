@@ -124,6 +124,53 @@ static void test_server_exit(void)
     DeleteFileA(msifile);
 }
 
+static DWORD WINAPI install_thread(void *arg)
+{
+    return MsiInstallProductA(msifile, NULL);
+}
+
+static void test_server_start_failure(void)
+{
+    static const char ifeo[] = "Software\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\msiexec.exe";
+    static const char debugger[] = "cmd.exe /c rem";
+    DWORD disposition, wait, r = 0xdeadbeef;
+    HANDLE thread;
+    HKEY key;
+    LONG res;
+
+    create_database(msifile, cs_tables, ARRAY_SIZE(cs_tables));
+    MsiSetInternalUI(INSTALLUILEVEL_NONE, NULL);
+
+    res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, ifeo, 0, NULL, 0, KEY_SET_VALUE | DELETE, NULL, &key, &disposition);
+    if (res)
+    {
+        skip("cannot redirect msiexec.exe: %ld\n", res);
+        DeleteFileA(msifile);
+        return;
+    }
+    res = RegSetValueExA(key, "Debugger", 0, REG_SZ, (const BYTE *)debugger, sizeof(debugger));
+    ok(!res, "RegSetValueExA failed: %ld\n", res);
+
+    thread = CreateThread(NULL, 0, install_thread, NULL, 0, NULL);
+    ok(thread != NULL, "CreateThread failed, error %lu\n", GetLastError());
+    wait = thread ? WaitForSingleObject(thread, 60000) : WAIT_FAILED;
+
+    RegDeleteValueA(key, "Debugger");
+    if (disposition == REG_CREATED_NEW_KEY)
+        RegDeleteKeyA(HKEY_LOCAL_MACHINE, ifeo);
+    RegCloseKey(key);
+
+    ok(wait == WAIT_OBJECT_0, "the install did not end within 60 s of its custom action server exiting\n");
+    if (wait == WAIT_OBJECT_0)
+    {
+        GetExitCodeThread(thread, &r);
+        ok(r == ERROR_INSTALL_FAILURE, "got %lu\n", r);
+        DeleteFileA(msifile);
+    }
+    if (thread)
+        CloseHandle(thread);
+}
+
 START_TEST(customserver)
 {
     char temp_path[MAX_PATH], prev_path[MAX_PATH];
@@ -141,6 +188,7 @@ START_TEST(customserver)
         CURR_DIR[len - 1] = 0;
 
     test_server_exit();
+    test_server_start_failure();
 
     SetCurrentDirectoryA(prev_path);
 }

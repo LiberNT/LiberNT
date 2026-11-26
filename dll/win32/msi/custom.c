@@ -723,6 +723,24 @@ static BOOL custom_server_running( HANDLE *process, HANDLE *pipe )
     return FALSE;
 }
 
+typedef struct
+{
+    HANDLE process;
+    HANDLE done;
+    const WCHAR *name;
+    HANDLE client;
+} custom_server_wait;
+
+static DWORD WINAPI custom_server_watch(void *arg)
+{
+    custom_server_wait *wait = arg;
+    HANDLE handles[2] = { wait->done, wait->process };
+
+    if (WaitForMultipleObjects(2, handles, FALSE, INFINITE) == WAIT_OBJECT_0 + 1)
+        wait->client = CreateFileW(wait->name, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    return 0;
+}
+
 static DWORD custom_start_server(MSIPACKAGE *package, DWORD arch, USHORT emulated_machine)
 #else
 static DWORD custom_start_server(MSIPACKAGE *package, DWORD arch)
@@ -741,6 +759,10 @@ static DWORD custom_start_server(MSIPACKAGE *package, DWORD arch)
     void *cookie;
     HANDLE pipe;
     BOOL ret;
+#ifdef __REACTOS__
+    custom_server_wait wait;
+    HANDLE watcher;
+#endif
 
 #ifdef __REACTOS__
     if (emulated_machine)
@@ -843,7 +865,42 @@ static DWORD custom_start_server(MSIPACKAGE *package, DWORD arch)
 
     CloseHandle(pi.hThread);
 
+#ifdef __REACTOS__
+    wait.process = pi.hProcess;
+    wait.done = CreateEventW(NULL, TRUE, FALSE, NULL);
+    wait.name = buffer;
+    wait.client = INVALID_HANDLE_VALUE;
+    watcher = wait.done ? CreateThread(NULL, 0, custom_server_watch, &wait, 0, NULL) : NULL;
+    if (!watcher)
+    {
+        error = GetLastError();
+        if (!error) error = ERROR_FUNCTION_FAILED;
+        ERR("failed to watch the custom action server: %lu\n", error);
+        if (wait.done) CloseHandle(wait.done);
+        TerminateProcess(pi.hProcess, error);
+        WaitForSingleObject(pi.hProcess, INFINITE);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pipe);
+        return error;
+    }
+
+    ret = ConnectNamedPipe(pipe, NULL);
+    error = ret ? ERROR_SUCCESS : GetLastError();
+    SetEvent(wait.done);
+    WaitForSingleObject(watcher, INFINITE);
+    CloseHandle(watcher);
+    CloseHandle(wait.done);
+    if (wait.client != INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(wait.client);
+        ret = FALSE;
+        error = ERROR_PROCESS_ABORTED;
+    }
+
+    if (!ret && error != ERROR_PIPE_CONNECTED)
+#else
     if (!ConnectNamedPipe(pipe, NULL) && (error = GetLastError()) != ERROR_PIPE_CONNECTED)
+#endif
     {
         if (!error) error = ERROR_FUNCTION_FAILED;
         ERR("failed to connect to custom action server: %lu\n", error);
@@ -1146,7 +1203,11 @@ static UINT HANDLE_CustomType1( MSIPACKAGE *package, const WCHAR *source, const 
     TRACE("Calling function %s from %s\n", debugstr_w(target), debugstr_w(binary->tmpfile));
 
     if (!(info = do_msidbCustomActionTypeDll( package, type, binary->tmpfile, target, action )))
+#ifdef __REACTOS__
+        return ERROR_INSTALL_FAILURE;
+#else
         return ERROR_FUNCTION_FAILED;
+#endif
     return wait_thread_handle( info );
 }
 
@@ -1252,7 +1313,11 @@ static UINT HANDLE_CustomType17( MSIPACKAGE *package, const WCHAR *source, const
     }
 
     if (!(info = do_msidbCustomActionTypeDll( package, type, file->TargetPath, target, action )))
+#ifdef __REACTOS__
+        return ERROR_INSTALL_FAILURE;
+#else
         return ERROR_FUNCTION_FAILED;
+#endif
     return wait_thread_handle( info );
 }
 
