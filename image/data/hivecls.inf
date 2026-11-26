@@ -11,7 +11,6 @@ HKCR,"SystemFileAssociations",,0x00000010
 
 ; Open With List
 HKCR,"*\OpenWithList\excel.exe","",0x00000000,""
-HKCR,"*\OpenWithList\iexplore.exe","",0x00000000,""
 HKCR,"*\OpenWithList\mspaint.exe","",0x00000000,""
 HKCR,"*\OpenWithList\notepad.exe","",0x00000000,""
 HKCR,"*\OpenWithList\winword.exe","",0x00000000,""
@@ -283,7 +282,6 @@ HKCR,"htafile","",0x00000000,"HTML Application"
 HKCR,"htafile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\mshta.exe,-1"
 ; HKCR,"htafile\shell\open\command","",0x00020000,"%SystemRoot%\system32\mshta.exe ""%1"" %*"
 HKCR,"htafile\shell\edit\command","",0x00020000,"%SystemRoot%\system32\notepad.exe %1"
-HKCR,"htafile\shell\open\command","",0x00020000,"""%ProgramFiles%\Internet Explorer\iexplore.exe"" %1"
 
 ; set MIME type for .html and .htm because Tiny webserver needs it
 HKCR,".htm","",0x00000000,"htmlfile"
@@ -296,7 +294,6 @@ HKCR,"htmlfile","",0x00000000,"HTML Document"
 HKCR,"htmlfile","FriendlyTypeName",0x00020000,"@%SystemRoot%\system32\mshtml.dll,-7501"
 HKCR,"CLSID\{25336920-03F9-11CF-8FD0-00AA00686F13}\BrowseInPlace","",0x00000000,""
 HKCR,"htmlfile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\ieframe.dll,0"
-HKCR,"htmlfile\shell\open\command","",0x00020000,"""%ProgramFiles%\Internet Explorer\iexplore.exe"" ""%1"""
 
 ; FIXME: Windows takes the image type icons from imageres.dll and opens images in a viewer; these use the shell32 picture icon and Paint
 ; Icons

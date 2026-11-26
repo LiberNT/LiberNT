@@ -63,18 +63,6 @@ BEGIN
     DEFPUSHBUTTON "Zamknij", IDOK, 152, 176, 50, 14, WS_GROUP | WS_TABSTOP
 END
 
-ID_DWL_GECKO_DIALOG DIALOGEX  0, 0, 260, 95
-STYLE DS_SHELLFONT | DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Instalator Wine Gecko"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    CONTROL "System LiberNT nie mógł odnaleźć pakietu Wine Gecko, który jest potrzebny dla aplikacji osadzających kod HTML, aby mogły poprawnie działać. System LiberNT może automatycznie pobrać i zainstalować ten pakiet dla Ciebie.",
-          ID_DWL_STATUS, "SysLink", 0, 10, 10, 240, 35
-    CONTROL "", ID_DWL_PROGRESS, PROGRESS_CLASSA, WS_BORDER | PBS_SMOOTH, 10, 48, 240, 12
-    DEFPUSHBUTTON "&Instaluj", ID_DWL_INSTALL, 144, 76, 50, 14
-    PUSHBUTTON "Anuluj", IDCANCEL, 200, 76, 50, 14
-END
-
 STRINGTABLE
 BEGIN
     IDS_CPLSYSTEMNAME "Dodaj lub usuń programy"
@@ -89,7 +77,6 @@ BEGIN
     IDS_INSTALLING "Instalowanie..."
     IDS_INVALID_SHA "Nieoczekiwana suma kontrolna pobranego pliku. Instalacja uszkodzonego pliku została przerwana."
     IDS_NEW_INTERNET_SHORTCUT "Nowy skrót internetowy"
-    IDS_DWL_FAILED "Nie można pobrać pakietu Gecko. Upewnij się, że masz połączenie z internetem, aby pobrać pakiet. Instalacja będzie kontynuowana bez pakietu Gecko."
     IDS_CANTMAKEINETSHORTCUT "Nie można utworzyć skrótu internetowego."
     IDS_CANTMAKESHORTCUT "Nie można utworzyć skrótu."
     IDS_NO_MEMORY "Nie można przydzielić pamięci!"

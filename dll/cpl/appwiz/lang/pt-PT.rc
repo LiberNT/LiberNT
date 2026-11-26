@@ -61,18 +61,6 @@ BEGIN
     DEFPUSHBUTTON "Fechar", IDOK, 152, 176, 50, 14, WS_GROUP | WS_TABSTOP
 END
 
-ID_DWL_GECKO_DIALOG DIALOGEX  0, 0, 260, 95
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Instalador Wine Gecko "
-FONT 8, "MS Shell Dlg"
-BEGIN
-    CONTROL "O LiberNT não consegue encontrar o pacote Wine Gecko que é necessário para que as aplicações HTML funcionem correctamente. O LiberNT pode fazer o download automático e instalar por si.",
-          ID_DWL_STATUS, "SysLink", 0, 10, 10, 240, 65
-    CONTROL "", ID_DWL_PROGRESS, PROGRESS_CLASSA, WS_BORDER | PBS_SMOOTH, 10, 40, 240, 12
-    DEFPUSHBUTTON "&Instalar", ID_DWL_INSTALL, 144, 76, 50, 14
-    PUSHBUTTON "Cancelar", IDCANCEL, 200, 76, 50, 14
-END
-
 STRINGTABLE
 BEGIN
     IDS_CPLSYSTEMNAME "Adicionar/Remover Programas"
@@ -87,7 +75,6 @@ BEGIN
     IDS_INSTALLING "A Instalar..."
     IDS_INVALID_SHA "Inesperado checksum do ficheiro carregado . Abortar instalação. Ficheiro corrompido."
     IDS_NEW_INTERNET_SHORTCUT "Novo atalho de Internet"
-    IDS_DWL_FAILED "Falha ao carregar o pacote Gecko. Verifique a ligação à Internet. O setup irá continuar sem instalar o Gecko."
     IDS_CANTMAKEINETSHORTCUT "Falha ao criar o atalho de internete."
     IDS_CANTMAKESHORTCUT "Falha ao criar o atalho."
     IDS_NO_MEMORY "A memória não pode ser alocada!"

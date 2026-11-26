@@ -53,18 +53,6 @@ BEGIN
     DEFPUSHBUTTON "閉じる", IDOK, 152, 176, 50, 14, WS_GROUP | WS_TABSTOP
 END
 
-ID_DWL_GECKO_DIALOG DIALOGEX  0, 0, 260, 95
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Wine Geckoインストーラー"
-FONT 9, "MS UI Gothic"
-BEGIN
-    CONTROL "LiberNTは、HTMLを埋め込んだアプリを正しく動作させるために必要なWine Geckoパッケージを発見できませんでした。LiberNTはそれを自動的にダウンロード・インストールできます。",
-          ID_DWL_STATUS, "SysLink", 0, 10, 10, 240, 65
-    CONTROL "", ID_DWL_PROGRESS, PROGRESS_CLASSA, WS_BORDER | PBS_SMOOTH, 10, 40, 240, 12
-    DEFPUSHBUTTON "インストール(&I)", ID_DWL_INSTALL, 144, 76, 50, 14
-    PUSHBUTTON "キャンセル", IDCANCEL, 200, 76, 50, 14
-END
-
 STRINGTABLE
 BEGIN
     IDS_CPLSYSTEMNAME "プログラムの追加/削除"
@@ -79,7 +67,6 @@ BEGIN
     IDS_INSTALLING "インストール中..."
     IDS_INVALID_SHA "ダウンロードしたファイルのチェックサムが合致しません。壊れたファイルのインストールを中止しています。"
     IDS_NEW_INTERNET_SHORTCUT "新しいインターネット ショートカット"
-    IDS_DWL_FAILED "Geckoパッケージをダウンロードできません。ダウンロードするためにインターネット接続を確認して下さい。セットアップはGeckoをインストールせずに続行します。"
     IDS_CANTMAKEINETSHORTCUT "インターネット ショートカットの作成に失敗しました。"
     IDS_CANTMAKESHORTCUT "ショートカットの作成に失敗しました。"
     IDS_NO_MEMORY "メモリが割り当てできませんでした！"

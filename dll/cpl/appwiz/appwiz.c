@@ -19,18 +19,6 @@ static LONG start_params(const WCHAR *params, HWND hwnd_parent)
     if (!params)
         return FALSE;
 
-    if (!strcmpW(params, L"install_gecko"))
-    {
-        install_addon(ADDON_GECKO, hwnd_parent);
-        return TRUE;
-    }
-
-    if (!strcmpW(params, L"install_mono"))
-    {
-        install_addon(ADDON_MONO, hwnd_parent);
-        return TRUE;
-    }
-
     WARN("unknown param %s\n", debugstr_w(params));
     return FALSE;
 }

@@ -16,7 +16,6 @@ QuickLaunchShortcuts=26, Microsoft\Internet Explorer\Quick Launch
 [ProgramShortcuts]
 %SystemRoot%\explorer.exe, %EXPLORER_TITLE%, %EXPLORER_DESC%, 1, %HOMEDRIVE%%HOMEPATH%
 %SystemRoot%\system32\terminal.exe, %LXTERM_TITLE%, %LXTERM_DESC%, 0, %HOMEDRIVE%%HOMEPATH%, -p Ubuntu, %SystemRoot%\system32\lxterm.exe
-%16422%\Internet Explorer\iexplore.exe, %IEXPLORE_TITLE%, %IEXPLORE_DESC%, 0
 %SystemRoot%\system32\lntget.exe, %LNTGET_TITLE%, %LNTGET_DESC%, 0, %SystemRoot%\system32, gui
 
 [AdminToolsShortcuts]
@@ -48,7 +47,6 @@ QuickLaunchShortcuts=26, Microsoft\Internet Explorer\Quick Launch
 %SystemRoot%\system32\taskmgr11.exe, %TASKMGR11_TITLE%, %TASKMGR11_DESC%, 0
 %SystemRoot%\system32\dxdiag.exe, %DXDIAG_TITLE%, %DXDIAG_DESC%, 0
 %SystemRoot%\system32\netassist.exe, %NETASSIST_TITLE%, %NETASSIST_DESC%, 0
-%SystemRoot%\system32\control.exe, %GECKO_TITLE%, %GECKO_DESC%, 0, , "appwiz.cpl,,install_gecko"
 %SystemRoot%\system32\oobe\oobe.exe, %COMPONENTS_TITLE%, %COMPONENTS_DESC%, 0, %SystemRoot%\system32\oobe, "/components"
 
 [AccessibilityShortcuts]
@@ -154,10 +152,6 @@ SPIDER_TITLE=Spider Solitaire
 SPIDER_DESC=Spider Solitaire
 UTILMAN_TITLE=Accessibility Utility Manager
 UTILMAN_DESC=Launch Accessibility Utility Manager
-IEXPLORE_TITLE=Wine Internet Explorer
-IEXPLORE_DESC=Wine Web Browser
-GECKO_TITLE=Wine Gecko Installer
-GECKO_DESC=Download and install the Wine Gecko HTML engine
 
 [Strings.0402]
 ACCESSORIES=Принадлежности
@@ -299,8 +293,6 @@ SPIDER_TITLE=連環新接龍
 SPIDER_DESC=啟動並遊玩連環新接龍
 UTILMAN_TITLE=協助工具管理員
 UTILMAN_DESC=啟動協助工具管理員
-IEXPLORE_TITLE=Wine Internet Explorer
-IEXPLORE_DESC=瀏覽網際網路上的網頁
 
 [Strings.0405]
 ACCESSORIES=Příslušenství
@@ -727,8 +719,6 @@ SPIDER_TITLE=Spider Solitaire
 SPIDER_DESC=Spider Solitaire
 UTILMAN_TITLE=Gestionnaire d'utilitaires d'accessibilité
 UTILMAN_DESC=Lance le gestionnaire d'utilitaires d'accessibilité
-IEXPLORE_TITLE=Wine Internet Explorer
-IEXPLORE_DESC=Lance le navigateur Wine Internet Explorer
 
 [Strings.040D]
 ACCESSORIES=עזרים
@@ -1714,8 +1704,6 @@ SPIDER_TITLE=Örümcek Solitaire
 SPIDER_DESC=Örümcek Solitaire
 UTILMAN_TITLE=Erişilebilirlik Araçları Yöneticisi
 UTILMAN_DESC=Erişilebilirlik Araçları Yöneticisi'ni başlat
-IEXPLORE_TITLE=Wine Internet Explorer
-IEXPLORE_DESC=Wine Web Tarayıcısı
 
 [Strings.0422]
 ACCESSORIES=Стандартні
@@ -2008,5 +1996,3 @@ SPIDER_TITLE=連環新接龍
 SPIDER_DESC=啟動並遊玩連環新接龍
 UTILMAN_TITLE=協助工具管理員
 UTILMAN_DESC=啟動協助工具管理員
-IEXPLORE_TITLE=Wine Internet Explorer
-IEXPLORE_DESC=瀏覽互聯網上的網頁

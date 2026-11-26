@@ -58,18 +58,6 @@ BEGIN
     DEFPUSHBUTTON "Zavřít", IDOK, 152, 176, 50, 14, WS_GROUP | WS_TABSTOP
 END
 
-ID_DWL_GECKO_DIALOG DIALOGEX  0, 0, 260, 95
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Wine Gecko Instalátor"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    CONTROL "LiberNT nenalezl balíček Wine Gecko nutný k tomu, aby aplikace zapouzdřující HTML fungovaly správně. LiberNT jej může automaticky stáhnout a nainstalovat.",
-          ID_DWL_STATUS, "SysLink", 0, 10, 10, 240, 65
-    CONTROL "", ID_DWL_PROGRESS, PROGRESS_CLASSA, WS_BORDER | PBS_SMOOTH, 10, 40, 240, 12
-    DEFPUSHBUTTON "&Instalovat", ID_DWL_INSTALL, 144, 76, 50, 14
-    PUSHBUTTON "Storno", IDCANCEL, 200, 76, 50, 14
-END
-
 STRINGTABLE
 BEGIN
     IDS_CPLSYSTEMNAME "Přidat a odebrat programy"
@@ -84,7 +72,6 @@ BEGIN
     IDS_INSTALLING "Instalace..."
     IDS_INVALID_SHA "Stažený soubor má neplatný kontrolní součet. Instalace poškozeného souboru bude přerušena."
     IDS_NEW_INTERNET_SHORTCUT "New Internet Shortcut"
-    IDS_DWL_FAILED "Failed to download the Gecko package. Make sure you have an internet connection in order to download it. The setup will proceed without installing Gecko."
     IDS_CANTMAKEINETSHORTCUT "Failed to create internet shortcut."
     IDS_CANTMAKESHORTCUT "Failed to create shortcut."
     IDS_NO_MEMORY "No memory could be allocated!"

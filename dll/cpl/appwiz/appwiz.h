@@ -54,13 +54,6 @@ ConfigStartMenu(HWND hwndCPl, UINT uMsg, LPARAM lParam1, LPARAM lParam2);
 
 void ShowLastWin32Error(HWND hWndOwner);
 
-typedef enum {
-    ADDON_GECKO,
-    ADDON_MONO
-} addon_t;
-
-BOOL install_addon(addon_t, HWND hwnd_parent) DECLSPEC_HIDDEN;
-
 extern HINSTANCE hInst DECLSPEC_HIDDEN;
 
 static inline void *heap_alloc(size_t len)

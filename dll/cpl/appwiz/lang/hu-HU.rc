@@ -57,18 +57,6 @@ BEGIN
     DEFPUSHBUTTON "Bezárás", IDOK, 152, 176, 50, 14, WS_GROUP | WS_TABSTOP
 END
 
-ID_DWL_GECKO_DIALOG DIALOGEX  0, 0, 260, 95
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Wine Gecko telepítő"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    CONTROL "A LiberNT nem találja a Wine Gecko csomagot, ami a HTML-t beágyazó alkalmazások működéséhez szükséges. Ezt a LiberNT automatikusan le tudja tölteni és telepíteni.",
-          ID_DWL_STATUS, "SysLink", 0, 10, 10, 240, 65
-    CONTROL "", ID_DWL_PROGRESS, PROGRESS_CLASSA, WS_BORDER | PBS_SMOOTH, 10, 40, 240, 12
-    DEFPUSHBUTTON "&Telepítés", ID_DWL_INSTALL, 144, 76, 50, 14
-    PUSHBUTTON "Mégse", IDCANCEL, 200, 76, 50, 14
-END
-
 STRINGTABLE
 BEGIN
     IDS_CPLSYSTEMNAME "Programok telepítése/eltávolítása"
@@ -83,7 +71,6 @@ BEGIN
     IDS_INSTALLING "Telepítés..."
     IDS_INVALID_SHA "A letöltött fájlnak váratlan ellenörző összege van. A telepítés megszakadt egy sérült fájl miatt."
     IDS_NEW_INTERNET_SHORTCUT "Új internetes parancsikon."
-    IDS_DWL_FAILED "Nem sikerült letölteni a Gecko csomagot. Ellenőrizze az internetkapcsolatot a letöltéshez. A telepítés a Gecko installálása nélkül folytatódik."
     IDS_CANTMAKEINETSHORTCUT "Nem sikerült létrehozni az internetes parancsikont."
     IDS_CANTMAKESHORTCUT "Nem sikerült létrehozni a parancsikont."
     IDS_NO_MEMORY "Nem sikerült a memóriafoglalás!"

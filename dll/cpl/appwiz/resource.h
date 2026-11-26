@@ -34,7 +34,6 @@
 #define IDS_DOWNLOADING        14
 #define IDS_INSTALLING         15
 #define IDS_INVALID_SHA        16
-#define IDS_DWL_FAILED         17
 
 /* Controls */
 #define IDC_LINK_LOCATION       107
@@ -43,9 +42,5 @@
 #define IDC_STARTMENU_TREE      110
 #define IDC_REMOVE_ENTRIES      111
 
-#define ID_DWL_GECKO_DIALOG 1200
-#define ID_DWL_PROGRESS     1201
-#define ID_DWL_INSTALL      1202
-#define ID_DWL_STATUS       1203
 
 /* EOF */

@@ -401,61 +401,7 @@ static void register_browser_class(void)
     browser_class = RegisterClassExW(&wndclass);
 }
 
-#ifdef __REACTOS__
-static BOOL install_wine_gecko(void)
-{
-    static const WCHAR nativeW[] = L"\\sysnative\\rundll32.exe";
-    static const WCHAR rundllW[] = L"\\rundll32.exe";
-    static const WCHAR argsW[] = L" shell32.dll,Control_RunDLL appwiz.cpl,,install_gecko";
-    USEROBJECTFLAGS flags;
-    PROCESS_INFORMATION pi;
-    STARTUPINFOW si;
-    WCHAR app[MAX_PATH];
-    BOOL is_wow64 = FALSE;
-    HWINSTA station;
-    WCHAR *args;
-    DWORD len;
-    BOOL ret;
-
-    station = GetProcessWindowStation();
-    if(!station || !GetUserObjectInformationW(station, UOI_FLAGS, &flags, sizeof(flags), &len)
-       || !(flags.dwFlags & WSF_VISIBLE))
-        return FALSE;
-
-    IsWow64Process(GetCurrentProcess(), &is_wow64);
-    if(is_wow64) {
-        len = GetWindowsDirectoryW(app, MAX_PATH-ARRAY_SIZE(nativeW));
-        memcpy(app+len, nativeW, sizeof(nativeW));
-    }else {
-        len = GetSystemDirectoryW(app, MAX_PATH-ARRAY_SIZE(rundllW));
-        memcpy(app+len, rundllW, sizeof(rundllW));
-    }
-    len = lstrlenW(app);
-
-    args = malloc(len * sizeof(WCHAR) + sizeof(argsW));
-    if(!args)
-        return FALSE;
-
-    memcpy(args, app, len * sizeof(WCHAR));
-    memcpy(args + len, argsW, sizeof(argsW));
-
-    TRACE("starting %s\n", debugstr_w(args));
-
-    memset(&si, 0, sizeof(si));
-    si.cb = sizeof(si);
-    ret = CreateProcessW(app, args, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi);
-    free(args);
-    if (ret) {
-        CloseHandle(pi.hThread);
-        WaitForSingleObject(pi.hProcess, INFINITE);
-        CloseHandle(pi.hProcess);
-    }else {
-        WARN("installation failed\n");
-    }
-
-    return ret;
-}
-#else
+#ifndef __REACTOS__
 static BOOL install_wine_gecko(void)
 {
     PROCESS_INFORMATION pi;
@@ -879,10 +825,8 @@ BOOL load_gecko(void)
         loading_thread = GetCurrentThreadId();
 
 #ifdef __REACTOS__
-        if(!(gecko_path = find_wine_gecko_sysdir())
-           && !(gecko_path = find_wine_gecko_datadir())
-           && install_wine_gecko())
-            gecko_path = find_wine_gecko_sysdir();
+        if(!(gecko_path = find_wine_gecko_sysdir()))
+            gecko_path = find_wine_gecko_datadir();
 #else
         if(!(gecko_path = find_wine_gecko_reg())
            && !(gecko_path = find_wine_gecko_datadir())

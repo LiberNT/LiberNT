@@ -3,7 +3,6 @@ add_definitions(-D_CRT_DECLARE_NONSTDC_NAMES=1)
 spec2def(appwiz.cpl appwiz.spec)
 
 list(APPEND SOURCE
-    addons.c
     appwiz.c
     createlink.c
     removestartmenuitems.c
@@ -19,8 +18,7 @@ add_library(appwiz MODULE
 
 set_module_type(appwiz cpl UNICODE)
 target_link_libraries(appwiz uuid wine)
-add_delay_importlibs(appwiz msi)
-add_importlibs(appwiz urlmon ole32 comctl32 advapi32 shell32 shlwapi user32 bcrypt msvcrt kernel32 ntdll)
+add_importlibs(appwiz ole32 comctl32 advapi32 shell32 shlwapi user32 msvcrt kernel32 ntdll)
 add_pch(appwiz appwiz.h SOURCE)
 add_cd_file(TARGET appwiz DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(appwiz) # CORE-5743: No CONST_VTABLE

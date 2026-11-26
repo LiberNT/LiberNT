@@ -60,18 +60,6 @@ BEGIN
     DEFPUSHBUTTON "Sule", IDOK, 152, 176, 50, 14, WS_GROUP | WS_TABSTOP
 END
 
-ID_DWL_GECKO_DIALOG DIALOGEX  0, 0, 260, 95
-STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Wine Gecko Paigaldamine"
-FONT 8, "MS Shell Dlg"
-BEGIN
-    CONTROL "LiberNT ei leidnud Wine Gecko paketti, mille abil saavad rakendused HTMLi korralikult kasutada. LiberNT saab selle automaatselt paigaldada ja alla laadida.",
-          ID_DWL_STATUS, "SysLink", 0, 10, 10, 240, 65
-    CONTROL "", ID_DWL_PROGRESS, PROGRESS_CLASSA, WS_BORDER | PBS_SMOOTH, 10, 40, 240, 12
-    DEFPUSHBUTTON "&Paigalda", ID_DWL_INSTALL, 144, 76, 50, 14
-    PUSHBUTTON "&Loobu", IDCANCEL, 200, 76, 50, 14
-END
-
 STRINGTABLE
 BEGIN
     IDS_CPLSYSTEMNAME "Programmide lisamine või eemaldamine"
@@ -86,7 +74,6 @@ BEGIN
     IDS_INSTALLING "Paigaldamine..."
     IDS_INVALID_SHA "Kontrollsumma ei kattu. Paigaldamine katkestatud korrupteerinud faili tõttu."
     IDS_NEW_INTERNET_SHORTCUT "New Internet Shortcut"
-    IDS_DWL_FAILED "Failed to download the Gecko package. Make sure you have an internet connection in order to download it. The setup will proceed without installing Gecko."
     IDS_CANTMAKEINETSHORTCUT "Failed to create internet shortcut."
     IDS_CANTMAKESHORTCUT "Failed to create shortcut."
     IDS_NO_MEMORY "No memory could be allocated!"
