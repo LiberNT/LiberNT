@@ -122,19 +122,32 @@ MapImageInto(HANDLE Section, HANDLE Process)
 
 typedef struct _EC_CALL_DATA
 {
-    ULONG64 Reserved[6];
+    ULONG64 Sentinel[3];
+    RTL_RUN_ONCE RunOnce;
+    ULONG64 Callback;
+    ULONG64 RunOnceExecuteOnce;
     ULONG64 Status;
+    ULONG64 Register[3];
 } EC_CALL_DATA, *PEC_CALL_DATA;
 
+C_ASSERT(FIELD_OFFSET(EC_CALL_DATA, RunOnce) == 24);
 C_ASSERT(FIELD_OFFSET(EC_CALL_DATA, Status) == 48);
+C_ASSERT(FIELD_OFFSET(EC_CALL_DATA, Register) == 56);
 
 static const ULONG EcCode[] =
 {
-    0x00000000, 0x0000000c, 0x52800028, 0xb9003008,
-    0x14000000, 0xd61f0120,
+    0x00000000, 0x00000060, 0x52800028, 0xb9003008,
+    0x14000000, 0x00000050, 0xa9bf7bfd, 0x910003fd,
+    0xaa0003f3, 0xa9406277, 0xf9400a7c, 0x91006260,
+    0xf9401261, 0xaa1f03e2, 0xaa1f03e3, 0xf9401668,
+    0xd63f0100, 0xb9003260, 0xa903e277, 0xf900267c,
+    0x14000000, 0xd2816477, 0xd2816498, 0xd281651c,
+    0x52800020, 0xd65f03c0, 0xd61f0120,
 };
 
 #define EC_PROBE    (2 * sizeof(ULONG))
+#define EC_CALLER   (6 * sizeof(ULONG))
+#define EC_CLOBBER  (21 * sizeof(ULONG))
 #define EC_DATA     0x100
 #define EC_HOST_DATA 0x140002000ULL
 
@@ -279,6 +292,44 @@ TestEcCodeOfEmulatedProgram(PCWSTR Directory)
     StopEcHost(&Host);
 }
 
+static
+VOID
+TestEcCallbackKeepsNativeRegisters(PCWSTR Directory)
+{
+    static const ULONG64 Sentinel[3] = { 0x2323232323232323ULL, 0x2424242424242424ULL, 0x2828282828282828ULL };
+    static const PCSTR RegisterName[3] = { "x23", "x24", "x28" };
+    HMODULE NtDll = GetModuleHandleW(L"ntdll.dll");
+    EC_HOST Host;
+    EC_CALL_DATA Call;
+    ULONG Index;
+
+    if (!GetProcAddress(NtDll, "ChpeMarkEcCodeRange"))
+    {
+        skip("Windows 11 ends the process when EC code calls the native RtlRunOnceExecuteOnce\n");
+        return;
+    }
+
+    if (!StartEcHost(Directory, &Host))
+        return;
+
+    if (Host.Code)
+    {
+        RtlZeroMemory(&Call, sizeof(Call));
+        RtlCopyMemory(Call.Sentinel, Sentinel, sizeof(Sentinel));
+        InitOnceInitialize(&Call.RunOnce);
+        Call.Callback = Host.Code + EC_CLOBBER;
+        Call.RunOnceExecuteOnce = (ULONG_PTR)GetProcAddress(NtDll, "RtlRunOnceExecuteOnce");
+        RunEcApc(&Host, EC_CALLER, &Call);
+        ok_hex((ULONG)Call.Status, STATUS_SUCCESS);
+        for (Index = 0; Index < ARRAYSIZE(Sentinel); Index++)
+        {
+            ok(Call.Register[Index] == Sentinel[Index], "%s is %#I64x after the EC run-once callback\n",
+               RegisterName[Index], Call.Register[Index]);
+        }
+    }
+    StopEcHost(&Host);
+}
+
 START_TEST(EmulatedProcess)
 {
     static const UCHAR ReturnZero[] = { 0x31, 0xC0, 0xC3 };
@@ -307,6 +358,7 @@ START_TEST(EmulatedProcess)
     }
 
     TestEcCodeOfEmulatedProgram(Directory);
+    TestEcCallbackKeepsNativeRegisters(Directory);
 
     if (!WriteAmd64Image(Path, ReturnZero, sizeof(ReturnZero), NULL, 0))
     {

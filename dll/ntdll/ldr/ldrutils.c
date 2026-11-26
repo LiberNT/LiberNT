@@ -163,6 +163,16 @@ LdrpCallInitRoutine(IN PDLL_INIT_ROUTINE EntryPoint,
             {
                 return ChpeCallX64DllMain(EntryPoint, BaseAddress, Reason, Context);
             }
+
+            if (RtlIsEcCode((ULONG_PTR)EntryPoint))
+            {
+                return (ULONG)ChpeCallArm64Routine((PVOID)EntryPoint,
+                                                   (ULONG_PTR)BaseAddress,
+                                                   Reason,
+                                                   (ULONG_PTR)Context,
+                                                   0,
+                                                   0) != 0;
+            }
         }
     }
 #endif

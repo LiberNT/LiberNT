@@ -636,6 +636,16 @@ ChpeCallX64DllMain(
     ULONG Reason,
     PVOID Context);
 
+ULONG_PTR
+NTAPI
+ChpeCallArm64Routine(
+    PVOID EntryPoint,
+    ULONG_PTR Arg0,
+    ULONG_PTR Arg1,
+    ULONG_PTR Arg2,
+    ULONG_PTR Arg3,
+    ULONG_PTR Arg4);
+
 VOID
 NTAPI
 RtlUserThreadStart(
