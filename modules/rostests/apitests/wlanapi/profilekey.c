@@ -184,6 +184,8 @@ TestHandshake(HANDLE Client, const GUID *Interface)
            "The connection succeeded with a wrong key\n");
         ok(WaitState(Client, Interface, wlan_interface_state_disconnected, 2000),
            "Interface state is %d after a wrong key, expected disconnected\n", QueryState(Client, Interface));
+        Error = WlanDisconnect(Client, Interface, NULL);
+        ok(Error == ERROR_SUCCESS, "WlanDisconnect on a disconnected interface failed: %lu\n", Error);
     }
 
     Start = GetTickCount64();
