@@ -17,6 +17,7 @@ list(APPEND SOURCE
     property.cpp
     range.cpp
     textedit.cpp
+    threadfocus.cpp
     threadmgr.cpp
     tipthread.cpp
     trackprop.cpp
