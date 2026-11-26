@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     CreateEnvironmentBlock.c
+    DeleteProfile.c
     GetProfileDirs.c
     LoadUserProfile.c
     ProfileCreation.c

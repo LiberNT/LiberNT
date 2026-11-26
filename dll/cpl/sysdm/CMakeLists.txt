@@ -29,6 +29,6 @@ add_library(sysdm MODULE
 
 set_module_type(sysdm cpl UNICODE)
 target_link_libraries(sysdm udmihelp uuid)
-add_importlibs(sysdm advapi32 setupapi user32 gdi32 comctl32 comdlg32 msimg32 shell32 shlwapi ole32 powrprof msvcrt kernel32 ntdll)
+add_importlibs(sysdm advapi32 userenv setupapi user32 gdi32 comctl32 comdlg32 msimg32 shell32 shlwapi ole32 powrprof msvcrt kernel32 ntdll)
 add_pch(sysdm precomp.h SOURCE)
 add_cd_file(TARGET sysdm DESTINATION reactos/system32 FOR all)
