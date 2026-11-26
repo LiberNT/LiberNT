@@ -49,6 +49,7 @@ NDIS_OID VWifiSupportedOids[] =
     OID_DOT11_CURRENT_PACKET_FILTER,
     OID_DOT11_CURRENT_PHY_TYPE,
     OID_DOT11_SUPPORTED_PHY_TYPES,
+    OID_DOT11_EXTSTA_CAPABILITY,
     OID_DOT11_NIC_POWER_STATE,
     OID_DOT11_HARDWARE_PHY_STATE,
     OID_DOT11_MAC_ADDRESS,
@@ -201,17 +202,32 @@ NDIS_STATUS
 VWifiDot11QuerySupportedPhyTypes(
     IN PNDIS_OID_REQUEST Request)
 {
-    DOT11_PHY_TYPE_LIST List;
+    DOT11_SUPPORTED_PHY_TYPES List;
 
     RtlZeroMemory(&List, sizeof(List));
-    List.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
-    List.Header.Revision = DOT11_PHY_TYPE_LIST_REVISION_1;
-    List.Header.Size = sizeof(DOT11_PHY_TYPE_LIST);
     List.uNumOfEntries = 1;
     List.uTotalNumOfEntries = 1;
-    List.dot11PhyType[0] = dot11_phy_type_erp;   /* 2.4 GHz 802.11g */
+    List.dot11PHYType[0] = dot11_phy_type_erp;   /* 2.4 GHz 802.11g */
 
     return VWifiOidQueryBuffer(Request, &List, sizeof(List));
+}
+
+static
+NDIS_STATUS
+VWifiDot11QueryExtStaCapability(
+    IN PNDIS_OID_REQUEST Request)
+{
+    DOT11_EXTSTA_CAPABILITY Capability;
+
+    RtlZeroMemory(&Capability, sizeof(Capability));
+    Capability.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+    Capability.Header.Revision = DOT11_EXTSTA_CAPABILITY_REVISION_1;
+    Capability.Header.Size = sizeof(Capability);
+    Capability.uScanSSIDListSize = 1;
+    Capability.uDesiredBSSIDListSize = 1;
+    Capability.uDesiredSSIDListSize = 1;
+
+    return VWifiOidQueryBuffer(Request, &Capability, sizeof(Capability));
 }
 
 static
@@ -276,6 +292,9 @@ VWifiDot11Query(
 
         case OID_DOT11_SUPPORTED_PHY_TYPES:
             return VWifiDot11QuerySupportedPhyTypes(Request);
+
+        case OID_DOT11_EXTSTA_CAPABILITY:
+            return VWifiDot11QueryExtStaCapability(Request);
 
         case OID_DOT11_CURRENT_PACKET_FILTER:
             return VWifiOidQueryUlong(Request, Adapter->Dot11.PacketFilter);
