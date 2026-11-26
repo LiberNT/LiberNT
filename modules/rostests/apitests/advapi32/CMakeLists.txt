@@ -16,6 +16,7 @@ list(APPEND SOURCE
     DuplicateTokenEx.c
     EnableTraceEx.c
     EnumerateTraceGuidsEx.c
+    TraceCallback.c
     eventlog.c
     Hash.c
     HKEY_CLASSES_ROOT.c

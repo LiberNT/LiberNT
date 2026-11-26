@@ -187,13 +187,13 @@
 @ stdcall RegisterServiceCtrlHandlerW(wstr ptr) advapi32.RegisterServiceCtrlHandlerW
 @ stdcall RegisterTraceGuidsA(ptr ptr ptr long ptr str str ptr) advapi32.RegisterTraceGuidsA
 @ stub ReleaseIdentityProviderEnumContext
-@ stub RemoveTraceCallback
+@ stdcall RemoveTraceCallback(ptr)
 @ stub RpcClientCapabilityCheck
 @ stub SetLocalRpcServerInterfaceSecurity
 @ stub SetLocalRpcServerProtseqSecurity
 @ stdcall SetServiceObjectSecurity(long long ptr) advapi32.SetServiceObjectSecurity
 @ stdcall SetServiceStatus(long ptr) advapi32.SetServiceStatus
-@ stub SetTraceCallback
+@ stdcall SetTraceCallback(ptr ptr)
 @ stdcall StartServiceA(long long ptr) advapi32.StartServiceA
 @ stdcall StartServiceCtrlDispatcherA(ptr) advapi32.StartServiceCtrlDispatcherA
 @ stdcall StartServiceCtrlDispatcherW(ptr) advapi32.StartServiceCtrlDispatcherW

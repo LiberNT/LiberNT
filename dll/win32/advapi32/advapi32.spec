@@ -612,7 +612,7 @@
 @ stdcall RegisterServiceCtrlHandlerW(wstr ptr)
 @ stdcall RegisterTraceGuidsA(ptr ptr ptr long ptr str str ptr) ntdll.EtwRegisterTraceGuidsA
 @ stdcall RegisterTraceGuidsW(ptr ptr ptr long ptr wstr wstr ptr) ntdll.EtwRegisterTraceGuidsW
-@ stub RemoveTraceCallback
+@ stdcall RemoveTraceCallback(ptr) sechost.RemoveTraceCallback
 @ stdcall RemoveUsersFromEncryptedFile(wstr ptr)
 @ stdcall ReportEventA(long long long long ptr long long str ptr)
 @ stdcall ReportEventW(long long long long ptr long long wstr ptr)
@@ -666,7 +666,7 @@
 @ stdcall SetServiceStatus(long long)
 @ stdcall -thunk SetThreadToken(ptr ptr) kernelbase.SetThreadToken
 @ stdcall -thunk SetTokenInformation(long long ptr long) kernelbase.SetTokenInformation
-@ stub SetTraceCallback
+@ stdcall SetTraceCallback(ptr ptr) sechost.SetTraceCallback
 @ stub SetUserFileEncryptionKey
 @ stdcall StartServiceA(long long ptr)
 @ stdcall StartServiceCtrlDispatcherA(ptr)

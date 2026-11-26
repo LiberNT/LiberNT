@@ -11,6 +11,7 @@ list(APPEND SOURCE
     security.c
     service.c
     trace.c
+    tracecallback.c
     ${CMAKE_CURRENT_BINARY_DIR}/svcctl_c.c
     ${CMAKE_CURRENT_BINARY_DIR}/plugplay_c.c
     ${CMAKE_CURRENT_BINARY_DIR}/sechost_stubs.c
