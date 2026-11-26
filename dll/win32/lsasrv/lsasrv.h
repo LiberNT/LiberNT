@@ -125,6 +125,11 @@ LsapCallAuthenticationPackage(PLSA_API_MSG RequestMsg,
 NTSTATUS
 LsapLogonUser(PLSA_API_MSG RequestMsg,
               PLSAP_LOGON_CONTEXT LogonContext);
+NTSTATUS
+NTAPI
+LsapLogonVirtualUser(
+    _Inout_ PLSA_API_MSG RequestMsg,
+    _In_ PLSAP_LOGON_CONTEXT LogonContext);
 
 VOID
 LsapTerminateLogon(

@@ -989,7 +989,6 @@ LsapAddDefaultGroups(
                 break;
 
             case Network:
-            case NetworkCleartext:
                 SrcSid = LsapNetworkSid;
                 break;
 
@@ -2055,6 +2054,420 @@ done:
     }
 
     TRACE("LsapLogonUser done (Status 0x%08lx)\n", Status);
+
+    return Status;
+}
+
+/*
+ * Copy a UNICODE_STRING and its buffer from the client's address space.
+ */
+static
+NTSTATUS
+LsapCopyClientString(
+    _In_ PLSAP_LOGON_CONTEXT LogonContext,
+    _In_ PUNICODE_STRING ClientString,
+    _Out_ PUNICODE_STRING LocalString)
+{
+    NTSTATUS Status;
+
+    RtlZeroMemory(LocalString, sizeof(*LocalString));
+
+    if (ClientString->Buffer == NULL || ClientString->Length == 0)
+        return STATUS_SUCCESS;
+
+    if (ClientString->Length > 1024)
+        return STATUS_INVALID_PARAMETER;
+
+    LocalString->Buffer = RtlAllocateHeap(RtlGetProcessHeap(),
+                                          HEAP_ZERO_MEMORY,
+                                          ClientString->Length + sizeof(WCHAR));
+    if (LocalString->Buffer == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = NtReadVirtualMemory(LogonContext->ClientProcessHandle,
+                                 ClientString->Buffer,
+                                 LocalString->Buffer,
+                                 ClientString->Length,
+                                 NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, LocalString->Buffer);
+        RtlZeroMemory(LocalString, sizeof(*LocalString));
+        return Status;
+    }
+
+    LocalString->Length = ClientString->Length;
+    LocalString->MaximumLength = ClientString->Length + sizeof(WCHAR);
+
+    return STATUS_SUCCESS;
+}
+
+
+/*
+ * Log on a virtual account.
+ *
+ * A virtual account is a self-asserting machine-local identity whose SID is
+ * fixed by a sid-name mapping: nothing is authenticated, so the request only
+ * assembles the logon session and the token. Since that mints a token with no
+ * credential check, the request is answered for trusted (TCB) logon processes
+ * only, which is the class of caller services belong to.
+ *
+ * The logon session is what makes the token usable: the kernel requires the
+ * authentication id of a token to reference a live logon session, and the
+ * session also keys the window station the subsystem hands to processes
+ * created with the token.
+ */
+NTSTATUS
+NTAPI
+LsapLogonVirtualUser(
+    _Inout_ PLSA_API_MSG RequestMsg,
+    _In_ PLSAP_LOGON_CONTEXT LogonContext)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    SECURITY_QUALITY_OF_SERVICE Qos;
+    PROCESS_SESSION_INFORMATION ClientSession;
+    PLSA_TOKEN_INFORMATION_V1 TokenInfo1 = NULL;
+    TOKEN_PRIVILEGES NoPrivileges = {0};
+    PSECURITY_DESCRIPTOR TokenSd = NULL;
+    UNICODE_STRING UserName = {0};
+    UNICODE_STRING LogonDomain = {0};
+    SECURITY_LOGON_TYPE LogonType;
+    PSID UserSid = NULL;
+    PSID UsersSid = NULL;
+    HANDLE TokenHandle = NULL;
+    ULONG TokenSdSize = 0;
+    ULONG SidLength;
+    ULONG Length;
+    LUID LogonId;
+    BOOLEAN SessionCreated = FALSE;
+    NTSTATUS Status;
+
+    TRACE("LsapLogonVirtualUser(%p %p)\n", RequestMsg, LogonContext);
+
+    if (!LogonContext->TrustedCaller)
+    {
+        ERR("LsapLogonVirtualUser: caller is not trusted\n");
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    LogonType = RequestMsg->LogonVirtualUser.Request.LogonType;
+    SidLength = RequestMsg->LogonVirtualUser.Request.UserSidLength;
+    if (SidLength < sizeof(SID) || SidLength > SECURITY_MAX_SID_SIZE ||
+        RequestMsg->LogonVirtualUser.Request.UserSid == NULL)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    /* Read the account SID from the caller's memory */
+    UserSid = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, SidLength);
+    if (UserSid == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = NtReadVirtualMemory(LogonContext->ClientProcessHandle,
+                                 RequestMsg->LogonVirtualUser.Request.UserSid,
+                                 UserSid,
+                                 SidLength,
+                                 NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("NtReadVirtualMemory of user sid failed (Status 0x%08lx)\n", Status);
+        goto done;
+    }
+
+    if (!RtlValidSid(UserSid))
+    {
+        Status = STATUS_INVALID_SID;
+        goto done;
+    }
+
+    /* The account names only feed the session bookkeeping */
+    Status = LsapCopyClientString(LogonContext,
+                                  &RequestMsg->LogonVirtualUser.Request.UserName,
+                                  &UserName);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    Status = LsapCopyClientString(LogonContext,
+                                  &RequestMsg->LogonVirtualUser.Request.LogonDomain,
+                                  &LogonDomain);
+    if (!NT_SUCCESS(Status))
+        goto done;
+
+    /* Start the logon session the token will reference */
+    Status = NtAllocateLocallyUniqueId(&LogonId);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("NtAllocateLocallyUniqueId failed (Status 0x%08lx)\n", Status);
+        goto done;
+    }
+
+    Status = LsapCreateLogonSession(&LogonId);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("LsapCreateLogonSession failed (Status 0x%08lx)\n", Status);
+        goto done;
+    }
+    SessionCreated = TRUE;
+
+    /* Assemble the token information */
+    TokenInfo1 = RtlAllocateHeap(RtlGetProcessHeap(),
+                                 HEAP_ZERO_MEMORY,
+                                 sizeof(LSA_TOKEN_INFORMATION_V1));
+    if (TokenInfo1 == NULL)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto done;
+    }
+
+    TokenInfo1->ExpirationTime.QuadPart = -1;
+
+    TokenInfo1->User.User.Sid = RtlAllocateHeap(RtlGetProcessHeap(),
+                                                HEAP_ZERO_MEMORY,
+                                                SidLength);
+    if (TokenInfo1->User.User.Sid == NULL)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto done;
+    }
+    RtlCopyMemory(TokenInfo1->User.User.Sid, UserSid, SidLength);
+    TokenInfo1->User.User.Attributes = 0;
+
+    /* Everyone plus the logon type SID (SERVICE for a service logon) */
+    Status = LsapAddDefaultGroups(TokenInfo1,
+                                  LsaTokenInformationV1,
+                                  LogonType);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("LsapAddDefaultGroups failed (Status 0x%08lx)\n", Status);
+        goto done;
+    }
+
+    /*
+     * Membership of BUILTIN\Users, as Windows service tokens carry it: the
+     * system files grant their read access to Users rather than Everyone.
+     */
+    UsersSid = LsapAppendRidToSid(BuiltinDomainSid,
+                                  DOMAIN_ALIAS_RID_USERS);
+    if (UsersSid == NULL)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto done;
+    }
+
+    {
+        PTOKEN_GROUPS Groups = TokenInfo1->Groups;
+        ULONG Count = Groups->GroupCount;
+
+        Length = sizeof(TOKEN_GROUPS) +
+                 (Count + 1 - ANYSIZE_ARRAY) * sizeof(SID_AND_ATTRIBUTES);
+
+        Groups = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, Length);
+        if (Groups == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto done;
+        }
+
+        Groups->GroupCount = Count + 1;
+        for (Length = 0; Length < Count; Length++)
+        {
+            Groups->Groups[Length].Sid = TokenInfo1->Groups->Groups[Length].Sid;
+            Groups->Groups[Length].Attributes = TokenInfo1->Groups->Groups[Length].Attributes;
+        }
+
+        RtlFreeHeap(RtlGetProcessHeap(), 0, TokenInfo1->Groups);
+        TokenInfo1->Groups = Groups;
+
+        Length = RtlLengthSid(UsersSid);
+        Groups->Groups[Count].Sid = RtlAllocateHeap(RtlGetProcessHeap(),
+                                                    HEAP_ZERO_MEMORY,
+                                                    Length);
+        if (Groups->Groups[Count].Sid == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto done;
+        }
+        RtlCopyMemory(Groups->Groups[Count].Sid, UsersSid, Length);
+        Groups->Groups[Count].Attributes =
+            SE_GROUP_ENABLED | SE_GROUP_ENABLED_BY_DEFAULT | SE_GROUP_MANDATORY;
+    }
+
+    Status = LsapAddIntegrityGroup(TokenInfo1,
+                                   LsaTokenInformationV1);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("LsapAddIntegrityGroup failed (Status 0x%08lx)\n", Status);
+        goto done;
+    }
+
+    Status = LsapSetTokenOwner(TokenInfo1,
+                               LsaTokenInformationV1);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("LsapSetTokenOwner failed (Status 0x%08lx)\n", Status);
+        goto done;
+    }
+
+    /* Primary group falls back to the user when nothing better applies */
+    if (TokenInfo1->PrimaryGroup.PrimaryGroup == NULL)
+    {
+        Length = RtlLengthSid(TokenInfo1->User.User.Sid);
+        TokenInfo1->PrimaryGroup.PrimaryGroup = RtlAllocateHeap(RtlGetProcessHeap(),
+                                                                HEAP_ZERO_MEMORY,
+                                                                Length);
+        if (TokenInfo1->PrimaryGroup.PrimaryGroup == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            goto done;
+        }
+        RtlCopyMemory(TokenInfo1->PrimaryGroup.PrimaryGroup,
+                      TokenInfo1->User.User.Sid,
+                      Length);
+    }
+
+    Status = LsapAddTokenDefaultDacl(TokenInfo1,
+                                     LsaTokenInformationV1);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("LsapAddTokenDefaultDacl failed (Status 0x%08lx)\n", Status);
+        goto done;
+    }
+
+    /* Set up a security descriptor for the token object itself */
+    Status = LsapCreateTokenSd(&TokenInfo1->User, &TokenSd, &TokenSdSize);
+    if (!NT_SUCCESS(Status))
+    {
+        TokenSd = NULL;
+    }
+
+    Qos.Length = sizeof(SECURITY_QUALITY_OF_SERVICE);
+    Qos.ImpersonationLevel = SecurityImpersonation;
+    Qos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
+    Qos.EffectiveOnly = FALSE;
+
+    ObjectAttributes.Length = sizeof(OBJECT_ATTRIBUTES);
+    ObjectAttributes.RootDirectory = NULL;
+    ObjectAttributes.ObjectName = NULL;
+    ObjectAttributes.Attributes = 0;
+    ObjectAttributes.SecurityDescriptor = TokenSd;
+    ObjectAttributes.SecurityQualityOfService = &Qos;
+
+    /* Create the logon token */
+    Status = NtCreateToken(&TokenHandle,
+                           TOKEN_ALL_ACCESS,
+                           &ObjectAttributes,
+                           (LogonType == Network) ? TokenImpersonation : TokenPrimary,
+                           &LogonId,
+                           &TokenInfo1->ExpirationTime,
+                           &TokenInfo1->User,
+                           TokenInfo1->Groups,
+                           TokenInfo1->Privileges ? TokenInfo1->Privileges : &NoPrivileges,
+                           &TokenInfo1->Owner,
+                           &TokenInfo1->PrimaryGroup,
+                           &TokenInfo1->DefaultDacl,
+                           &RequestMsg->LogonVirtualUser.Request.SourceContext);
+
+    if (TokenSd != NULL)
+        RtlFreeHeap(RtlGetProcessHeap(), 0, TokenSd);
+
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("NtCreateToken failed (Status 0x%08lx)\n", Status);
+        goto done;
+    }
+
+    ClientSession.SessionId = 0;
+    NtQueryInformationProcess(LogonContext->ClientProcessHandle,
+                              ProcessSessionInformation,
+                              &ClientSession,
+                              sizeof(ClientSession),
+                              NULL);
+
+    Status = LsapSetLogonSessionData(&LogonId,
+                                     LogonType,
+                                     UserName.Buffer != NULL ? &UserName : &LogonDomain,
+                                     &LogonDomain,
+                                     TokenInfo1->User.User.Sid,
+                                     ClientSession.SessionId);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("LsapSetLogonSessionData failed (Status 0x%08lx)\n", Status);
+        goto done;
+    }
+
+    /*
+     * Duplicate the token handle into the client process.
+     * This must be the last step because we cannot
+     * close the duplicated token handle in case something fails.
+     */
+    Status = NtDuplicateObject(NtCurrentProcess(),
+                               TokenHandle,
+                               LogonContext->ClientProcessHandle,
+                               &RequestMsg->LogonVirtualUser.Reply.Token,
+                               0,
+                               0,
+                               DUPLICATE_SAME_ACCESS | DUPLICATE_SAME_ATTRIBUTES | DUPLICATE_CLOSE_SOURCE);
+    if (!NT_SUCCESS(Status))
+    {
+        /* The source handle stays open when the duplication fails;
+         * the cleanup below closes it. */
+        ERR("NtDuplicateObject failed (Status 0x%08lx)\n", Status);
+        goto done;
+    }
+
+    TokenHandle = NULL;
+    RequestMsg->LogonVirtualUser.Reply.LogonId = LogonId;
+
+done:
+    if (!NT_SUCCESS(Status) && SessionCreated)
+        LsapDeleteLogonSession(&LogonId);
+
+    if (TokenHandle != NULL)
+        NtClose(TokenHandle);
+
+    if (UsersSid != NULL)
+        RtlFreeSid(UsersSid);
+
+    if (UserName.Buffer != NULL)
+        RtlFreeHeap(RtlGetProcessHeap(), 0, UserName.Buffer);
+
+    if (LogonDomain.Buffer != NULL)
+        RtlFreeHeap(RtlGetProcessHeap(), 0, LogonDomain.Buffer);
+
+    if (UserSid != NULL)
+        RtlFreeHeap(RtlGetProcessHeap(), 0, UserSid);
+
+    if (TokenInfo1 != NULL)
+    {
+        ULONG i;
+
+        if (TokenInfo1->User.User.Sid != NULL)
+            RtlFreeHeap(RtlGetProcessHeap(), 0, TokenInfo1->User.User.Sid);
+
+        if (TokenInfo1->Groups != NULL)
+        {
+            for (i = 0; i < TokenInfo1->Groups->GroupCount; i++)
+            {
+                if (TokenInfo1->Groups->Groups[i].Sid != NULL)
+                    RtlFreeHeap(RtlGetProcessHeap(), 0, TokenInfo1->Groups->Groups[i].Sid);
+            }
+
+            RtlFreeHeap(RtlGetProcessHeap(), 0, TokenInfo1->Groups);
+        }
+
+        if (TokenInfo1->PrimaryGroup.PrimaryGroup != NULL)
+            RtlFreeHeap(RtlGetProcessHeap(), 0, TokenInfo1->PrimaryGroup.PrimaryGroup);
+
+        if (TokenInfo1->Owner.Owner != NULL)
+            RtlFreeHeap(RtlGetProcessHeap(), 0, TokenInfo1->Owner.Owner);
+
+        if (TokenInfo1->DefaultDacl.DefaultDacl != NULL)
+            RtlFreeHeap(RtlGetProcessHeap(), 0, TokenInfo1->DefaultDacl.DefaultDacl);
+
+        RtlFreeHeap(RtlGetProcessHeap(), 0, TokenInfo1);
+    }
+
+    TRACE("LsapLogonVirtualUser done (Status 0x%08lx)\n", Status);
 
     return Status;
 }

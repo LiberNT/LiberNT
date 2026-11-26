@@ -325,6 +325,12 @@ AuthPortThreadRoutine(PVOID Param)
                         ReplyMsg = &RequestMsg;
                         break;
 
+                    case LSASS_REQUEST_LOGON_VIRTUAL_USER:
+                        RequestMsg.Status = LsapLogonVirtualUser(&RequestMsg,
+                                                                 LogonContext);
+                        ReplyMsg = &RequestMsg;
+                        break;
+
                     case LSASS_REQUEST_LOOKUP_AUTHENTICATION_PACKAGE:
                         RequestMsg.Status = LsapLookupAuthenticationPackage(&RequestMsg,
                                                                             LogonContext);

@@ -24,6 +24,7 @@ typedef enum _LSA_API_NUMBER
     LSASS_REQUEST_ENUM_LOGON_SESSIONS,
     LSASS_REQUEST_GET_LOGON_SESSION_DATA,
     LSASS_REQUEST_POLICY_CHANGE_NOTIFY,
+    LSASS_REQUEST_LOGON_VIRTUAL_USER,
     LSASS_REQUEST_MAXIMUM
 } LSA_API_NUMBER, *PLSA_API_NUMBER;
 
@@ -180,6 +181,34 @@ typedef struct _LSA_POLICY_CHANGE_NOTIFY_MSG
 } LSA_POLICY_CHANGE_NOTIFY_MSG, *PLSA_POLICY_CHANGE_NOTIFY_MSG;
 
 
+/*
+ * Virtual account logon. A virtual account is a self-asserting machine-local
+ * identity backed by a sid-name mapping, so there is no credential to verify.
+ * Because the logon mints a token without authentication, this request is
+ * answered for trusted (TCB) logon processes only.
+ */
+typedef struct _LSA_LOGON_VIRTUAL_USER_MSG
+{
+    union
+    {
+        struct
+        {
+            SECURITY_LOGON_TYPE LogonType;
+            ULONG UserSidLength;
+            PVOID UserSid;
+            UNICODE_STRING UserName;
+            UNICODE_STRING LogonDomain;
+            TOKEN_SOURCE SourceContext;
+        } Request;
+        struct
+        {
+            LUID LogonId;
+            HANDLE Token;
+        } Reply;
+    };
+} LSA_LOGON_VIRTUAL_USER_MSG, *PLSA_LOGON_VIRTUAL_USER_MSG;
+
+
 typedef struct _LSA_API_MSG
 {
     PORT_MESSAGE h;
@@ -193,6 +222,7 @@ typedef struct _LSA_API_MSG
             union
             {
                 LSA_LOGON_USER_MSG LogonUser;
+                LSA_LOGON_VIRTUAL_USER_MSG LogonVirtualUser;
                 LSA_CALL_AUTHENTICATION_PACKAGE_MSG CallAuthenticationPackage;
                 LSA_DEREGISTER_LOGON_PROCESS_MSG DeregisterLogonProcess;
                 LSA_LOOKUP_AUTHENTICATION_PACKAGE_MSG LookupAuthenticationPackage;
