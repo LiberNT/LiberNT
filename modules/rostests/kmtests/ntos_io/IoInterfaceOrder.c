@@ -19,6 +19,7 @@ static const GUID AliasInterface = {0x3b0e6c21, 0x9a47, 0x4f15, {0x8d, 0x2e, 0x6
 static const DEVPROPKEY TestProperty = {{0x6a1d3c58, 0x2e4f, 0x4b91, {0x8c, 0x07, 0x5d, 0x3e, 0x9a, 0x41, 0xf2, 0x6b}}, 2};
 static const GUID NotifyInterface = {0x9c4e1b27, 0x5d83, 0x4a6f, {0xb1, 0x2e, 0x7f, 0x05, 0xc9, 0x3a, 0x68, 0xd4}};
 static const GUID UnregisterInterface = {0x2d7f4a90, 0x13b6, 0x4c5e, {0xa8, 0x41, 0x6e, 0x2c, 0x9b, 0x07, 0xf3, 0x5d}};
+static const GUID DisableInterface = {0x5e81c3a6, 0x0f27, 0x4d94, {0xb6, 0x1a, 0x93, 0x4c, 0x2d, 0x7e, 0x58, 0x0b}};
 
 typedef struct _NOTIFY_STATE
 {
@@ -335,7 +336,7 @@ ReadDeviceName(
 static
 PDEVICE_OBJECT
 ReferenceRootDevice(
-    _In_ PCUNICODE_STRING Name)
+    _In_opt_ PCUNICODE_STRING Name)
 {
     UNICODE_STRING RootName = RTL_CONSTANT_STRING(L"\\Driver\\PnpManager");
     UCHAR Buffer[sizeof(OBJECT_NAME_INFORMATION) + 128 * sizeof(WCHAR)];
@@ -361,8 +362,9 @@ ReferenceRootDevice(
     for (Index = 0; List != NULL && NT_SUCCESS(Status) && Index < Count; Index++)
     {
         if (Found == NULL &&
-            NT_SUCCESS(ObQueryNameString(List[Index], NameInfo, sizeof(Buffer), &Length)) &&
-            RtlEqualUnicodeString(&NameInfo->Name, Name, TRUE))
+            (Name == NULL ||
+             (NT_SUCCESS(ObQueryNameString(List[Index], NameInfo, sizeof(Buffer), &Length)) &&
+              RtlEqualUnicodeString(&NameInfo->Name, Name, TRUE))))
         {
             Found = List[Index];
             ObReferenceObject(Found);
@@ -374,7 +376,7 @@ ReferenceRootDevice(
     if (List != NULL) ExFreePoolWithTag(List, 'kDtK');
     ObDereferenceObject(RootDriver);
 
-    ok(Found != NULL, "no root device object is named %wZ\n", Name);
+    ok(Found != NULL, "no root device object is named %wZ\n", Name != NULL ? Name : &RootName);
     return Found;
 }
 
@@ -531,7 +533,7 @@ START_TEST(IoInterfaceOrderCheck)
 
         ok_once(IoSetDeviceInterfaceState(&First, FALSE), STATUS_SUCCESS);
         ok_once(LinkStatus(&Second, &ReferenceB, &DeviceName), STATUS_SUCCESS);
-        ok_once(IoSetDeviceInterfaceState(&First, FALSE), STATUS_OBJECT_NAME_NOT_FOUND);
+        ok_once(IoSetDeviceInterfaceState(&First, FALSE), STATUS_SUCCESS);
         ok_once(IoSetDeviceInterfaceState(&Second, FALSE), STATUS_SUCCESS);
         ok_once(LinkStatus(&Second, &ReferenceB, &DeviceName), STATUS_OBJECT_NAME_NOT_FOUND);
     }
@@ -604,5 +606,33 @@ START_TEST(IoInterfaceOrderCheck)
     RtlFreeUnicodeString(&Third);
     RtlFreeUnicodeString(&AliasA);
     RtlFreeUnicodeString(&Notified);
+    ObDereferenceObject(Pdo);
+}
+
+START_TEST(IoInterfaceDisable)
+{
+    UNICODE_STRING Reference = RTL_CONSTANT_STRING(L"Disable");
+    UNICODE_STRING Missing = RTL_CONSTANT_STRING(L"\\??\\ROOT#KmtMissing#0000#{5e81c3a6-0f27-4d94-b61a-934c2d7e580b}");
+    UNICODE_STRING Link = { 0 };
+    PDEVICE_OBJECT Pdo;
+    NTSTATUS Status;
+
+    ok_once(IoSetDeviceInterfaceState(&Missing, FALSE), STATUS_SUCCESS);
+
+    Pdo = ReferenceRootDevice(NULL);
+    if (Pdo == NULL) return;
+
+    Status = IoRegisterDeviceInterface(Pdo, &DisableInterface, &Reference, &Link);
+    ok(NT_SUCCESS(Status), "IoRegisterDeviceInterface returned 0x%08lx\n", Status);
+    if (NT_SUCCESS(Status))
+    {
+        ok_once(IoSetDeviceInterfaceState(&Link, FALSE), STATUS_SUCCESS);
+        ok_once(IoSetDeviceInterfaceState(&Link, FALSE), STATUS_SUCCESS);
+        ok_once(IoSetDeviceInterfaceState(&Link, TRUE), STATUS_SUCCESS);
+        ok_once(IoSetDeviceInterfaceState(&Link, FALSE), STATUS_SUCCESS);
+        ok_once(IoSetDeviceInterfaceState(&Link, FALSE), STATUS_SUCCESS);
+        RtlFreeUnicodeString(&Link);
+    }
+
     ObDereferenceObject(Pdo);
 }

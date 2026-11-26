@@ -805,7 +805,7 @@ IopSetInterfaceState(
     if (Interface == NULL)
     {
         KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
-        return STATUS_OBJECT_NAME_NOT_FOUND;
+        return Enable ? STATUS_OBJECT_NAME_NOT_FOUND : STATUS_SUCCESS;
     }
 
     /* Arrivals wait until IRP_MN_START_DEVICE completes (IoSetDeviceInterfaceState documentation) */
@@ -832,7 +832,7 @@ IopSetInterfaceState(
     if (Interface->Enabled == Enable)
     {
         KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
-        return Enable ? STATUS_OBJECT_NAME_EXISTS : STATUS_OBJECT_NAME_NOT_FOUND;
+        return Enable ? STATUS_OBJECT_NAME_EXISTS : STATUS_SUCCESS;
     }
 
     if (Enable)

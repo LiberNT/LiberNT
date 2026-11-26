@@ -203,6 +203,7 @@ KMT_TESTFUNC Test_IoDeviceInterface;
 KMT_TESTFUNC Test_IoDeviceTextProperties;
 KMT_TESTFUNC Test_IoDeviceSecurity;
 KMT_TESTFUNC Test_IoEvent;
+KMT_TESTFUNC Test_IoInterfaceDisable;
 KMT_TESTFUNC Test_IoInterfaceOrderCheck;
 KMT_TESTFUNC Test_IoResourceSearch;
 KMT_TESTFUNC Test_IoMessageInterruptClaim;
@@ -652,6 +653,7 @@ const KMT_TEST TestList[] =
     { "IoDeviceTextProperties",             Test_IoDeviceTextProperties },
     { "IoDeviceSecurity",                   Test_IoDeviceSecurity },
     { "IoEvent",                            Test_IoEvent },
+    { "IoInterfaceDisable",                 Test_IoInterfaceDisable },
     { "-IoInterfaceOrderCheck",             Test_IoInterfaceOrderCheck },
     { "IoResourceSearch",                   Test_IoResourceSearch },
     { "IoMessageInterruptClaim",            Test_IoMessageInterruptClaim },
