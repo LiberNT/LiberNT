@@ -29,7 +29,9 @@ HandleReadIrp(
 	IN PDEVICE_OBJECT DeviceObject,
 	IN PIRP Irp,
 	BOOLEAN IsInStartIo,
-	OUT PBOOLEAN CompleteCancelled);
+	BOOLEAN FreshRead,
+	OUT PBOOLEAN CompleteCancelled,
+	OUT PBOOLEAN CompleteRead);
 
 static VOID NTAPI
 DriverUnload(IN PDRIVER_OBJECT DriverObject)
@@ -145,7 +147,7 @@ ClassRead(
 	PCLASS_DEVICE_EXTENSION DeviceExtension;
 	KIRQL OldIrql;
 	NTSTATUS Status;
-	BOOLEAN CompleteCancelled;
+	BOOLEAN CompleteCancelled, CompleteRead;
 
 	TRACE_(CLASS_NAME, "IRP_MJ_READ\n");
 
@@ -165,13 +167,17 @@ ClassRead(
 	}
 
 	KeAcquireSpinLock(&DeviceExtension->SpinLock, &OldIrql);
-	Status = HandleReadIrp(ClassDevice, Irp, FALSE, &CompleteCancelled);
+	Status = HandleReadIrp(ClassDevice, Irp, FALSE, TRUE, &CompleteCancelled, &CompleteRead);
 	KeReleaseSpinLock(&DeviceExtension->SpinLock, OldIrql);
 	if (CompleteCancelled)
 	{
 		Irp->IoStatus.Status = STATUS_CANCELLED;
 		Irp->IoStatus.Information = 0;
 		IoCompleteRequest(Irp, IO_NO_INCREMENT);
+	}
+	else if (CompleteRead)
+	{
+		IoCompleteRequest(Irp, IO_KEYBOARD_INCREMENT);
 	}
 	return Status;
 }
@@ -592,7 +598,8 @@ ClassCallback(
 	KIRQL OldIrql;
 	SIZE_T InputCount = DataEnd - DataStart;
 	SIZE_T ReadSize;
-	BOOLEAN CompleteCancelled;
+	BOOLEAN CompleteCancelled, CompleteRead;
+	PIRP ReadIrp = NULL;
 
 	TRACE_(CLASS_NAME, "ClassCallback()\n");
 
@@ -629,11 +636,17 @@ ClassCallback(
 		/* Complete pending IRP (if any) */
 		if (ClassDeviceExtension->PendingIrp)
 		{
-			HandleReadIrp(ClassDeviceObject, ClassDeviceExtension->PendingIrp, FALSE, &CompleteCancelled);
+			PIRP PendingIrp = ClassDeviceExtension->PendingIrp;
+
+			HandleReadIrp(ClassDeviceObject, PendingIrp, FALSE, FALSE, &CompleteCancelled, &CompleteRead);
 			ASSERT(!CompleteCancelled);
+			if (CompleteRead)
+				ReadIrp = PendingIrp;
 		}
 	}
 	KeReleaseSpinLock(&ClassDeviceExtension->SpinLock, OldIrql);
+	if (ReadIrp)
+		IoCompleteRequest(ReadIrp, IO_KEYBOARD_INCREMENT);
 
 	TRACE_(CLASS_NAME, "Leaving ClassCallback()\n");
 	return TRUE;
@@ -891,7 +904,9 @@ HandleReadIrp(
 	IN PDEVICE_OBJECT DeviceObject,
 	IN PIRP Irp,
 	BOOLEAN IsInStartIo,
-	OUT PBOOLEAN CompleteCancelled)
+	BOOLEAN FreshRead,
+	OUT PBOOLEAN CompleteCancelled,
+	OUT PBOOLEAN CompleteRead)
 {
 	PCLASS_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
 	NTSTATUS Status;
@@ -900,17 +915,27 @@ HandleReadIrp(
 	TRACE_(CLASS_NAME, "HandleReadIrp(DeviceObject %p, Irp %p)\n", DeviceObject, Irp);
 
 	ASSERT(DeviceExtension->Common.IsClassDO);
-	ASSERT(CompleteCancelled != NULL);
+	ASSERT(CompleteCancelled != NULL && CompleteRead != NULL);
 	*CompleteCancelled = FALSE;
+	*CompleteRead = FALSE;
 
 	if (DeviceExtension->InputCount > 0)
 	{
 		SIZE_T NumberOfEntries;
 
+		if (!FreshRead && !IsInStartIo)
+		{
+			ASSERT(DeviceExtension->PendingIrp == Irp);
+			if (!IoSetCancelRoutine(Irp, NULL))
+				return STATUS_PENDING;
+			DeviceExtension->PendingIrp = NULL;
+		}
+
 		NumberOfEntries = MIN(
 			DeviceExtension->InputCount,
 			IoGetCurrentIrpStackLocation(Irp)->Parameters.Read.Length / sizeof(KEYBOARD_INPUT_DATA));
 
+		Irp->IoStatus.Information = 0;
 		Status = FillEntries(
 			Irp,
 			DeviceExtension->PortData,
@@ -934,9 +959,12 @@ HandleReadIrp(
 		/* Go to next packet and complete this request */
 		Irp->IoStatus.Status = Status;
 
-		(VOID)IoSetCancelRoutine(Irp, NULL);
-		IoCompleteRequest(Irp, IO_KEYBOARD_INCREMENT);
-		DeviceExtension->PendingIrp = NULL;
+		if (IsInStartIo && !FreshRead)
+		{
+			(VOID)IoSetCancelRoutine(Irp, NULL);
+			DeviceExtension->PendingIrp = NULL;
+		}
+		*CompleteRead = TRUE;
 	}
 	else
 	{
@@ -1209,15 +1237,25 @@ ClassStartIo(
 {
 	PCLASS_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
 	KIRQL OldIrql;
-	BOOLEAN CompleteCancelled;
+	BOOLEAN CompleteCancelled, CompleteRead;
 
 	TRACE_(CLASS_NAME, "ClassStartIo(DeviceObject %p, Irp %p)\n", DeviceObject, Irp);
 
 	ASSERT(DeviceExtension->Common.IsClassDO);
 
 	KeAcquireSpinLock(&DeviceExtension->SpinLock, &OldIrql);
-	HandleReadIrp(DeviceObject, Irp, TRUE, &CompleteCancelled);
+	HandleReadIrp(DeviceObject, Irp, TRUE, FALSE, &CompleteCancelled, &CompleteRead);
 	KeReleaseSpinLock(&DeviceExtension->SpinLock, OldIrql);
+	if (CompleteCancelled)
+	{
+		Irp->IoStatus.Status = STATUS_CANCELLED;
+		Irp->IoStatus.Information = 0;
+		IoCompleteRequest(Irp, IO_NO_INCREMENT);
+	}
+	else if (CompleteRead)
+	{
+		IoCompleteRequest(Irp, IO_KEYBOARD_INCREMENT);
+	}
 }
 
 static VOID NTAPI
