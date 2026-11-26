@@ -268,6 +268,8 @@ protected:
 
     struct list m_AssociatedFocusWindows;
     HHOOK  m_focusHook;
+    HHOOK  m_threadFocusHook;
+    BOOL   m_fThreadFocus;
 
     /* kept as separate lists to reduce unnecessary iterations */
     struct list m_ActiveLanguageProfileNotifySink;
@@ -303,6 +305,9 @@ protected:
 
     static LRESULT CALLBACK ThreadFocusHookProc(INT nCode, WPARAM wParam, LPARAM lParam);
     LRESULT _ThreadFocusHookProc(INT nCode, WPARAM wParam, LPARAM lParam);
+
+    static LRESULT CALLBACK ThreadFocusMessageProc(INT nCode, WPARAM wParam, LPARAM lParam);
+    void NotifyThreadFocus(BOOL fFocus);
 
     HRESULT SetupWindowsHook();
     HRESULT DispatchKey(WPARAM wParam, LPARAM lParam, BOOL *pfEaten, BOOL test, BOOL keyUp);
@@ -423,6 +428,8 @@ CThreadMgr::CThreadMgr()
 
     list_init(&m_AssociatedFocusWindows);
     m_focusHook = NULL;
+    m_threadFocusHook = NULL;
+    m_fThreadFocus = FALSE;
 
     /* kept as separate lists to reduce unnecessary iterations */
     list_init(&m_ActiveLanguageProfileNotifySink);
@@ -445,6 +452,8 @@ CThreadMgr::~CThreadMgr()
     /* unhook right away */
     if (m_focusHook)
         UnhookWindowsHookEx(m_focusHook);
+    if (m_threadFocusHook)
+        UnhookWindowsHookEx(m_threadFocusHook);
 
     TlsSetValue(g_dwTLSIndex, NULL);
     TRACE("destroying %p\n", this);
@@ -780,6 +789,49 @@ LRESULT CALLBACK CThreadMgr::ThreadFocusHookProc(INT nCode, WPARAM wParam, LPARA
     return This->_ThreadFocusHookProc(nCode, wParam, lParam);
 }
 
+void CThreadMgr::NotifyThreadFocus(BOOL fFocus)
+{
+    if (m_fThreadFocus == fFocus)
+        return;
+    m_fThreadFocus = fFocus;
+
+    CSinkSnapshot sinks;
+    if (FAILED(sinks.Capture(&m_ThreadFocusSink)))
+        return;
+    for (ULONG i = 0; i < sinks.Count(); ++i)
+    {
+        ITfThreadFocusSink *sink = static_cast<ITfThreadFocusSink *>(sinks[i]);
+        if (fFocus)
+            sink->OnSetThreadFocus();
+        else
+            sink->OnKillThreadFocus();
+    }
+}
+
+LRESULT CALLBACK CThreadMgr::ThreadFocusMessageProc(INT nCode, WPARAM wParam, LPARAM lParam)
+{
+    CThreadMgr *This = (CThreadMgr *)TlsGetValue(g_dwTLSIndex);
+    const CWPSTRUCT *pMsg = (const CWPSTRUCT *)lParam;
+
+    if (!This)
+        return CallNextHookEx(NULL, nCode, wParam, lParam);
+
+    if (nCode == HC_ACTION)
+    {
+        if (pMsg->message == WM_SETFOCUS)
+        {
+            This->NotifyThreadFocus(TRUE);
+        }
+        else if (pMsg->message == WM_KILLFOCUS)
+        {
+            HWND hwndNext = (HWND)pMsg->wParam;
+            if (!hwndNext || GetWindowThreadProcessId(hwndNext, NULL) != GetCurrentThreadId())
+                This->NotifyThreadFocus(FALSE);
+        }
+    }
+    return CallNextHookEx(This->m_threadFocusHook, nCode, wParam, lParam);
+}
+
 HRESULT CThreadMgr::SetupWindowsHook()
 {
     if (!m_focusHook)
@@ -1035,7 +1087,13 @@ STDMETHODIMP CThreadMgr::AdviseSink(
 
     if (riid == IID_ITfThreadFocusSink)
     {
-        WARN("semi-stub for ITfThreadFocusSink: sink won't be used.\n");
+        if (!m_threadFocusHook)
+        {
+            m_threadFocusHook = SetWindowsHookExW(WH_CALLWNDPROC, ThreadFocusMessageProc, NULL, GetCurrentThreadId());
+            if (!m_threadFocusHook)
+                return E_FAIL;
+            m_fThreadFocus = (::GetFocus() != NULL);
+        }
         return advise_sink(&m_ThreadFocusSink, IID_ITfThreadFocusSink, COOKIE_MAGIC_THREADFOCUSSINK, punk, pdwCookie);
     }
 
