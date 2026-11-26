@@ -33,6 +33,7 @@ typedef struct _HTML_ITEM
     int Heading;
     int Checked;
     int Disabled;
+    int Hidden;
     char *Text;
     char *Href;
     char *Type;

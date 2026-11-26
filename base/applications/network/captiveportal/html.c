@@ -53,6 +53,9 @@ typedef struct _HTML_PARSER
     int InSelect;
     int InOption;
     int InLabel;
+    int LinkInLabel;
+    int HiddenDepth;
+    char HiddenTag[HTML_MAX_TAG_NAME];
     int OptionSelected;
     int OptionDisabled;
     size_t ButtonItem;
@@ -90,6 +93,11 @@ static const char *const BlockTags[] =
     "address", "article", "aside", "blockquote", "body", "center", "dd", "details", "div", "dl", "dt",
     "fieldset", "figcaption", "figure", "footer", "header", "hr", "html", "legend", "li", "main", "nav",
     "ol", "p", "pre", "section", "summary", "table", "td", "th", "tr", "ul",
+};
+
+static const char *const VoidTags[] =
+{
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr",
 };
 
 static const char *const SkippedTags[] =
@@ -598,14 +606,18 @@ HtmlAppendText(HTML_PARSER *Parser, const char *Text, size_t Length)
 {
     HTML_BUFFER *Target;
 
-    if (Parser->InHead)
+    if (Parser->InHead || Parser->HiddenDepth)
         return;
     if (Parser->InOption)
         Target = &Parser->OptionText;
     else if (Parser->InButton)
         Target = &Parser->ButtonText;
     else if (Parser->InLink)
+    {
         Target = &Parser->LinkText;
+        if (Parser->LinkInLabel && !HtmlAppendDecoded(&Parser->LabelText, Text, Length))
+            Parser->Failed = 1;
+    }
     else if (Parser->InLabel)
         Target = &Parser->LabelText;
     else if (Parser->InSelect)
@@ -631,6 +643,7 @@ HtmlFinishLink(HTML_PARSER *Parser)
     if (!Parser->InLink)
         return;
     Parser->InLink = 0;
+    Parser->LinkInLabel = 0;
     Text = HtmlTakeCollapsed(&Parser->LinkText);
     if (!Text)
     {
@@ -798,7 +811,7 @@ HtmlStartInput(HTML_PARSER *Parser, const HTML_TAG *Tag)
         Parser->Failed = 1;
         return;
     }
-    if (Visible && !Parser->InButton && !Parser->InLink)
+    if (Visible && !Parser->InButton && !Parser->InLink && !Parser->HiddenDepth)
     {
         HtmlFlushText(Parser);
         if (Parser->InLabel && !Checkable)
@@ -825,11 +838,12 @@ HtmlStartInput(HTML_PARSER *Parser, const HTML_TAG *Tag)
     Item->Value = HtmlStrDup(HtmlAttribute(Tag, "value"));
     Item->Id = HtmlStrDup(HtmlAttribute(Tag, "id"));
     Item->Placeholder = HtmlStrDup(HtmlAttribute(Tag, "placeholder"));
+    Item->Hidden = Parser->HiddenDepth != 0 || HtmlAttribute(Tag, "hidden") != NULL;
     Item->Checked = HtmlAttribute(Tag, "checked") != NULL;
     Item->Disabled = HtmlAttribute(Tag, "disabled") != NULL;
     if (strcmp(Type, "image") == 0)
         Item->Text = HtmlStrDup(HtmlAttribute(Tag, "alt"));
-    if (Checkable && Parser->InLabel && Parser->LabelTarget < 0)
+    if (Checkable && Parser->InLabel && Parser->LabelTarget < 0 && !Parser->HiddenDepth)
         Parser->LabelTarget = (long)(Parser->Document->ItemCount - 1);
 }
 
@@ -904,6 +918,7 @@ HtmlStartTag(HTML_PARSER *Parser, const HTML_TAG *Tag)
             return;
         HtmlFlushText(Parser);
         Parser->InLink = 1;
+        Parser->LinkInLabel = Parser->InLabel;
         Parser->LinkHref = HtmlStrDup(Href);
         return;
     }
@@ -1163,6 +1178,7 @@ HtmlParse(
             Item = HtmlAddItem(&Parser, HtmlItemTextArea);
             if (Item)
             {
+                Item->Hidden = Parser.HiddenDepth != 0 || HtmlAttribute(&Tag, "hidden") != NULL;
                 Item->Name = HtmlStrDup(HtmlAttribute(&Tag, "name"));
                 Item->Id = HtmlStrDup(HtmlAttribute(&Tag, "id"));
                 Item->Placeholder = HtmlStrDup(HtmlAttribute(&Tag, "placeholder"));
@@ -1179,9 +1195,28 @@ HtmlParse(
                 Document->HasScript = 1;
             Index = HtmlFindClosing(Data, Length, Index, Tag.Name, &ContentEnd);
         }
+        else if (Parser.HiddenDepth)
+        {
+            if (strcmp(Tag.Name, Parser.HiddenTag) == 0 &&
+                !HtmlIsOneOf(Tag.Name, VoidTags, sizeof(VoidTags) / sizeof(VoidTags[0])))
+            {
+                Parser.HiddenDepth += Tag.Closing ? -1 : 1;
+            }
+            else if (!Tag.Closing && strcmp(Tag.Name, "input") == 0)
+            {
+                HtmlStartInput(&Parser, &Tag);
+            }
+        }
         else if (Tag.Closing)
         {
             HtmlEndTag(&Parser, &Tag);
+        }
+        else if (HtmlAttribute(&Tag, "hidden") &&
+                 !HtmlIsOneOf(Tag.Name, VoidTags, sizeof(VoidTags) / sizeof(VoidTags[0])))
+        {
+            HtmlFlushText(&Parser);
+            Parser.HiddenDepth = 1;
+            memcpy(Parser.HiddenTag, Tag.Name, sizeof(Parser.HiddenTag));
         }
         else
         {
@@ -1260,6 +1295,8 @@ int
 HtmlIsVisibleItem(
     const HTML_ITEM *Item)
 {
+    if (Item->Hidden)
+        return 0;
     if (Item->Kind == HtmlItemInput)
         return !HtmlTypeIs(Item, "hidden") && !HtmlTypeIs(Item, "reset") && !HtmlTypeIs(Item, "file");
     if (Item->Kind == HtmlItemButton)

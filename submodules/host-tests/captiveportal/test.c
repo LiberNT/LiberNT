@@ -109,7 +109,7 @@ TestClickThrough(void)
 
     Accept = Find(&Document, "accept", "checkbox");
     Go = Find(&Document, "go", "submit");
-    CHECK(Accept == 4 && Same(Document.Items[Accept].Text, "I accept the"),
+    CHECK(Accept == 4 && Same(Document.Items[Accept].Text, "I accept the terms"),
           "checkbox caption \"%s\"", Accept < Document.ItemCount ? Document.Items[Accept].Text : "");
     CHECK(Item(&Document, 5)->Kind == HtmlItemLink && Same(Item(&Document, 5)->Href, "/terms") &&
           Same(Item(&Document, 5)->Text, "terms") && Item(&Document, 5)->Form == -1, "terms link");
@@ -236,6 +236,49 @@ TestSubmitKinds(void)
 }
 
 static void
+TestHiddenAndLabelLinks(void)
+{
+    HTML_DOCUMENT Document;
+    size_t Accept, Token, Index;
+
+    Parse("<form method=post><div hidden><p>please wait...</p><div><p>still hidden</p></div>"
+          "<input name=inside value=1></div><p>shown</p><input hidden name=h value=2>"
+          "<textarea hidden name=t>x</textarea>"
+          "<label><input type=checkbox name=accept value=1> J'accepte les <a href=\"/t\">conditions</a> et la "
+          "<a href=\"/p\">politique</a>.<sup>*</sup></label><input type=submit value=Go></form>", &Document);
+    for (Index = 0; Index < Document.ItemCount; Index++)
+    {
+        CHECK(!Document.Items[Index].Text || (strcmp(Document.Items[Index].Text, "please wait...") != 0 &&
+                                               strcmp(Document.Items[Index].Text, "still hidden") != 0),
+              "hidden text shown: \"%s\"", Document.Items[Index].Text);
+    }
+    Token = Find(&Document, "inside", NULL);
+    CHECK(Token < Document.ItemCount && Document.Items[Token].Hidden && !HtmlIsVisibleItem(&Document.Items[Token]),
+          "input inside a hidden element is kept but not shown");
+    Index = Find(&Document, "h", NULL);
+    CHECK(Index < Document.ItemCount && !HtmlIsVisibleItem(&Document.Items[Index]), "hidden input not shown");
+    Index = Find(&Document, "t", NULL);
+    CHECK(Index < Document.ItemCount && !HtmlIsVisibleItem(&Document.Items[Index]), "hidden textarea not shown");
+    CHECK(Item(&Document, 1)->Kind == HtmlItemText && Same(Item(&Document, 1)->Text, "shown"),
+          "text after the hidden block \"%s\"", Item(&Document, 1)->Text);
+
+    Accept = Find(&Document, "accept", "checkbox");
+    CHECK(Accept < Document.ItemCount && Same(Document.Items[Accept].Text, "J'accepte les conditions et la politique.*"),
+          "checkbox caption \"%s\"", Accept < Document.ItemCount ? Document.Items[Accept].Text : "");
+    CHECK(Item(&Document, Accept + 1)->Kind == HtmlItemLink && Same(Item(&Document, Accept + 1)->Text, "conditions") &&
+          Item(&Document, Accept + 2)->Kind == HtmlItemLink && Same(Item(&Document, Accept + 2)->Href, "/p"),
+          "label links still listed");
+    Document.Items[Accept].Checked = 1;
+    CheckEncoding(&Document, 0, Document.ItemCount - 1, NULL, "inside=1&h=2&t=x&accept=1");
+    HtmlFree(&Document);
+
+    Parse("<div hidden><div>a</div>b</div><div>c</div><br hidden><p>d</p>", &Document);
+    CHECK(Document.ItemCount == 2 && Same(Item(&Document, 0)->Text, "c") && Same(Item(&Document, 1)->Text, "d"),
+          "nested hidden: %zu items, first \"%s\"", Document.ItemCount, Item(&Document, 0)->Text);
+    HtmlFree(&Document);
+}
+
+static void
 TestCharset(void)
 {
     static const char Meta[] = "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=ISO-8859-1\">";
@@ -261,6 +304,7 @@ main(void)
     TestText();
     TestSubmitKinds();
     TestCharset();
+    TestHiddenAndLabelLinks();
     if (Failures)
     {
         printf("%d failure(s)\n", Failures);
