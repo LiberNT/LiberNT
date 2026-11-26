@@ -383,6 +383,30 @@ NwifiQueryState(ULONG InterfaceIndex, ULONG64 UpperLuid,
                       pState, sizeof(*pState), &ret);
 }
 
+DWORD
+NwifiQueryCapability(ULONG InterfaceIndex, ULONG64 UpperLuid,
+                     const DOT11_MAC_ADDRESS *pMac,
+                     PNWIFI_INTERFACE_CAPABILITY pCapability)
+{
+    NWIFI_INTERFACE_REF ref;
+    HANDLE hDev = NwifiGetControlHandle();
+    DWORD ret;
+
+    if (hDev == INVALID_HANDLE_VALUE)
+        return ERROR_NOT_READY;
+
+    ZeroMemory(&ref, sizeof(ref));
+    ref.Size = sizeof(ref);
+    ref.InterfaceIndex = InterfaceIndex;
+    ref.UpperLuid = UpperLuid;
+    if (pMac != NULL)
+        ref.MacAddress = *pMac;
+
+    ZeroMemory(pCapability, sizeof(*pCapability));
+    return NwifiIoctl(hDev, IOCTL_NWIFI_QUERY_CAPABILITY, &ref, sizeof(ref),
+                      pCapability, sizeof(*pCapability), &ret);
+}
+
 /*
  * Notification worker: pends IOCTL_NWIFI_GET_NOTIFICATION on a private handle
  * in a loop; each completed NWIFI_NOTIFICATION is translated into the matching

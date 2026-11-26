@@ -657,6 +657,85 @@ NwifiDispatchDeviceControl(
             break;
         }
 
+        case IOCTL_NWIFI_QUERY_CAPABILITY:
+        {
+            PNWIFI_INTERFACE_REF Ref = (PNWIFI_INTERFACE_REF)Buffer;
+            PNWIFI_INTERFACE_CAPABILITY Out = (PNWIFI_INTERFACE_CAPABILITY)Buffer;
+            DOT11_EXTSTA_CAPABILITY ExtSta;
+            PDOT11_SUPPORTED_PHY_TYPES PhyTypes;
+            ULONG PhyLength = FIELD_OFFSET(DOT11_SUPPORTED_PHY_TYPES, dot11PHYType) + NWIFI_MAX_PHY_TYPES * sizeof(DOT11_PHY_TYPE);
+            BOOLEAN MultiDomain = FALSE;
+            ULONG Count;
+
+            C_ASSERT(sizeof(NWIFI_INTERFACE_CAPABILITY) >= sizeof(NWIFI_INTERFACE_REF));
+            if (InLen < sizeof(NWIFI_INTERFACE_REF) || Ref->Size < sizeof(*Ref))
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+            if (OutLen < sizeof(NWIFI_INTERFACE_CAPABILITY))
+            {
+                Status = STATUS_BUFFER_TOO_SMALL;
+                Info = sizeof(NWIFI_INTERFACE_CAPABILITY);
+                break;
+            }
+            Adapter = NwifiFindAdapterByIndex(Ref->InterfaceIndex);
+            if (Adapter == NULL)
+            {
+                Status = STATUS_OBJECT_NAME_NOT_FOUND;
+                break;
+            }
+
+            /* TODO: rt2800usb and rtw8852bs do not answer OID_DOT11_EXTSTA_CAPABILITY yet, so their capability query fails */
+            RtlZeroMemory(&ExtSta, sizeof(ExtSta));
+            ExtSta.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+            ExtSta.Header.Revision = DOT11_EXTSTA_CAPABILITY_REVISION_1;
+            ExtSta.Header.Size = sizeof(DOT11_EXTSTA_CAPABILITY);
+            NdisStatus = NwifiDoRequest(Adapter, NdisRequestQueryInformation, OID_DOT11_EXTSTA_CAPABILITY,
+                                        &ExtSta, sizeof(ExtSta), NULL);
+            if (NdisStatus != NDIS_STATUS_SUCCESS)
+            {
+                Status = NwifiMapNdisStatus(NdisStatus);
+                break;
+            }
+
+            PhyTypes = (PDOT11_SUPPORTED_PHY_TYPES)NwifiAllocate(PhyLength);
+            if (PhyTypes == NULL)
+            {
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+                break;
+            }
+            RtlZeroMemory(PhyTypes, PhyLength);
+            NdisStatus = NwifiDoRequest(Adapter, NdisRequestQueryInformation, OID_DOT11_SUPPORTED_PHY_TYPES,
+                                        PhyTypes, PhyLength, NULL);
+            if (NdisStatus != NDIS_STATUS_SUCCESS)
+            {
+                NwifiFree(PhyTypes);
+                Status = NwifiMapNdisStatus(NdisStatus);
+                break;
+            }
+            Count = min(PhyTypes->uNumOfEntries, NWIFI_MAX_PHY_TYPES);
+
+            /* 802.11d support is optional: a miniport without the OID does not implement multi-domain operation. */
+            if (NwifiDoRequest(Adapter, NdisRequestQueryInformation, OID_DOT11_MULTI_DOMAIN_CAPABILITY_IMPLEMENTED,
+                               &MultiDomain, sizeof(MultiDomain), NULL) != NDIS_STATUS_SUCCESS)
+            {
+                MultiDomain = FALSE;
+            }
+
+            RtlZeroMemory(Out, sizeof(*Out));
+            Out->Size = sizeof(*Out);
+            Out->Dot11DSupported = MultiDomain != FALSE;
+            Out->MaxDesiredSsidListSize = ExtSta.uDesiredSSIDListSize;
+            Out->MaxDesiredBssidListSize = ExtSta.uDesiredBSSIDListSize;
+            Out->NumberOfPhyTypes = Count;
+            RtlCopyMemory(Out->PhyTypes, PhyTypes->dot11PHYType, Count * sizeof(DOT11_PHY_TYPE));
+            NwifiFree(PhyTypes);
+            Info = sizeof(*Out);
+            Status = STATUS_SUCCESS;
+            break;
+        }
+
         case IOCTL_NWIFI_GET_NOTIFICATION:
             if (OutLen < sizeof(NWIFI_NOTIFICATION))
             {

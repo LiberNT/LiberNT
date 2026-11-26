@@ -257,6 +257,16 @@ DWORD _RpcGetInterfaceCapability(
     PWLAN_INTERFACE_CAPABILITY *ppCapability)
 {
     PWLANSVCHANDLE lpWlanSvcHandle;
+    PWLANSVC_INTERFACE iface;
+    PWLAN_INTERFACE_CAPABILITY pCapability;
+    NWIFI_INTERFACE_CAPABILITY caps;
+    ULONG index;
+    ULONG64 luid;
+    DOT11_MAC_ADDRESS mac;
+    DWORD dwResult;
+    ULONG i;
+
+    C_ASSERT(NWIFI_MAX_PHY_TYPES == WLAN_MAX_PHY_INDEX);
 
     lpWlanSvcHandle = WlanSvcGetHandleEntry(hClientHandle);
     if (!lpWlanSvcHandle)
@@ -264,8 +274,38 @@ DWORD _RpcGetInterfaceCapability(
         return ERROR_INVALID_HANDLE;
     }
 
-    UNIMPLEMENTED;
-    return ERROR_CALL_NOT_IMPLEMENTED;
+    *ppCapability = NULL;
+    EnterCriticalSection(&WlanSvcLock);
+    iface = WlanSvcFindInterface(pInterfaceGuid);
+    if (iface == NULL)
+    {
+        LeaveCriticalSection(&WlanSvcLock);
+        return ERROR_NOT_FOUND;
+    }
+    index = iface->NwifiIndex;
+    luid = iface->UpperLuid;
+    mac = iface->MacAddress;
+    LeaveCriticalSection(&WlanSvcLock);
+
+    dwResult = NwifiQueryCapability(index, luid, &mac, &caps);
+    if (dwResult != ERROR_SUCCESS)
+        return dwResult;
+    if (caps.Size < sizeof(caps) || caps.NumberOfPhyTypes > WLAN_MAX_PHY_INDEX)
+        return ERROR_INVALID_DATA;
+
+    pCapability = midl_user_allocate(sizeof(*pCapability));
+    if (pCapability == NULL)
+        return ERROR_NOT_ENOUGH_MEMORY;
+    ZeroMemory(pCapability, sizeof(*pCapability));
+    pCapability->interfaceType = wlan_interface_type_native_802_11;
+    pCapability->bDot11DSupported = caps.Dot11DSupported ? TRUE : FALSE;
+    pCapability->dwMaxDesiredSsidListSize = caps.MaxDesiredSsidListSize;
+    pCapability->dwMaxDesiredBssidListSize = caps.MaxDesiredBssidListSize;
+    pCapability->dwNumberOfSupportedPhys = caps.NumberOfPhyTypes;
+    for (i = 0; i < caps.NumberOfPhyTypes; i++)
+        pCapability->dot11PhyTypes[i] = caps.PhyTypes[i];
+    *ppCapability = pCapability;
+    return ERROR_SUCCESS;
 }
 
 DWORD _RpcSetInterface(

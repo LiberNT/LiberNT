@@ -63,6 +63,8 @@
 
 #define IOCTL_NWIFI_GET_AUTH_CIPHER_PAIRS _NWIFI_CTL(0x08)
 #define IOCTL_NWIFI_IHV_CONTROL         _NWIFI_CTL(0x09)
+/* IN: NWIFI_INTERFACE_REF  OUT: NWIFI_INTERFACE_CAPABILITY. */
+#define IOCTL_NWIFI_QUERY_CAPABILITY    _NWIFI_CTL(0x0A)
 
 /* ===========================================================================
  *  Payload structures
@@ -87,6 +89,18 @@ typedef struct _NWIFI_INTERFACE_LIST
     ULONG NumberOfItems;
     NWIFI_INTERFACE_REF Item[1];    /* NumberOfItems entries */
 } NWIFI_INTERFACE_LIST, *PNWIFI_INTERFACE_LIST;
+
+#define NWIFI_MAX_PHY_TYPES 64
+
+typedef struct _NWIFI_INTERFACE_CAPABILITY
+{
+    ULONG Size;
+    BOOLEAN Dot11DSupported;
+    ULONG MaxDesiredSsidListSize;
+    ULONG MaxDesiredBssidListSize;
+    ULONG NumberOfPhyTypes;
+    DOT11_PHY_TYPE PhyTypes[NWIFI_MAX_PHY_TYPES];
+} NWIFI_INTERFACE_CAPABILITY, *PNWIFI_INTERFACE_CAPABILITY;
 
 typedef struct _NWIFI_SCAN_REQUEST
 {
