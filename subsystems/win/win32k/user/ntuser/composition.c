@@ -5108,8 +5108,14 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
             /* The ICD update rectangle addresses the client-sized shared
              * allocation. The compositor applies rcClient when placing that
              * allocation in the top-level window backing store. */
-            if ((Request.Flags & ~1u) != 0)
+            if ((Request.Flags & ~(1u | DWM_DX_UPDATE_PREMULTIPLIED)) != 0)
                 return STATUS_INVALID_PARAMETER;
+            if (Request.Flags & DWM_DX_UPDATE_PREMULTIPLIED)
+                Entry->Redirect.DxFlags |= DWM_DX_PUBLISH_PREMULTIPLIED;
+            else
+                Entry->Redirect.DxFlags &= ~DWM_DX_PUBLISH_PREMULTIPLIED;
+            ASSERT(!!(Entry->Redirect.DxFlags & DWM_DX_PUBLISH_PREMULTIPLIED) ==
+                   !!(Request.Flags & DWM_DX_UPDATE_PREMULTIPLIED));
             RECTL_vOffsetRect(&Request.UpdateRect,
                               SourceWnd->rcWindow.left - SourceWnd->rcClient.left,
                               SourceWnd->rcWindow.top - SourceWnd->rcClient.top);
