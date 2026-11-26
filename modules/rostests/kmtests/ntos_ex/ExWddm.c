@@ -1448,6 +1448,57 @@ TestModernInbvState(VOID)
     ok_eq_hex(Status, STATUS_SUCCESS);
 }
 
+typedef struct _TEST_MEMORY_PARTITION_INFORMATION
+{
+    ULONG Flags;
+    ULONG NumaNode;
+    ULONG Channel;
+    ULONG NumberOfNumaNodes;
+    ULONG64 ResidentAvailablePages;
+    ULONG64 CommittedPages;
+    ULONG64 CommitLimit;
+    ULONG64 PeakCommitment;
+    ULONG64 TotalNumberOfPages;
+    ULONG64 AvailablePages;
+    ULONG64 ZeroPages;
+    ULONG64 FreePages;
+    ULONG64 StandbyPages;
+    ULONG64 Reserved[16];
+    ULONG64 MaximumCommitLimit;
+    ULONG64 Reserved2;
+    ULONG PartitionId;
+} TEST_MEMORY_PARTITION_INFORMATION;
+
+C_ASSERT(sizeof(TEST_MEMORY_PARTITION_INFORMATION) == 0xF0);
+
+static
+VOID
+TestSystemPartitionInformation(
+    _In_ HANDLE PartitionHandle)
+{
+    TEST_MEMORY_PARTITION_INFORMATION Information;
+    NTSTATUS Status;
+
+    RtlZeroMemory(&Information, sizeof(Information));
+    Information.NumaNode = MAXULONG;
+    Information.Channel = MAXULONG;
+    Status = ZwManagePartition(PartitionHandle, NULL, SystemMemoryPartitionInformation, &Information, sizeof(Information));
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    ok_eq_ulong(Information.Flags, 0UL);
+    ok_eq_ulong(Information.NumaNode, MAXULONG);
+    ok_eq_ulong(Information.Channel, MAXULONG);
+    ok(Information.NumberOfNumaNodes != 0, "no NUMA node was reported\n");
+    ok(Information.CommittedPages <= Information.CommitLimit, "%I64u pages committed, limit %I64u\n", Information.CommittedPages, Information.CommitLimit);
+    ok(Information.PeakCommitment >= Information.CommittedPages, "peak %I64u below the %I64u pages committed\n", Information.PeakCommitment, Information.CommittedPages);
+    ok(Information.TotalNumberOfPages != 0, "the partition has no pages\n");
+    ok(Information.AvailablePages <= Information.TotalNumberOfPages, "%I64u pages available of %I64u\n", Information.AvailablePages, Information.TotalNumberOfPages);
+    ok(Information.MaximumCommitLimit >= Information.CommitLimit, "maximum commit limit %I64u below the limit %I64u\n", Information.MaximumCommitLimit, Information.CommitLimit);
+    ok_eq_ulong(Information.PartitionId, 0UL);
+}
+
 static
 VOID
 TestModernProviderState(VOID)
@@ -1810,6 +1861,8 @@ START_TEST(ExWddmRotateValid)
 START_TEST(ExWddmProviders)
 {
     TestModernProviderState();
+    TestSystemPartitionInformation((HANDLE)(LONG_PTR)MEMORY_CURRENT_PARTITION_HANDLE);
+    TestSystemPartitionInformation((HANDLE)(LONG_PTR)MEMORY_SYSTEM_PARTITION_HANDLE);
 }
 
 START_TEST(ExWddmTls)

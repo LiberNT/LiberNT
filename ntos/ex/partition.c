@@ -23,6 +23,32 @@ typedef struct _EXP_MEMORY_PARTITION
     PVOID ProviderContext;
 } EXP_MEMORY_PARTITION, *PEXP_MEMORY_PARTITION;
 
+typedef struct _EXP_MEMORY_PARTITION_INFORMATION
+{
+    ULONG Flags;
+    ULONG NumaNode;
+    ULONG Channel;
+    ULONG NumberOfNumaNodes;
+    ULONG64 ResidentAvailablePages;
+    ULONG64 CommittedPages;
+    ULONG64 CommitLimit;
+    ULONG64 PeakCommitment;
+    ULONG64 TotalNumberOfPages;
+    ULONG64 AvailablePages;
+    ULONG64 ZeroPages;
+    ULONG64 FreePages;
+    ULONG64 StandbyPages;
+    ULONG64 Reserved[16];
+    ULONG64 MaximumCommitLimit;
+    ULONG64 Reserved2;
+    ULONG PartitionId;
+} EXP_MEMORY_PARTITION_INFORMATION, *PEXP_MEMORY_PARTITION_INFORMATION;
+
+C_ASSERT(sizeof(EXP_MEMORY_PARTITION_INFORMATION) == 0xF0);
+C_ASSERT(FIELD_OFFSET(EXP_MEMORY_PARTITION_INFORMATION, TotalNumberOfPages) == 0x30);
+C_ASSERT(FIELD_OFFSET(EXP_MEMORY_PARTITION_INFORMATION, MaximumCommitLimit) == 0xD8);
+C_ASSERT(FIELD_OFFSET(EXP_MEMORY_PARTITION_INFORMATION, PartitionId) == 0xE8);
+
 /* GLOBALS *******************************************************************/
 
 POBJECT_TYPE PsPartitionType;
@@ -108,6 +134,73 @@ ExpCreateMemoryPartition(
                           PartitionHandle);
 }
 
+static
+NTSTATUS
+ExpQuerySystemPartitionInformation(
+    _Inout_updates_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length)
+{
+    PEXP_MEMORY_PARTITION_INFORMATION Information;
+    MM_PAGE_LIST_COUNTS Counts;
+    SIZE_T PeakCommitment;
+
+    PAGED_CODE();
+
+    if (Length != sizeof(EXP_MEMORY_PARTITION_INFORMATION))
+        return STATUS_INFO_LENGTH_MISMATCH;
+    if (Buffer == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    Information = Buffer;
+    if (Information->NumaNode != MAXULONG || Information->Channel != MAXULONG)
+    {
+        /* TODO: counts of one NUMA node or one channel */
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    MmQueryPageListCounts(&Counts);
+
+    Information->NumberOfNumaNodes = KeNumberNodes;
+    Information->ResidentAvailablePages = MmResidentAvailablePages;
+    Information->CommittedPages = MmQuerySystemCommitCharge(&PeakCommitment);
+    Information->CommitLimit = MmTotalCommitLimit;
+    Information->PeakCommitment = PeakCommitment;
+    Information->TotalNumberOfPages = MmNumberOfPhysicalPages;
+    Information->AvailablePages = MmAvailablePages;
+    Information->ZeroPages = Counts.Zeroed;
+    Information->FreePages = Counts.Free;
+    Information->StandbyPages = Counts.Standby;
+    RtlZeroMemory(Information->Reserved, sizeof(Information->Reserved));
+    Information->MaximumCommitLimit = MmTotalCommitLimitMaximum;
+    Information->Reserved2 = 0;
+    Information->PartitionId = 0;
+
+    ASSERT(Information->NumberOfNumaNodes != 0);
+    ASSERT(Information->TotalNumberOfPages != 0);
+    ASSERT(Information->PeakCommitment >= Information->CommittedPages);
+
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+ExpManageSystemPartition(
+    _In_ ULONG PartitionInformationClass,
+    _Inout_updates_bytes_opt_(PartitionInformationLength) PVOID PartitionInformation,
+    _In_ ULONG PartitionInformationLength)
+{
+    PAGED_CODE();
+
+    if (PartitionInformationClass != SystemMemoryPartitionInformation)
+    {
+        /* TODO: dedicated memory classes of the system partition */
+        return STATUS_INVALID_INFO_CLASS;
+    }
+
+    return ExpQuerySystemPartitionInformation(PartitionInformation,
+                                              PartitionInformationLength);
+}
+
 /* PUBLIC FUNCTIONS **********************************************************/
 
 NTSTATUS
@@ -142,6 +235,14 @@ ZwManagePartition(
     NTSTATUS Status;
 
     PAGED_CODE();
+
+    if (TargetHandle == (HANDLE)(LONG_PTR)MEMORY_CURRENT_PARTITION_HANDLE ||
+        TargetHandle == (HANDLE)(LONG_PTR)MEMORY_SYSTEM_PARTITION_HANDLE)
+    {
+        return ExpManageSystemPartition(PartitionInformationClass,
+                                        PartitionInformation,
+                                        PartitionInformationLength);
+    }
 
     DesiredAccess = PartitionInformationClass == 0 ?
                         MEMORY_PARTITION_QUERY_ACCESS :
