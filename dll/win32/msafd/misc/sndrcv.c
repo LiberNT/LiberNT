@@ -1076,12 +1076,6 @@ MsafdSendTo(SOCKET Handle,
             *lpErrno = WSAENOTSOCK;
         return SOCKET_ERROR;
     }
-    if (!lpNumberOfBytesSent && !lpOverlapped)
-    {
-        if (lpErrno)
-            *lpErrno = WSAEFAULT;
-        return SOCKET_ERROR;
-    }
 
     if (!(Socket->SharedData->ServiceFlags1 & XP1_CONNECTIONLESS) || (!SocketAddress && !Control))
     {
@@ -1125,6 +1119,13 @@ MsafdSendTo(SOCKET Handle,
                 *lpErrno = WSAEINVAL;
             return SOCKET_ERROR;
         }
+    }
+
+    if (!lpNumberOfBytesSent && !lpOverlapped)
+    {
+        if (lpErrno)
+            *lpErrno = WSAEFAULT;
+        return SOCKET_ERROR;
     }
 
     if (SocketAddress && SocketAddressLength > 128 - sizeof(TRANSPORT_ADDRESS)) {
