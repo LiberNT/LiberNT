@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     AcpiDeviceCapabilities.c
+    CfgMgr32EnumSubkeys.c
     ClassInstallParams.c
     devclass.c
     DeviceClassName.c
