@@ -451,6 +451,12 @@
 @ stdcall RpcServerInqDefaultPrincNameA(long ptr)
 @ stdcall RpcServerInqDefaultPrincNameW(long ptr)
 @ stub RpcServerInqIf
+@ stdcall RpcServerInterfaceGroupActivate(ptr)
+@ stdcall RpcServerInterfaceGroupClose(ptr)
+@ stdcall RpcServerInterfaceGroupCreateA(ptr long ptr long long ptr ptr ptr)
+@ stdcall RpcServerInterfaceGroupCreateW(ptr long ptr long long ptr ptr ptr)
+@ stdcall RpcServerInterfaceGroupDeactivate(ptr long)
+@ stdcall RpcServerInterfaceGroupInqBindings(ptr ptr)
 @ stdcall RpcServerListen(long long long)
 @ stdcall RpcServerRegisterAuthInfoA(str  long ptr ptr)
 @ stdcall RpcServerRegisterAuthInfoW(wstr long ptr ptr)
