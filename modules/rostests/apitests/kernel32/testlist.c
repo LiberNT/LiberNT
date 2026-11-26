@@ -96,6 +96,7 @@ extern void func_GetTempPath2(void);
 extern void func_GetThreadTimes(void);
 extern void func_GetUILanguageInfo(void);
 extern void func_GetVolumeInformation(void);
+extern void func_NulDevice(void);
 extern void func_GetWsChangesEx(void);
 extern void func_HeapLowFragmentation(void);
 extern void func_HighResolutionTimerClock(void);
@@ -336,6 +337,7 @@ const struct test winetest_testlist[] =
     { "GetThreadTimes",              func_GetThreadTimes },
     { "GetUILanguageInfo",           func_GetUILanguageInfo },
     { "GetVolumeInformation",        func_GetVolumeInformation },
+    { "NulDevice",                   func_NulDevice },
     { "GetWsChangesEx",              func_GetWsChangesEx },
     { "HeapLowFragmentation",        func_HeapLowFragmentation },
     { "HighResolutionTimerClock",    func_HighResolutionTimerClock },
