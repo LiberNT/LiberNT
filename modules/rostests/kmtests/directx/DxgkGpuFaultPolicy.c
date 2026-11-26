@@ -22,6 +22,22 @@ TestCompletionAlreadyRetired(VOID)
 }
 
 static VOID
+TestFenceAbortedByReset(VOID)
+{
+    ok_bool_true(VidSchPolicyFenceAbortedByReset(249, 248, 249), "reset boundary after the last completion");
+    ok_bool_true(VidSchPolicyFenceAbortedByReset(250, 248, 255), "aborted fence inside the boundary");
+    ok_bool_true(VidSchPolicyFenceAbortedByReset(5, 0, 7), "nothing completed before the reset");
+    ok_bool_false(VidSchPolicyFenceAbortedByReset(248, 248, 249), "last successful completion");
+    ok_bool_false(VidSchPolicyFenceAbortedByReset(200, 248, 249), "older completed fence");
+    ok_bool_false(VidSchPolicyFenceAbortedByReset(250, 248, 249), "fence past the boundary");
+    ok_bool_false(VidSchPolicyFenceAbortedByReset(249, 248, 0), "no reset");
+    ok_bool_false(VidSchPolicyFenceAbortedByReset(0, 248, 249), "fence zero");
+    ok_bool_false(VidSchPolicyFenceAbortedByReset(249, 249, 249), "boundary already completed");
+    ok_bool_true(VidSchPolicyFenceAbortedByReset(0x10, 0xFFFFFFF0, 0x20), "wrapped aborted fence");
+    ok_bool_false(VidSchPolicyFenceAbortedByReset(0x30, 0xFFFFFFF0, 0x20), "wrapped fence past the boundary");
+}
+
+static VOID
 TestPreemptCommandIrql(VOID)
 {
     ok_eq_uint(VidSchPolicyPreemptCommandIrql(FALSE), DISPATCH_LEVEL);
@@ -35,6 +51,7 @@ START_TEST(DxgkGpuFaultPolicy)
     SOFTGPU_FAULT_RETIREMENT Retirement;
 
     TestCompletionAlreadyRetired();
+    TestFenceAbortedByReset();
     TestPreemptCommandIrql();
     ok(VidSchPolicyDependentNodes(0, 0, 4) == 0, "no dependents\n");
     ok(VidSchPolicyDependentNodes(0x1, 0, 4) == 0, "the reset node is not its own dependent\n");
