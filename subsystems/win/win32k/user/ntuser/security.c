@@ -502,17 +502,19 @@ IntCreateServiceSecurity(
 {
     NTSTATUS Status;
     PACL ServiceDacl;
+    PACL ServiceSacl;
     ULONG DaclSize;
+    ULONG SaclSize;
     ULONG RelSDSize;
     SECURITY_DESCRIPTOR AbsSD;
     PSECURITY_DESCRIPTOR RelSD;
     PTOKEN_USER TokenUser;
-
     /* Initialize our local variables */
     RelSDSize = 0;
     TokenUser = NULL;
     RelSD = NULL;
     ServiceDacl = NULL;
+    ServiceSacl = NULL;
 
     /* Query the logged in user of the current security context (aka token) */
     Status = IntQueryUserSecurityIdentification(&TokenUser);
@@ -521,6 +523,7 @@ IntCreateServiceSecurity(
         ERR("IntCreateServiceSecurity(): Failed to query the token user (Status 0x%08lx)\n", Status);
         return Status;
     }
+
 
     /* Initialize the absolute security descriptor */
     Status = RtlCreateSecurityDescriptor(&AbsSD, SECURITY_DESCRIPTOR_REVISION);
@@ -563,6 +566,7 @@ IntCreateServiceSecurity(
                sizeof(ACCESS_ALLOWED_ACE) + RtlLengthSid(TokenUser->User.Sid) +
                sizeof(ACCESS_ALLOWED_ACE) + RtlLengthSid(SeExports->SeAliasAdminsSid) +
                sizeof(ACCESS_ALLOWED_ACE) + RtlLengthSid(SeExports->SeAliasAdminsSid);
+
 
     /* Allocate memory for service DACL */
     ServiceDacl = IntAllocateSecurityBuffer(DaclSize);
@@ -658,6 +662,50 @@ IntCreateServiceSecurity(
         goto Quit;
     }
 
+    /*
+     * Window stations and desktops carry the low integrity mandatory
+     * label on Windows, policy no-write-up: even low integrity processes
+     * may use the desktop, but they cannot write up to it. This is the
+     * label the UI integrity model is built around.
+     */
+    SaclSize = sizeof(ACL) + sizeof(ACE) + RtlLengthSid(SeExports->SeLowMandatorySid);
+    ServiceSacl = IntAllocateSecurityBuffer(SaclSize);
+    if (!ServiceSacl)
+    {
+        ERR("IntCreateServiceSecurity(): Failed to allocate memory for service SACL!\n");
+        Status = STATUS_NO_MEMORY;
+        goto Quit;
+    }
+
+    Status = RtlCreateAcl(ServiceSacl, SaclSize, ACL_REVISION);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("IntCreateServiceSecurity(): Failed to create service SACL (Status 0x%08lx)\n", Status);
+        goto Quit;
+    }
+
+    Status = RtlAddMandatoryAce(ServiceSacl,
+                                ACL_REVISION,
+                                0,
+                                SYSTEM_MANDATORY_LABEL_NO_WRITE_UP,
+                                SYSTEM_MANDATORY_LABEL_ACE_TYPE,
+                                SeExports->SeLowMandatorySid);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("IntCreateServiceSecurity(): Failed to set up mandatory label ACE (Status 0x%08lx)\n", Status);
+        goto Quit;
+    }
+
+    Status = RtlSetSaclSecurityDescriptor(&AbsSD,
+                                          TRUE,
+                                          ServiceSacl,
+                                          FALSE);
+    if (!NT_SUCCESS(Status))
+    {
+        ERR("IntCreateServiceSecurity(): Failed to set up service SACL to absolute SD (Status 0x%08lx)\n", Status);
+        goto Quit;
+    }
+
     /* This descriptor is ownerless */
     Status = RtlSetOwnerSecurityDescriptor(&AbsSD,
                                            NULL,
@@ -714,6 +762,11 @@ IntCreateServiceSecurity(
     *ServiceSd = RelSD;
 
 Quit:
+    if (ServiceSacl)
+    {
+        IntFreeSecurityBuffer(ServiceSacl);
+    }
+
     if (ServiceDacl)
     {
         IntFreeSecurityBuffer(ServiceDacl);

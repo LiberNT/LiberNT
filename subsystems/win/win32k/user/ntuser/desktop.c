@@ -957,13 +957,12 @@ IntResolveDesktop(
                                             MAXIMUM_ALLOWED,
                                             0, 0, 0, 0, 0);
 
-            IntFreeSecurityBuffer(ServiceSD);
-
             if (!NT_SUCCESS(Status))
             {
                 ASSERT(hWinSta == NULL);
                 ERR("Failed to create or open the non-interactive window station '%wZ', Status 0x%08lx\n",
                     ObjectName, Status);
+                IntFreeSecurityBuffer(ServiceSD);
                 goto Quit;
             }
 
@@ -974,20 +973,21 @@ IntResolveDesktop(
             if (!NT_SUCCESS(Status))
             {
                 ERR("Impossible to build a valid desktop name, Status 0x%08lx\n", Status);
+                IntFreeSecurityBuffer(ServiceSD);
                 goto Quit;
             }
             ObjectName->Length = (USHORT)(wcslen(ObjectName->Buffer) * sizeof(WCHAR));
 
             /*
              * NOTE: The non-interactive desktop handle is never inheritable.
-             * The security descriptor is inherited from the newly created
-             * window station for the desktop.
+             * The desktop carries the same security descriptor as its window
+             * station: mandatory label ACEs do not propagate by inheritance.
              */
             InitializeObjectAttributes(ObjectAttributes,
                                        ObjectName,
                                        OBJ_CASE_INSENSITIVE | OBJ_OPENIF,
                                        hWinSta,
-                                       NULL);
+                                       ServiceSD);
 
             if (RtlEqualUnicodeString(&DesktopName, &DefaultDesktopName, TRUE))
             {
@@ -1010,6 +1010,8 @@ IntResolveDesktop(
                                             NULL,
                                             (PHANDLE)&hDesktop);
             }
+            IntFreeSecurityBuffer(ServiceSD);
+
             if (!NT_SUCCESS(Status))
             {
                 ASSERT(hDesktop == NULL);
