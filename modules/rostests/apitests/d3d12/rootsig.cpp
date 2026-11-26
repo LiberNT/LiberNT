@@ -183,6 +183,18 @@ static void TestSerialization(void)
     }
 }
 
+static void TestNullDescription(void)
+{
+    ID3DBlob *blob = (ID3DBlob *)(ULONG_PTR)1;
+    ID3DBlob *errors = (ID3DBlob *)(ULONG_PTR)1;
+    HRESULT hr;
+
+    hr = D3D12SerializeRootSignature(NULL, D3D_ROOT_SIGNATURE_VERSION_1, &blob, &errors);
+    ok(hr == E_INVALIDARG, "null description: %#lx\n", hr);
+    ok(blob == (ID3DBlob *)(ULONG_PTR)1, "null description: blob %p\n", blob);
+    ok(errors == (ID3DBlob *)(ULONG_PTR)1, "null description: errors %p\n", errors);
+}
+
 static void TestValidation(void)
 {
     static const struct
@@ -484,6 +496,7 @@ static void RunRootSignature(void *)
     ID3D12Device *device;
 
     TestSerialization();
+    TestNullDescription();
     TestValidation();
     TestSamplerValidation();
     if (!(device = d3d12_test_create_device())) return;
