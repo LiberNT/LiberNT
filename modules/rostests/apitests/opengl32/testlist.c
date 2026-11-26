@@ -20,6 +20,7 @@ extern void func_wgl_color_blit(void);
 extern void func_wgl_render(void);
 extern void func_wgl_gears(void);
 extern void func_wgl_monitor_off(void);
+extern void func_wgl_quiet_init(void);
 
 const struct test winetest_testlist[] =
 {
@@ -41,6 +42,7 @@ const struct test winetest_testlist[] =
     { "wgl_render", func_wgl_render },
     { "wgl_gears", func_wgl_gears },
     { "wgl_monitor_off", func_wgl_monitor_off },
+    { "wgl_quiet_init", func_wgl_quiet_init },
 
     { 0, 0 }
 };
