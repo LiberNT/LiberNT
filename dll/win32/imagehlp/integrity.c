@@ -450,6 +450,18 @@ BOOL WINAPI ImageAddCertificate(
             index++;
         }
 
+        if (offset > size)
+        {
+            static const BYTE pad[8];
+            DWORD pad_len = offset - size;
+
+            if (SetFilePointer(FileHandle, sd_VirtualAddr + size, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER ||
+                !WriteFile(FileHandle, pad, pad_len, &count, NULL) ||
+                count != pad_len)
+                return FALSE;
+            size = offset;
+        }
+
         count = SetFilePointer (FileHandle, sd_VirtualAddr + offset, NULL, FILE_BEGIN);
 
         if (count == INVALID_SET_FILE_POINTER)
@@ -999,7 +1011,7 @@ invalid_parameter:
  */
 BOOL WINAPI ImageRemoveCertificate(HANDLE FileHandle, DWORD Index)
 {
-    DWORD size = 0, count = 0, sd_VirtualAddr = 0, offset = 0;
+    DWORD size = 0, count = 0, bytes = 0, sd_VirtualAddr = 0, offset = 0;
     DWORD data_size = 0, cert_size = 0, cert_size_padded = 0, ret = 0;
     LPVOID cert_data;
     BOOL r;
@@ -1021,11 +1033,14 @@ BOOL WINAPI ImageRemoveCertificate(HANDLE FileHandle, DWORD Index)
     else
         cert_size_padded = cert_size;
 
+    if (cert_size_padded > size - (offset - sd_VirtualAddr))
+        cert_size_padded = size - (offset - sd_VirtualAddr);
+
     data_size = size - (offset - sd_VirtualAddr) - cert_size_padded;
 
     if (data_size == 0)
     {
-        ret = SetFilePointer(FileHandle, sd_VirtualAddr, NULL, FILE_BEGIN);
+        ret = SetFilePointer(FileHandle, offset, NULL, FILE_BEGIN);
 
         if (ret == INVALID_SET_FILE_POINTER)
             return FALSE;
@@ -1043,17 +1058,17 @@ BOOL WINAPI ImageRemoveCertificate(HANDLE FileHandle, DWORD Index)
             goto error;
 
         /* Read any subsequent certificates */
-        r = ReadFile(FileHandle, cert_data, data_size, &count, NULL);
+        r = ReadFile(FileHandle, cert_data, data_size, &bytes, NULL);
 
-        if ((!r) || (count != data_size))
+        if ((!r) || (bytes != data_size))
             goto error;
 
         SetFilePointer(FileHandle, offset, NULL, FILE_BEGIN);
 
         /* Write them one index back */
-        r = WriteFile(FileHandle, cert_data, data_size, &count, NULL);
+        r = WriteFile(FileHandle, cert_data, data_size, &bytes, NULL);
 
-        if ((!r) || (count != data_size))
+        if ((!r) || (bytes != data_size))
             goto error;
 
         HeapFree(GetProcessHeap(), 0, cert_data);
