@@ -27,6 +27,7 @@ list(APPEND SOURCE
     LogonSessionEnd.c
     LogonUserExEx.c
     LogonUserNetwork.c
+    LogonUserVirtual.c
     IsTextUnicode.c
     LocalSystemPrivileges.c
     LockServiceDatabase.c

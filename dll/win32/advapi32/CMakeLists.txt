@@ -3,8 +3,8 @@ spec2def(advapi32.dll advapi32.spec ADD_IMPORTLIB)
 add_definitions(-D_ADVAPI32_)
 
 include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/subsys
     ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/subsys
     ${REACTOS_SOURCE_DIR}/sdk/include/libernt/drivers/ksecdd
     ${REACTOS_SOURCE_DIR}/sdk/lib/cryptlib
     ${CMAKE_CURRENT_BINARY_DIR})
