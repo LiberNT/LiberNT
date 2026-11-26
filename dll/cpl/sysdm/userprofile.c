@@ -11,6 +11,7 @@
 #include "precomp.h"
 #include <sddl.h>
 #include <winnls.h>
+#include <userenv.h>
 
 #include <debug.h>
 
@@ -21,7 +22,13 @@ typedef struct _PROFILEDATA
     BOOL bUnknownProfile;
     PWSTR pszFullName;
     PWSTR pszProfilePath;
+    PWSTR pszSid;
 } PROFILEDATA, *PPROFILEDATA;
+
+static VOID
+UpdateButtonState(
+    _In_ HWND hwndDlg,
+    _In_ HWND hwndListView);
 
 
 static
@@ -185,7 +192,11 @@ DeleteUserProfile(
                            IDS_USERPROFILE_CONFIRM_DELETE,
                            pProfileData->pszFullName) == IDYES)
     {
-        /* FIXME: Delete the profile here! */
+        if (!DeleteProfileW(pProfileData->pszSid, NULL, NULL))
+            return FALSE;
+
+        ListView_DeleteItem(hwndListView, iSelected);
+        UpdateButtonState(hwndDlg, hwndListView);
         return TRUE;
     }
 
@@ -438,6 +449,7 @@ AddUserProfile(
 {
     WCHAR szTempProfilePath[MAX_PATH], szProfilePath[MAX_PATH];
     WCHAR szNameBuffer[256];
+    PWSTR pszSid = NULL;
     PPROFILEDATA pProfileData = NULL;
     DWORD dwProfileData, dwSize, dwType, dwState = 0, dwRefCount = 0;
     DWORD dwProfilePathLength;
@@ -521,15 +533,22 @@ AddUserProfile(
         dwRefCount = 0;
     }
 
+    if (!ConvertSidToStringSidW(pProfileSid, &pszSid))
+        return;
+
     /* Create and fill the profile data entry */
     dwProfileData = sizeof(PROFILEDATA) +
                     ((wcslen(szNameBuffer) + 1) * sizeof(WCHAR)) +
-                    ((wcslen(szProfilePath) + 1) * sizeof(WCHAR));
+                    ((wcslen(szProfilePath) + 1) * sizeof(WCHAR)) +
+                    ((wcslen(pszSid) + 1) * sizeof(WCHAR));
     pProfileData = HeapAlloc(GetProcessHeap(),
                              HEAP_ZERO_MEMORY,
                              dwProfileData);
     if (pProfileData == NULL)
+    {
+        LocalFree(pszSid);
         return;
+    }
 
     pProfileData->dwRefCount = dwRefCount;
     pProfileData->dwState = dwState;
@@ -543,6 +562,11 @@ AddUserProfile(
     ptr = (PWSTR)((ULONG_PTR)ptr + ((wcslen(pProfileData->pszFullName) + 1) * sizeof(WCHAR)));
     pProfileData->pszProfilePath = ptr;
     wcscpy(pProfileData->pszProfilePath, szProfilePath);
+
+    ptr = (PWSTR)((ULONG_PTR)ptr + ((wcslen(pProfileData->pszProfilePath) + 1) * sizeof(WCHAR)));
+    pProfileData->pszSid = ptr;
+    wcscpy(pProfileData->pszSid, pszSid);
+    LocalFree(pszSid);
 
     /* Add the profile and set its name */
     memset(&lvi, 0x00, sizeof(lvi));
