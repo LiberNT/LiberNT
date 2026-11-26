@@ -211,16 +211,25 @@ SETUP_CreateInterfaceList(
         if (rc != ERROR_SUCCESS)
             goto cleanup;
         i++;
+        if (KeyBuffer[0] != '#')
+            continue;
 
         /* Open sub key */
         if (hDeviceInstanceKey != NULL)
+        {
             RegCloseKey(hDeviceInstanceKey);
+            hDeviceInstanceKey = NULL;
+        }
         rc = RegOpenKeyExW(hInterfaceKey, KeyBuffer, 0, KEY_QUERY_VALUE | KEY_ENUMERATE_SUB_KEYS, &hDeviceInstanceKey);
+        if (rc == ERROR_FILE_NOT_FOUND)
+            continue;
         if (rc != ERROR_SUCCESS)
             goto cleanup;
 
         /* Read DeviceInstance */
         rc = RegQueryValueExW(hDeviceInstanceKey, DeviceInstance, NULL, &dwRegType, NULL, &dwInstancePathLength);
+        if (rc == ERROR_FILE_NOT_FOUND)
+            continue;
         if (rc != ERROR_SUCCESS)
             goto cleanup;
         if (dwRegType != REG_SZ)
@@ -314,8 +323,13 @@ SETUP_CreateInterfaceList(
 
             /* Open sub key */
             if (hReferenceKey != NULL)
+            {
                 RegCloseKey(hReferenceKey);
+                hReferenceKey = NULL;
+            }
             rc = RegOpenKeyExW(hDeviceInstanceKey, KeyBuffer, 0, KEY_QUERY_VALUE, &hReferenceKey);
+            if (rc == ERROR_FILE_NOT_FOUND)
+                continue;
             if (rc != ERROR_SUCCESS)
                 goto cleanup;
 
@@ -325,6 +339,7 @@ SETUP_CreateInterfaceList(
             {
                 /* Skip device interface with invalid reference value (i.e. interface not actually available for this device) */
                 RegCloseKey(hReferenceKey);
+                hReferenceKey = NULL;
                 continue;
             }
             if (dwRegType != REG_SZ)

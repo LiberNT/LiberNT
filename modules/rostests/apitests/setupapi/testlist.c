@@ -40,6 +40,7 @@ extern void func_ServiceFilterNoLegacyNode(void);
 extern void func_SoftwareComponent(void);
 extern void func_SetupCommitFileQueue(void);
 extern void func_SetupDiInstallClassExA(void);
+extern void func_SetupDiInterfaceSubkeys(void);
 extern void func_SetupDiOpenDeviceInterface(void);
 extern void func_SetupInstallFile(void);
 extern void func_SetupInstallRegisterDlls(void);
@@ -88,6 +89,7 @@ const struct test winetest_testlist[] =
     { "SoftwareComponent", func_SoftwareComponent },
     { "SetupCommitFileQueue", func_SetupCommitFileQueue },
     { "SetupDiInstallClassExA", func_SetupDiInstallClassExA},
+    { "SetupDiInterfaceSubkeys", func_SetupDiInterfaceSubkeys },
     { "SetupDiOpenDeviceInterface", func_SetupDiOpenDeviceInterface },
     { "SetupInstallFile", func_SetupInstallFile },
     { "SetupInstallRegisterDlls", func_SetupInstallRegisterDlls },
