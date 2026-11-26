@@ -352,8 +352,8 @@ IopQueryNameInternal(
         DeviceLength = DeviceName->Name.Length;
     }
 
-    /* FIXME: a file opened by a full path reports that path, not the name the file system holds now */
-    if (FileObject->RelatedFileObject != NULL)
+    if (FileObject->RelatedFileObject != NULL ||
+        (FileObject->FileName.Length != 0 && FileObject->Vpb != NULL))
     {
         if (FileObject->Flags & FO_SYNCHRONOUS_IO)
             (VOID)IopAcquireFileObjectLock(FileObject, KernelMode, FALSE, &LockFailed);
@@ -366,19 +366,23 @@ IopQueryNameInternal(
             DeviceLength + FileSystemName->FileNameLength + sizeof(WCHAR) > MAXUSHORT)
         {
             ExFreePoolWithTag(FileSystemName, TAG_IO_NAME);
+            FileSystemName = NULL;
             Status = STATUS_NAME_TOO_LONG;
         }
 
-        if (!NT_SUCCESS(Status))
+        if (NT_SUCCESS(Status))
+        {
+            ASSERT(FileSystemName != NULL);
+            FileName.Buffer = FileSystemName->FileName;
+            FileName.Length = (USHORT)FileSystemName->FileNameLength;
+            FileName.MaximumLength = FileName.Length;
+        }
+        else if (FileObject->RelatedFileObject != NULL)
         {
             if (DeviceName != NULL) ExFreePoolWithTag(DeviceName, TAG_IO_NAME);
             if (DosNameUsed) ExFreePool(DosName.Buffer);
             return Status;
         }
-
-        FileName.Buffer = FileSystemName->FileName;
-        FileName.Length = (USHORT)FileSystemName->FileNameLength;
-        FileName.MaximumLength = FileName.Length;
     }
 
     TotalLength = (ULONG)sizeof(OBJECT_NAME_INFORMATION) + DeviceLength +

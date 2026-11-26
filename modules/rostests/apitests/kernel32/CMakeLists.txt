@@ -50,6 +50,7 @@ list(APPEND SOURCE
     CreateAfterMissingName.c
     CreateDirectoryRoot.c
     CreateProcess.c
+    ProcessImageRename.c
     DefaultActCtx.c
     DeleteFileCase.c
     DeleteFileOpenHandle.c

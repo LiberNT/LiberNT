@@ -480,10 +480,21 @@ CloneDone:
     {
         PFILE_OBJECT FileObject = MmGetFileObjectForSection(Section);
         UNICODE_STRING FileName = FileObject->FileName;
-        PWCHAR Source = FileName.Buffer;
+        PWCHAR Source;
         PCHAR Destination = (PCHAR)Process->ImageFileName;
         USHORT Length = 0;
 
+        if (AuditName != NULL)
+        {
+            Status = SeInitializeProcessAuditName(FileObject, FALSE, AuditName);
+            if (NT_SUCCESS(Status))
+            {
+                ASSERT(*AuditName != NULL);
+                FileName = (*AuditName)->Name;
+            }
+        }
+
+        Source = FileName.Buffer;
         if (FileName.Buffer != NULL)
         {
             Source = (PWCHAR)((PCHAR)FileName.Buffer + FileName.Length);
@@ -503,9 +514,6 @@ CloneDone:
         while (Length--)
             *Destination++ = (UCHAR)*Source++;
         *Destination = ANSI_NULL;
-
-        if (AuditName != NULL)
-            Status = SeInitializeProcessAuditName(FileObject, FALSE, AuditName);
     }
 
     if (NT_SUCCESS(Status))
