@@ -522,6 +522,8 @@ PspTerminateThreadByPointer(
      */
     if (Thread->Tcb.State == Terminated) return STATUS_SUCCESS;
 
+    /* An alertable wait in kernel mode ends with STATUS_ALERTED so the thread reaches its exit */
+    KeAlertThread(&Thread->Tcb, KernelMode);
     KeForceResumeThread(&Thread->Tcb);
     return STATUS_SUCCESS;
 }

@@ -679,6 +679,7 @@ list(APPEND KMTEST_SOURCE
     ntos_cc/CcMapData_user.c
     ntos_cc/CcPinMappedData_user.c
     ntos_cc/CcPinRead_user.c
+    ntos_ps/PsTerminateWait_user.c
     ntos_cc/CcSetFileSizes_user.c
     ntos_io/IoAddDeviceUnload_user.c
     ntos_io/IoFilterRequirements_user.c

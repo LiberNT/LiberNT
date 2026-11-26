@@ -11,6 +11,7 @@ KMT_TESTFUNC Test_CcCopyWrite;
 KMT_TESTFUNC Test_CcMapData;
 KMT_TESTFUNC Test_CcPinMappedData;
 KMT_TESTFUNC Test_CcPinRead;
+KMT_TESTFUNC Test_PsTerminateWait;
 KMT_TESTFUNC Test_CcSetFileSizes;
 KMT_TESTFUNC Test_Example;
 KMT_TESTFUNC Test_FileAttributes;
@@ -113,6 +114,7 @@ const KMT_TEST TestList[] =
     { "CcMapData",                     Test_CcMapData },
     { "CcPinMappedData",               Test_CcPinMappedData },
     { "CcPinRead",                     Test_CcPinRead },
+    { "PsTerminateWait",               Test_PsTerminateWait },
     { "CcSetFileSizes",                Test_CcSetFileSizes },
     { "-Example",                     Test_Example },
     { "FileAttributes",               Test_FileAttributes },
