@@ -50,6 +50,12 @@ typedef struct _DWM_SURFACE
 static DWM_SURFACE g_views[DWM_VIEW_CACHE_SIZE];
 static ULONG g_frameSeq;
 
+static BOOL
+DwmWindowHasBase(const DWM_WIN *Window)
+{
+    return Window->Generation != 0 && Window->BaseUpdateId != 0;
+}
+
 static void
 DwmDropView(DWM_SURFACE *v)
 {
@@ -67,6 +73,8 @@ DwmGetSurfaceView(const DWM_WIN *w)
     DWM_OPEN_SURFACE req;
     ULONG i;
 
+    if (!DwmWindowHasBase(w))
+        return NULL;
     if (w->BaseGlobalShare != 0)
         return DwmDxGetRedirectionSnapshot(w);
 
@@ -1430,6 +1438,8 @@ DwmCaptureReads(const DWM_WIN *Windows, ULONG First, ULONG Last,
 static BOOL
 DwmWindowIsOpaque(const DWM_WIN *Window)
 {
+    if (!DwmWindowHasBase(Window))
+        return FALSE;
     if (Window->cx <= 0 || Window->cy <= 0)
         return FALSE;
     if (Window->AnimFlags != 0)
@@ -3219,6 +3229,8 @@ DwmFindOpaqueCover(const DWM_WIN *Windows, ULONG Count, ULONG Index,
             Cover->BackdropRegion != 0 &&
             !(Cover->BlurFlags & DWM_BLUR_DISABLE_FILTER))
             Reach += FilterReach;
+        if (!DwmWindowHasBase(Cover))
+            continue;
         if (Cover->cx <= 0 || Cover->cy <= 0 ||
             (Cover->LayerFlags & DWM_LWA_COLORKEY) ||
             ((Cover->LayerFlags & DWM_LWA_ALPHA) && Cover->Alpha < 255) ||
@@ -3851,8 +3863,11 @@ DwmBlitReplaced(ULONG *comp, LONG scrW,
             g_views[i].ReplacedBy == w->Generation)
             source = &g_views[i];
     }
-    if (source == NULL || source->Window.cx <= 0 || source->Window.cy <= 0)
+    if (source == NULL || source->View == NULL ||
+        source->Window.cx <= 0 || source->Window.cy <= 0)
+    {
         return;
+    }
     source->LastSeenFrame = g_frameSeq;
     alpha = ((source->Window.LayerFlags & DWM_LWA_ALPHA) ? min(source->Window.Alpha, 255u) : 255u) *
             DwmAnimationSourceAlpha(&source->Window, w) / 255u;
@@ -4869,13 +4884,15 @@ DwmComposeLoop(HANDLE hStopEvent)
                     const RECTL *windowBlurRects = NULL;
                     RECTL Cover;
                     BOOL HaveCover;
+                    BOOL HasBase;
 
                     if (DwmWindowIsHidden(wins, hdr->Count, i, cl, ct, cr, cb))
                         continue;
                     HaveCover = DwmFindOpaqueCover(wins, hdr->Count, i,
                                                     cl, ct, cr, cb, &Cover);
-                    pix = DwmGetSurfaceView(&wins[i]);
-                    if (pix == NULL)
+                    HasBase = DwmWindowHasBase(&wins[i]);
+                    pix = HasBase ? DwmGetSurfaceView(&wins[i]) : NULL;
+                    if (HasBase && pix == NULL)
                     {
                         completeFrame = FALSE;
                         break;
@@ -4902,11 +4919,15 @@ DwmComposeLoop(HANDLE hStopEvent)
                         Animated.cx = wins[i].AnimCx;
                         Animated.cy = wins[i].AnimCy;
                         Animated.AnimFlags = 0;
-                        DwmKeepCorners((ULONG *)g_compBits, g_W, g_H, &Animated, FALSE);
-                        animatedBackdrop = DwmApplyBackdropBlur(
-                            (ULONG *)g_compBits, g_W, g_H,
-                            pl, pt, pr, pb, &Animated, wins, i);
-                        DwmKeepCorners((ULONG *)g_compBits, g_W, g_H, &Animated, TRUE);
+                        animatedBackdrop = NULL;
+                        if (HasBase)
+                        {
+                            DwmKeepCorners((ULONG *)g_compBits, g_W, g_H, &Animated, FALSE);
+                            animatedBackdrop = DwmApplyBackdropBlur(
+                                (ULONG *)g_compBits, g_W, g_H,
+                                pl, pt, pr, pb, &Animated, wins, i);
+                            DwmKeepCorners((ULONG *)g_compBits, g_W, g_H, &Animated, TRUE);
+                        }
                         DwmBlendShadow((ULONG *)g_compBits, g_W, g_H,
                                        cl, ct, cr, cb, &wins[i]);
                         DwmStatCounter(&stgA);
@@ -4921,18 +4942,25 @@ DwmComposeLoop(HANDLE hStopEvent)
                         continue;
                     }
                     DwmStatCounter(&stgA);
-                    DwmKeepCorners((ULONG *)g_compBits, g_W, g_H, &wins[i], FALSE);
-                    DwmApplyBlur((const ULONG *)g_compBits,
-                                 (ULONG *)g_compBits, g_W, g_H,
-                                 pl, pt, pr, pb, &wins[i],
-                                 windowBlurRects, DwmBlurRadius());
+                    backdropBase = NULL;
+                    if (HasBase)
+                    {
+                        DwmKeepCorners((ULONG *)g_compBits, g_W, g_H, &wins[i], FALSE);
+                        DwmApplyBlur((const ULONG *)g_compBits,
+                                     (ULONG *)g_compBits, g_W, g_H,
+                                     pl, pt, pr, pb, &wins[i],
+                                     windowBlurRects, DwmBlurRadius());
+                    }
                     DwmStatCounter(&stgB);
                     if (g_frameStats)
                         g_statBlurTicks += (ULONGLONG)(stgB.QuadPart - stgA.QuadPart);
-                    backdropBase = DwmApplyBackdropBlur(
-                        (ULONG *)g_compBits, g_W, g_H,
-                        pl, pt, pr, pb, &wins[i], wins, i);
-                    DwmKeepCorners((ULONG *)g_compBits, g_W, g_H, &wins[i], TRUE);
+                    if (HasBase)
+                    {
+                        backdropBase = DwmApplyBackdropBlur(
+                            (ULONG *)g_compBits, g_W, g_H,
+                            pl, pt, pr, pb, &wins[i], wins, i);
+                        DwmKeepCorners((ULONG *)g_compBits, g_W, g_H, &wins[i], TRUE);
+                    }
                     DwmStatCounter(&stgA);
                     if (g_frameStats)
                         g_statBackdropBlurTicks += (ULONGLONG)(stgA.QuadPart - stgB.QuadPart);
@@ -4944,10 +4972,13 @@ DwmComposeLoop(HANDLE hStopEvent)
                     DwmStatCounter(&stgB);
                     if (g_frameStats)
                         g_statShadowTicks += (ULONGLONG)(stgB.QuadPart - stgA.QuadPart);
-                    DwmBlitWindowVisible((ULONG *)g_compBits, g_W, cl, ct, cr, cb,
-                                         pix, (const ULONG *)g_backdropBits,
-                                         backdropBase, &wins[i],
-                                         HaveCover ? &Cover : NULL);
+                    if (HasBase)
+                    {
+                        DwmBlitWindowVisible((ULONG *)g_compBits, g_W, cl, ct, cr, cb,
+                                             pix, (const ULONG *)g_backdropBits,
+                                             backdropBase, &wins[i],
+                                             HaveCover ? &Cover : NULL);
+                    }
                     DwmStatCounter(&stgA);
                     if (g_frameStats)
                         g_statBlitTicks += (ULONGLONG)(stgA.QuadPart - stgB.QuadPart);
