@@ -405,6 +405,75 @@ NtfsCacheWriteBackOne(_In_ PDEVICE_OBJECT Owner,
     return Status;
 }
 
+#define NTFS_CACHE_WRITEBACK_RUN 16
+
+/* Clean blocks never join a run: a clean copy may be older than a direct write in flight behind the cache. */
+static
+NTSTATUS
+NtfsCacheWriteBackRun(_In_ PDEVICE_OBJECT Owner,
+                      _In_ ULONGLONG Block,
+                      _Out_ PULONG Written)
+{
+    ULONGLONG Generations[NTFS_CACHE_WRITEBACK_RUN];
+    NTSTATUS Status = STATUS_SUCCESS;
+    NTFS_CACHE_SLOT* Slot;
+    ULONG Count;
+    ULONG Index;
+    PUCHAR Staged;
+
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
+    ASSERT(Owner != NULL);
+    ASSERT(Block != NTFS_CACHE_EMPTY);
+
+    *Written = 0;
+    Staged = (PUCHAR)ExAllocatePoolUninitialized(NonPagedPoolNx,
+                                                NTFS_CACHE_WRITEBACK_RUN * NTFS_CACHE_BLOCK_SIZE,
+                                                'CftN');
+    if (!Staged)
+    {
+        *Written = 1;
+        return NtfsCacheWriteBackOne(Owner, Block);
+    }
+
+    KeWaitForSingleObject(&NtfsCacheWritebackMutex, Executive, KernelMode, FALSE, NULL);
+    ExAcquireFastMutex(&NtfsCacheMutex);
+    for (Count = 0; Count < NTFS_CACHE_WRITEBACK_RUN; Count++)
+    {
+        Slot = NtfsCacheProbe(Owner, Block + Count);
+        if (!Slot || !Slot->Dirty || !Slot->Data)
+            break;
+        RtlCopyMemory(Staged + Count * NTFS_CACHE_BLOCK_SIZE, Slot->Data, NTFS_CACHE_BLOCK_SIZE);
+        Generations[Count] = Slot->Generation;
+    }
+    if (Count != 0)
+        ObReferenceObject(Owner);
+    ExReleaseFastMutex(&NtfsCacheMutex);
+
+    if (Count != 0)
+    {
+        ASSERT(Count <= NTFS_CACHE_WRITEBACK_RUN);
+        Status = WriteDisk(Owner, Block << NTFS_CACHE_BLOCK_SHIFT,
+                           Count * NTFS_CACHE_BLOCK_SIZE, Staged);
+        ExAcquireFastMutex(&NtfsCacheMutex);
+        for (Index = 0; NT_SUCCESS(Status) && Index < Count; Index++)
+        {
+            Slot = NtfsCacheProbe(Owner, Block + Index);
+            if (Slot && Slot->Dirty && Slot->Generation == Generations[Index])
+            {
+                ASSERT(NtfsCacheDirtyCount != 0);
+                Slot->Dirty = FALSE;
+                NtfsCacheDirtyCount--;
+            }
+        }
+        ExReleaseFastMutex(&NtfsCacheMutex);
+        ObDereferenceObject(Owner);
+    }
+    KeReleaseMutex(&NtfsCacheWritebackMutex, FALSE);
+    ExFreePoolWithTag(Staged, 'CftN');
+    *Written = Count;
+    return Status;
+}
+
 static
 NTSTATUS
 NtfsCacheFlushSome(_In_ ULONG Budget)
@@ -432,11 +501,12 @@ NtfsCacheFlushSome(_In_ ULONG Budget)
 
         if (Dirty && Owner && Block != NTFS_CACHE_EMPTY)
         {
-            NTSTATUS One = NtfsCacheWriteBackOne(Owner, Block);
+            ULONG Run;
+            NTSTATUS One = NtfsCacheWriteBackRun(Owner, Block, &Run);
 
             if (!NT_SUCCESS(One))
                 Status = One;
-            Written++;
+            Written += max(Run, 1UL);
         }
         if (Owner)
             ObDereferenceObject(Owner);
@@ -471,7 +541,8 @@ NtfsCacheFlushAll(_In_opt_ PDEVICE_OBJECT OnlyOwner)
         if (Dirty && Owner && Block != NTFS_CACHE_EMPTY &&
             (!OnlyOwner || OnlyOwner == Owner))
         {
-            NTSTATUS One = NtfsCacheWriteBackOne(Owner, Block);
+            ULONG Run;
+            NTSTATUS One = NtfsCacheWriteBackRun(Owner, Block, &Run);
 
             if (!NT_SUCCESS(One))
                 Status = One;
