@@ -675,11 +675,11 @@ HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_L
         return DXGI_ERROR_UNSUPPORTED;
     }
 
-    D3D12DDI_3DPIPELINESUPPORT1_DATA_0081 pipeline = {};
-    pipeline.HighestRuntimeSupportedFeatureLevel = D3D12DDI_3DPIPELINELEVEL_12_1;
-    if (FAILED(hr = QueryCaps(D3D12DDICAPS_TYPE_0081_3DPIPELINESUPPORT1, NULL, &pipeline, sizeof(pipeline))))
+    D3D12DDI_3DPIPELINELEVEL pipeline_level = static_cast<D3D12DDI_3DPIPELINELEVEL>(0);
+    if (FAILED(hr = QueryCaps(D3D12DDICAPS_TYPE_3DPIPELINESUPPORT, NULL, &pipeline_level, sizeof(pipeline_level))))
         return DXGI_ERROR_UNSUPPORTED;
-    feature_level = Native12LevelFromPipeline(pipeline.MaximumDriverSupportedFeatureLevel);
+    /* TODO: ask 3DPIPELINESUPPORT1 for levels above 12_1 once the runtime creates them */
+    feature_level = Native12LevelFromPipeline(pipeline_level);
     if (!feature_level || feature_level < minimum_level) return DXGI_ERROR_UNSUPPORTED;
 
     D3DKMT_CREATEDEVICE create = {};

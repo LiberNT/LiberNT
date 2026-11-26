@@ -6,6 +6,7 @@
  */
 
 #include "d3d12_apitest.h"
+#include <d3dkmthk.h>
 
 static IDXGIAdapter1 *AdapterOf(ID3D12Device *device)
 {
@@ -18,6 +19,53 @@ static IDXGIAdapter1 *AdapterOf(ID3D12Device *device)
         adapter = NULL;
     factory->Release();
     return adapter;
+}
+
+static BOOL DefaultAdapterHasDriver(void)
+{
+    IDXGIFactory1 *factory = NULL;
+    IDXGIAdapter1 *adapter = NULL;
+    DXGI_ADAPTER_DESC1 desc;
+    D3DKMT_OPENADAPTERFROMLUID open = {};
+    D3DKMT_UMDFILENAMEINFO name = {};
+    D3DKMT_QUERYADAPTERINFO query = {};
+    D3DKMT_CLOSEADAPTER close = {};
+    BOOL found = FALSE;
+
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void **>(&factory)))) return FALSE;
+    if (factory->EnumAdapters1(0, &adapter) == S_OK && SUCCEEDED(adapter->GetDesc1(&desc)))
+    {
+        open.AdapterLuid = desc.AdapterLuid;
+        if (D3DKMTOpenAdapterFromLuid(&open) >= 0)
+        {
+            name.Version = KMTUMDVERSION_DX12;
+            query.hAdapter = open.hAdapter;
+            query.Type = KMTQAITYPE_UMDRIVERNAME;
+            query.pPrivateDriverData = &name;
+            query.PrivateDriverDataSize = sizeof(name);
+            found = D3DKMTQueryAdapterInfo(&query) >= 0 && name.UmdFileName[0];
+            close.hAdapter = open.hAdapter;
+            D3DKMTCloseAdapter(&close);
+        }
+    }
+    if (adapter) adapter->Release();
+    factory->Release();
+    return found;
+}
+
+static void RunDefaultDevice(void *)
+{
+    ID3D12Device *device = NULL;
+    HRESULT hr;
+
+    if (!DefaultAdapterHasDriver())
+    {
+        skip("the default adapter has no D3D12 driver\n");
+        return;
+    }
+    hr = D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), reinterpret_cast<void **>(&device));
+    ok(hr == S_OK && device, "default adapter with a D3D12 driver: %#lx\n", hr);
+    if (device) device->Release();
 }
 
 static void RunDevice(void *)
@@ -67,5 +115,6 @@ static void RunDevice(void *)
 
 START_TEST(device)
 {
+    d3d12_test_bounded("default device", RunDefaultDevice, NULL, D3D12_TEST_BUDGET);
     d3d12_test_bounded("device", RunDevice, NULL, D3D12_TEST_BUDGET);
 }
