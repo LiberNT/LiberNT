@@ -1118,6 +1118,333 @@ LsaLookupSids(IN LSA_HANDLE PolicyHandle,
 }
 
 
+
+/* Sid-name mappings are kept in the registry so that every process
+ * shares the same store; virtual accounts are machine-local state. */
+#define LSA_SNM_KEY L"SOFTWARE\\LiberNT\\LSA\\SidNameMapping"
+
+static
+NTSTATUS
+LsapSnmOpenKey(IN ACCESS_MASK DesiredAccess,
+               OUT PHANDLE KeyHandle)
+{
+    HKEY Root = NULL, Current = NULL;
+    static const WCHAR Path[] = L"LiberNT\\LSA\\SidNameMapping";
+    WCHAR Component[64];
+    PCWSTR p = Path;
+    LSTATUS lrc;
+    BOOLEAN WriteAccess = (DesiredAccess & KEY_WRITE) != 0;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE", 0, KEY_READ, &Root) != ERROR_SUCCESS)
+        return STATUS_OBJECT_NAME_NOT_FOUND;
+
+    /* Walk the components below HKLM\\SOFTWARE, creating them only when
+     * write access is requested: readers must not need write privilege on
+     * the parent keys, and a missing store is not an error for them. */
+    while (*p)
+    {
+        ULONG len = 0;
+        HKEY Next = NULL;
+
+        while (p[len] && p[len] != L'\\')
+            len++;
+        if (len == 0) { p++; continue; }
+        if (len >= 64) len = 63;
+        RtlCopyMemory(Component, p, len * sizeof(WCHAR));
+        Component[len] = UNICODE_NULL;
+        p += len;
+
+        /* KEY_WRITE alone carries neither query nor enumerate rights, and the
+     * collision detection reads the store back through this handle */
+    if (WriteAccess)
+            lrc = RegCreateKeyExW(Root, Component, 0, NULL, 0, KEY_READ | KEY_WRITE, NULL, &Next, NULL);
+        else
+            lrc = RegOpenKeyExW(Root, Component, 0, KEY_READ, &Next);
+        if (Current != NULL)
+            RegCloseKey(Current);
+        Current = Next;
+        if (lrc != ERROR_SUCCESS)
+        {
+            if (Root != NULL) RegCloseKey(Root);
+            if (Current != NULL) RegCloseKey(Current);
+            if (lrc == ERROR_ACCESS_DENIED)
+                return STATUS_ACCESS_DENIED;
+            return STATUS_OBJECT_NAME_NOT_FOUND;
+        }
+        if (Root != HKEY_LOCAL_MACHINE && Root != NULL)
+            RegCloseKey(Root);
+        Root = Current;
+        Current = NULL;
+    }
+
+    if (Root == NULL)
+        return STATUS_OBJECT_NAME_NOT_FOUND;
+    *KeyHandle = Root;
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+LsapSnmValueName(IN PUNICODE_STRING DomainName,
+                 IN PUNICODE_STRING AccountName,
+                 OUT PUNICODE_STRING ValueName,
+                 IN PWCHAR Buffer,
+                 IN ULONG BufferChars)
+{
+    ULONG Chars = DomainName->Length / sizeof(WCHAR);
+
+    if (Chars > BufferChars - 2)
+        Chars = BufferChars - 2;
+    RtlCopyMemory(Buffer, DomainName->Buffer, Chars * sizeof(WCHAR));
+
+    if (AccountName != NULL && AccountName->Length != 0)
+    {
+        ULONG AccChars = AccountName->Length / sizeof(WCHAR);
+        Buffer[Chars++] = L'\\';
+        if (Chars + AccChars > BufferChars - 1)
+            AccChars = BufferChars - 1 - Chars;
+        RtlCopyMemory(Buffer + Chars, AccountName->Buffer, AccChars * sizeof(WCHAR));
+        Chars += AccChars;
+    }
+
+    Buffer[Chars] = UNICODE_NULL;
+    RtlInitUnicodeString(ValueName, Buffer);
+}
+
+/******************************************************************************
+ * LsapLookupSidNameMapping
+ *
+ * Looks up a registered sid-name mapping. On success returns a heap copy
+ * of the SID in *Sid (free with RtlFreeHeap/RtlGetProcessHeap).
+ */
+NTSTATUS
+LsapLookupSidNameMapping(IN PUNICODE_STRING DomainName,
+                         IN PUNICODE_STRING AccountName,
+                         OUT PSID *Sid)
+{
+    UNICODE_STRING ValueName;
+    WCHAR ValueNameBuffer[128];
+    HANDLE KeyHandle = NULL;
+    BYTE SidData[64];
+    DWORD SidSize = sizeof(SidData);
+    DWORD Type = 0;
+    NTSTATUS Status;
+
+    *Sid = NULL;
+
+    Status = LsapSnmOpenKey(KEY_READ, &KeyHandle);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    LsapSnmValueName(DomainName, AccountName, &ValueName, ValueNameBuffer,
+                     sizeof(ValueNameBuffer) / sizeof(WCHAR));
+
+    if (RegQueryValueExW((HKEY)KeyHandle, ValueName.Buffer, NULL, &Type, SidData, &SidSize) != ERROR_SUCCESS)
+        Status = STATUS_OBJECT_NAME_NOT_FOUND;
+    else if (Type != REG_BINARY || SidSize < 8 || !RtlValidSid((PSID)SidData) ||
+             RtlLengthSid((PSID)SidData) != SidSize)
+        Status = STATUS_INVALID_SID;
+    else
+    {
+        *Sid = RtlAllocateHeap(RtlGetProcessHeap(), 0, SidSize);
+        if (*Sid != NULL)
+            RtlCopyMemory(*Sid, SidData, SidSize);
+        else
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    RegCloseKey((HKEY)KeyHandle);
+    return Status;
+}
+
+
+/* Allocate the generic operation output the way LsaFreeMemory expects. */
+static PVOID
+LsapSnmAllocateOutput(IN LSA_SID_NAME_MAPPING_OPERATION_ERROR ErrorCode)
+{
+    PLSA_SID_NAME_MAPPING_OPERATION_GENERIC_OUTPUT Output;
+
+    Output = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY,
+                             sizeof(LSA_SID_NAME_MAPPING_OPERATION_GENERIC_OUTPUT));
+    if (Output != NULL)
+        Output->ErrorCode = ErrorCode;
+    return Output;
+}
+
+/* Check whether Sid is already mapped under any name in the store,
+ * optionally skipping the value the caller is about to write. */
+static BOOLEAN
+LsapSnmSidIsMapped(IN HANDLE KeyHandle,
+                   IN PSID Sid,
+                   IN PUNICODE_STRING SkipValueName)
+{
+    WCHAR ValueName[128];
+    BYTE ValueData[64];
+    ULONG ValueNameSize, ValueDataSize, Type, Index;
+    ULONG SidSize = RtlLengthSid(Sid);
+
+    for (Index = 0; ; Index++)
+    {
+        ValueNameSize = sizeof(ValueName) / sizeof(WCHAR);
+        ValueDataSize = sizeof(ValueData);
+        if (RegEnumValueW((HKEY)KeyHandle, Index, ValueName, &ValueNameSize,
+                          NULL, &Type, ValueData, &ValueDataSize) != ERROR_SUCCESS)
+            break;
+
+        if (Type != REG_BINARY || ValueDataSize != SidSize)
+            continue;
+
+        if (SkipValueName != NULL &&
+            ValueNameSize == SkipValueName->Length / sizeof(WCHAR) &&
+            _wcsnicmp(ValueName, SkipValueName->Buffer, ValueNameSize) == 0)
+            continue;
+
+        if (RtlCompareMemory(ValueData, Sid, SidSize) == SidSize)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+/******************************************************************************
+ * LsaManageSidNameMapping
+ *
+ * PARAMS
+ *   OpType   [I]
+ *   OpInput  [I]
+ *   OpOutput [O]
+ *
+ * @implemented: the mappings are machine-local state, kept in the registry
+ * so all processes share them. Virtual accounts (S-1-5-111) are the primary
+ * consumer. The output carries the mapping outcome: collisions and
+ * absent removals are reported there and fail the operation, after the
+ * documented contract.
+ */
+NTSTATUS
+NTAPI
+LsaManageSidNameMapping(IN LSA_SID_NAME_MAPPING_OPERATION_TYPE OpType,
+                        IN PLSA_SID_NAME_MAPPING_OPERATION_INPUT OpInput,
+                        OUT PLSA_SID_NAME_MAPPING_OPERATION_OUTPUT *OpOutput)
+{
+    PLSA_SID_NAME_MAPPING_OPERATION_INPUT Input = OpInput;
+    HANDLE KeyHandle = NULL;
+    NTSTATUS Status;
+
+    TRACE("LsaManageSidNameMapping(0x%lx %p %p)\n", OpType, OpInput, OpOutput);
+
+    if (OpInput == NULL || OpOutput == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    *OpOutput = NULL;
+
+    if (OpType == LsaSidNameMappingOperation_Add)
+    {
+        UNICODE_STRING ValueName;
+        WCHAR ValueNameBuffer[128];
+        ULONG SidSize;
+
+        if (!RtlValidSid(Input->AddInput.Sid))
+            return STATUS_INVALID_PARAMETER;
+
+        Status = LsapSnmOpenKey(KEY_WRITE, &KeyHandle);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        LsapSnmValueName(&Input->AddInput.DomainName,
+                         Input->AddInput.AccountName.Length != 0 ? &Input->AddInput.AccountName : NULL,
+                         &ValueName,
+                         ValueNameBuffer,
+                         sizeof(ValueNameBuffer) / sizeof(WCHAR));
+
+        SidSize = RtlLengthSid(Input->AddInput.Sid);
+
+        /* Collision detection, after the documented contract: a mapping for
+         * the same name with a different SID is a name collision, and the
+         * same SID mapped under any other name is a SID collision. Either
+         * way the store is left unchanged, the failure is reported in the
+         * output, and the operation itself fails. Re-adding the exact same
+         * mapping is idempotent. */
+        {
+            BYTE ExistingSid[64];
+            ULONG ExistingSize = sizeof(ExistingSid), ExistingType;
+            BOOLEAN NameTaken = FALSE;
+
+            if (RegQueryValueExW((HKEY)KeyHandle, ValueName.Buffer, NULL, &ExistingType,
+                                 ExistingSid, &ExistingSize) == ERROR_SUCCESS &&
+                ExistingType == REG_BINARY)
+            {
+                if (ExistingSize == SidSize &&
+                    RtlCompareMemory(ExistingSid, Input->AddInput.Sid, SidSize) == SidSize)
+                {
+                    /* Same mapping already present: nothing to do */
+                    *OpOutput = LsapSnmAllocateOutput(LsaSidNameMappingOperation_Success);
+                    RegCloseKey((HKEY)KeyHandle);
+                    return STATUS_SUCCESS;
+                }
+                NameTaken = TRUE;
+            }
+
+            if (NameTaken)
+            {
+                *OpOutput = LsapSnmAllocateOutput(LsaSidNameMappingOperation_NameCollision);
+                RegCloseKey((HKEY)KeyHandle);
+                return STATUS_OBJECT_NAME_COLLISION;
+            }
+
+            if (LsapSnmSidIsMapped(KeyHandle, Input->AddInput.Sid, NULL))
+            {
+                *OpOutput = LsapSnmAllocateOutput(LsaSidNameMappingOperation_SidCollision);
+                RegCloseKey((HKEY)KeyHandle);
+                return STATUS_OBJECT_NAME_COLLISION;
+            }
+        }
+
+        if (RegSetValueExW((HKEY)KeyHandle, ValueName.Buffer, 0, REG_BINARY,
+                           (const BYTE *)Input->AddInput.Sid, SidSize) == ERROR_SUCCESS)
+        {
+            *OpOutput = LsapSnmAllocateOutput(LsaSidNameMappingOperation_Success);
+            Status = STATUS_SUCCESS;
+        }
+        else
+        {
+            Status = STATUS_UNSUCCESSFUL;
+        }
+        RegCloseKey((HKEY)KeyHandle);
+        return Status;
+    }
+    else if (OpType == LsaSidNameMappingOperation_Remove)
+    {
+        UNICODE_STRING ValueName;
+        WCHAR ValueNameBuffer[128];
+
+        Status = LsapSnmOpenKey(KEY_WRITE, &KeyHandle);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        LsapSnmValueName(&Input->RemoveInput.DomainName,
+                         Input->RemoveInput.AccountName.Length != 0 ? &Input->RemoveInput.AccountName : NULL,
+                         &ValueName,
+                         ValueNameBuffer,
+                         sizeof(ValueNameBuffer) / sizeof(WCHAR));
+
+        if (RegDeleteValueW((HKEY)KeyHandle, ValueName.Buffer) == ERROR_SUCCESS)
+        {
+            *OpOutput = LsapSnmAllocateOutput(LsaSidNameMappingOperation_Success);
+            Status = STATUS_SUCCESS;
+        }
+        else
+        {
+            *OpOutput = LsapSnmAllocateOutput(LsaSidNameMappingOperation_MappingNotFound);
+            Status = STATUS_NOT_FOUND;
+        }
+        RegCloseKey((HKEY)KeyHandle);
+        return Status;
+    }
+
+    return STATUS_INVALID_PARAMETER;
+}
+
+
 /******************************************************************************
  * LsaNtStatusToWinError
  *
