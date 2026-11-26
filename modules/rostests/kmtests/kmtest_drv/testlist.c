@@ -15,6 +15,7 @@ KMT_TESTFUNC Test_DxgkChildDescriptor;
 KMT_TESTFUNC Test_DxgkDisplayDetectControl;
 KMT_TESTFUNC Test_DxgkPostDisplayHandoff;
 KMT_TESTFUNC Test_DxgkStopScreen;
+KMT_TESTFUNC Test_WdSessionManager;
 KMT_TESTFUNC Test_DxgkPresentUserSource;
 KMT_TESTFUNC Test_MonitorBrightnessKey;
 KMT_TESTFUNC Test_DxgkGpuVaAddress;
@@ -516,6 +517,7 @@ const KMT_TEST TestList[] =
     { "DxgkDisplayDetectControl",          Test_DxgkDisplayDetectControl },
     { "DxgkPostDisplayHandoff",            Test_DxgkPostDisplayHandoff },
     { "DxgkStopScreen",                    Test_DxgkStopScreen },
+    { "WdSessionManager",                   Test_WdSessionManager },
     { "DxgkPresentUserSource",             Test_DxgkPresentUserSource },
     { "DxgkGpuVaAddress",                   Test_DxgkGpuVaAddress },
     { "DxgkGpuVaPageTable",                 Test_DxgkGpuVaPageTable },
