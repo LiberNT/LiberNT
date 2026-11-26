@@ -1193,6 +1193,7 @@ public:
     SM2ITEM m_Root;
     CAtlArray<SM2ITEM*> m_Flat;
     CAtlArray<SM2ITEM*> m_RecentExecutables;
+    SM2ITEM *m_pCommand;
     CAtlArray<SM2ITEM*> m_Recent;
     CAtlArray<SM2ITEM*> m_Results;
     CAtlArray<SM2ITEM*> m_TreeVis;
@@ -1244,7 +1245,7 @@ public:
         m_Tray(NULL), m_hwndTray(NULL), m_hwndEdit(NULL),
         m_hFont(NULL), m_hFontCue(NULL), m_hFontUser(NULL), m_hSearchIcon(NULL),
         m_hLiquidTheme(NULL), m_iDpi(96),
-        m_nView(SM2V_MAIN), m_nScroll(0), m_nContentH(0),
+        m_pCommand(NULL), m_nView(SM2V_MAIN), m_nScroll(0), m_nContentH(0),
         m_bScrollVis(FALSE), m_bDragScroll(FALSE), m_nDragOff(0),
         m_iHot(-1), m_iSel(-1), m_iPressed(-1),
         m_AnimPhase(SM2A_NONE), m_AnimT0(0), m_dxSlide(0), m_dySlide(0),
@@ -1607,6 +1608,77 @@ public:
         BuildTreeVis();
     }
 
+    BOOL ResolveCommand(LPCWSTR pszQuery, LPWSTR pszPath, DWORD cchPath)
+    {
+        WCHAR szFile[MAX_PATH], szKey[MAX_PATH + 64];
+        DWORD cb = cchPath * sizeof(WCHAR), attributes;
+
+        if (!pszQuery[0] || StrPBrkW(pszQuery, L"\\/:*?\"<>| \t") ||
+            FAILED(StringCchCopyW(szFile, _countof(szFile), pszQuery)))
+        {
+            return FALSE;
+        }
+        if (!*PathFindExtensionW(szFile) && FAILED(StringCchCatW(szFile, _countof(szFile), L".exe")))
+            return FALSE;
+        if (lstrcmpiW(PathFindExtensionW(szFile), L".exe"))
+            return FALSE;
+
+        pszPath[0] = UNICODE_NULL;
+        if (SUCCEEDED(StringCchPrintfW(szKey, _countof(szKey), L"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\%s", szFile)) &&
+            SHGetValueW(HKEY_LOCAL_MACHINE, szKey, NULL, NULL, pszPath, &cb) == ERROR_SUCCESS && cb >= sizeof(WCHAR))
+        {
+            pszPath[cchPath - 1] = UNICODE_NULL;
+            PathUnquoteSpacesW(pszPath);
+        }
+        else
+        {
+            DWORD cch = SearchPathW(NULL, szFile, NULL, cchPath, pszPath, NULL);
+            if (!cch || cch >= cchPath)
+                return FALSE;
+        }
+
+        attributes = GetFileAttributesW(pszPath);
+        return attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY);
+    }
+
+    VOID AddCommandResult(LPCWSTR pszQuery)
+    {
+        WCHAR szPath[MAX_PATH];
+
+        if (!ResolveCommand(pszQuery, szPath, _countof(szPath)))
+            return;
+        for (SIZE_T i = 0; i < m_Results.GetCount(); i++)
+        {
+            if (SM2GetTargetPath(m_Results[i]) &&
+                !lstrcmpiW(PathFindFileNameW(m_Results[i]->szTargetPath), PathFindFileNameW(szPath)))
+            {
+                return;
+            }
+        }
+
+        if (!m_pCommand)
+        {
+            m_pCommand = new SM2ITEM;
+            if (!m_pCommand)
+                return;
+        }
+        if (m_pCommand->szPath.CompareNoCase(szPath))
+        {
+            m_pCommand->Clear();
+            m_pCommand->szPath = szPath;
+        }
+        m_pCommand->szTargetPath = szPath;
+        m_pCommand->bTargetTried = TRUE;
+        m_pCommand->szName = PathFindFileNameW(szPath);
+        PathRemoveExtensionW(m_pCommand->szName.GetBuffer());
+        m_pCommand->szName.ReleaseBuffer();
+        ASSERT(m_pCommand->szName.GetLength() > 0);
+        m_Results.Add(m_pCommand);
+        for (SIZE_T i = m_Results.GetCount() - 1; i > 0; i--)
+            m_Results[i] = m_Results[i - 1];
+        m_Results[0] = m_pCommand;
+    }
+
     VOID BuildResults(LPCWSTR pszQuery)
     {
         int cchQuery = lstrlenW(pszQuery);
@@ -1621,6 +1693,7 @@ public:
                 m_Results.Add(m_Flat[i]);
             }
         }
+        AddCommandResult(pszQuery);
     }
 
     VOID Layout()
@@ -2974,6 +3047,8 @@ public:
         }
         m_Root.Clear();
         ClearRecentExecutables();
+        delete m_pCommand;
+        m_pCommand = NULL;
         return 0;
     }
 
