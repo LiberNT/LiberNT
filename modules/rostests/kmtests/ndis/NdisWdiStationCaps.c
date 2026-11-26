@@ -6,6 +6,8 @@
  */
 
 #include <kmt_test.h>
+#include <ndis.h>
+#include <windot11.h>
 #include "../../../../drivers/network/ndis/include/ndis6_wdi_caps.h"
 
 static
