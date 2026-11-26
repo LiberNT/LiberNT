@@ -12,7 +12,7 @@
 #define TEST_PROTO_KEY L"Software\\Classes\\lnturlexetest"
 #define TEST_CMD_KEY   TEST_PROTO_KEY L"\\shell\\open\\command"
 
-START_TEST(ShellExecuteUrlExe)
+static void TestUrlExe(LPCWSTR Verb)
 {
     WCHAR szTempDir[MAX_PATH];
     WCHAR szTempFile[MAX_PATH];
@@ -85,12 +85,12 @@ START_TEST(ShellExecuteUrlExe)
         goto cleanup;
 
     sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI;
-    sei.lpVerb = L"open";
+    sei.lpVerb = Verb;
     sei.lpFile = L"lnturlexetest://foo/bar.exe";
     sei.nShow = SW_HIDE;
 
     bRet = ShellExecuteExW(&sei);
-    ok(bRet, "ShellExecuteExW failed (%lu)\n", GetLastError());
+    ok(bRet, "Verb %ls: ShellExecuteExW failed (%lu)\n", Verb ? Verb : L"(null)", GetLastError());
     ok(sei.hProcess != NULL, "Expected non-NULL sei.hProcess\n");
     if (bRet && sei.hProcess)
     {
@@ -109,10 +109,16 @@ START_TEST(ShellExecuteUrlExe)
         CloseHandle(hFile);
         szOutput[cbRead] = '\0';
         ok(strstr(szOutput, "lnturlexetest://foo/bar.exe") != NULL,
-           "Unexpected captured output: '%s'\n", szOutput);
+           "Verb %ls: unexpected captured output: '%s'\n", Verb ? Verb : L"(null)", szOutput);
     }
 
 cleanup:
     SHDeleteKeyW(HKEY_CURRENT_USER, TEST_PROTO_KEY);
     DeleteFileW(szTempFile);
+}
+
+START_TEST(ShellExecuteUrlExe)
+{
+    TestUrlExe(L"open");
+    TestUrlExe(NULL);
 }
