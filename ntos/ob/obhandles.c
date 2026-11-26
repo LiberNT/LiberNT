@@ -742,9 +742,11 @@ ObpIncrementHandleCount(
         else if (AccessMode != KernelMode && CheckObjectAccess &&
                  OpenReason == ObOpenHandle &&
                  AccessState->RemainingDesiredAccess == 0 &&
-                 AccessState->PreviouslyGrantedAccess == 0)
+                 AccessState->PreviouslyGrantedAccess == 0 &&
+                 (ObjectType->TypeInfo.SecurityProcedure != SeDefaultObjectMethod ||
+                  ExGetObjectFastReference(*(PEX_FAST_REF)&Header->SecurityDescriptor) != NULL))
         {
-            /* An open for no access at all is refused, though a duplicate may carry none */
+            /* An open for no access at all is refused unless nothing secures the object; a duplicate may carry none */
             return STATUS_ACCESS_DENIED;
         }
         else if (AccessMode != KernelMode && CheckObjectAccess &&

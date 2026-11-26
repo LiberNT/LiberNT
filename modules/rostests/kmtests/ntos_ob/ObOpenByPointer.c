@@ -117,10 +117,62 @@ TestQueryName(VOID)
     ZwClose(Handle);
 }
 
+static
+NTSTATUS
+OpenForNoAccess(
+    _In_ PVOID Object,
+    _In_ POBJECT_TYPE Type,
+    _In_ KPROCESSOR_MODE Mode)
+{
+    HANDLE Handle = NULL;
+    NTSTATUS Status;
+
+    Status = ObOpenObjectByPointer(Object, Mode == KernelMode ? OBJ_KERNEL_HANDLE : 0, NULL, 0, Type, Mode, &Handle);
+    if (NT_SUCCESS(Status))
+    {
+        ok(Handle != NULL, "handle NULL\n");
+        ObCloseHandle(Handle, Mode);
+    }
+    return Status;
+}
+
+static
+VOID
+TestOpenForNoAccess(VOID)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE EventHandle = NULL;
+    PKEVENT Event = NULL;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&ObjectAttributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwCreateEvent(&EventHandle, EVENT_ALL_ACCESS, &ObjectAttributes, NotificationEvent, FALSE);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status)) return;
+
+    Status = ObReferenceObjectByHandle(EventHandle, 0, *ExEventObjectType, KernelMode, (PVOID *)&Event, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        Status = OpenForNoAccess(Event, *ExEventObjectType, UserMode);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        Status = OpenForNoAccess(Event, *ExEventObjectType, KernelMode);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        ObDereferenceObject(Event);
+    }
+    ZwClose(EventHandle);
+
+    Status = OpenForNoAccess(PsGetCurrentProcess(), *PsProcessType, UserMode);
+    ok_eq_hex(Status, STATUS_ACCESS_DENIED);
+    Status = OpenForNoAccess(PsGetCurrentProcess(), *PsProcessType, KernelMode);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+}
+
 START_TEST(ObOpenByPointer)
 {
     TestOpenProcessByPointer();
     TestOpenThreadByPointer();
     TestTypeMismatch();
     TestQueryName();
+    TestOpenForNoAccess();
 }
