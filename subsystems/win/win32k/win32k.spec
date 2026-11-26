@@ -194,6 +194,8 @@
 @ stdcall PATHOBJ_vEnumStart(ptr)
 @ stdcall PATHOBJ_vEnumStartClipLines(ptr ptr ptr ptr)
 @ stdcall PATHOBJ_vGetBounds(ptr ptr)
+@ stdcall RosWddmHandOverDisplayProcess()
+@ stdcall RosWddmHandOverEngineInterface()
 @ stdcall RtlAnsiCharToUnicodeChar(ptr) NTOSKRNL.RtlAnsiCharToUnicodeChar
 @ stdcall -arch=x86_64,arm,riscv64 RtlCaptureContext(ptr) NTOSKRNL.RtlCaptureContext
 @ stdcall -arch=x86_64,arm RtlCopyMemory(ptr ptr int64) NTOSKRNL.RtlCopyMemory

@@ -40,6 +40,9 @@ RcddInitHardwarePointer(
    ULONG WidthInBytes;
    ULONG PixelBytes;
 
+   if (ppdev->DxgkAdapter != NULL)
+      return TRUE;
+
    if (EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_QUERY_POINTER_CAPABILITIES,
                           NULL, 0, &ppdev->HwPointerCapabilities,
                           sizeof(ppdev->HwPointerCapabilities), &Returned) != 0)

@@ -32,6 +32,36 @@
                             HOOK_STRETCHBLTROP | HOOK_ALPHABLEND | HOOK_TRANSPARENTBLT | \
                             HOOK_GRADIENTFILL)
 
+static HSURF
+RcddDxgkEnableSurface(
+   PRCDD_PDEV ppdev)
+{
+   HSURF hSurface;
+   SIZEL ScreenSize;
+
+   ASSERT(ppdev->DxgkAdapter != NULL);
+   ASSERT(ppdev->hSurfEng == NULL);
+   if (ppdev->BitsPerPixel != 32 || !RcddDxgkEnableSource(ppdev))
+      return NULL;
+
+   ScreenSize.cx = ppdev->ScreenWidth;
+   ScreenSize.cy = ppdev->ScreenHeight;
+   hSurface = (HSURF)EngCreateBitmap(ScreenSize, ppdev->ScreenDelta, BMF_32BPP, BMF_TOPDOWN, ppdev->ScreenPtr);
+   if (hSurface == NULL)
+   {
+      RcddDxgkDisableSource(ppdev);
+      return NULL;
+   }
+   if (!EngAssociateSurface(hSurface, ppdev->hDevEng, RCDD_SURFACE_HOOKS))
+   {
+      EngDeleteSurface(hSurface);
+      RcddDxgkDisableSource(ppdev);
+      return NULL;
+   }
+   ppdev->hSurfEng = hSurface;
+   return hSurface;
+}
+
 /*
  * RcddEnableSurface
  *
@@ -53,6 +83,9 @@ RcddEnableSurface(
    ULONG ulTemp;
    FLONG flHooks = 0;
    PVOID SurfaceBits;
+
+   if (ppdev->DxgkAdapter != NULL)
+      return RcddDxgkEnableSurface(ppdev);
 
    RtlZeroMemory(&VideoMemoryInfo, sizeof(VideoMemoryInfo));
 
@@ -230,6 +263,12 @@ RcddDisableSurface(
       ppdev->hSurfEng = NULL;
    }
 
+   if (ppdev->DxgkAdapter != NULL)
+   {
+      RcddDxgkDisableSource(ppdev);
+      return;
+   }
+
    if (ppdev->ScreenPtr != NULL)
    {
       VideoMemory.RequestedVirtualAddress = ppdev->ScreenPtr;
@@ -249,7 +288,7 @@ RcddRemapSurface(
    PVOID OldPtr = ppdev->ScreenPtr;
    ULONG ulTemp;
 
-   if (ppdev->hSurfEng == NULL || OldPtr == NULL || ppdev->ScreenDelta == 0)
+   if (ppdev->hSurfEng == NULL || OldPtr == NULL || ppdev->ScreenDelta == 0 || ppdev->DxgkAdapter != NULL)
       return;
 
    RtlZeroMemory(&VideoMemoryInfo, sizeof(VideoMemoryInfo));

@@ -108,6 +108,10 @@ typedef struct _RCDD_PDEV
    ULONG PresentFailedCount;
    ULONG PresentRejectedCount;
    ULONG PresentSynchronousCount;
+
+   /* Display-only scan-out through the graphics kernel's display driver interface (dxgkcdd.c) */
+   struct _RCDD_DXGK_ADAPTER *DxgkAdapter;
+   ULONG DxgkScreenBytes;
 } RCDD_PDEV, *PRCDD_PDEV;
 
 typedef struct _RCDD_BITMAP
@@ -126,6 +130,24 @@ typedef struct _RCDD_BITMAP
 
 #define DEVICE_NAME L"cdd"
 #define ALLOC_TAG ' DDC'        /* Pool tag displays as "CDD "                */
+
+/* ---- dxgkcdd.c : graphics kernel display driver interface --------------- */
+
+const VOID *
+NTAPI
+RosWddmHandOverEngineInterface(VOID);
+
+PEPROCESS
+NTAPI
+RosWddmHandOverDisplayProcess(VOID);
+
+VOID RcddDxgkInitialize(VOID);
+struct _RCDD_DXGK_ADAPTER *RcddDxgkGetAdapter(HANDLE hDriver);
+VOID RcddDxgkFreeAdapter(struct _RCDD_DXGK_ADAPTER *Adapter);
+DWORD RcddDxgkGetModes(struct _RCDD_DXGK_ADAPTER *Adapter, PVIDEO_MODE_INFORMATION *ModeInfo, DWORD *ModeInfoSize);
+BOOL RcddDxgkEnableSource(PRCDD_PDEV ppdev);
+VOID RcddDxgkDisableSource(PRCDD_PDEV ppdev);
+BOOL RcddDxgkPresent(PRCDD_PDEV ppdev, const RECTL *prcl, ULONG Count);
 
 /* ---- enable.c : driver entry + PDEV lifetime ---------------------------- */
 

@@ -32,6 +32,13 @@ RcddGetAvailableModes(
    *ModeInfo = NULL;
    *ModeInfoSize = 0;
 
+   if (RosWddmHandOverEngineInterface() != NULL)
+   {
+      struct _RCDD_DXGK_ADAPTER *Adapter = RcddDxgkGetAdapter(hDriver);
+
+      return Adapter != NULL ? RcddDxgkGetModes(Adapter, ModeInfo, ModeInfoSize) : 0;
+   }
+
    if (EngDeviceIoControl(hDriver, IOCTL_VIDEO_QUERY_NUM_AVAIL_MODES, NULL,
                           0, &Modes, sizeof(VIDEO_NUM_MODES), &ulTemp) ||
        ulTemp < sizeof(VIDEO_NUM_MODES))
@@ -217,7 +224,8 @@ RcddInitScreenInfo(
    pGdiInfo->szlPhysSize.cx = 0;
    pGdiInfo->szlPhysSize.cy = 0;
 
-   if (!EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_QUERY_COLOR_CAPABILITIES,
+   if (ppdev->DxgkAdapter == NULL &&
+       !EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_QUERY_COLOR_CAPABILITIES,
                            NULL, 0, &ColorCapabilities,
                            sizeof(VIDEO_COLOR_CAPABILITIES), &Temp))
    {
@@ -456,6 +464,14 @@ RcddAssertMode(
 {
    PRCDD_PDEV ppdev = (PRCDD_PDEV)dhpdev;
    ULONG ulTemp;
+
+   if (ppdev->DxgkAdapter != NULL)
+   {
+      /* TODO: the source is neither disabled nor re-enabled in the graphics kernel on a mode switch */
+      if (bEnable)
+         RcddPresent(ppdev, NULL);
+      return TRUE;
+   }
 
    if (bEnable)
    {

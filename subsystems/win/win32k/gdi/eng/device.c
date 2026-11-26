@@ -9,6 +9,7 @@
 
 #include <win32k.h>
 #include <ntddvdeo.h>
+#include "drivers/wddm/wddm_bridge.h"
 
 DBG_DEFAULT_CHANNEL(EngDev);
 
@@ -901,13 +902,16 @@ EngpRegisterGraphicsDevice(
             KeStackAttachProcess(&CsrProcess->Pcb, &ApcState);
         }
     }
-    Status = (NTSTATUS)EngDeviceIoControl((HANDLE)pDeviceObject,
-                                          IOCTL_VIDEO_INIT_WIN32K_CALLBACKS,
-                                          &Win32kCallbacks,
-                                          sizeof(Win32kCallbacks),
-                                          &Win32kCallbacks,
-                                          sizeof(Win32kCallbacks),
-                                          &ulReturn);
+    if (WddmHandOverIsActive())
+        Status = NT_SUCCESS(WddmHandOverInitGdiDevice(pDeviceObject, &Win32kCallbacks)) ? ERROR_SUCCESS : ERROR_NOT_SUPPORTED;
+    else
+        Status = (NTSTATUS)EngDeviceIoControl((HANDLE)pDeviceObject,
+                                              IOCTL_VIDEO_INIT_WIN32K_CALLBACKS,
+                                              &Win32kCallbacks,
+                                              sizeof(Win32kCallbacks),
+                                              &Win32kCallbacks,
+                                              sizeof(Win32kCallbacks),
+                                              &ulReturn);
     if (CsrProcess != NULL)
     {
         KeUnstackDetachProcess(&ApcState);

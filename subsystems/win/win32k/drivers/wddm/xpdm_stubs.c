@@ -8,6 +8,7 @@
 #include <ntifs.h>
 #include <windef.h>
 #include <d3dkmthk.h>
+#include <ntddvdeo.h>
 
 /*
  * XPDM does not have a dxgkrnl bridge. Keep only the symbols referenced by
@@ -197,6 +198,23 @@ BOOLEAN
 WddmHandOverIsActive(VOID)
 {
     return FALSE;
+}
+
+NTSTATUS
+WddmHandOverInitGdiDevice(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ struct _VIDEO_WIN32K_CALLBACKS *Callbacks)
+{
+    UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(Callbacks);
+    return STATUS_NOT_SUPPORTED;
+}
+
+const VOID *
+NTAPI
+RosWddmHandOverEngineInterface(VOID)
+{
+    return NULL;
 }
 
 VOID

@@ -52,6 +52,9 @@ RcddNotifyDirtyRects(
    ULONG Ret;
    BOOL Result;
 
+   if (ppdev->DxgkAdapter != NULL)
+      return RcddDxgkPresent(ppdev, prcl, Count);
+
    HeaderSize = FIELD_OFFSET(DXGK_PRESENT_DIRTY_RECTS_INPUT, Rects);
    if (Count > DXGK_PRESENT_DIRTY_MAX_RECTS)
       return FALSE;
