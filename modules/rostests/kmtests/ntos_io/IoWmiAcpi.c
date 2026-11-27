@@ -67,6 +67,23 @@ WmiAcpiEventCallback(
 }
 
 static
+BOOLEAN
+WmiAcpiDeviceEnumerated(VOID)
+{
+    UNICODE_STRING Path = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Enum\\ACPI\\PNP0C14\\WMITEST_0");
+    OBJECT_ATTRIBUTES Attributes;
+    HANDLE Key;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&Attributes, &Path, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = ZwOpenKey(&Key, KEY_READ, &Attributes);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+    ZwClose(Key);
+    return TRUE;
+}
+
+static
 NTSTATUS
 WmiAcpiWaitForProvider(
     _In_ PVOID DataBlock)
@@ -134,7 +151,7 @@ START_TEST(IoWmiAcpi)
     if (!NT_SUCCESS(Status))
         return;
 
-    Status = WmiAcpiWaitForProvider(DataBlock);
+    Status = WmiAcpiDeviceEnumerated() ? WmiAcpiWaitForProvider(DataBlock) : STATUS_WMI_GUID_NOT_FOUND;
     if (skip(Status != STATUS_WMI_GUID_NOT_FOUND, "the WMITEST ACPI WMI device is not present\n"))
     {
         ObDereferenceObject(DataBlock);
