@@ -3921,6 +3921,7 @@ HRESULT NativeDevice::CreateTexture(const D3D11_TEXTURE2D_DESC *input,
     args.MapFlags = input->CPUAccessFlags >> 16;
     args.MiscFlags = NativeDriverMiscFlags(input->MiscFlags);
     if (present && !primary) args.MiscFlags |= D3D10_DDI_RESOURCE_MISC_SHARED;
+    if (primary && wddm20 && !ddi11_1) args.MiscFlags |= D3DWDDM2_0DDI_RESOURCE_MISC_DISPLAYABLE_SURFACE;
     args.Format = input->Format;
     args.SampleDesc = input->SampleDesc;
     args.MipLevels = mip_count;
