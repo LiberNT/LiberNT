@@ -238,6 +238,7 @@
 @ stdcall EnumWindowStationsW(ptr long)
 @ stdcall EnumWindows(ptr long)
 @ stdcall EqualRect(ptr ptr)
+@ stdcall -version=0x602+ EvaluateProximityToPolygon(long ptr ptr ptr)
 @ stdcall -version=0x602+ EvaluateProximityToRect(ptr ptr ptr)
 @ stdcall ExcludeUpdateRgn(long long) NtUserExcludeUpdateRgn
 @ stdcall ExitWindowsEx(long long)

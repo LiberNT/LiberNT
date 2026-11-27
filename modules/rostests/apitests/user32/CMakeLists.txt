@@ -1,6 +1,7 @@
 add_subdirectory(makeimg)
 
 list(APPEND SOURCE
+    TouchProximity.c
     AltTabHook.c
     AnimatedCursor.c
     AttachThreadInput.c

@@ -506,6 +506,7 @@ BOOL WINAPI RegisterTouchHitTestingWindow(HWND hwnd, ULONG value)
     return TRUE;
 }
 
+#ifndef __REACTOS__
 /**********************************************************************
  * EvaluateProximityToRect [USER32.@]
  */
@@ -517,6 +518,7 @@ BOOL WINAPI EvaluateProximityToRect(const RECT *box,
     SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
     return FALSE;
 }
+#endif
 
 /**********************************************************************
  * PackTouchHitTestingProximityEvaluation [USER32.@]

@@ -1,5 +1,6 @@
 set(USER32_API_SOURCE
     misc/dpi.c
+    misc/touchprox.c
     windows/pointer.c
     wine/input.c
     wine/misc.c
