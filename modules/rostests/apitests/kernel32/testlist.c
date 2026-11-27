@@ -151,6 +151,7 @@ extern void func_PerfConsumer(void);
 extern void func_PerfProvider(void);
 extern void func_Pipes(void);
 extern void func_PackageIdentity(void);
+extern void func_PackageInfoReference(void);
 extern void func_PackageNames(void);
 extern void func_ParentHandleList(void);
 extern void func_PixeloramaCompat(void);
@@ -396,6 +397,7 @@ const struct test winetest_testlist[] =
     { "PerfProvider",              func_PerfProvider },
     { "Pipes",                       func_Pipes },
     { "PackageIdentity",             func_PackageIdentity },
+    { "PackageInfoReference",        func_PackageInfoReference },
     { "PackageNames",                func_PackageNames },
     { "ParentHandleList",            func_ParentHandleList },
     { "PixeloramaCompat",            func_PixeloramaCompat },
