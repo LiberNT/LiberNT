@@ -961,13 +961,18 @@ CreateToolbar (HWND hwnd, DWORD style, UINT wID, INT nBitmaps,
 #ifdef __REACTOS__
 HRESULT WINAPI DllGetVersion(DLLVERSIONINFO *info)
 {
-    if (info->cbSize != sizeof(*info))
+    if ((info->cbSize != sizeof(DLLVERSIONINFO)) && (info->cbSize != sizeof(DLLVERSIONINFO2)))
         return E_INVALIDARG;
 
     info->dwMajorVersion = COMCTL32_VERSION;
     info->dwMinorVersion = COMCTL32_VERSION_MINOR;
-    info->dwBuildNumber = 2919;
-    info->dwPlatformID = 6304;
+    info->dwBuildNumber = COMCTL32_VERSION_BUILD;
+    info->dwPlatformID = DLLVER_PLATFORM_NT;
+    if (info->cbSize == sizeof(DLLVERSIONINFO2))
+    {
+        ((DLLVERSIONINFO2 *)info)->ullVersion = MAKEDLLVERULL(COMCTL32_VERSION, COMCTL32_VERSION_MINOR,
+                                                              COMCTL32_VERSION_BUILD, 0);
+    }
     return S_OK;
 }
 #endif
