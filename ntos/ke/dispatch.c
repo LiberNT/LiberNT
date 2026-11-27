@@ -106,7 +106,8 @@ KiUnlinkWaitBlocks(
     PDISPATCHER_HEADER Object;
 
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
-    ASSERT(Thread->WaitRegister.State == KI_WAIT_ABORTED);
+    ASSERT((Thread->WaitRegister.State == KI_WAIT_ABORTED) ||
+           (Thread->WaitRegister.State == KI_WAIT_SATISFIED));
 
     Count = KiThreadWaitBlockCount(Thread);
     for (Index = 0; Index < Count; Index++)
@@ -136,7 +137,8 @@ KiEndThreadWait(
     /* A signaller can be ending a wait still in progress at this very moment, so the register is only touched under the lock */
     KiAcquireThreadLock(Thread);
     ASSERT(Thread->WaitRegister.State != KI_WAIT_COMMITTED);
-    Thread->WaitRegister.State = KI_WAIT_ABORTED;
+    if (Thread->WaitRegister.State != KI_WAIT_SATISFIED)
+        Thread->WaitRegister.State = KI_WAIT_ABORTED;
     KiReleaseThreadLock(Thread);
 
     if (Thread->WaitBlockList != NULL)
@@ -226,7 +228,41 @@ KiLockCommittedWaiter(
     if (Thread->WaitRegister.State == KI_WAIT_COMMITTED)
         return Thread;
 
-    Thread->WaitRegister.State = KI_WAIT_ABORTED;
+    if (Thread->WaitRegister.State == KI_WAIT_IN_PROGRESS)
+        Thread->WaitRegister.State = KI_WAIT_ABORTED;
+    KiReleaseThreadLock(Thread);
+
+    KiUnlinkOneWaitBlock(WaitBlock);
+    return NULL;
+}
+
+/* A signal that leaves no state behind ends a wait still being set up with its status, which the thread reads when it fails to commit */
+PKTHREAD
+FASTCALL
+KiLockWaiterOrSatisfy(
+    _Inout_ PKWAIT_BLOCK WaitBlock,
+    _In_ NTSTATUS WaitStatus,
+    _Out_opt_ PBOOLEAN Satisfied)
+{
+    PKTHREAD Thread = WaitBlock->Thread;
+
+    ASSERT(WaitBlock->WaitType != WaitDpc);
+    ASSERT(KiWaitBlockObject(WaitBlock)->Lock & KOBJECT_LOCK_BIT);
+
+    if (Satisfied != NULL)
+        *Satisfied = FALSE;
+
+    KiAcquireThreadLock(Thread);
+    if (Thread->WaitRegister.State == KI_WAIT_COMMITTED)
+        return Thread;
+
+    if (Thread->WaitRegister.State == KI_WAIT_IN_PROGRESS)
+    {
+        Thread->WaitStatus = WaitStatus;
+        Thread->WaitRegister.State = KI_WAIT_SATISFIED;
+        if (Satisfied != NULL)
+            *Satisfied = TRUE;
+    }
     KiReleaseThreadLock(Thread);
 
     KiUnlinkOneWaitBlock(WaitBlock);
@@ -252,11 +288,12 @@ KiUnlinkWaitBlock(
  *
  * Entered with the object locked.
  */
+static
 VOID
-FASTCALL
-KiWaitTest(
+KiWaitTestEx(
     _In_ PVOID ObjectPointer,
-    _In_ KPRIORITY Increment)
+    _In_ KPRIORITY Increment,
+    _In_ BOOLEAN Transient)
 {
     PDISPATCHER_HEADER Object = (PDISPATCHER_HEADER)ObjectPointer;
     PLIST_ENTRY WaitList = &Object->WaitListHead;
@@ -280,9 +317,25 @@ KiWaitTest(
             continue;
         }
 
-        WaitThread = KiLockCommittedWaiter(WaitBlock);
-        if (WaitThread == NULL)
-            continue;
+        if (Transient && (WaitBlock->WaitType == WaitAny))
+        {
+            BOOLEAN Satisfied;
+            PKTHREAD Waiter = WaitBlock->Thread;
+
+            WaitThread = KiLockWaiterOrSatisfy(WaitBlock, WaitBlock->WaitKey, &Satisfied);
+            if (WaitThread == NULL)
+            {
+                if (Satisfied)
+                    KiSatisfyObjectWait((PKMUTANT)Object, Waiter);
+                continue;
+            }
+        }
+        else
+        {
+            WaitThread = KiLockCommittedWaiter(WaitBlock);
+            if (WaitThread == NULL)
+                continue;
+        }
 
         if (WaitBlock->WaitType == WaitAny)
         {
@@ -297,6 +350,25 @@ KiWaitTest(
         KiReleaseThreadLock(WaitThread);
         KiUnlinkOneWaitBlock(WaitBlock);
     }
+}
+
+VOID
+FASTCALL
+KiWaitTest(
+    _In_ PVOID ObjectPointer,
+    _In_ KPRIORITY Increment)
+{
+    KiWaitTestEx(ObjectPointer, Increment, FALSE);
+}
+
+/* A pulse leaves no state behind, so a waiter still setting its wait up is released here rather than sent to look again */
+VOID
+FASTCALL
+KiPulseWaitTest(
+    _In_ PVOID ObjectPointer,
+    _In_ KPRIORITY Increment)
+{
+    KiWaitTestEx(ObjectPointer, Increment, TRUE);
 }
 
 /*

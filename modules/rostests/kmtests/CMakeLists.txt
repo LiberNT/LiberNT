@@ -326,6 +326,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ke/KeModern.c
     ntos_ke/KeMutex.c
     ntos_ke/KePcr.c
+    ntos_ke/KePulseWaiter.c
     ntos_ke/KeQueue.c
     ntos_ke/KeProcessStackCount.c
     ntos_ke/KeQueryBasePriority.c

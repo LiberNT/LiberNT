@@ -647,7 +647,12 @@ KeRundownQueue(
             continue;
         }
 
-        Thread = KiLockCommittedWaiter(WaitBlock);
+        if (WaitBlock->WaitType == WaitDequeue)
+            Thread = KiLockWaiterOrSatisfy(WaitBlock, STATUS_ABANDONED, NULL);
+        else if (WaitBlock->WaitType == WaitAny)
+            Thread = KiLockWaiterOrSatisfy(WaitBlock, WaitBlock->WaitKey, NULL);
+        else
+            Thread = KiLockCommittedWaiter(WaitBlock);
         if (Thread == NULL)
             continue;
 
