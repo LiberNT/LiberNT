@@ -6300,11 +6300,11 @@ static void generate_font_link_info(struct gdip_format_string_info *info, DWORD 
 
 #ifdef __REACTOS__
     {
-        UINT acp = GetACP();
-        if (acp == CP_UTF8)
-            GetLocaleInfoW(LOCALE_SYSTEM_DEFAULT,
-                           LOCALE_IDEFAULTANSICODEPAGE | LOCALE_RETURN_NUMBER,
-                           (WCHAR *)&acp, sizeof(acp) / sizeof(WCHAR));
+        UINT acp = 0;
+        if (!GetLocaleInfoW(LOCALE_SYSTEM_DEFAULT,
+                            LOCALE_IDEFAULTANSICODEPAGE | LOCALE_RETURN_NUMBER,
+                            (WCHAR *)&acp, sizeof(acp) / sizeof(WCHAR)) || !acp)
+            acp = GetACP();
         IMLangFontLink_CodePageToCodePages(iMLFL, acp, &priority_cp);
     }
 #endif
@@ -6331,6 +6331,10 @@ static void generate_font_link_info(struct gdip_format_string_info *info, DWORD 
         }
         else
         {
+#ifdef __REACTOS__
+            static const DWORD cjk_codepages = FS_JISJAPAN | FS_CHINESESIMP | FS_WANSUNG |
+                                               FS_CHINESETRAD | FS_JOHAB;
+#endif
             IMLangFontLink_GetStrCodePages(iMLFL, &info->string[progress], length - progress,
                                             priority_cp, &string_codepages, &processed);
 #ifdef __REACTOS__
@@ -6338,6 +6342,9 @@ static void generate_font_link_info(struct gdip_format_string_info *info, DWORD 
             if (priority_cp & string_codepages)
                 hr = IMLangFontLink_MapFont(iMLFL, info->hdc, string_codepages & priority_cp,
                                             hfont, &map_hfont);
+            if (FAILED(hr) && !(priority_cp & cjk_codepages) &&
+                !(string_codepages & ~cjk_codepages) && (string_codepages & FS_CHINESESIMP))
+                hr = IMLangFontLink_MapFont(iMLFL, info->hdc, FS_CHINESESIMP, hfont, &map_hfont);
             if (FAILED(hr))
                 hr = IMLangFontLink_MapFont(iMLFL, info->hdc, string_codepages, hfont, &map_hfont);
 #else
