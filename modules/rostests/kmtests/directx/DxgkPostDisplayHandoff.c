@@ -321,6 +321,18 @@ DxgkPostDisplayTestHeadlessSize(VOID)
     ok_eq_ulong(Height, 768UL);
 }
 
+static
+VOID
+DxgkPostDisplayTestBootScreenAction(VOID)
+{
+    ok_eq_int(DxgkPostDisplayCoreBootScreenAction(FALSE, TRUE, TRUE), DxgkBootScreenDrawToCopy);
+    ok_eq_int(DxgkPostDisplayCoreBootScreenAction(FALSE, TRUE, FALSE), DxgkBootScreenRelease);
+    ok_eq_int(DxgkPostDisplayCoreBootScreenAction(TRUE, TRUE, TRUE), DxgkBootScreenKeep);
+    ok_eq_int(DxgkPostDisplayCoreBootScreenAction(TRUE, TRUE, FALSE), DxgkBootScreenKeep);
+    ok_eq_int(DxgkPostDisplayCoreBootScreenAction(FALSE, FALSE, TRUE), DxgkBootScreenKeep);
+    ok_eq_int(DxgkPostDisplayCoreBootScreenAction(FALSE, FALSE, FALSE), DxgkBootScreenKeep);
+}
+
 START_TEST(DxgkPostDisplayHandoff)
 {
     DxgkPostDisplayTestRestartableFailure();
@@ -329,6 +341,7 @@ START_TEST(DxgkPostDisplayHandoff)
     DxgkPostDisplayTestPostDevice();
     DxgkPostDisplayTestClaim();
     DxgkPostDisplayTestHeadlessSize();
+    DxgkPostDisplayTestBootScreenAction();
     DxgkPostDisplayTestFirmwareScanout();
     DxgkPostDisplayTestApertureRunTakesBootWindow();
     DxgkPostDisplayTestUefiRangeSegment();

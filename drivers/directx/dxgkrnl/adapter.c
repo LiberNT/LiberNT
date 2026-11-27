@@ -141,38 +141,19 @@ static PDXGKRNL_ADAPTER g_PostDisplayOwnerAdapter = NULL;
 static PVOID g_BootScreenCopy;
 static volatile LONG g_BootScreenDetached;
 
-/* The boot video driver keeps drawing at the firmware framebuffer's address, for the boot log and at a debugger stop; once the miniport shows other memory there it draws to a copy. */
+static
 NTSTATUS
-DxgkDetachBootScreen(
-    _In_ PHYSICAL_ADDRESS ApertureBase,
-    _In_ ULONG AperturePageSize,
-    _In_ ULONG FirstPage,
-    _In_ ULONG PageCount)
+DxgkpDetachBootScreenToCopy(
+    _In_ CONST LOADER_PARAMETER_FRAMEBUFFER *FrameBuffer)
 {
-    LOADER_PARAMETER_FRAMEBUFFER Fb;
+    LOADER_PARAMETER_FRAMEBUFFER Fb = *FrameBuffer;
     INBV_VIRTUAL_FRAME_BUFFER Shadow;
     PVOID Copy;
     PVOID Installed;
     NTSTATUS Status;
 
     PAGED_CODE();
-    ASSERT(ApertureBase.QuadPart >= 0);
-
-    /* TODO: a swizzling range or a CPU-visible segment placed in that window is not covered */
-    if (InterlockedCompareExchange(&g_BootScreenDetached, 0, 0) != 0 ||
-        !InbvIsBootDriverInstalled() ||
-        !InbvHasValidGopFrameBuffer() ||
-        !InbvGetGopFrameBufferInfo(&Fb) ||
-        Fb.FrameBufferBase.QuadPart <= 0 ||
-        !DxgkPostDisplayCoreApertureRunTakesBootWindow((ULONGLONG)ApertureBase.QuadPart,
-                                                       AperturePageSize,
-                                                       FirstPage,
-                                                       PageCount,
-                                                       (ULONGLONG)Fb.FrameBufferBase.QuadPart,
-                                                       Fb.FrameBufferSize))
-    {
-        return STATUS_SUCCESS;
-    }
+    ASSERT(Fb.FrameBufferBase.QuadPart > 0);
 
     ASSERT(Fb.FrameBufferSize != 0);
     Copy = ExAllocatePoolWithTag(NonPagedPool, Fb.FrameBufferSize, TAG_DXGK_DISPLAY);
@@ -201,6 +182,57 @@ DxgkDetachBootScreen(
                      Fb.FrameBufferBase.QuadPart, Fb.FrameBufferSize);
     }
     return STATUS_SUCCESS;
+}
+
+/* The boot video driver keeps drawing at the firmware framebuffer's address, for the boot log and at a debugger stop; once the miniport shows other memory there it draws to a copy. */
+NTSTATUS
+DxgkDetachBootScreen(
+    _In_ PHYSICAL_ADDRESS ApertureBase,
+    _In_ ULONG AperturePageSize,
+    _In_ ULONG FirstPage,
+    _In_ ULONG PageCount)
+{
+    LOADER_PARAMETER_FRAMEBUFFER Fb;
+
+    PAGED_CODE();
+    ASSERT(ApertureBase.QuadPart >= 0);
+
+    /* TODO: a swizzling range or a CPU-visible segment placed in that window is not covered */
+    if (InterlockedCompareExchange(&g_BootScreenDetached, 0, 0) != 0 ||
+        !InbvIsBootDriverInstalled() ||
+        !InbvHasValidGopFrameBuffer() ||
+        !InbvGetGopFrameBufferInfo(&Fb) ||
+        Fb.FrameBufferBase.QuadPart <= 0 ||
+        !DxgkPostDisplayCoreApertureRunTakesBootWindow((ULONGLONG)ApertureBase.QuadPart,
+                                                       AperturePageSize,
+                                                       FirstPage,
+                                                       PageCount,
+                                                       (ULONGLONG)Fb.FrameBufferBase.QuadPart,
+                                                       Fb.FrameBufferSize))
+    {
+        return STATUS_SUCCESS;
+    }
+
+    return DxgkpDetachBootScreenToCopy(&Fb);
+}
+
+static
+NTSTATUS
+DxgkpDetachWholeBootScreen(VOID)
+{
+    LOADER_PARAMETER_FRAMEBUFFER Fb;
+
+    PAGED_CODE();
+
+    if (InterlockedCompareExchange(&g_BootScreenDetached, 0, 0) != 0 ||
+        !InbvIsBootDriverInstalled() ||
+        !InbvHasValidGopFrameBuffer() ||
+        !InbvGetGopFrameBufferInfo(&Fb) ||
+        Fb.FrameBufferBase.QuadPart <= 0)
+    {
+        return STATUS_SUCCESS;
+    }
+    return DxgkpDetachBootScreenToCopy(&Fb);
 }
 
 static NTSTATUS
@@ -14614,6 +14646,7 @@ DxgkAdapterStart(
     ULONG           StartGeneration;
     DXGK_ADAPTER_START_ROLE Role;
     DXGKP_ADAPTER_START_PROGRESS Progress;
+    DXGK_BOOT_SCREEN_ACTION BootScreenAction;
     BOOLEAN         Restartable;
 
     PAGED_CODE();
@@ -14917,7 +14950,12 @@ DxgkAdapterStart(
         }
     }
 
-    if (!Adapter->IsBasicDisplayFallback && DxgkpIsPostDisplayDevice(Adapter) && !DxgkpScreenLogRequested())
+    BootScreenAction = DxgkPostDisplayCoreBootScreenAction(Adapter->IsBasicDisplayFallback,
+                                                           DxgkpIsPostDisplayDevice(Adapter),
+                                                           DxgkpScreenLogRequested());
+    if (BootScreenAction == DxgkBootScreenDrawToCopy && !NT_SUCCESS(DxgkpDetachWholeBootScreen()))
+        BootScreenAction = DxgkBootScreenRelease;
+    if (BootScreenAction == DxgkBootScreenRelease)
     {
         /* TODO: keep boot output in a virtual frame buffer for the boot image relay instead of dropping it */
         DXGKRNL_TRACE("DxgkAdapterStart: POST display adapter %p takes the display from the boot screen\n", Adapter);
