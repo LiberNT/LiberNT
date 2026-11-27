@@ -2875,8 +2875,8 @@ DxgkpHotPlugRebuildWorker(
     PAGED_CODE();
     for (;;)
     {
-        if (InterlockedExchange(&Adapter->ConnectorChangePending, 0) != 0 &&
-            Adapter->State == DxgkAdapterStateStarted)
+        if (DxgkHotPlugWorkCoreTakeConnectorChange(&Adapter->ConnectorChangePending,
+                                                   Adapter->State == DxgkAdapterStateStarted))
         {
             DxgkpDrainConnectionChanges(Adapter);
         }

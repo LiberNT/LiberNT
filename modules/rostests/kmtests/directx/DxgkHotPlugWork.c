@@ -172,6 +172,18 @@ static VOID DxgkHotPlugWorkTestDisplayChangeNotice(VOID)
     ok_bool_false(DxgkHotPlugWorkCoreNotifiesDisplayChange(FALSE, TRUE, TRUE, TRUE, TRUE), "nothing is announced without a committed VidPN");
 }
 
+static VOID DxgkHotPlugWorkTestConnectorChangeBeforeStart(VOID)
+{
+    volatile LONG Pending = 1;
+
+    ok_bool_false(DxgkHotPlugWorkCoreTakeConnectorChange(&Pending, FALSE), "a starting adapter does not take the change");
+    ok_eq_long(Pending, 1L);
+    ok_bool_true(DxgkHotPlugWorkCoreTakeConnectorChange(&Pending, TRUE), "a started adapter takes the change");
+    ok_eq_long(Pending, 0L);
+    ok_bool_false(DxgkHotPlugWorkCoreTakeConnectorChange(&Pending, TRUE), "nothing pending, nothing taken");
+    ok_eq_long(Pending, 0L);
+}
+
 START_TEST(DxgkHotPlugWork)
 {
     DxgkHotPlugWorkTestCoalescing();
@@ -187,4 +199,5 @@ START_TEST(DxgkHotPlugWork)
     DxgkHotPlugWorkTestExtendSource();
     DxgkHotPlugWorkTestSourcePrimary();
     DxgkHotPlugWorkTestDisplayChangeNotice();
+    DxgkHotPlugWorkTestConnectorChangeBeforeStart();
 }
