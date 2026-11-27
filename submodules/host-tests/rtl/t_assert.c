@@ -19,6 +19,7 @@ static unsigned long Checks, Failures;
 
 static const char *Script;
 static ULONG GlobalFlags;
+static BOOLEAN DebuggerEnabled = TRUE;
 static ULONG Reports, Prompts, Breaks, ContextHints, ProcessEnds, ThreadEnds;
 static ULONG PromptBufferSize;
 static NTSTATUS Raised;
@@ -31,11 +32,8 @@ enum
     ESCAPE_ASKED_FOREVER
 };
 
-ULONG DbgPrint(const char *Format, ...)
+static ULONG RecordPrint(const char *Format, va_list Arguments)
 {
-    va_list Arguments;
-
-    va_start(Arguments, Format);
     if (strncmp(Format, "\n*** Assertion failed", 21) == 0)
     {
         Reports++;
@@ -45,8 +43,34 @@ ULONG DbgPrint(const char *Format, ...)
     {
         ContextHints++;
     }
+    return 0;
+}
+
+ULONG DbgPrint(const char *Format, ...)
+{
+    va_list Arguments;
+
+    va_start(Arguments, Format);
+    RecordPrint(Format, Arguments);
     va_end(Arguments);
     return 0;
+}
+
+ULONG DbgPrintEx(ULONG ComponentId, ULONG Level, const char *Format, ...)
+{
+    va_list Arguments;
+
+    (void)ComponentId;
+    (void)Level;
+    va_start(Arguments, Format);
+    RecordPrint(Format, Arguments);
+    va_end(Arguments);
+    return 0;
+}
+
+BOOLEAN RtlpKernelDebuggerEnabled(VOID)
+{
+    return DebuggerEnabled;
 }
 
 ULONG DbgPrompt(PCCH Prompt, PCH Response, ULONG MaximumResponseLength)
@@ -124,11 +148,11 @@ static int Fail(const char *Answers, ULONG Flags, char *Message)
 
 int main(void)
 {
-    /* Nobody answers: one report, one breakpoint, and the caller gets control back */
+    /* Nobody answers: one report, ignored without breaking, and the caller gets control back */
     CHECK(Fail("", 0, NULL) == 0);
     CHECK(Reports == 1);
     CHECK(Prompts == 1);
-    CHECK(Breaks == 1);
+    CHECK(Breaks == 0);
     CHECK(ContextHints == 0);
     CHECK(PromptBufferSize == 2);
     CHECK(strcmp(LastReport, "\n*** Assertion failed: Count == 0\n***   Source File: driver.c, line 42\n\n") == 0);
@@ -166,10 +190,10 @@ int main(void)
     CHECK(Prompts == 3);
     CHECK(Breaks == 0);
 
-    /* An answer that means nothing, then nobody: the stop */
+    /* An answer that means nothing, then nobody: ignored without breaking */
     CHECK(Fail("x", 0, NULL) == 0);
     CHECK(Prompts == 2);
-    CHECK(Breaks == 1);
+    CHECK(Breaks == 0);
 
     /* Terminations that come back ask again */
     CHECK(Fail("pi", 0, NULL) == 0);
@@ -190,6 +214,14 @@ int main(void)
     CHECK(Reports == 1);
     CHECK(Prompts == 0);
     CHECK(Breaks == 0);
+
+    /* No kernel debugger attached: reported, never prompted, returns without breaking */
+    DebuggerEnabled = FALSE;
+    CHECK(Fail("o", 0, NULL) == 0);
+    CHECK(Reports == 1);
+    CHECK(Prompts == 0);
+    CHECK(Breaks == 0);
+    DebuggerEnabled = TRUE;
 
     printf("rtl_assert: %lu checks, %lu failures\n", Checks, Failures);
     return Failures != 0;
