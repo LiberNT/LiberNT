@@ -63,9 +63,9 @@ set(LXCORE_TESTS ${LXCORE_HOST}/t_lxmm.c ${LXCORE_HOST}/lxshim.c ${LXCORE_COPY}/
 set_source_files_properties(${LXCORE_TESTS} PROPERTIES
     INCLUDE_DIRECTORIES "${LXCORE_HOST};${CMAKE_CURRENT_SOURCE_DIR};${LXCORE_SOURCE};${LXCORE_SOURCE}/arm64")
 set_source_files_properties(${LXCORE_COPY}/mm.c PROPERTIES COMPILE_OPTIONS -Wno-clobbered)
-set_source_files_properties(${REACTOS_HOST_SOURCE_ROOT}/ntos/rtl/rbtree.c PROPERTIES
+set_source_files_properties(${REACTOS_HOST_SOURCE_ROOT}/sdk/lib/rtl/rbtree.c PROPERTIES
     INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/../../../rtl/include")
-list(APPEND MM_TESTS ${LXCORE_TESTS} ${REACTOS_HOST_SOURCE_ROOT}/ntos/rtl/rbtree.c)
+list(APPEND MM_TESTS ${LXCORE_TESTS} ${REACTOS_HOST_SOURCE_ROOT}/sdk/lib/rtl/rbtree.c)
 
 set(MM_AREAS pfn pagetable vad vm large awe clone session fault fault_smp paging section image stress ccmm ntfile writeback ntpaging async sys process highmem lxmm)
 

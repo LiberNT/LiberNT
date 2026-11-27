@@ -12,9 +12,15 @@
 
 typedef uint32_t ULONG;
 typedef int32_t NTSTATUS;
+typedef unsigned char BOOLEAN;
 typedef char CHAR, *PCHAR, *PSTR, *PCH;
 typedef const char *PCCH;
 typedef void VOID, *PVOID, *HANDLE;
+
+#define TRUE 1
+#define FALSE 0
+#define DPFLTR_DEFAULT_ID 101
+#define DPFLTR_ERROR_LEVEL 0
 
 typedef struct _CONTEXT
 {
@@ -31,6 +37,8 @@ typedef struct _CONTEXT
 #define ZwCurrentThread() ((HANDLE)(intptr_t)-2)
 
 ULONG DbgPrint(const char *Format, ...);
+ULONG DbgPrintEx(ULONG ComponentId, ULONG Level, const char *Format, ...);
+BOOLEAN RtlpKernelDebuggerEnabled(VOID);
 ULONG DbgPrompt(PCCH Prompt, PCH Response, ULONG MaximumResponseLength);
 VOID DbgBreakPoint(VOID);
 VOID RtlCaptureContext(PCONTEXT Context);
