@@ -2,6 +2,7 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_ExportForwarders(void);
 extern void func_ApiSetHosts(void);
 extern void func_GlobalMemoryStatusVirtual(void);
 extern void func_ActCtxWithXmlNamespaces(void);
@@ -244,6 +245,7 @@ extern void func_FileSecurityCache(void);
 
 const struct test winetest_testlist[] =
 {
+    { "ExportForwarders", func_ExportForwarders },
     { "GlobalMemoryStatusVirtual", func_GlobalMemoryStatusVirtual },
     { "ApiSetHosts", func_ApiSetHosts },
     { "FileSecurityCache",                  func_FileSecurityCache },
