@@ -1435,6 +1435,7 @@ DxgkpProgramScanoutViaMpo(
         DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY3 Args3;
         DXGK_MULTIPLANE_OVERLAY_PLANE3 Plane3, *PlanePointer = &Plane3;
         DXGK_PRIMARYCONTEXTDATA Primary, *PrimaryPointer = &Primary;
+        DXGK_MULTIPLANE_OVERLAY_POST_COMPOSITION PostComposition;
 
         RtlZeroMemory(&Primary, sizeof(Primary));
         Primary.hAllocation = Allocation->MiniportHandle;
@@ -1457,6 +1458,12 @@ DxgkpProgramScanoutViaMpo(
         Args3.VidPnSourceId = VidPnSourceId;
         Args3.PlaneCount = 1;
         Args3.ppPlanes = &PlanePointer;
+        RtlZeroMemory(&PostComposition, sizeof(PostComposition));
+        if (DxgkPresentCorePostCompositionRects(Width, Height, &PostComposition.SrcRect, &PostComposition.DstRect))
+        {
+            PostComposition.Rotation = D3DDDI_ROTATION_IDENTITY;
+            Args3.pPostComposition = &PostComposition;
+        }
 
         if (!DxgkAcquireKmdCall(Adapter))
             return STATUS_DELETE_PENDING;
@@ -5482,6 +5489,7 @@ typedef struct _DXGKP_MMIO_MPO3_CALL
     DXGK_PRIMARYCONTEXTDATA *ContextPointers[DXGKP_MMIO_MAX_PLANES];
     DXGK_HDR_METADATA HdrMetadata;
     D3DDDI_HDR_METADATA_HDR10 Hdr10;
+    DXGK_MULTIPLANE_OVERLAY_POST_COMPOSITION PostComposition;
     LONG64 ArmSequence;
     NTSTATUS Status;
 } DXGKP_MMIO_MPO3_CALL;
@@ -5556,6 +5564,37 @@ DxgkpMmioMpo3Plane(
     Plane3->ppContextData = &Call->ContextPointers[Slot];
     DxgkMpoAttributes3(Plane, &Plane3->PlaneAttributes);
     Call->PlanePointers[Slot] = Plane3;
+}
+
+static DXGK_MULTIPLANE_OVERLAY_POST_COMPOSITION *
+DxgkpMmioPostComposition(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _In_ ULONG64 CompositorGeneration,
+    _Out_ DXGK_MULTIPLANE_OVERLAY_POST_COMPOSITION *PostComposition)
+{
+    ULONG ModeWidth = 0;
+    ULONG ModeHeight = 0;
+
+    PAGED_CODE();
+    RtlZeroMemory(PostComposition, sizeof(*PostComposition));
+    if (VidPnSourceId == Adapter->SharedPrimaryVidPnSourceId)
+    {
+        ModeWidth = Adapter->CommittedWidth;
+        ModeHeight = Adapter->CommittedHeight;
+    }
+    else if (CompositorGeneration == 0 ||
+             !DxgkVidPnGetCompositorOutputSize(Adapter, VidPnSourceId, &ModeWidth, &ModeHeight))
+    {
+        return NULL;
+    }
+    if (!DxgkPresentCorePostCompositionRects(ModeWidth, ModeHeight, &PostComposition->SrcRect, &PostComposition->DstRect))
+        return NULL;
+    PostComposition->Rotation = D3DDDI_ROTATION_IDENTITY;
+    ASSERT(PostComposition->Flags.Value == 0);
+    ASSERT(PostComposition->SrcRect.right == (LONG)ModeWidth);
+    ASSERT(PostComposition->SrcRect.bottom == (LONG)ModeHeight);
+    return PostComposition;
 }
 
 static BOOLEAN NTAPI
@@ -5982,6 +6021,8 @@ DxgkpExecuteMmioFlip(
         Mpo3Call.Args.VidPnSourceId = Entry->VidPnSourceId;
         Mpo3Call.Args.PlaneCount = PlaneCount;
         Mpo3Call.Args.ppPlanes = Mpo3Call.PlanePointers;
+        Mpo3Call.Args.pPostComposition =
+            DxgkpMmioPostComposition(Adapter, Entry->VidPnSourceId, Entry->CompositorGeneration, &Mpo3Call.PostComposition);
         Status = DxgkSynchronizeScanoutExecution(Adapter, DxgkpSetMmioMpo3, &Mpo3Call, &Synchronized);
         if (NT_SUCCESS(Status))
             Status = Mpo3Call.Status;
