@@ -2648,6 +2648,8 @@ UINT WINAPI waveOutGetDevCapsW(UINT_PTR uDeviceID, LPWAVEOUTCAPSW lpCaps,
     if (lpCaps == NULL)	return MMSYSERR_INVALPARAM;
 
     if(WINMM_IsMapper(uDeviceID)){
+        if(!g_outmmdevices_count)
+            return MMSYSERR_NODRIVER;
         mapper_caps.wMid = 0xFF;
         mapper_caps.wPid = 0xFF;
         mapper_caps.vDriverVersion = 0x00010001;
@@ -3352,6 +3354,8 @@ UINT WINAPI waveInGetDevCapsW(UINT_PTR uDeviceID, LPWAVEINCAPSW lpCaps, UINT uSi
         return MMSYSERR_INVALPARAM;
 
     if(WINMM_IsMapper(uDeviceID)){
+        if(!g_inmmdevices_count)
+            return MMSYSERR_NODRIVER;
         mapper_caps.wMid = 0xFF;
         mapper_caps.wPid = 0xFF;
         mapper_caps.vDriverVersion = 0x00010001;
