@@ -375,7 +375,11 @@ static RETURN_CODE WCMD_list_directory (DIRECTORY_STACK *inputparms, int level, 
     if (!bare) {
        if (level != 0 && (entry_count > 0)) return_code = WCMD_output_asis(L"\r\n");
        if (!recurse || ((entry_count > 0) && done_header==FALSE)) {
+#ifdef __REACTOS__
+           WCMD_output (L" Directory of %1\n\n", real_path);
+#else
            WCMD_output (L"Directory of %1\n\n", real_path);
+#endif
            done_header = TRUE;
        }
     }
@@ -523,6 +527,11 @@ static RETURN_CODE WCMD_list_directory (DIRECTORY_STACK *inputparms, int level, 
      }
     }
 
+#ifdef __REACTOS__
+    if (!bare && return_code == NO_ERROR && entry_count > 0) {
+       WCMD_output (L"%1!16d! File(s)%2!15s! bytes\n", file_count, WCMD_filesize64 (byte_count.QuadPart));
+    }
+#else
     if (!bare && return_code == NO_ERROR) {
        if (file_count == 1) {
          WCMD_output (L"       1 file %1!25s! bytes\n", WCMD_filesize64 (byte_count.QuadPart));
@@ -531,10 +540,16 @@ static RETURN_CODE WCMD_list_directory (DIRECTORY_STACK *inputparms, int level, 
          WCMD_output (L"%1!8d! files %2!24s! bytes\n", file_count, WCMD_filesize64 (byte_count.QuadPart));
        }
     }
+#endif
     byte_total = byte_total + byte_count.QuadPart;
     file_total = file_total + file_count;
     dir_total = dir_total + dir_count;
 
+#ifdef __REACTOS__
+    if (!bare && !recurse && return_code == NO_ERROR && entry_count > 0) {
+       WCMD_output (L"%1!16d! Dir(s)", dir_count);
+    }
+#else
     if (!bare && !recurse && return_code == NO_ERROR) {
        if (dir_count == 1) {
            WCMD_output (L"%1!8d! directory         ", 1);
@@ -542,6 +557,7 @@ static RETURN_CODE WCMD_list_directory (DIRECTORY_STACK *inputparms, int level, 
            WCMD_output (L"%1!8d! directories", dir_count);
        }
     }
+#endif
   }
   free(fd);
 
@@ -609,8 +625,12 @@ static RETURN_CODE WCMD_list_directory (DIRECTORY_STACK *inputparms, int level, 
   /* Handle case where everything is filtered out */
   if ((file_total + dir_total == 0) && (level == 0)) {
     return_code = ERROR_FILE_NOT_FOUND;
+#ifdef __REACTOS__
+    WCMD_output_stderr (WCMD_LoadMessage (WCMD_DIRFILENOTFOUND));
+#else
     SetLastError (return_code);
     WCMD_print_error ();
+#endif
   }
 
   *outputparms = parms;
@@ -635,7 +655,11 @@ static void WCMD_dir_trailer(const WCHAR *path) {
         WCMD_output (L"\n     Total files listed:\n%1!8d! files%2!25s! bytes\n", file_total, WCMD_filesize64 (byte_total));
         WCMD_output (L"%1!8d! directories %2!18s! bytes free\n\n", dir_total, WCMD_filesize64 (freebytes.QuadPart));
       } else {
+#ifdef __REACTOS__
+        WCMD_output (L"%1!16s! bytes free\n", WCMD_filesize64 (freebytes.QuadPart));
+#else
         WCMD_output (L" %1!18s! bytes free\n\n", WCMD_filesize64 (freebytes.QuadPart));
+#endif
       }
     }
 }

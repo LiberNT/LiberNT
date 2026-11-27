@@ -3860,11 +3860,17 @@ BOOL WCMD_print_volume_information(const WCHAR *path)
 
     if (!GetVolumeInformationW(path, label, ARRAY_SIZE(label), &serial, NULL, NULL, NULL, 0))
         return FALSE;
+#ifdef __REACTOS__
+    WCMD_output_asis(L" ");
+#endif
     if (label[0])
         WCMD_output(WCMD_LoadMessage(WCMD_VOLUMELABEL), path[0], label);
     else
         WCMD_output(WCMD_LoadMessage(WCMD_VOLUMENOLABEL), path[0]);
 
+#ifdef __REACTOS__
+    WCMD_output_asis(L" ");
+#endif
     WCMD_output(WCMD_LoadMessage(WCMD_VOLUMESERIALNO), HIWORD(serial), LOWORD(serial));
     return TRUE;
 }

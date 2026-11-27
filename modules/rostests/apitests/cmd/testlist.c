@@ -4,6 +4,7 @@
 extern void func_attrib(void);
 extern void func_cd(void);
 extern void func_confirm(void);
+extern void func_dir(void);
 extern void func_echo(void);
 extern void func_exit(void);
 extern void func_fc(void);
@@ -17,6 +18,7 @@ const struct test winetest_testlist[] =
     { "attrib", func_attrib },
     { "cd", func_cd },
     { "confirm", func_confirm },
+    { "dir", func_dir },
     { "echo", func_echo },
     { "exit", func_exit },
     { "fc", func_fc },

@@ -283,7 +283,7 @@ EXIT\t\tCMD を終了\n\
     WCMD_VERIFYPROMPT, "Verify は %1\n"
     WCMD_VERIFYERR, "Verify は ON か OFF で指定する必要があります\n"
     WCMD_ARGERR, "パラメーター エラー\n"
-    WCMD_VOLUMESERIALNO, "ボリューム シリアル番号は %1!04x!-%2!04x!\n\
+    WCMD_VOLUMESERIALNO, "ボリューム シリアル番号は %1!04X!-%2!04X!\n\
 \n"
     WCMD_VOLUMEPROMPT, "ボリューム ラベル(半角11文字、<Enter>で無指定)?"
     WCMD_ANYKEY, "続けるには何かキーを押して下さい... "

@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     cmd.c
     confirm.c
+    dir.c
     fc.c
     script.c
     tree.c
