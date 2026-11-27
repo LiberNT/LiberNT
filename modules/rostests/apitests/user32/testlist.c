@@ -2,6 +2,7 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_TouchProximity(void);
 extern void func_RegisterTouchWindow(void);
 extern void func_AltTabHook(void);
 extern void func_AnimatedCursor(void);
@@ -184,6 +185,7 @@ extern void func_wsprintfApi(void);
 
 const struct test winetest_testlist[] =
 {
+    { "TouchProximity", func_TouchProximity },
     { "RegisterTouchWindow", func_RegisterTouchWindow },
     { "AltTabHook", func_AltTabHook },
     { "AnimatedCursor", func_AnimatedCursor },
