@@ -179,17 +179,9 @@ jobs:
       if: ${{ always() && steps.ccache_restore.outcome == 'success' }}
       run: ccache -s
 
-    # A cancelled build holds a partial cache: saving it would make it the newest and prune the full one
-    - name: Save ccache
-      id: ccache_save
-      if: ${{ !cancelled() && steps.ccache_restore.outcome == 'success' && github.event_name != 'pull_request' }}
-      uses: actions/cache/save@v5
-      with:
-        path: ccache
-        key: ${{ steps.ccache_restore.outputs.cache-primary-key }}
-
+    # Pruning first keeps two copies of a cache from pushing the store over its limit, where eviction drops the debug caches only the nightly run saves
     - name: Prune older ccache entries
-      if: ${{ !cancelled() && steps.ccache_save.outcome == 'success' }}
+      if: ${{ !cancelled() && steps.ccache_restore.outcome == 'success' && github.event_name != 'pull_request' }}
       continue-on-error: true
       env:
         GH_TOKEN: ${{ github.token }}
@@ -201,6 +193,15 @@ jobs:
         while read -r id; do
           gh cache delete "$id" --repo "$GITHUB_REPOSITORY" || true
         done
+
+    # A cancelled build holds a partial cache: saving it would make it the newest and prune the full one
+    - name: Save ccache
+      id: ccache_save
+      if: ${{ !cancelled() && steps.ccache_restore.outcome == 'success' && github.event_name != 'pull_request' }}
+      uses: actions/cache/save@v5
+      with:
+        path: ccache
+        key: ${{ steps.ccache_restore.outputs.cache-primary-key }}
 
     - name: Name artifacts
       id: images
