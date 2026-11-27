@@ -2309,6 +2309,7 @@ int RunCommand(int argc, LPWSTR *argv)
         std::vector<SearchPlan> plans;
         InstallSink sink(groups);
         size_t missing = 0;
+        int exitCode;
 
         catalog.SetThrottleCallback(&throttle);
         for (const std::vector<DeviceInfo> &group : groups)
@@ -2317,12 +2318,14 @@ int RunCommand(int argc, LPWSTR *argv)
             plans.push_back(DevicePlan(group.front()));
         }
         Print(FormatText(IDS_CLI_MISSING_TOTAL, NumberText(missing)));
-        ScanPlans(catalog, plans, sink);
+        error = ScanPlans(catalog, plans, sink);
+        if (InstallAllStopped(error, sink.Failed(), exitCode))
+            Print(ErrorText(error));
         Print(FormatText(IDS_CLI_SUMMARY, NumberText(sink.Installed()), NumberText(sink.Absent()),
                          NumberText(sink.Failed())) +
               (sink.Restart() ? L" " + LoadText(IDS_CLI_RESTART) : std::wstring()));
         OutputDebugStringW((L"[LNTDRV] Scan sent " + NumberText(catalog.Searches()) + L" catalog searches\n").c_str());
-        return (int)sink.Failed();
+        return exitCode;
     }
     if (_wcsicmp(command.c_str(), L"search") == 0 || install)
     {
