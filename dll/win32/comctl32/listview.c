@@ -2160,7 +2160,7 @@ static void LISTVIEW_UpdateHeaderSize(const LISTVIEW_INFO *infoPtr, INT nNewScro
 
     SetWindowPos(infoPtr->hwndHeader,0,
         point[0].x,point[0].y,point[1].x,point[1].y,
-        (infoPtr->dwStyle & LVS_NOCOLUMNHEADER) ? SWP_HIDEWINDOW : SWP_SHOWWINDOW |
+        ((infoPtr->dwStyle & LVS_NOCOLUMNHEADER) ? SWP_HIDEWINDOW : SWP_SHOWWINDOW) |
         SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
@@ -2220,7 +2220,7 @@ static INT LISTVIEW_UpdateHScroll(LISTVIEW_INFO *infoPtr)
     TRACE("horzInfo=%s\n", debugscrollinfo(&horzInfo));
 
     /* Update the Header Control */
-    if (infoPtr->hwndHeader)
+    if (infoPtr->hwndHeader && LISTVIEW_IsHeaderEnabled(infoPtr))
     {
 	horzInfo.fMask = SIF_POS;
 	GetScrollInfo(infoPtr->hwndSelf, SB_HORZ, &horzInfo);
@@ -9964,9 +9964,13 @@ static INT LISTVIEW_SetView(LISTVIEW_INFO *infoPtr, DWORD nView)
   infoPtr->uView = nView;
 
   SendMessageW(infoPtr->hwndEdit, WM_KILLFOCUS, 0, 0);
-  ShowWindow(infoPtr->hwndHeader, SW_HIDE);
+  if (infoPtr->hwndHeader)
+      SetWindowPos(infoPtr->hwndHeader, NULL, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                   SWP_HIDEWINDOW | (infoPtr->redraw ? 0 : SWP_NOREDRAW));
 
-  ShowScrollBar(infoPtr->hwndSelf, SB_BOTH, FALSE);
+  if (is_redrawing(infoPtr))
+      ShowScrollBar(infoPtr->hwndSelf, SB_BOTH, FALSE);
   SetRectEmpty(&infoPtr->rcFocus);
 
   himl = (nView == LV_VIEW_ICON ? infoPtr->himlNormal : infoPtr->himlSmall);
@@ -9989,7 +9993,8 @@ static INT LISTVIEW_SetView(LISTVIEW_INFO *infoPtr, DWORD nView)
       hl.pwpos = &wp;
       SendMessageW(infoPtr->hwndHeader, HDM_LAYOUT, 0, (LPARAM)&hl);
       SetWindowPos(infoPtr->hwndHeader, infoPtr->hwndSelf, wp.x, wp.y, wp.cx, wp.cy,
-                   wp.flags | ((infoPtr->dwStyle & LVS_NOCOLUMNHEADER) ? SWP_HIDEWINDOW : SWP_SHOWWINDOW));
+                   wp.flags | ((infoPtr->dwStyle & LVS_NOCOLUMNHEADER) ? SWP_HIDEWINDOW : SWP_SHOWWINDOW) |
+                   (infoPtr->redraw ? 0 : SWP_NOREDRAW));
       break;
   }
   case LV_VIEW_LIST:
