@@ -15,6 +15,7 @@ list(APPEND SOURCE
     CloseWindow.c
     ClipboardAccess.c
     ClipboardData.c
+    DeleteItemMessage.c
     FrameMetrics.c
     ComboBox.c
     ControlColorOtherThread.c

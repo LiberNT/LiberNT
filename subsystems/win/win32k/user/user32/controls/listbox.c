@@ -1742,14 +1742,10 @@ static LRESULT LISTBOX_InsertString( LB_DESCR *descr, INT index, LPCWSTR str )
  *
  * Delete the content of an item. 'index' must be a valid index.
  */
-static void LISTBOX_DeleteItem( LB_DESCR *descr, INT index )
+static void LISTBOX_DeleteItem( LB_DESCR *descr, INT index, BOOL removing )
 {
-    /* Note: Win 3.1 only sends DELETEITEM on owner-draw items,
-     *       while Win95 sends it for all items with user data.
-     *       It's probably better to send it too often than not
-     *       often enough, so this is what we do here.
-     */
-    if (IS_OWNERDRAW(descr) || get_item_data(descr, index))
+    /* A plain list box reports the items it removes, never the ones a reset or a destroy drops */
+    if (IS_OWNERDRAW(descr) || removing)
     {
         DELETEITEMSTRUCT dis;
         UINT id = (UINT)GetWindowLongPtrW( descr->self, GWLP_ID );
@@ -1785,7 +1781,7 @@ static LRESULT LISTBOX_RemoveItem( LB_DESCR *descr, INT index )
         return LB_OKAY;
     }
     descr->nb_items--;
-    LISTBOX_DeleteItem( descr, index );
+    LISTBOX_DeleteItem( descr, index, TRUE );
     remove_item_data(descr, index);
 
     if (descr->anchor_item == descr->nb_items) descr->anchor_item--;
@@ -1829,7 +1825,7 @@ static void LISTBOX_ResetContent( LB_DESCR *descr )
     INT i;
 
     if (!(descr->style & LBS_NODATA))
-        for (i = descr->nb_items - 1; i >= 0; i--) LISTBOX_DeleteItem(descr, i);
+        for (i = descr->nb_items - 1; i >= 0; i--) LISTBOX_DeleteItem(descr, i, FALSE);
     HeapFree( GetProcessHeap(), 0, descr->u.items );
     descr->nb_items      = 0;
     descr->top_item      = 0;
