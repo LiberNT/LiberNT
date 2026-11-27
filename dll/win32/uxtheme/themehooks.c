@@ -452,10 +452,42 @@ ThemeMarkPrintClient(HWND hWnd, UINT Msg)
         SetPropW(hWnd, UXTHEME_PARENTBKGND_PROP, UlongToHandle(flags | UXTHEME_PARENTBKGND_UNHANDLED));
 }
 
+static BOOL
+ThemeApplyDialogCtlColorBrush(HWND hWnd, WPARAM wParam, LPARAM lParam, LRESULT *pResult)
+{
+    HBRUSH brush;
+    POINT org = {0, 0};
+    HDC hdc;
+
+    if (!IsThemeDialogTextureEnabled(hWnd))
+        return FALSE;
+
+    brush = UXTHEME_GetDialogBackgroundBrush(hWnd, FALSE);
+    if (!brush)
+        return FALSE;
+
+    hdc = (HDC)wParam;
+    SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
+    SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
+    SetBkMode(hdc, TRANSPARENT);
+    MapWindowPoints((HWND)lParam, hWnd, &org, 1);
+    SetBrushOrgEx(hdc, -org.x, -org.y, NULL);
+    *pResult = (LRESULT)brush;
+    return TRUE;
+}
+
 static LRESULT CALLBACK
-ThemeDefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
+ThemeDefWindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, WNDPROC RealDefProc)
 {
     PWND_DATA pwndData;
+    LRESULT Result;
+
+    if ((Msg == WM_CTLCOLORMSGBOX || Msg == WM_CTLCOLORBTN || Msg == WM_CTLCOLORSTATIC) &&
+        UXTHEME_IsAppThemed() &&
+        ThemeApplyDialogCtlColorBrush(hWnd, wParam, lParam, &Result))
+    {
+        return Result;
+    }
 
     ThemeMarkPrintClient(hWnd, Msg);
     pwndData = ThemeFindWndData(hWnd);
@@ -464,42 +496,22 @@ ThemeDefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
        !(GetThemeAppProperties() & STAP_ALLOW_NONCLIENT) ||
        (pwndData && pwndData->HasAppDefinedRgn))
     {
-        return g_user32ApiHook.DefWindowProcW(hWnd,
-                                            Msg,
-                                            wParam,
-                                            lParam);
+        return RealDefProc(hWnd, Msg, wParam, lParam);
     }
 
-    return ThemeWndProc(hWnd,
-                        Msg,
-                        wParam,
-                        lParam,
-                        g_user32ApiHook.DefWindowProcW);
+    return ThemeWndProc(hWnd, Msg, wParam, lParam, RealDefProc);
+}
+
+static LRESULT CALLBACK
+ThemeDefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
+{
+    return ThemeDefWindowProc(hWnd, Msg, wParam, lParam, g_user32ApiHook.DefWindowProcW);
 }
 
 static LRESULT CALLBACK
 ThemeDefWindowProcA(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
-    PWND_DATA pwndData;
-
-    ThemeMarkPrintClient(hWnd, Msg);
-    pwndData = ThemeFindWndData(hWnd);
-
-    if(!UXTHEME_IsAppThemed() ||
-       !(GetThemeAppProperties() & STAP_ALLOW_NONCLIENT) ||
-       (pwndData && pwndData->HasAppDefinedRgn))
-    {
-        return g_user32ApiHook.DefWindowProcA(hWnd,
-                                            Msg,
-                                            wParam,
-                                            lParam);
-    }
-
-    return ThemeWndProc(hWnd,
-                        Msg,
-                        wParam,
-                        lParam,
-                        g_user32ApiHook.DefWindowProcA);
+    return ThemeDefWindowProc(hWnd, Msg, wParam, lParam, g_user32ApiHook.DefWindowProcA);
 }
 
 static VOID
@@ -860,21 +872,8 @@ ThemeDlgPreWindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, ULONG_P
                 *pResult = lr;
                 return TRUE;
             }
-            brush = UXTHEME_GetDialogBackgroundBrush(hWnd, FALSE);
-            if (!brush)
-            {
+            if (!ThemeApplyDialogCtlColorBrush(hWnd, wParam, lParam, pResult))
                 *pResult = DefWindowProcW(hWnd, Msg, wParam, lParam);
-                return TRUE;
-            }
-            hdc = (HDC)wParam;
-            SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
-            SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
-            SetBkMode(hdc, TRANSPARENT);
-            org.x = 0;
-            org.y = 0;
-            MapWindowPoints((HWND)lParam, hWnd, &org, 1);
-            SetBrushOrgEx(hdc, -org.x, -org.y, NULL);
-            *pResult = (LRESULT)brush;
             return TRUE;
         }
     }

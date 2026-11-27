@@ -1111,9 +1111,13 @@ HRESULT WINAPI GetCurrentThemeName(LPWSTR pszThemeFileName, int dwMaxNameChars,
 {
     if(!bThemeActive)
         return E_PROP_ID_UNSUPPORTED;
-    if(pszThemeFileName) lstrcpynW(pszThemeFileName, szCurrentTheme, dwMaxNameChars);
-    if(pszColorBuff) lstrcpynW(pszColorBuff, szCurrentColor, cchMaxColorChars);
-    if(pszSizeBuff) lstrcpynW(pszSizeBuff, szCurrentSize, cchMaxSizeChars);
+    if((pszThemeFileName && (dwMaxNameChars < 0 || (dwMaxNameChars > 0 && dwMaxNameChars <= lstrlenW(szCurrentTheme)))) ||
+       (pszColorBuff && (cchMaxColorChars < 0 || (cchMaxColorChars > 0 && cchMaxColorChars <= lstrlenW(szCurrentColor)))) ||
+       (pszSizeBuff && (cchMaxSizeChars < 0 || (cchMaxSizeChars > 0 && cchMaxSizeChars <= lstrlenW(szCurrentSize)))))
+        return E_NOT_SUFFICIENT_BUFFER;
+    if(pszThemeFileName && dwMaxNameChars > 0) lstrcpynW(pszThemeFileName, szCurrentTheme, dwMaxNameChars);
+    if(pszColorBuff && cchMaxColorChars > 0) lstrcpynW(pszColorBuff, szCurrentColor, cchMaxColorChars);
+    if(pszSizeBuff && cchMaxSizeChars > 0) lstrcpynW(pszSizeBuff, szCurrentSize, cchMaxSizeChars);
     return S_OK;
 }
 
@@ -1174,7 +1178,7 @@ BOOL WINAPI IsThemePartDefined(HTHEME hTheme, int iPartId, int iStateId)
     }
 
     SetLastError(NO_ERROR);
-    return !iStateId && MSSTYLES_FindPart(hTheme, iPartId);
+    return iPartId > 0 && !iStateId && MSSTYLES_FindPart(hTheme, iPartId);
 }
 
 /***********************************************************************
@@ -1278,6 +1282,11 @@ HRESULT WINAPI OpenThemeFile(LPCWSTR pszThemeFileName, LPCWSTR pszColorName,
     TRACE("(%s,%s,%s,%p,%ld)\n", debugstr_w(pszThemeFileName),
           debugstr_w(pszColorName), debugstr_w(pszSizeName),
           hThemeFile, unknown);
+    if (!hThemeFile)
+        return E_POINTER;
+    *hThemeFile = NULL;
+    if (!pszThemeFileName)
+        return E_POINTER;
     return MSSTYLES_OpenThemeFile(pszThemeFileName, pszColorName, pszSizeName, (PTHEME_FILE*)hThemeFile);
 }
 
