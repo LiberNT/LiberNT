@@ -28,10 +28,6 @@ PPEB Peb;
 ULONG SessionId;
 static BOOL DllInitialized = FALSE;
 
-/* Critical section for various kernel32 data structures */
-RTL_CRITICAL_SECTION BaseDllDirectoryLock;
-LIST_ENTRY BaseDllDirectoryList;
-
 extern BOOL FASTCALL NlsInit(VOID);
 extern VOID FASTCALL NlsUninit(VOID);
 
@@ -198,9 +194,6 @@ DllMain(HANDLE hDll,
             /* Initialize command line */
             InitCommandLines();
 
-            /* Initialize the DLL critical section */
-            RtlInitializeCriticalSection(&BaseDllDirectoryLock);
-            InitializeListHead(&BaseDllDirectoryList);
             BasepInheritDllDirectory();
 
             /* Initialize the National Language Support routines */
@@ -235,9 +228,6 @@ DllMain(HANDLE hDll,
 
                 /* Insert more dll detach stuff here! */
                 NlsUninit();
-
-                /* Delete DLL critical section */
-                RtlDeleteCriticalSection(&BaseDllDirectoryLock);
             }
             break;
         }

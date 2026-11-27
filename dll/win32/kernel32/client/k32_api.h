@@ -15,6 +15,7 @@
 #include <ndk/psfuncs.h>
 #include <ndk/rtlfuncs.h>
 #include <ndk/setypes.h>
+#include <ndk/umfuncs.h>
 
 /* CSRSS Headers */
 #include <win/base.h>

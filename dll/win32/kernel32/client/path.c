@@ -18,8 +18,7 @@
 UNICODE_STRING NoDefaultCurrentDirectoryInExePath = RTL_CONSTANT_STRING(L"NoDefaultCurrentDirectoryInExePath");
 
 UNICODE_STRING BaseWindowsSystemDirectory, BaseWindowsDirectory;
-UNICODE_STRING BaseDefaultPathAppend, BaseDefaultPath, BaseDllDirectory;
-DWORD BaseDefaultDllDirectoriesFlags;
+UNICODE_STRING BaseDefaultPathAppend, BaseDefaultPath;
 
 static const WCHAR BaseWow64DirectorySuffix[] = L"\\SysWOW64";
 
@@ -128,7 +127,8 @@ LPWSTR
 WINAPI
 BasepComputeProcessPath(IN PBASE_SEARCH_PATH_TYPE PathOrder,
                         IN LPWSTR AppName,
-                        IN LPVOID Environment)
+                        IN LPVOID Environment,
+                        IN PCUNICODE_STRING DllDirectory)
 {
     PWCHAR PathBuffer, Buffer, AppNameEnd, PathCurrent;
     SIZE_T PathLengthInBytes;
@@ -149,13 +149,13 @@ BasepComputeProcessPath(IN PBASE_SEARCH_PATH_TYPE PathOrder,
         case BaseSearchPathDll:
 
             /* This path only gets called if SetDllDirectory was called */
-            ASSERT(BaseDllDirectory.Buffer != NULL);
+            ASSERT(DllDirectory != NULL);
 
             /* Make sure there's a DLL directory size */
-            if (BaseDllDirectory.Length)
+            if (DllDirectory->Length)
             {
                 /* Add it, plus the separator */
-                PathLengthInBytes += BaseDllDirectory.Length + sizeof(L';');
+                PathLengthInBytes += DllDirectory->Length + sizeof(L';');
             }
             break;
 
@@ -313,16 +313,16 @@ BasepComputeProcessPath(IN PBASE_SEARCH_PATH_TYPE PathOrder,
     {
         /* Add the DLL path */
         case BaseSearchPathDll:
-            if (BaseDllDirectory.Length)
+            if (DllDirectory->Length)
             {
                 /* Copy it in the buffer, ASSERT there's enough space */
-                ASSERT((((PathCurrent - PathBuffer + 1) * sizeof(WCHAR)) + BaseDllDirectory.Length) <= PathLengthInBytes);
+                ASSERT((((PathCurrent - PathBuffer + 1) * sizeof(WCHAR)) + DllDirectory->Length) <= PathLengthInBytes);
                 RtlCopyMemory(PathCurrent,
-                              BaseDllDirectory.Buffer,
-                              BaseDllDirectory.Length);
+                              DllDirectory->Buffer,
+                              DllDirectory->Length);
 
                 /* Update the current pointer, add a separator */
-                PathCurrent += (BaseDllDirectory.Length / sizeof(WCHAR));
+                PathCurrent += (DllDirectory->Length / sizeof(WCHAR));
                 *PathCurrent++ = ';';
             }
             break;
@@ -423,7 +423,7 @@ BaseComputeProcessSearchPath(VOID)
     DPRINT("Computing Process Search path\n");
 
     PathOrder = BasepSearchPathMode ? BaseProcessOrderSafe : BaseProcessOrder;
-    return BasepComputeProcessPath(PathOrder, NULL, NULL);
+    return BasepComputeProcessPath(PathOrder, NULL, NULL, NULL);
 }
 
 LPWSTR
@@ -438,7 +438,7 @@ BaseComputeProcessExePath(IN LPWSTR FullPath)
                 BaseProcessOrder : BaseProcessOrderNoCurrent;
 
     /* And now compute the path */
-    return BasepComputeProcessPath(PathOrder, NULL, NULL);
+    return BasepComputeProcessPath(PathOrder, NULL, NULL, NULL);
 }
 
 static
@@ -506,7 +506,31 @@ BasepInheritDllDirectory(VOID)
     {
         return;
     }
-    RtlDuplicateUnicodeString(RTL_DUPLICATE_UNICODE_STRING_NULL_TERMINATE, &Directory, &BaseDllDirectory);
+    LdrSetDllDirectory(&Directory);
+}
+
+static
+BOOLEAN
+BasepQueryDllDirectory(
+    _Out_ PUNICODE_STRING Directory)
+{
+    NTSTATUS Status;
+
+    RtlInitEmptyUnicodeString(Directory, NULL, 0);
+    Status = LdrGetDllDirectory(Directory);
+    while (Status == STATUS_BUFFER_TOO_SMALL)
+    {
+        USHORT Needed = Directory->Length;
+
+        if (Directory->Buffer) RtlFreeHeap(RtlGetProcessHeap(), 0, Directory->Buffer);
+        Directory->Buffer = RtlAllocateHeap(RtlGetProcessHeap(), 0, Needed);
+        if (!Directory->Buffer)
+            return FALSE;
+        Directory->Length = 0;
+        Directory->MaximumLength = Needed;
+        Status = LdrGetDllDirectory(Directory);
+    }
+    return NT_SUCCESS(Status);
 }
 
 LPWSTR
@@ -524,24 +548,19 @@ BaseComputeProcessDllPath(IN LPWSTR FullPath,
     ULONG ResultLength;
     BASE_CURRENT_DIR_PLACEMENT CurrentDirPlacement, OldCurrentDirPlacement;
 
-    /* Acquire DLL directory lock */
-    RtlEnterCriticalSection(&BaseDllDirectoryLock);
+    UNICODE_STRING DllDirectory;
 
-    /* Check if we have a base dll directory */
-    if (BaseDllDirectory.Buffer)
+    /* FIXME: LdrGetDllDirectory cannot tell a DLL directory set to "" from none, so that case keeps the current directory */
+    if (BasepQueryDllDirectory(&DllDirectory) && DllDirectory.Length)
     {
         /* Then compute the process path using DLL order (without curdir) */
-        DllPath = BasepComputeProcessPath(BaseDllOrderNoCurrent, FullPath, Environment);
-
-        /* Release DLL directory lock */
-        RtlLeaveCriticalSection(&BaseDllDirectoryLock);
+        DllPath = BasepComputeProcessPath(BaseDllOrderNoCurrent, FullPath, Environment, &DllDirectory);
+        RtlFreeHeap(RtlGetProcessHeap(), 0, DllDirectory.Buffer);
 
         /* Return dll path */
         return BasepApplyPreferSystem32(DllPath);
     }
-
-    /* Release DLL directory lock */
-    RtlLeaveCriticalSection(&BaseDllDirectoryLock);
+    if (DllDirectory.Buffer) RtlFreeHeap(RtlGetProcessHeap(), 0, DllDirectory.Buffer);
 
     /* Read the current placement */
     CurrentDirPlacement = BasepDllCurrentDirPlacement;
@@ -602,104 +621,11 @@ BaseComputeProcessDllPath(IN LPWSTR FullPath,
     /* Compute the process path using either normal or safe search */
     DllPath = BasepComputeProcessPath(BaseDllOrderCurrent[CurrentDirPlacement],
                                       FullPath,
-                                      Environment);
+                                      Environment,
+                                      NULL);
 
     /* Return dll path */
     return BasepApplyPreferSystem32(DllPath);
-}
-
-static PWSTR
-BasepAppendDllSearchDirectory(
-    _Out_ PWSTR Destination,
-    _In_reads_(Length) PCWSTR Directory,
-    _In_ SIZE_T Length)
-{
-    if (Length)
-    {
-        RtlCopyMemory(Destination, Directory, Length * sizeof(WCHAR));
-        Destination += Length;
-        *Destination++ = L';';
-    }
-    return Destination;
-}
-
-LPWSTR
-WINAPI
-BaseComputeSecureDllPath(
-    IN LPCWSTR FullPath,
-    IN DWORD Flags)
-{
-    PBASE_DLL_DIRECTORY_ENTRY Entry;
-    PLIST_ENTRY ListEntry;
-    PCWSTR ModuleEnd = NULL, ImagePath = NULL, ImageEnd = NULL, Directory;
-    SIZE_T Length = 1;
-    LPWSTR DllPath, Current;
-
-    RtlEnterCriticalSection(&BaseDllDirectoryLock);
-
-    if (Flags & LOAD_LIBRARY_SEARCH_DEFAULT_DIRS)
-    {
-        Flags |= LOAD_LIBRARY_SEARCH_APPLICATION_DIR |
-                 LOAD_LIBRARY_SEARCH_USER_DIRS |
-                 LOAD_LIBRARY_SEARCH_SYSTEM32;
-    }
-
-    if (Flags & LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR)
-    {
-        ModuleEnd = BasepEndOfDirName((PWSTR)FullPath);
-        if (ModuleEnd) Length += ModuleEnd - FullPath + 1;
-    }
-
-    if (Flags & LOAD_LIBRARY_SEARCH_APPLICATION_DIR)
-    {
-        ImagePath = NtCurrentPeb()->ProcessParameters->ImagePathName.Buffer;
-        ImageEnd = BasepEndOfDirName((PWSTR)ImagePath);
-        if (ImageEnd) Length += ImageEnd - ImagePath + 1;
-    }
-
-    if (Flags & LOAD_LIBRARY_SEARCH_USER_DIRS)
-    {
-        for (ListEntry = BaseDllDirectoryList.Flink; ListEntry != &BaseDllDirectoryList; ListEntry = ListEntry->Flink)
-        {
-            Entry = CONTAINING_RECORD(ListEntry, BASE_DLL_DIRECTORY_ENTRY, ListEntry);
-            Directory = Entry->NtPath;
-            if (!wcsncmp(Directory, L"\\??\\", 4)) Directory += 4;
-            Length += wcslen(Directory) + 1;
-        }
-        if (BaseDllDirectory.Length) Length += BaseDllDirectory.Length / sizeof(WCHAR) + 1;
-    }
-
-    if (Flags & LOAD_LIBRARY_SEARCH_SYSTEM32) Length += BaseWindowsSystemDirectory.Length / sizeof(WCHAR) + 1;
-
-    DllPath = RtlAllocateHeap(RtlGetProcessHeap(), 0, Length * sizeof(WCHAR));
-    if (!DllPath)
-    {
-        RtlLeaveCriticalSection(&BaseDllDirectoryLock);
-        return NULL;
-    }
-
-    Current = DllPath;
-    if (ModuleEnd) Current = BasepAppendDllSearchDirectory(Current, FullPath, ModuleEnd - FullPath);
-    if (ImageEnd) Current = BasepAppendDllSearchDirectory(Current, ImagePath, ImageEnd - ImagePath);
-
-    if (Flags & LOAD_LIBRARY_SEARCH_USER_DIRS)
-    {
-        for (ListEntry = BaseDllDirectoryList.Flink; ListEntry != &BaseDllDirectoryList; ListEntry = ListEntry->Flink)
-        {
-            Entry = CONTAINING_RECORD(ListEntry, BASE_DLL_DIRECTORY_ENTRY, ListEntry);
-            Directory = Entry->NtPath;
-            if (!wcsncmp(Directory, L"\\??\\", 4)) Directory += 4;
-            Current = BasepAppendDllSearchDirectory(Current, Directory, wcslen(Directory));
-        }
-        Current = BasepAppendDllSearchDirectory(Current, BaseDllDirectory.Buffer, BaseDllDirectory.Length / sizeof(WCHAR));
-    }
-
-    if (Flags & LOAD_LIBRARY_SEARCH_SYSTEM32) Current = BasepAppendDllSearchDirectory(Current, BaseWindowsSystemDirectory.Buffer, BaseWindowsSystemDirectory.Length / sizeof(WCHAR));
-
-    if (Current != DllPath) --Current;
-    *Current = UNICODE_NULL;
-    RtlLeaveCriticalSection(&BaseDllDirectoryLock);
-    return DllPath;
 }
 
 BOOLEAN
@@ -987,34 +913,22 @@ BOOL
 WINAPI
 SetDllDirectoryW(IN LPCWSTR lpPathName)
 {
-    UNICODE_STRING OldDirectory, DllDirectory;
+    UNICODE_STRING DllDirectory;
+    NTSTATUS Status;
 
-    if (lpPathName)
+    if (lpPathName && wcschr(lpPathName, L';'))
     {
-        if (wcschr(lpPathName, L';'))
-        {
-            SetLastError(ERROR_INVALID_PARAMETER);
-            return FALSE;
-        }
-        if (!RtlCreateUnicodeString(&DllDirectory, lpPathName))
-        {
-            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-            return FALSE;
-        }
-    }
-    else
-    {
-        RtlInitUnicodeString(&DllDirectory, NULL);
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
     }
 
-    RtlEnterCriticalSection(&BaseDllDirectoryLock);
-
-    OldDirectory = BaseDllDirectory;
-    BaseDllDirectory = DllDirectory;
-
-    RtlLeaveCriticalSection(&BaseDllDirectoryLock);
-
-    RtlFreeUnicodeString(&OldDirectory);
+    RtlInitUnicodeString(&DllDirectory, lpPathName);
+    Status = LdrSetDllDirectory(&DllDirectory);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
     return TRUE;
 }
 
@@ -1026,44 +940,34 @@ WINAPI
 SetDllDirectoryA(IN LPCSTR lpPathName)
 {
     ANSI_STRING AnsiDllDirectory;
-    UNICODE_STRING OldDirectory, DllDirectory;
+    UNICODE_STRING DllDirectory;
     NTSTATUS Status;
 
-    if (lpPathName)
-    {
-        if (strchr(lpPathName, ';'))
-        {
-            SetLastError(ERROR_INVALID_PARAMETER);
-            return FALSE;
-        }
+    if (!lpPathName)
+        return SetDllDirectoryW(NULL);
 
-        Status = RtlInitAnsiStringEx(&AnsiDllDirectory, lpPathName);
-        if (NT_SUCCESS(Status))
-        {
-            Status = Basep8BitStringToUnicodeString(&DllDirectory,
-                                                    &AnsiDllDirectory,
-                                                    TRUE);
-        }
-
-        if (!NT_SUCCESS(Status))
-        {
-            BaseSetLastNTError(Status);
-            return FALSE;
-        }
-    }
-    else
+    if (strchr(lpPathName, ';'))
     {
-        RtlInitUnicodeString(&DllDirectory, NULL);
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
     }
 
-    RtlEnterCriticalSection(&BaseDllDirectoryLock);
+    Status = RtlInitAnsiStringEx(&AnsiDllDirectory, lpPathName);
+    if (NT_SUCCESS(Status))
+        Status = Basep8BitStringToUnicodeString(&DllDirectory, &AnsiDllDirectory, TRUE);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
 
-    OldDirectory = BaseDllDirectory;
-    BaseDllDirectory = DllDirectory;
-
-    RtlLeaveCriticalSection(&BaseDllDirectoryLock);
-
-    RtlFreeUnicodeString(&OldDirectory);
+    Status = LdrSetDllDirectory(&DllDirectory);
+    RtlFreeUnicodeString(&DllDirectory);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
     return TRUE;
 }
 
@@ -1075,24 +979,12 @@ WINAPI
 GetDllDirectoryW(IN DWORD nBufferLength,
                  OUT LPWSTR lpBuffer)
 {
-    ULONG Length;
+    UNICODE_STRING DllDirectory;
 
-    RtlEnterCriticalSection(&BaseDllDirectoryLock);
-
-    if ((nBufferLength * sizeof(WCHAR)) > BaseDllDirectory.Length)
-    {
-        RtlCopyMemory(lpBuffer, BaseDllDirectory.Buffer, BaseDllDirectory.Length);
-        Length = BaseDllDirectory.Length / sizeof(WCHAR);
-        lpBuffer[Length] = UNICODE_NULL;
-    }
-    else
-    {
-        Length = (BaseDllDirectory.Length + sizeof(UNICODE_NULL)) / sizeof(WCHAR);
-        if (lpBuffer) *lpBuffer = UNICODE_NULL;
-    }
-
-    RtlLeaveCriticalSection(&BaseDllDirectoryLock);
-    return Length;
+    RtlInitEmptyUnicodeString(&DllDirectory, lpBuffer,
+                              (USHORT)min((SIZE_T)nBufferLength * sizeof(WCHAR), MAXUSHORT & ~1));
+    LdrGetDllDirectory(&DllDirectory);
+    return DllDirectory.Length / sizeof(WCHAR);
 }
 
 /*
@@ -1103,15 +995,20 @@ WINAPI
 GetDllDirectoryA(IN DWORD nBufferLength,
                  OUT LPSTR lpBuffer)
 {
-    NTSTATUS Status;
     ANSI_STRING AnsiDllDirectory;
+    UNICODE_STRING DllDirectory;
+    NTSTATUS Status;
     ULONG Length;
 
+    if (!BasepQueryDllDirectory(&DllDirectory))
+    {
+        BaseSetLastNTError(STATUS_NO_MEMORY);
+        if (lpBuffer && nBufferLength) *lpBuffer = ANSI_NULL;
+        return 0;
+    }
+
     RtlInitEmptyAnsiString(&AnsiDllDirectory, lpBuffer, (USHORT)nBufferLength);
-
-    RtlEnterCriticalSection(&BaseDllDirectoryLock);
-
-    Length = BasepUnicodeStringTo8BitSize(&BaseDllDirectory);
+    Length = BasepUnicodeStringTo8BitSize(&DllDirectory);
     if (Length > nBufferLength)
     {
         Status = STATUS_SUCCESS;
@@ -1120,12 +1017,9 @@ GetDllDirectoryA(IN DWORD nBufferLength,
     else
     {
         --Length;
-        Status = BasepUnicodeStringTo8BitString(&AnsiDllDirectory,
-                                                &BaseDllDirectory,
-                                                FALSE);
+        Status = BasepUnicodeStringTo8BitString(&AnsiDllDirectory, &DllDirectory, FALSE);
     }
-
-    RtlLeaveCriticalSection(&BaseDllDirectoryLock);
+    if (DllDirectory.Buffer) RtlFreeHeap(RtlGetProcessHeap(), 0, DllDirectory.Buffer);
 
     if (!NT_SUCCESS(Status))
     {
