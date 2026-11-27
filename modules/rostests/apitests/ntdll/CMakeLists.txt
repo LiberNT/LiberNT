@@ -165,6 +165,7 @@ list(APPEND SOURCE
     NtSetInformationThread.c
     NtSetInformationToken.c
     NtSetValueKey.c
+    NtSetTimerEx.c
     NtSetVolumeInformationFile.c
     NtStartProfile.c
     NtTerminateThread.c

@@ -599,6 +599,23 @@ typedef VOID
     _In_ LONG TimerHighValue
 );
 
+typedef enum _TIMER_SET_INFORMATION_CLASS
+{
+    TimerSetCoalescableTimer,
+    MaxTimerInfoClass
+} TIMER_SET_INFORMATION_CLASS;
+
+typedef struct _TIMER_SET_COALESCABLE_TIMER_INFO
+{
+    _In_ LARGE_INTEGER DueTime;
+    _In_opt_ PTIMER_APC_ROUTINE TimerApcRoutine;
+    _In_opt_ PVOID TimerContext;
+    _In_opt_ struct _COUNTED_REASON_CONTEXT *WakeContext;
+    _In_opt_ ULONG Period;
+    _In_ ULONG TolerableDelay;
+    _Out_opt_ PBOOLEAN PreviousState;
+} TIMER_SET_COALESCABLE_TIMER_INFO, *PTIMER_SET_COALESCABLE_TIMER_INFO;
+
 //
 // System Time Structure
 //

@@ -884,4 +884,15 @@ typedef struct
     ULONGLONG Ticket;
 } ALPC_WORK_ON_BEHALF_ATTR32, *PALPC_WORK_ON_BEHALF_ATTR32;
 
+typedef struct
+{
+    LARGE_INTEGER DueTime;
+    ULONG TimerApcRoutine;
+    ULONG TimerContext;
+    ULONG WakeContext;
+    ULONG Period;
+    ULONG TolerableDelay;
+    ULONG PreviousState;
+} TIMER_SET_COALESCABLE_TIMER_INFO32;
+
 #endif /* __WOW64_STRUCT32_H */

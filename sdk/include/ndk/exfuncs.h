@@ -646,6 +646,16 @@ NtSetTimer(
 NTSYSCALLAPI
 NTSTATUS
 NTAPI
+NtSetTimerEx(
+    _In_ HANDLE TimerHandle,
+    _In_ TIMER_SET_INFORMATION_CLASS TimerSetInformationClass,
+    _Inout_updates_bytes_opt_(TimerSetInformationLength) PVOID TimerSetInformation,
+    _In_ ULONG TimerSetInformationLength
+);
+
+NTSYSCALLAPI
+NTSTATUS
+NTAPI
 NtSetUuidSeed(
     _In_ PUCHAR UuidSeed
 );
@@ -1117,6 +1127,16 @@ ZwSetTimer(
     _In_ BOOLEAN WakeTimer,
     _In_opt_ LONG Period,
     _Out_opt_ PBOOLEAN PreviousState
+);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+ZwSetTimerEx(
+    _In_ HANDLE TimerHandle,
+    _In_ TIMER_SET_INFORMATION_CLASS TimerSetInformationClass,
+    _Inout_updates_bytes_opt_(TimerSetInformationLength) PVOID TimerSetInformation,
+    _In_ ULONG TimerSetInformationLength
 );
 #endif
 

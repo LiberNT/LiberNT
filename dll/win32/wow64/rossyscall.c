@@ -408,6 +408,7 @@ NTSYSAPI NTSTATUS WINAPI NtSetBootOptions( void *, ULONG );
 NTSYSAPI NTSTATUS WINAPI NtSetDriverEntryOrder( ULONG *, ULONG * );
 NTSYSAPI NTSTATUS WINAPI NtSetQuotaInformationFile( HANDLE, IO_STATUS_BLOCK *, void *, ULONG );
 NTSYSAPI NTSTATUS WINAPI NtSetSystemEnvironmentValueEx( UNICODE_STRING *, GUID *, void *, ULONG, ULONG );
+NTSYSAPI NTSTATUS WINAPI NtSetTimerEx( HANDLE, ULONG, void *, ULONG );
 NTSYSAPI NTSTATUS WINAPI NtSetUuidSeed( char * );
 NTSYSAPI NTSTATUS WINAPI NtSubscribeWnfStateChange( const WNF_STATE_NAME *, ULONG, ULONG, ULONG64 * );
 NTSYSAPI NTSTATUS WINAPI NtTraceEvent( HANDLE, ULONG, ULONG, void * );
@@ -2063,6 +2064,42 @@ NTSTATUS WINAPI wow64_NtSetSystemPowerState( UINT *args )
     ULONG flags = get_ulong( &args );
 
     return NtSetSystemPowerState( action, state, flags );
+}
+
+
+/**********************************************************************
+ *           wow64_NtSetTimerEx
+ */
+NTSTATUS WINAPI wow64_NtSetTimerEx( UINT *args )
+{
+    HANDLE handle = get_handle( &args );
+    ULONG class = get_ulong( &args );
+    TIMER_SET_COALESCABLE_TIMER_INFO32 *info32 = get_ptr( &args );
+    ULONG len = get_ulong( &args );
+    struct
+    {
+        LARGE_INTEGER DueTime;
+        void *TimerApcRoutine;
+        void *TimerContext;
+        void *WakeContext;
+        ULONG Period;
+        ULONG TolerableDelay;
+        BOOLEAN *PreviousState;
+    } info;
+
+    if (class != 0 /* TimerSetCoalescableTimer */) return NtSetTimerEx( handle, class, info32, len );
+    if (len != sizeof(*info32)) return STATUS_INFO_LENGTH_MISMATCH;
+    if (!info32) return NtSetTimerEx( handle, class, NULL, sizeof(info) );
+
+    info.DueTime = info32->DueTime;
+    info.TimerApcRoutine = apc_32to64( info32->TimerApcRoutine );
+    info.TimerContext = apc_param_32to64( info32->TimerApcRoutine, info32->TimerContext );
+    /* FIXME: the wake reason context keeps its 32-bit layout */
+    info.WakeContext = ULongToPtr( info32->WakeContext );
+    info.Period = info32->Period;
+    info.TolerableDelay = info32->TolerableDelay;
+    info.PreviousState = ULongToPtr( info32->PreviousState );
+    return NtSetTimerEx( handle, class, &info, sizeof(info) );
 }
 
 
