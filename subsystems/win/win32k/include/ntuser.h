@@ -974,9 +974,11 @@ typedef LONG_PTR
                             /* Seen during WM_CREATE on error exit too. */
 #define FNID_FREED   0x8000 /* Window being Freed... */
 
-#define FNID_HAS_PRIVATE_EXTRA(fnid) \
-    ((((fnid) & ~(FNID_DDEML | FNID_DESTROY | FNID_FREED)) == FNID_MENU) || \
-     (((fnid) & ~(FNID_DDEML | FNID_DESTROY | FNID_FREED)) == FNID_SCROLLBAR))
+#define FNID_PRIVATE_EXTRA_SIZE(fnid) \
+    ((((fnid) & ~(FNID_DDEML | FNID_DESTROY | FNID_FREED)) == FNID_MENU) ? \
+        (ULONG)(sizeof(MENUWND) - sizeof(WND)) : \
+     (((fnid) & ~(FNID_DDEML | FNID_DESTROY | FNID_FREED)) == FNID_SCROLLBAR) ? \
+        (ULONG)(sizeof(SBWND) - sizeof(WND)) : 0UL)
 
 #define ICLASS_TO_MASK(iCls) (1 << ((iCls)))
 

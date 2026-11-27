@@ -4353,7 +4353,9 @@ co_IntSetWindowLongPtr(HWND hWnd, DWORD Index, LONG_PTR NewValue, BOOL Ansi, ULO
 
    if ((INT)Index >= 0)
    {
-      if (FNID_HAS_PRIVATE_EXTRA(Window->fnid) || (Index + Size) > Window->cbwndExtra)
+      if ((ULONG)Index < FNID_PRIVATE_EXTRA_SIZE(Window->fnid) ||
+          (ULONG)Index > Window->cbwndExtra ||
+          (Window->cbwndExtra - (ULONG)Index) < Size)
       {
          EngSetLastError(ERROR_INVALID_INDEX);
          OldValue = 0;
@@ -4712,7 +4714,9 @@ NtUserSetWindowWord(HWND hWnd, INT Index, WORD NewValue)
       goto Exit; // Return 0
    }
 
-   if (FNID_HAS_PRIVATE_EXTRA(Window->fnid) || (ULONG)Index > (Window->cbwndExtra - sizeof(WORD)))
+   if ((ULONG)Index < FNID_PRIVATE_EXTRA_SIZE(Window->fnid) ||
+       (ULONG)Index > Window->cbwndExtra ||
+       (Window->cbwndExtra - (ULONG)Index) < sizeof(WORD))
    {
       EngSetLastError(ERROR_INVALID_INDEX);
       goto Exit; // Return 0
