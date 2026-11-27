@@ -2055,6 +2055,9 @@ static HRESULT WINAPI ddraw2_GetAvailableVidMem(IDirectDraw2 *iface,
 
     TRACE("iface %p, caps %p, total %p, free %p.\n", iface, caps, total, free);
 
+    if (!caps)
+        return DDERR_INVALIDPARAMS;
+
     DDRAW_Convert_DDSCAPS_1_To_2(caps, &caps2);
     return ddraw7_GetAvailableVidMem(&ddraw->IDirectDraw7_iface, &caps2, total, free);
 }
