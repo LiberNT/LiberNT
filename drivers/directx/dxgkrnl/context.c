@@ -57,6 +57,7 @@
 #include "handles.h"
 #include "vidmm.h"
 #include "gpuva_core.h"
+#include "context_create_core.h"
 #include "vidpn.h"
 #include "vidsch.h"
 #include <ndk/psfuncs.h>
@@ -3075,7 +3076,7 @@ DxgkCreateContextVirtual(
         CreateContextArg.Flags.HwQueueSupported = 1;
     }
     Status = DXGK_CB_FULL(Adapter, DxgkDdiCreateContext)(Device->hMiniportDevice, &CreateContextArg);
-    if (!NT_SUCCESS(Status))
+    if (!DxgkContextCreateCoreRollbackDestroysMiniport(Status))
     {
         DXGKRNL_ERR("DxgkCreateContextVirtual: DxgkDdiCreateContext=%p failed 0x%08lX device=%p context=%p node=%lu engine=0x%X flags=0x%X private=%p bytes=%u arg-size=%Iu\n",
                     DXGK_CB_FULL(Adapter, DxgkDdiCreateContext),
