@@ -14,6 +14,7 @@ extern void func_LoadIconWithScaleDown(void);
 extern void func_OwnerDrawButtonCues(void);
 extern void func_propsheetv6(void);
 extern void func_PropSheetRecalc(void);
+extern void func_PropSheetTitle(void);
 extern void func_TabControlKeys(void);
 extern void func_StatusBarResize(void);
 extern void func_SysLinkIdealSize(void);
@@ -38,6 +39,7 @@ const struct test winetest_testlist[] =
     { "OwnerDrawButtonCues", func_OwnerDrawButtonCues },
     { "propsheetv6", func_propsheetv6 },
     { "PropSheetRecalc", func_PropSheetRecalc },
+    { "PropSheetTitle", func_PropSheetTitle },
     { "TabControlKeys", func_TabControlKeys },
     { "StatusBarResize", func_StatusBarResize },
     { "SysLinkIdealSize", func_SysLinkIdealSize },

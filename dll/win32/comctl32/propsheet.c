@@ -2312,7 +2312,7 @@ static void PROPSHEET_SetTitleW(HWND hwndDlg, DWORD dwStyle, LPCWSTR lpszText)
       return;
     lpszText = szTitle;
   }
-  if (dwStyle & PSH_PROPTITLE)
+  if ((dwStyle & PSH_PROPTITLE) && !(psInfo->ppshheader.dwFlags & INTRNL_ANY_WIZARD))
   {
     WCHAR* dest;
     int lentitle = lstrlenW(lpszText);

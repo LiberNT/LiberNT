@@ -14,6 +14,7 @@ list(APPEND SOURCE
     OwnerDrawButtonCues.c
     propsheet.c
     PropSheetRecalc.c
+    PropSheetTitle.c
     TabControlKeys.c
     StatusBarResize.c
     SysLinkIdealSize.c
