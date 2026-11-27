@@ -13,10 +13,13 @@ if(NOT CMAKE_C_COMPILER_ID STREQUAL "Clang" OR MSVC)
     return()
 endif()
 
-set(LXGPU_VIRGLRENDERER_ARCHIVE "https://gitlab.freedesktop.org/virgl/virglrenderer/-/archive/1.1.1/virglrenderer-1.1.1.tar.gz"
-    CACHE STRING "virglrenderer 1.1.1 source archive (URL or local file)")
-set(LXGPU_EPOXY_ARCHIVE "https://github.com/anholt/libepoxy/archive/refs/tags/1.5.10.tar.gz"
-    CACHE STRING "libepoxy 1.5.10 source archive (URL or local file)")
+set(_lxgpu_mirror "https://github.com/LiberNT/LiberNT/releases/download/lxgpu-sources-1")
+set(LXGPU_VIRGLRENDERER_ARCHIVE
+    "https://gitlab.freedesktop.org/virgl/virglrenderer/-/archive/1.1.1/virglrenderer-1.1.1.tar.gz;${_lxgpu_mirror}/virglrenderer-1.1.1.tar.gz"
+    CACHE STRING "virglrenderer 1.1.1 source archive (URLs tried in order, or a local file)")
+set(LXGPU_EPOXY_ARCHIVE
+    "https://github.com/anholt/libepoxy/archive/refs/tags/1.5.10.tar.gz;${_lxgpu_mirror}/libepoxy-1.5.10.tar.gz"
+    CACHE STRING "libepoxy 1.5.10 source archive (URLs tried in order, or a local file)")
 
 if(ARCH STREQUAL "amd64")
     set(_lxgpu_cpu x86_64)
