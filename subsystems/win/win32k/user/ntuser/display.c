@@ -949,6 +949,11 @@ UserDisplayTopologyChanged(VOID)
 static VOID
 UserDisplayChangeDone(VOID);
 
+static VOID
+UserNotifyDisplayChange(
+    _In_ WORD OrigBC,
+    _In_ DWORD flags);
+
 static BOOL
 UserDetachDisplay(
     _In_ PPDEVOBJ ppdevDisplay)
@@ -983,7 +988,6 @@ UserDetachDisplay(
 static VOID
 UserDisplayChangeDone(VOID)
 {
-    ULONG_PTR ulResult;
     PDESKTOP pdesk;
     ULONG i;
 
@@ -994,15 +998,7 @@ UserDisplayChangeDone(VOID)
     pdesk = IntGetActiveDesktop();
     if (pdesk != NULL)
         co_IntShowDesktop(pdesk, gpsi->aiSysMet[SM_CXVIRTUALSCREEN], gpsi->aiSysMet[SM_CYVIRTUALSCREEN], FALSE);
-    UserClipCursor(NULL);
-    co_IntSendMessageTimeout(HWND_BROADCAST,
-                             WM_DISPLAYCHANGE,
-                             gpsi->BitCount,
-                             MAKELONG(gpsi->aiSysMet[SM_CXSCREEN], gpsi->aiSysMet[SM_CYSCREEN]),
-                             SMTO_NORMAL,
-                             100,
-                             &ulResult);
-    UserRedrawDesktop();
+    UserNotifyDisplayChange(gpsi->BitCount, 0);
 }
 
 static BOOL
@@ -1244,8 +1240,9 @@ co_UserResizeDesktopForDisplayChange(
     if (!DesktopWindow)
         return;
     UserRefObjectCo(DesktopWindow, &Ref);
-    co_WinPosSetWindowPos(DesktopWindow, NULL, 0, 0,
-                          gpsi->aiSysMet[SM_CXSCREEN], gpsi->aiSysMet[SM_CYSCREEN],
+    co_WinPosSetWindowPos(DesktopWindow, NULL,
+                          gpsi->aiSysMet[SM_XVIRTUALSCREEN], gpsi->aiSysMet[SM_YVIRTUALSCREEN],
+                          gpsi->aiSysMet[SM_CXVIRTUALSCREEN], gpsi->aiSysMet[SM_CYVIRTUALSCREEN],
                           SWP_NOZORDER | SWP_NOACTIVATE);
     UserDerefObjectCo(DesktopWindow);
     if (pdesk != gpdeskInputDesktop)
