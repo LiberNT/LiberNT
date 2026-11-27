@@ -18,6 +18,11 @@ if(ENABLE_KERNEL_UBSAN)
     set_property(SOURCE ${CI_MBEDTLS_SOURCE} APPEND PROPERTY COMPILE_OPTIONS -fno-sanitize=undefined)
 endif()
 
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    # Every image load under a signature policy hashes the whole file
+    set_property(SOURCE ${REACTOS_SOURCE_DIR}/dll/3rdparty/mbedtls/sha256.c APPEND PROPERTY COMPILE_OPTIONS -O2 -fno-sanitize=all)
+endif()
+
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     set_property(SOURCE ${REACTOS_SOURCE_DIR}/dll/3rdparty/mbedtls/bignum.c APPEND PROPERTY COMPILE_OPTIONS -Wno-unused-but-set-variable)
     set_property(SOURCE ${REACTOS_SOURCE_DIR}/dll/3rdparty/mbedtls/x509_crt.c APPEND PROPERTY COMPILE_OPTIONS -Wno-uninitialized-const-pointer)
