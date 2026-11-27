@@ -82,6 +82,7 @@
 @ stdcall ClearCommError(long ptr ptr)
 @ stdcall -thunk CloseConsoleHandle(long) kernelbase.CloseConsoleHandle
 @ stdcall CloseHandle(long)
+@ stdcall -version=0x602+ ClosePackageInfo(ptr)
 @ stdcall -thunk -version=0xA00+ ClosePseudoConsole(ptr) kernelbase.ClosePseudoConsole
 @ stdcall -version=0x600+ ClosePrivateNamespace(ptr long)
 @ stdcall CloseProfileUserMapping()
@@ -560,6 +561,7 @@
 @ stdcall -thunk GetLocaleInfoW(long long ptr long) kernelbase.GetLocaleInfoW
 @ stdcall -arch=win64 GetNextUmsListItem(ptr)
 @ stdcall -version=0x602+ GetOsSafeBootMode(ptr)
+@ stdcall -version=0x603+ GetPackageApplicationIds(ptr ptr ptr ptr)
 @ stdcall -version=0x602+ GetPackageFullName(long ptr ptr) kernelbase.GetPackageFullName
 @ stdcall -version=0x602+ GetStateSettingsFolder(ptr ptr ptr)
 @ stdcall -arch=win64 GetUmsCompletionListEvent(ptr ptr)
@@ -974,6 +976,7 @@
 @ stdcall OpenJobObjectW(long long wstr)
 @ stdcall OpenMutexA(long long str)
 @ stdcall OpenMutexW(long long wstr)
+@ stdcall -version=0x602+ OpenPackageInfoByFullName(wstr long ptr)
 @ stdcall -version=0x600+ OpenPrivateNamespaceA(ptr str)
 @ stdcall -version=0x600+ OpenPrivateNamespaceW(ptr wstr)
 @ stdcall OpenProcess(long long long)

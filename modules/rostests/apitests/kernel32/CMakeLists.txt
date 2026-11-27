@@ -160,6 +160,7 @@ list(APPEND SOURCE
     PerfProvider.c
     Pipes.c
     PackageIdentity.c
+    PackageInfoReference.c
     PackageNames.c
     ParentHandleList.c
     PixeloramaCompat.c
