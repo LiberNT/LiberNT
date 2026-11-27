@@ -9,6 +9,7 @@ add_message_headers(ANSI FormatMessage.mc)
 
 list(APPEND SOURCE
     ApiSetHosts.c
+    BackupSemanticsAccess.c
     FileSecurityCache.c
     ActCtxDependencyVersions.c
     AlternateComputerNames.c
