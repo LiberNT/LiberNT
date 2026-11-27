@@ -55,6 +55,7 @@ list(APPEND SOURCE
     rtl/nls.c
     rtl/reflect.c
     rtl/secmem.c
+    rtl/sku.c
     rtl/telemetry.c
     rtl/transaction.c
     rtl/userpfn.c
