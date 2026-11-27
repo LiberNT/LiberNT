@@ -1489,6 +1489,24 @@ KiSystemServiceHandler(
     Offset = (SystemCallNumber >> SERVICE_TABLE_SHIFT) & SERVICE_TABLE_MASK;
     Id = SystemCallNumber & SERVICE_NUMBER_MASK;
 
+    Thread->SystemCallNumber = SystemCallNumber;
+    Thread->FirstArgument = NULL;
+    if (!KiUserTrap(TrapFrame))
+    {
+        Thread->FirstArgument = *(PVOID*)Arguments;
+    }
+    else if ((ULONG_PTR)Arguments < (ULONG_PTR)MmUserProbeAddress)
+    {
+        _SEH2_TRY
+        {
+            Thread->FirstArgument = *(volatile PVOID*)Arguments;
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+        }
+        _SEH2_END;
+    }
+
     DescriptorTable = (PVOID)((ULONG_PTR)Thread->ServiceTable + Offset);
 
     if ((Offset & SERVICE_TABLE_TEST) &&

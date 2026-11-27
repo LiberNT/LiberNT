@@ -54,6 +54,7 @@ set(ALPC_SOURCE
     TpAlpc.c)
 
 list(APPEND SOURCE
+    ThreadLastSystemCall.c
     ApiSetMap.c
     AppendOnlyWrite.c
     BootLog.c

@@ -38,6 +38,7 @@ static const PSP_INFORMATION_CLASS PspQueryThreadClasses[MaxThreadInfoClass] =
     [ThreadBreakOnTermination] = PSP_INFO_EXACT(sizeof(ULONG)),
     [ThreadSwitchLegacyState] = PSP_INFO_WRONG_DIRECTION,
     [ThreadIsTerminated] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadLastSystemCall] = PSP_INFO_GUARDED(PspInformationAnyLength, 0),
     [ThreadIoPriority] = PSP_INFO_EXACT(sizeof(ULONG)),
     [ThreadCycleTime] = PSP_INFO_EXACT(sizeof(THREAD_CYCLE_TIME_INFORMATION)),
     [ThreadPagePriority] = PSP_INFO_EXACT(sizeof(PAGE_PRIORITY_INFORMATION)),
@@ -197,6 +198,43 @@ PspQuerySystemThreadInformation(
                                       ReturnLength);
 }
 
+static
+NTSTATUS
+PspQueryLastSystemCall(
+    _In_ PKTHREAD Thread,
+    _Out_ PTHREAD_LAST_SYSCALL_INFORMATION LastCall)
+{
+    ULONG Attempt;
+
+    RtlZeroMemory(LastCall, sizeof(*LastCall));
+
+    for (Attempt = 0; Attempt < 4; Attempt++)
+    {
+        UCHAR State = ReadUCharAcquire(&Thread->State);
+        ULONG WaitTime = ReadULongAcquire(&Thread->WaitTime);
+        ULONG Switches = ReadULongAcquire(&Thread->ContextSwitches);
+
+        if (State == Terminated)
+            return STATUS_UNSUCCESSFUL;
+        if (State != Waiting)
+            return STATUS_INVALID_PARAMETER;
+
+        LastCall->FirstArgument = ReadPointerNoFence(&Thread->FirstArgument);
+        LastCall->SystemCallNumber = (USHORT)ReadULongNoFence(&Thread->SystemCallNumber);
+        LastCall->WaitTime = (ULONG64)(KeTickCount.LowPart - WaitTime) * KeMaximumIncrement;
+        KeMemoryBarrier();
+
+        if ((ReadUCharAcquire(&Thread->State) == State) &&
+            (ReadULongAcquire(&Thread->WaitTime) == WaitTime) &&
+            (ReadULongAcquire(&Thread->ContextSwitches) == Switches))
+        {
+            return STATUS_SUCCESS;
+        }
+    }
+
+    return STATUS_INVALID_PARAMETER;
+}
+
 /* SYSTEM CALLS ***************************************************************/
 
 NTSTATUS
@@ -212,6 +250,7 @@ NtQueryInformationThread(
     ACCESS_MASK Access = THREAD_QUERY_INFORMATION;
     THREAD_POWER_THROTTLING_STATE Throttling;
     THREAD_CYCLE_TIME_INFORMATION Cycles;
+    THREAD_LAST_SYSCALL_INFORMATION LastCall;
     RTL_WORK_ON_BEHALF_TICKET_EX Ticket;
     THREAD_BASIC_INFORMATION Basic;
     PROCESSOR_NUMBER Processor;
@@ -268,8 +307,11 @@ NtQueryInformationThread(
     }
 
     /* Reading a thread's registers is reading its state, not its identity */
-    if (ThreadInformationClass == ThreadWow64Context)
+    if ((ThreadInformationClass == ThreadWow64Context) ||
+        (ThreadInformationClass == ThreadLastSystemCall))
+    {
         Access = THREAD_GET_CONTEXT;
+    }
 
     Status = ObReferenceObjectByHandle(ThreadHandle,
                                        Access,
@@ -697,16 +739,37 @@ NtQueryInformationThread(
             break;
 
         case ThreadLastSystemCall:
-            /* An empty buffer cannot hold any answer, whatever its shape */
-            if (ThreadInformationLength == 0)
+            if ((ThreadInformationLength != sizeof(THREAD_LAST_SYSCALL_INFORMATION)) &&
+                (ThreadInformationLength != FIELD_OFFSET(THREAD_LAST_SYSCALL_INFORMATION, WaitTime)))
             {
-                Status = STATUS_INFO_LENGTH_MISMATCH;
-                break;
+                ObDereferenceObject(Thread);
+                return STATUS_INFO_LENGTH_MISMATCH;
             }
 
-            /* TODO: the last call the thread made; the published headers
-             * give no shape for the answer. INFO_NEEDED */
-            Status = STATUS_NOT_SUPPORTED;
+            Status = PspQueryLastSystemCall(&Thread->Tcb, &LastCall);
+            if (!NT_SUCCESS(Status))
+            {
+                ObDereferenceObject(Thread);
+                return Status;
+            }
+
+            _SEH2_TRY
+            {
+                PTHREAD_LAST_SYSCALL_INFORMATION Out = ThreadInformation;
+
+                if (PreviousMode != KernelMode)
+                    ProbeForWrite(Out, ThreadInformationLength, sizeof(ULONG));
+                Out->FirstArgument = LastCall.FirstArgument;
+                Out->SystemCallNumber = LastCall.SystemCallNumber;
+                if (ThreadInformationLength == sizeof(THREAD_LAST_SYSCALL_INFORMATION))
+                    Out->WaitTime = LastCall.WaitTime;
+                Length = ThreadInformationLength;
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
             break;
 
         case ThreadTebInformation:

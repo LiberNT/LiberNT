@@ -552,6 +552,30 @@ NtReleaseMutant(
     return Status;
 }
 
+static
+VOID
+ExpQueryMutantOwner(
+    _In_ PKMUTANT Mutant,
+    _Out_ PCLIENT_ID ClientId)
+{
+    PKTHREAD Owner;
+    KIRQL OldIrql;
+
+    ClientId->UniqueProcess = NULL;
+    ClientId->UniqueThread = NULL;
+
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Mutant->Header);
+    Owner = Mutant->OwnerThread;
+    if (Owner != NULL)
+    {
+        ASSERT(Mutant->Header.SignalState <= 0);
+        *ClientId = CONTAINING_RECORD(Owner, ETHREAD, Tcb)->Cid;
+    }
+    KiReleaseDispatcherObject(&Mutant->Header);
+    KiExitDispatcher(OldIrql);
+}
+
 NTSTATUS
 NTAPI
 NtQueryMutant(
@@ -564,18 +588,27 @@ NtQueryMutant(
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     PKMUTANT Mutant;
     MUTANT_BASIC_INFORMATION Basic;
+    MUTANT_OWNER_INFORMATION Owner;
+    ULONG Size;
     NTSTATUS Status;
 
     PAGED_CODE();
 
-    if (MutantInformationClass != MutantBasicInformation)
+    if (MutantInformationClass == MutantBasicInformation)
+    {
+        Size = sizeof(MUTANT_BASIC_INFORMATION);
+        if (MutantInformationLength < Size)
+            return STATUS_INFO_LENGTH_MISMATCH;
+    }
+    else if (MutantInformationClass == MutantOwnerInformation)
+    {
+        Size = sizeof(MUTANT_OWNER_INFORMATION);
+        if (MutantInformationLength != Size)
+            return STATUS_INFO_LENGTH_MISMATCH;
+    }
+    else
     {
         return STATUS_INVALID_INFO_CLASS;
-    }
-
-    if (MutantInformationLength < sizeof(MUTANT_BASIC_INFORMATION))
-    {
-        return STATUS_INFO_LENGTH_MISMATCH;
     }
 
     if (PreviousMode != KernelMode)
@@ -583,7 +616,7 @@ NtQueryMutant(
         _SEH2_TRY
         {
             ProbeForWrite(MutantInformation,
-                          sizeof(MUTANT_BASIC_INFORMATION),
+                          Size,
                           sizeof(ULONG));
             if (ReturnLength != NULL) ProbeForWriteUlong(ReturnLength);
         }
@@ -605,18 +638,28 @@ NtQueryMutant(
         return Status;
     }
 
-    Basic.CurrentCount = KeReadStateMutant(Mutant);
-    Basic.OwnedByCaller = (Mutant->OwnerThread == KeGetCurrentThread());
-    Basic.AbandonedState = Mutant->Abandoned;
+    if (MutantInformationClass == MutantOwnerInformation)
+    {
+        ExpQueryMutantOwner(Mutant, &Owner.ClientId);
+    }
+    else
+    {
+        Basic.CurrentCount = KeReadStateMutant(Mutant);
+        Basic.OwnedByCaller = (Mutant->OwnerThread == KeGetCurrentThread());
+        Basic.AbandonedState = Mutant->Abandoned;
+    }
 
     ObDereferenceObject(Mutant);
 
     _SEH2_TRY
     {
-        *(PMUTANT_BASIC_INFORMATION)MutantInformation = Basic;
+        if (MutantInformationClass == MutantOwnerInformation)
+            *(PMUTANT_OWNER_INFORMATION)MutantInformation = Owner;
+        else
+            *(PMUTANT_BASIC_INFORMATION)MutantInformation = Basic;
         if (ReturnLength != NULL)
         {
-            *ReturnLength = sizeof(MUTANT_BASIC_INFORMATION);
+            *ReturnLength = Size;
         }
     }
     _SEH2_EXCEPT(ExSystemExceptionFilter())

@@ -215,6 +215,8 @@ KiSystemCallHandler(
     KernelParams = (PULONG64)TrapFrame - MAX_SYSCALL_PARAMS;
 
     ServiceNumber = (ULONG)TrapFrame->Rax;
+    Thread->SystemCallNumber = ServiceNumber;
+    Thread->FirstArgument = (PVOID)TrapFrame->Rcx;
     TableIndex = (ServiceNumber >> TABLE_OFFSET_BITS) & ((1 << TABLE_NUMBER_BITS) - 1);
     ServiceNumber &= SERVICE_NUMBER_MASK;
 
