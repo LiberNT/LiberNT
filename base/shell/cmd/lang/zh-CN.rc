@@ -255,7 +255,7 @@ EXIT\t\t退出 CMD\n\
     WCMD_VERIFYPROMPT, "Verify 处于 %1 状态\n"
     WCMD_VERIFYERR, "Verify 只能是开启 (ON) 或关闭 (OFF) 状态\n"
     WCMD_ARGERR, "参数错误\n"
-    WCMD_VOLUMESERIALNO, "卷的序列号是 %1!04x!-%2!04x!\n\
+    WCMD_VOLUMESERIALNO, "卷的序列号是 %1!04X!-%2!04X!\n\
 \n"
     WCMD_VOLUMEPROMPT, "卷标 (11 个字符，直接按 <回车> 以留空)?"
     WCMD_ANYKEY, "请按任意键继续..."

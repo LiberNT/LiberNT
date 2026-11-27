@@ -273,7 +273,7 @@ EXIT\t\tإغلاق CMD\n\
     WCMD_VERIFYPROMPT, "VERIFY في وضع %1\n"
     WCMD_VERIFYERR, "يجب أن تكون قيمة VERIFY إما ON أو OFF\n"
     WCMD_ARGERR, "خطأ في المعامل\n"
-    WCMD_VOLUMESERIALNO, "الرقم التسلسلي لوحدة التخزين هو %1!04x!-%2!04x!\n\
+    WCMD_VOLUMESERIALNO, "الرقم التسلسلي لوحدة التخزين هو %1!04X!-%2!04X!\n\
 \n"
     WCMD_VOLUMEPROMPT, "تسمية وحدة التخزين (11 حرفًا، <Enter> لتركها فارغة)؟"
     WCMD_ANYKEY, "اضغط أي مفتاح للاستمرار... "

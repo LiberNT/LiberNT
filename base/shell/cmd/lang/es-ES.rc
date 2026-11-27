@@ -307,7 +307,7 @@ comandos superiores.\n"
     WCMD_VERIFYPROMPT, "Verificar es %1\n"
     WCMD_VERIFYERR, "Verificar debe ser ON o OFF\n"
     WCMD_ARGERR, "Error de parámetro\n"
-    WCMD_VOLUMESERIALNO, "El número de serie del volumen es %1!04x!-%2!04x!\n\
+    WCMD_VOLUMESERIALNO, "El número de serie del volumen es %1!04X!-%2!04X!\n\
 \n"
     WCMD_VOLUMEPROMPT, "¿Etiqueta del volumen (11 caracteres, <Return> para ninguno)?"
     WCMD_ANYKEY, "Pulse cualquier tecla para continuar... "

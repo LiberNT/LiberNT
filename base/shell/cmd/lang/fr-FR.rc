@@ -300,7 +300,7 @@ Entrez HELP <commande> pour plus d'informations sur les commandes ci-dessus.\n"
     WCMD_VERIFYPROMPT, "Verify est %1\n"
     WCMD_VERIFYERR, "Verify doit être ON ou OFF\n"
     WCMD_ARGERR, "Erreur de paramètre\n"
-    WCMD_VOLUMESERIALNO, "Le numéro de série du volume est %1!04x!-%2!04x!\n\
+    WCMD_VOLUMESERIALNO, "Le numéro de série du volume est %1!04X!-%2!04X!\n\
 \n"
     WCMD_VOLUMEPROMPT, "Étiquette du volume (11 caractères, <Entrée> pour aucun) ?"
     WCMD_ANYKEY, "Appuyez sur une touche pour continuer... "
