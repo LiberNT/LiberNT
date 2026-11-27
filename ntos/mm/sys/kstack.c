@@ -19,13 +19,11 @@ MiAssertKernelStack(
     _In_ ULONG CommittedPages)
 {
     PMI_SYSTEM_PTES Ptes = System->SystemPtes;
-    ULONG64 TopIndex;
     ULONG i;
 
     MI_ASSERT(Ptes != NULL && Ptes->CacheCount != 0 && Ptes->CacheCount <= MI_SYSPTE_CPU_CACHES);
-    MI_ASSERT((StackTop & (PAGE_SIZE - 1)) == 0 && StackTop >= Ptes->Base);
-    TopIndex = (StackTop - Ptes->Base) >> PAGE_SHIFT;
-    MI_ASSERT(ReservePages != 0 && TopIndex >= (ULONG64)ReservePages + 1 && TopIndex <= Ptes->PageCount);
+    MI_ASSERT((StackTop & (PAGE_SIZE - 1)) == 0 && ReservePages != 0);
+    MI_ASSERT(MiSystemPtesContain(System, StackTop - ((ULONG64)ReservePages + 1) * PAGE_SIZE, (ULONG64)ReservePages + 1));
     MI_ASSERT(CommittedPages != 0 && CommittedPages <= ReservePages);
 
     for (i = 0; i <= ReservePages; i++)
@@ -117,8 +115,6 @@ MiCreateKernelStack(
 
             if (*StackTop != 0)
             {
-                MI_ASSERT((*StackTop & (PAGE_SIZE - 1)) == 0 && *StackTop > Ptes->Base);
-                MI_ASSERT(((*StackTop - Ptes->Base) >> PAGE_SHIFT) <= Ptes->PageCount);
                 MiAssertKernelStack(System, *StackTop, ReservePages, ReservePages);
                 return STATUS_SUCCESS;
             }

@@ -154,6 +154,7 @@ VOID MiHostQueueDpc(MI_HOST_DPC_ROUTINE Routine, PVOID Context);
 
 #define MI_CACHE_ALIGNED                __attribute__((aligned(64)))
 #define MI_CURRENT_CPU()                MiHostCpu
+#define MI_CAN_WAIT()                   (MiHostIrql <= 1)
 #define MI_RAISE_TO_DISPATCH(i)         (*(i) = MiHostRaiseIrql(2))
 #define MI_RESTORE_IRQL(i)              MiHostLowerIrql(i)
 #define MI_SPIN_INIT(l)                 ((l)->Held = 0)

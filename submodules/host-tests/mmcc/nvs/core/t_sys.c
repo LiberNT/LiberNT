@@ -70,12 +70,12 @@ SysPteAllocator(void)
     SysWorldCreate(&World, 1024, 2);
     Ptes = World.System.SystemPtes;
     CHECK(MI_ATOMIC_READ64(&World.System.SystemSpace.PageTablePages) <= 8);
-    CHECK(Ptes->Base >= World.System.Arch->SystemAddressStart);
+    CHECK(Ptes->Chunk[0].Base >= World.System.Arch->SystemAddressStart);
 
     for (i = 0; i < RTL_NUMBER_OF(Sizes); i++)
     {
         Va[i] = MiReserveSystemPtes(&World.System, Sizes[i]);
-        CHECK(Va[i] >= Ptes->Base && Va[i] + (ULONG64)Sizes[i] * PAGE_SIZE <= Ptes->Base + SYSPTE_PAGES * 4096ULL);
+        CHECK(Va[i] >= Ptes->Chunk[0].Base && Va[i] + (ULONG64)Sizes[i] * PAGE_SIZE <= Ptes->Chunk[0].Base + SYSPTE_PAGES * 4096ULL);
         CHECK((Va[i] & (PAGE_SIZE - 1)) == 0);
 
         for (j = 0; j < i; j++)
@@ -106,6 +106,69 @@ SysPteAllocator(void)
     Va[0] = MiReserveSystemPtes(&World.System, 8000);
     CHECK(Va[0] != 0);
     MiReleaseSystemPtes(&World.System, Va[0], 8000);
+
+    SysWorldDestroy(&World, 1024);
+}
+
+static void
+SysPteGrowth(void)
+{
+    static TEST_WORLD World;
+    static ULONG64 Held[64];
+    PMI_SYSTEM_PTES Ptes;
+    ULONG64 Va, Large, StackTop;
+    ULONG Count = 0;
+    KIRQL OldIrql;
+    ULONG i;
+
+    WorldCreate(&World, 1024, 2, 1000000);
+    World.Machine.StrictTlb = TRUE;
+    WorldAttach(&World, 0, NULL);
+    CHECK(NT_SUCCESS(MiSystemPtesInitialize(&World.System, 1024, 2)));
+    MiSystemPtesAllowGrowth(&World.System, 8192, 2048);
+    Ptes = World.System.SystemPtes;
+    CHECK(Ptes->PageCount == 1024 && Ptes->ChunkCount == 1 && Ptes->FreePages == 1024);
+
+    while (Count < 4 && (Held[Count] = MiReserveSystemPtes(&World.System, 256)) != 0)
+        Count++;
+    CHECK(Count == 4 && Ptes->ChunkCount == 1);
+
+    MI_RAISE_TO_DISPATCH(&OldIrql);
+    CHECK(MiReserveSystemPtes(&World.System, 256) == 0);
+    CHECK(MiReserveSystemPtesEx(&World.System, 256, &Va) == STATUS_INSUFFICIENT_RESOURCES && Va == 0);
+    MI_RESTORE_IRQL(OldIrql);
+    CHECK(Ptes->ChunkCount == 1 && Ptes->PageCount == 1024);
+
+    Held[Count] = MiReserveSystemPtes(&World.System, 256);
+    CHECK(Held[Count] != 0);
+    CHECK(Ptes->ChunkCount == 2 && Ptes->PageCount == 1024 + 2048);
+    CHECK(Ptes->Chunk[1].Base != Ptes->Chunk[0].Base);
+    CHECK(MiSystemPtesContain(&World.System, Held[Count], 256));
+    CHECK(!MiSystemPtesContain(&World.System, Ptes->Chunk[0].Base + 1024ULL * PAGE_SIZE, 1) ||
+          Ptes->Chunk[0].Base + 1024ULL * PAGE_SIZE == Ptes->Chunk[1].Base);
+    CHECK(!MiSystemPtesContain(&World.System, Ptes->Chunk[0].Base + 1000ULL * PAGE_SIZE, 100) ||
+          Ptes->Chunk[0].Base + 1024ULL * PAGE_SIZE == Ptes->Chunk[1].Base);
+    Count++;
+
+    Large = MiReserveSystemPtes(&World.System, 3000);
+    CHECK(Large != 0 && Ptes->ChunkCount == 3 && Ptes->PageCount == 1024 + 2048 + 3000);
+    CHECK(MiSystemPtesContain(&World.System, Large, 3000));
+    CHECK(Ptes->FreePages == (LONG64)(Ptes->PageCount - 5 * 256 - 3000));
+
+    CHECK(MiReserveSystemPtes(&World.System, 8192 - Ptes->PageCount + 1) == 0);
+    CHECK(Ptes->ChunkCount == 3);
+
+    CHECK(NT_SUCCESS(MiCreateKernelStack(&World.System, 6, 6, &StackTop)));
+    CHECK(MiSystemPtesContain(&World.System, StackTop - 7ULL * PAGE_SIZE, 7));
+    CHECK(NT_SUCCESS(KernelWrite64(&World, 0, StackTop - 8, 0x5354)));
+    MiDeleteKernelStack(&World.System, StackTop, 6);
+
+    MiReleaseSystemPtes(&World.System, Large, 3000);
+    for (i = 0; i < Count; i++)
+        MiReleaseSystemPtes(&World.System, Held[i], 256);
+    Va = MiReserveSystemPtes(&World.System, 3000);
+    CHECK(Va == Large && Ptes->ChunkCount == 3);
+    MiReleaseSystemPtes(&World.System, Va, 3000);
 
     SysWorldDestroy(&World, 1024);
 }
@@ -212,7 +275,7 @@ SysPtePopulationFailure(void)
     CHECK(Va == 0);
     CHECK(MiHostIrql == 2);
     MI_RESTORE_IRQL(OldIrql);
-    CHECK(World.System.SystemPtes->Allocations.NodeCount == 0);
+    CHECK(World.System.SystemPtes->Chunk[0].Allocations.NodeCount == 0);
     CHECK(World.System.SystemPtes->FreePages == SYSPTE_PAGES);
     CHECK(World.System.SystemSpace.PageTablePages > Tables);
 
@@ -220,7 +283,7 @@ SysPtePopulationFailure(void)
         MiPfnShareDecrement(&World.System.Pfn, Held[--Count], TRUE);
     MI_RAISE_TO_DISPATCH(&OldIrql);
     Va = MiReserveSystemPtes(&World.System, 2048);
-    CHECK(Va == World.System.SystemPtes->Base);
+    CHECK(Va == World.System.SystemPtes->Chunk[0].Base);
     CHECK(MiPtLookup(&World.System.SystemSpace, Va + 2047ULL * PAGE_SIZE, NULL) != NULL);
     MiReleaseSystemPtes(&World.System, Va, 2048);
     CHECK(MiHostIrql == 2);
@@ -986,7 +1049,7 @@ SysBootAdoption(void)
     CHECK(MiFault(&System->SystemSpace, BootVa + 0x5000, MiFaultRead, FALSE) == STATUS_ACCESS_VIOLATION);
 
     CHECK(NT_SUCCESS(MiSystemPtesInitialize(System, 2048, 2)));
-    CHECK((System->SystemPtes->Base >> Arch->Level[Top].Shift) != (BootVa >> Arch->Level[Top].Shift));
+    CHECK((System->SystemPtes->Chunk[0].Base >> Arch->Level[Top].Shift) != (BootVa >> Arch->Level[Top].Shift));
     CHECK(NT_SUCCESS(MiProcessManagerInitialize(System, &Manager)));
     CHECK(NT_SUCCESS(MiProcessCreate(System, &Manager, &Process)));
     WorldAttach(&World, 1, &Process.Space);
@@ -1246,6 +1309,7 @@ TestSys(void)
     SysSelfMapFault();
     SysBootAdoption();
     SysPteAllocator();
+    SysPteGrowth();
     SysReservedMapping();
     SysPtePopulationFailure();
     SysGraphicsMappingCapacity();
