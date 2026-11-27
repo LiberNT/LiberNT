@@ -2,6 +2,7 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_ClassAddProperty(void);
 extern void func_AcpiDeviceCapabilities(void);
 extern void func_CfgMgr32EnumSubkeys(void);
 extern void func_ClassInstallParams(void);
@@ -54,6 +55,7 @@ extern void func_UsbInterfaceIds(void);
 
 const struct test winetest_testlist[] =
 {
+    { "ClassAddProperty", func_ClassAddProperty },
     { "AcpiDeviceCapabilities", func_AcpiDeviceCapabilities },
     { "CfgMgr32EnumSubkeys", func_CfgMgr32EnumSubkeys },
     { "ClassInstallParams", func_ClassInstallParams },

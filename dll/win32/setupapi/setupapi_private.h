@@ -534,6 +534,8 @@ BOOL SETUPAPI_GetRawStringField(PINFCONTEXT context, DWORD index, PWSTR buffer, 
 
 BOOL SETUPAPI_RecordRelativeRegistry(HINF hinf, PCWSTR section, HKEY key_root);
 
+BOOL SETUP_InstallClassProperties(HINF InfHandle, PCWSTR SectionName);
+
 BOOL SETUPAPI_InstallFromInfSectionWithIncludes(HWND owner, HINF hinf, PCWSTR section, UINT flags,
                                                 HKEY key_root, PCWSTR src_root, UINT copy_flags,
                                                 PSP_FILE_CALLBACK_W callback, PVOID context,
