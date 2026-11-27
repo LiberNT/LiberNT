@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    Arguments.cpp
     DXCoreCreateAdapterFactory.cpp
     DisplayOnly.cpp
     testlist.c)
