@@ -190,8 +190,8 @@ TCPFinEventHandler(void *arg, const err_t err)
 
    LockObject(Connection);
 
-   if (err == ERR_RST && IsListEmpty(&Connection->ConnectRequest))
-       Status = STATUS_CONNECTION_RESET;
+   if (err == ERR_RST)
+       Status = IsListEmpty(&Connection->ConnectRequest) ? STATUS_CONNECTION_RESET : STATUS_CONNECTION_REFUSED;
 
    /* Complete all outstanding requests now */
    FlushAllQueues(Connection, Status);
