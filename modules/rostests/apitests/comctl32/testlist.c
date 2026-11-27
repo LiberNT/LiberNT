@@ -2,6 +2,7 @@
 #include <apitest.h>
 
 extern void func_buttonv6(void);
+extern void func_DllGetVersion(void);
 extern void func_ClassModule(void);
 extern void func_EditImeContext(void);
 extern void func_ImageListApi(void);
@@ -25,6 +26,7 @@ extern void func_tooltipv6(void);
 const struct test winetest_testlist[] =
 {
     { "buttonv6", func_buttonv6 },
+    { "DllGetVersion", func_DllGetVersion },
     { "ClassModule", func_ClassModule },
     { "EditImeContext", func_EditImeContext },
     { "ImageListApi", func_ImageListApi },

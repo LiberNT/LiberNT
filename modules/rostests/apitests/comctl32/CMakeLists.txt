@@ -3,6 +3,7 @@ list(APPEND SOURCE
     ../include/msgtrace.c
     button.c
     ClassModule.c
+    DllGetVersion.c
     EditImeContext.c
     imagelist.c
     ListViewActivate.c
