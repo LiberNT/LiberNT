@@ -57,6 +57,7 @@ list(APPEND SOURCE
     RestrictedTokenUser.c
     RtlEncryptMemory.c
     SaferIdentifyLevel.c
+    WaitChain.c
     SaferLevels.c
     SaferRules.c
     SeclogonCaller.c

@@ -69,6 +69,7 @@ extern void func_ServiceDisplay(void);
 extern void func_ServiceEnv(void);
 extern void func_ServiceRegistryState(void);
 extern void func_TriggerInfo(void);
+extern void func_WaitChain(void);
 extern void func_ServiceNetwork(void);
 extern void func_ServicePowerSetting(void);
 extern void func_StartServiceCtrlDispatcher(void);
@@ -147,6 +148,7 @@ const struct test winetest_testlist[] =
     { "ServiceEnv", func_ServiceEnv },
     { "ServiceRegistryState", func_ServiceRegistryState },
     { "TriggerInfo", func_TriggerInfo },
+    { "WaitChain", func_WaitChain },
     { "ServiceNetwork", func_ServiceNetwork },
     { "ServicePowerSetting", func_ServicePowerSetting },
     { "StartServiceCtrlDispatcher", func_StartServiceCtrlDispatcher },

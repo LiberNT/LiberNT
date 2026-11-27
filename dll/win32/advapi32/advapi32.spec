@@ -67,6 +67,7 @@
 @ stdcall CloseEncryptedFileRaw(ptr)
 @ stdcall CloseEventLog(long)
 @ stdcall CloseServiceHandle(long)
+@ stdcall CloseThreadWaitChainSession(ptr)
 @ stdcall CloseTrace(int64)
 @ stdcall CommandLineFromMsiDescriptor(wstr ptr ptr)
 @ stub ComputeAccessTokenFromCodeAuthzLevel
@@ -309,6 +310,7 @@
 @ stdcall -thunk GetSidSubAuthority(ptr long) kernelbase.GetSidSubAuthority
 @ stdcall -thunk GetSidSubAuthorityCount(ptr) kernelbase.GetSidSubAuthorityCount
 @ stdcall -thunk GetTokenInformation(long long ptr long ptr) kernelbase.GetTokenInformation
+@ stdcall GetThreadWaitChain(ptr ptr long long ptr ptr ptr)
 @ stdcall GetTraceEnableFlags(double) ntdll.EtwGetTraceEnableFlags
 @ stdcall GetTraceEnableLevel(double) ntdll.EtwGetTraceEnableLevel
 @ stdcall GetTraceLoggerHandle(ptr) ntdll.EtwGetTraceLoggerHandle
@@ -473,6 +475,7 @@
 @ stdcall OpenServiceA(long str long)
 @ stdcall OpenServiceW(long wstr long)
 @ stdcall -thunk OpenThreadToken(long long long ptr) kernelbase.OpenThreadToken
+@ stdcall OpenThreadWaitChainSession(long ptr)
 @ stdcall -ret64 OpenTraceA(ptr)
 @ stdcall -ret64 OpenTraceW(ptr)
 @ stdcall -version=0x600+ PerfAddCounters(ptr ptr long)
@@ -612,6 +615,7 @@
 @ stdcall RegisterServiceCtrlHandlerW(wstr ptr)
 @ stdcall RegisterTraceGuidsA(ptr ptr ptr long ptr str str ptr) ntdll.EtwRegisterTraceGuidsA
 @ stdcall RegisterTraceGuidsW(ptr ptr ptr long ptr wstr wstr ptr) ntdll.EtwRegisterTraceGuidsW
+@ stdcall RegisterWaitChainCOMCallback(ptr ptr)
 @ stdcall RemoveTraceCallback(ptr) sechost.RemoveTraceCallback
 @ stdcall RemoveUsersFromEncryptedFile(wstr ptr)
 @ stdcall ReportEventA(long long long long ptr long long str ptr)
