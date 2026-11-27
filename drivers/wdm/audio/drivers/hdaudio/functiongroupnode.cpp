@@ -856,6 +856,38 @@ CFunctionGroupNode::SetConverterStream(
 
 NTSTATUS
 NTAPI
+CFunctionGroupNode::EnableDigitalConverter(
+    IN ULONG NodeId)
+{
+    PNODE_CONTEXT NodeContext;
+    ULONG Verb;
+    ULONG Response = 0;
+    NTSTATUS Status;
+
+    NodeContext = FindNodeId(NodeId);
+    if (NodeContext == NULL || !NodeContext->Digital)
+        return STATUS_SUCCESS;
+
+    Verb = (m_CodecAddress << 28) | (NodeId << 20) | (AC_VERB_GET_DIGI_CONVERT_1 << 8);
+    Status = m_Adapter->TransferVerb(Verb, &Response);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("HDAUDIO: node %lu digital converter query failed with %x\n", NodeId, Status);
+        return Status;
+    }
+    if (Response & AC_DIG1_ENABLE)
+        return STATUS_SUCCESS;
+
+    Verb = (m_CodecAddress << 28) | (NodeId << 20) | (AC_VERB_SET_DIGI_CONVERT_1 << 8) |
+           ((Response | AC_DIG1_ENABLE) & 0xFF);
+    Status = m_Adapter->TransferVerb(Verb, &Response);
+    if (!NT_SUCCESS(Status))
+        DPRINT1("HDAUDIO: node %lu digital converter enable failed with %x\n", NodeId, Status);
+    return Status;
+}
+
+NTSTATUS
+NTAPI
 CFunctionGroupNode::SetConnectionSelect(
     IN ULONG NodeId,
     IN UCHAR Index)

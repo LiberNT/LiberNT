@@ -159,6 +159,12 @@ CMiniportWaveRTStream::SetState(
             if (!NT_SUCCESS(Status))
                 DPRINT1("Node %u SetConverterStream Status %x\n", m_Nodes[Index], Status);
         }
+        for (ULONG Index = 0; Index < m_NodeCount; Index++)
+        {
+            Status = m_OutNode->EnableDigitalConverter(m_Nodes[Index]);
+            if (!NT_SUCCESS(Status))
+                DPRINT1("Node %u EnableDigitalConverter Status %x\n", m_Nodes[Index], Status);
+        }
         Status = m_Interface.SetDmaEngineState(m_Interface.Context, RunState, 1, Handles);
     }
     return Status;

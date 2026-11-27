@@ -413,6 +413,10 @@ class CFunctionGroupNode
 
     NTSTATUS
     NTAPI
+    EnableDigitalConverter(IN ULONG NodeId);
+
+    NTSTATUS
+    NTAPI
     SetConnectionSelect(IN ULONG NodeId, IN UCHAR Index);
 
     NTSTATUS
