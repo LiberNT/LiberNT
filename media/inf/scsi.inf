@@ -12,6 +12,7 @@ Provider   = %ReactOS%
 DriverVer  = 11/02/2007,1.1
 
 [ClassInstall32.NT]
+AddProperty=ClassProperties.AddProperty
 AddReg = SCSIClass.NT.AddReg
 
 [SCSIClass.NT.AddReg]
@@ -68,6 +69,11 @@ ServiceBinary = %12%\buslogic.sys
 LoadOrderGroup = SCSI Miniport
 
 ;-------------------------------- STRINGS -------------------------------
+
+[ClassProperties.AddProperty]
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},3,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},4,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},6,0x11,,1
 
 [Strings]
 ; Non-localizable

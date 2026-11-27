@@ -8,6 +8,7 @@ Provider  = %ReactOS%
 DriverVer = 10/18/2026,1.00
 
 [ClassInstall32]
+AddProperty=ClassProperties.AddProperty
 AddReg = ClassInstall_AddReg
 AddReg = FirmwareInstall_AddReg
 
@@ -40,6 +41,11 @@ AddReg = FirmwareResource_AddReg
 
 [FirmwareResource_AddReg]
 HKR, , FirmwareVersion, 0x00010001, 0
+
+[ClassProperties.AddProperty]
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},3,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},4,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},6,0x11,,1
 
 [Strings]
 ; Non-localizable

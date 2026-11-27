@@ -15,6 +15,7 @@ DriverVer  = 08/15/2005,1.01.0.0
 DefaultDestDir = 12
 
 [ClassInstall32.NT]
+AddProperty=ClassProperties.AddProperty
 AddReg = Floppy.NT.AddReg
 
 [Floppy.NT.AddReg]
@@ -55,6 +56,11 @@ ServiceBinary  = %12%\flpydisk.sys
 AddService = , 0x00000002
 
 ;-------------------------------- STRINGS -------------------------------
+
+[ClassProperties.AddProperty]
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},3,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},4,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},6,0x11,,1
 
 [Strings]
 ; Non-localizable
