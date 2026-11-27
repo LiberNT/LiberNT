@@ -314,4 +314,28 @@ RtlGetDeviceFamilyInfoEnum(
     }
 }
 
+/* FIXME: only the desktop family and the unknown form are named; Windows 11 strings for the other values are not known */
+DWORD
+WINAPI
+RtlConvertDeviceFamilyInfoToString(
+    _Inout_ PDWORD DeviceFamilySize,
+    _Inout_ PDWORD DeviceFormSize,
+    _Out_writes_bytes_opt_(*DeviceFamilySize) PWSTR DeviceFamily,
+    _Out_writes_bytes_opt_(*DeviceFormSize) PWSTR DeviceForm)
+{
+    static const WCHAR Family[] = L"Windows.Desktop";
+    static const WCHAR Form[] = L"Unknown";
+
+    if (*DeviceFamilySize < sizeof(Family) || *DeviceFormSize < sizeof(Form))
+    {
+        *DeviceFamilySize = sizeof(Family);
+        *DeviceFormSize = sizeof(Form);
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+
+    RtlCopyMemory(DeviceFamily, Family, sizeof(Family));
+    RtlCopyMemory(DeviceForm, Form, sizeof(Form));
+    return STATUS_SUCCESS;
+}
+
 /* EOF */
