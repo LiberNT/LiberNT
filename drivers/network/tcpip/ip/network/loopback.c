@@ -132,6 +132,8 @@ NDIS_STATUS LoopRegisterAdapter(
   Loopback = IPCreateInterface(&BindInfo);
   if (!Loopback) return NDIS_STATUS_RESOURCES;
 
+  Loopback->LinkLocalAddressTimeout = 6500;
+
   Loopback->Name.Buffer = L"Loopback";
   Loopback->Name.MaximumLength = Loopback->Name.Length =
       (USHORT)wcslen(Loopback->Name.Buffer) * sizeof(WCHAR);
