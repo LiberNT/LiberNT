@@ -133,6 +133,7 @@ int set_selection_cursors(ME_TextEditor *editor, int from, int to)
 {
   int selectionEnd = 0;
   const int len = ME_GetTextLength(editor);
+  const int end_len = len + (editor->bEmulateVersion10 ? 2 : 1);
 
   /* all negative values are effectively the same */
   if (from < 0)
@@ -145,7 +146,7 @@ int set_selection_cursors(ME_TextEditor *editor, int from, int to)
   {
     ME_SetCursorToStart(editor, &editor->pCursors[1]);
     ME_SetCursorToEnd(editor, &editor->pCursors[0], TRUE);
-    return len + 1;
+    return end_len;
   }
 
   /* if both values are equal and also out of bound, that means to */
@@ -167,7 +168,7 @@ int set_selection_cursors(ME_TextEditor *editor, int from, int to)
           if (end > len)
           {
               editor->pCursors[0].nOffset = 0;
-              end --;
+              end = len;
           }
           editor->pCursors[1] = editor->pCursors[0];
       }
@@ -176,7 +177,7 @@ int set_selection_cursors(ME_TextEditor *editor, int from, int to)
 
     /* adjust to if it's a negative value */
     if (to < 0)
-      to = len + 1;
+      to = end_len;
 
     /* flip from and to if they are reversed */
     if (from>to)
@@ -186,12 +187,12 @@ int set_selection_cursors(ME_TextEditor *editor, int from, int to)
       to = tmp;
     }
 
-    /* after fiddling with the values, we find from > len && to > len */
-    if (from > len)
+    /* after fiddling with the values, we find from >= end_len && to >= end_len */
+    if (from >= end_len)
       selectionEnd = 1;
     /* special case with to too big */
-    else if (to > len)
-      to = len + 1;
+    else if (to > end_len)
+      to = end_len;
   }
 
   if (selectionEnd)
@@ -209,12 +210,12 @@ int set_selection_cursors(ME_TextEditor *editor, int from, int to)
     editor->pCursors[1].nOffset = 0;
   if (editor->pCursors[0].run->nFlags & MERF_ENDPARA)
   {
-    if (to > len)
+    if (to >= end_len)
       editor->pCursors[0].nOffset = editor->pCursors[0].run->len;
     else
       editor->pCursors[0].nOffset = 0;
   }
-  return to;
+  return ME_GetCursorOfs(&editor->pCursors[0]);
 }
 
 
