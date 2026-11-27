@@ -6213,6 +6213,18 @@ ULONG NTAPI ChpeAutoRtlRandomEx(PVOID a0)
     return RtlRandomEx(a0);
 }
 
+void NTAPI ChpeAutoRtlRbInsertNodeEx(PRTL_RB_TREE a0, PRTL_BALANCED_NODE a1, BOOLEAN a2, PRTL_BALANCED_NODE a3)
+{
+    RtlRbInsertNodeEx(a0, a1, a2, a3);
+}
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlRbInsertNodeEx), __typeof__(&RtlRbInsertNodeEx)), "RtlRbInsertNodeEx bridge signature mismatch");
+
+void NTAPI ChpeAutoRtlRbRemoveNode(PRTL_RB_TREE a0, PRTL_BALANCED_NODE a1)
+{
+    RtlRbRemoveNode(a0, a1);
+}
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlRbRemoveNode), __typeof__(&RtlRbRemoveNode)), "RtlRbRemoveNode bridge signature mismatch");
+
 HRESULT NTAPI ChpeAutoRtlReadMemoryStream(struct IStream * a0, PVOID a1, ULONG a2, PULONG a3)
 {
     return RtlReadMemoryStream(a0, a1, a2, a3);
