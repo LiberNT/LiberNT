@@ -5122,6 +5122,7 @@ PciPdoProgramType0Bars(
     UCHAR Bar;
     USHORT OriginalCommand;
     USHORT DisabledCommand;
+    BOOLEAN DecodeDisabled = FALSE;
     NTSTATUS Status = STATUS_SUCCESS;
 
     if (PCI_CONFIGURATION_TYPE(PciConfig) != PCI_DEVICE_TYPE)
@@ -5162,11 +5163,6 @@ PciPdoProgramType0Bars(
 
     OriginalCommand = PciConfig->Command;
     DisabledCommand = OriginalCommand & ~(PCI_ENABLE_MEMORY_SPACE | PCI_ENABLE_IO_SPACE);
-    if (DisabledCommand != OriginalCommand &&
-        PciPdoSetBusDataByOffset(DeviceExtension, &DisabledCommand, FIELD_OFFSET(PCI_COMMON_CONFIG, Command), sizeof(DisabledCommand)) != sizeof(DisabledCommand))
-    {
-        return STATUS_DEVICE_CONFIGURATION_ERROR;
-    }
 
     for (Bar = 0; Bar < PCI_TYPE0_ADDRESSES;)
     {
@@ -5261,6 +5257,21 @@ PciPdoProgramType0Bars(
         LowPart = (ULONG)BarValue;
         HighPart = (ULONG)(BarValue >> 32);
 
+        if (LowPart == OriginalBars[CurrentBar] &&
+            (NextBar != CurrentBar + 2 || HighPart == OriginalBars[CurrentBar + 1]))
+        {
+            continue;
+        }
+        if (!DecodeDisabled && DisabledCommand != OriginalCommand)
+        {
+            if (PciPdoSetBusDataByOffset(DeviceExtension, &DisabledCommand, FIELD_OFFSET(PCI_COMMON_CONFIG, Command), sizeof(DisabledCommand)) != sizeof(DisabledCommand))
+            {
+                Status = STATUS_DEVICE_CONFIGURATION_ERROR;
+                break;
+            }
+            DecodeDisabled = TRUE;
+        }
+
         if (PciPdoSetBusDataByOffset(DeviceExtension, &LowPart, 0x10 + CurrentBar * sizeof(ULONG), sizeof(LowPart)) != sizeof(LowPart))
         {
             Status = STATUS_DEVICE_CONFIGURATION_ERROR;
@@ -5315,7 +5326,7 @@ PciPdoProgramType0Bars(
         RtlCopyMemory(PciConfig->u.type0.BaseAddresses, OriginalBars, sizeof(OriginalBars));
     }
 
-    if (DisabledCommand != OriginalCommand)
+    if (DecodeDisabled)
     {
         if (PciPdoSetBusDataByOffset(DeviceExtension, &OriginalCommand, FIELD_OFFSET(PCI_COMMON_CONFIG, Command), sizeof(OriginalCommand)) != sizeof(OriginalCommand) &&
             NT_SUCCESS(Status))
