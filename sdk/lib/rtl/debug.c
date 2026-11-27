@@ -67,6 +67,7 @@ vDbgPrintExWithPrefixInternal(IN PCCH Prefix,
 
     /* Check if we should print it or not */
     if ((ComponentId != MAXULONG) &&
+        !((ComponentId == DPFLTR_DEFAULT_ID) && RtlpCheckForActiveDebugger()) &&
         (NtQueryDebugFilterState(ComponentId, Level)) != (NTSTATUS)TRUE)
     {
         /* This message is masked */

@@ -3567,14 +3567,6 @@ static void test_DbgPrint(void)
 #endif
     ok( !test_dbg_print_except, "DBG_PRINTEXCEPTION_C received\n" );
 
-#ifdef __REACTOS__
-    if (is_reactos())
-    {
-        skip("DbgPrint with a debugger attached is broken on ReactOS\n");
-        return;
-    }
-#endif
-
     Peb->BeingDebugged = TRUE;
     test_dbg_print_except = FALSE;
     test_dbg_print_except_ret = (LONG)EXCEPTION_EXECUTE_HANDLER;
