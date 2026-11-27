@@ -140,6 +140,8 @@ Test_ThreadHideFromDebuggerClass(void)
     HANDLE hWaitEvent = NULL, hThread = NULL;
     BOOLEAN IsThreadHidden;
     ULONG UlongData;
+    ULONG MisalignedStorage[2];
+    PBOOLEAN Misaligned = (PBOOLEAN)MisalignedStorage + 1;
     BOOL IsWow64 = FALSE;
 
     if (GetNTVersion() < _WIN32_WINNT_VISTA)
@@ -193,11 +195,11 @@ Test_ThreadHideFromDebuggerClass(void)
     ok_bool_false(IsThreadHidden, "IsThreadHidden is");
 
     /* Make the thread hidden from the debugger -- The wrong way (1) */
-    IsThreadHidden = TRUE;
+    *Misaligned = TRUE;
     Status = NtSetInformationThread(hThread,
                                     ThreadHideFromDebugger,
-                                    &IsThreadHidden,
-                                    sizeof(IsThreadHidden));
+                                    Misaligned,
+                                    sizeof(*Misaligned));
     ok_ntstatus(Status, STATUS_DATATYPE_MISALIGNMENT);
 
     /* The thread is still debuggable */
