@@ -546,6 +546,8 @@ AlpcpReceiveToUser(
     PKALPC_MESSAGE Message = NULL;
     PALPC_PORT ReceivePort;
     BOOLEAN Pending = FALSE;
+    BOOLEAN Canceled = FALSE;
+    BOOLEAN Kept = FALSE;
     BOOLEAN ThreadCallback = FALSE;
 
     AlpcpAcquirePortLock(Port);
@@ -574,7 +576,8 @@ AlpcpReceiveToUser(
     else
     {
         AlpcpAcquirePortLock(Port);
-        if (!AlpcpReclaimCanceledMessage(Message) &&
+        Canceled = AlpcpReclaimCanceledMessage(Message);
+        if (!Canceled &&
             (Message->State & (ALPC_MSG_STATE_CONNECTION | ALPC_MSG_STATE_SYNC)) &&
             !(Message->State & ALPC_MSG_STATE_REPLIED))
         {
@@ -587,9 +590,20 @@ AlpcpReceiveToUser(
 
     Status = AlpcpDeliverToUser(Port, Message, ReceiveMessage, BufferLength, AvailableLength, ReceiveAttributes, UserReceiveAttributes, PreviousMode);
 
+    if (Canceled && NT_SUCCESS(Status) &&
+        ((Message->State & (ALPC_MSG_STATE_CONNECTION | ALPC_MSG_STATE_SYNC)) == ALPC_MSG_STATE_SYNC))
+    {
+        ASSERT(!Pending);
+        ASSERT(!Message->WaitingThread);
+        ASSERT(Message->State & ALPC_MSG_STATE_CANCELED);
+        AlpcpAcquirePortLock(Port);
+        Kept = AlpcpRequeueCanceledMessage(Message);
+        AlpcpReleasePortLock(Port);
+    }
+
     if (!Pending)
     {
-        AlpcpFreeMessage(Message);
+        if (!Kept) AlpcpFreeMessage(Message);
     }
     else if (!NT_SUCCESS(Status))
     {
