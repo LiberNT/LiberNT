@@ -115,6 +115,10 @@ WDMDriver_Files = 10, win9xmig\DevUpgrd\AC97WDM ; Replace "AC97WDM" with your fa
 ;;This inf is intended for use by IHV. So, it's going to be used as from OEM distributed disk
 ;;This is why AlsoInstall got used instead if Needs & Include
 AlsoInstall=KS.Registration(ks.inf), WDMAUDIO.Registration(wdmaudio.inf)
+;;NT setupapi ignores AlsoInstall. amd64, ia64 and arm have no decorated section and install this one, so
+;;they need Include/Needs too, like [ac97.NTX86]: without them sysaudio, kmixer and wdmaud never exist.
+Include=ks.inf,wdmaudio.inf
+Needs=KS.Registration,WDMAUDIO.Registration
 CopyFiles=ac97.CopyList, DevUpgrd_Files, WDMDriver_Files
 AddReg=ac97.AddReg,ac97_NAMES.AddReg,ac97_OEM.AddReg,DevUpgrd_AddReg
 KnownRegEntries=AC97.KnownRegEntries
