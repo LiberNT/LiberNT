@@ -1605,28 +1605,47 @@ static void test_apisets(void)
     }
 }
 
+#ifdef __REACTOS__
+struct dll_dependency
+{
+    const WCHAR *dllname;
+    BOOL optional;
+};
+
+/* The dependency list follows the order of the import descriptors the linker wrote */
+static void sort_dependencies_by_imports(HMODULE module, struct dll_dependency *deps, unsigned int count)
+{
+    const IMAGE_NT_HEADERS *nt = (const IMAGE_NT_HEADERS *)((const char *)module + ((const IMAGE_DOS_HEADER *)module)->e_lfanew);
+    const IMAGE_DATA_DIRECTORY *dir = &nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    const IMAGE_IMPORT_DESCRIPTOR *imports = (const IMAGE_IMPORT_DESCRIPTOR *)((const char *)module + dir->VirtualAddress);
+    unsigned int i, j, sorted = 0;
+    WCHAR name[MAX_PATH];
+
+    for (i = 0; imports[i].Name && sorted < count; i++)
+    {
+        MultiByteToWideChar(CP_ACP, 0, (const char *)module + imports[i].Name, -1, name, ARRAY_SIZE(name));
+        for (j = sorted; j < count; j++)
+        {
+            if (!lstrcmpiW(name, deps[j].dllname))
+            {
+                const WCHAR *found = deps[j].dllname;
+                deps[j].dllname = deps[sorted].dllname;
+                deps[sorted].dllname = found;
+                sorted++;
+                break;
+            }
+        }
+    }
+    ok(sorted == count, "found %u of %u imports\n", sorted, count);
+    for (i = 0; i < count; i++)
+        deps[i].optional = (i != 0);
+}
+#endif
+
 static void test_ddag_node(void)
 {
-#if defined(__REACTOS__) && defined(_MSC_VER)
-    struct dll_dependency {
-        const WCHAR *dllname;
-        BOOL optional;
-    };
-
-    static struct dll_dependency expected_exe_dependencies_Old[] = {
-        { L"advapi32.dll" },
-        { L"msvcrt.dll", TRUE },
-        { L"user32.dll", TRUE },
-    };
-
-    static struct dll_dependency expected_exe_dependencies_Win8[] = {
-        { L"user32.dll" },
-        { L"advapi32.dll", TRUE },
-        { L"msvcrt.dll", TRUE },
-    };
-
-    static struct dll_dependency* expected_exe_dependencies;
-    static int expected_exe_dependencies_size;
+#ifdef __REACTOS__
+    struct dll_dependency expected_exe_dependencies[] =
 #else
     static const struct
     {
@@ -1634,12 +1653,12 @@ static void test_ddag_node(void)
         BOOL optional;
     }
     expected_exe_dependencies[] =
+#endif
     {
         { L"advapi32.dll" },
         { L"msvcrt.dll", TRUE },
         { L"user32.dll", TRUE },
     };
-#endif
     LDR_DDAG_NODE *node, *dep_node, *prev_node;
     LDR_DATA_TABLE_ENTRY *mod, *mod2;
     SINGLE_LIST_ENTRY *se, *se2;
@@ -1691,18 +1710,10 @@ static void test_ddag_node(void)
 
     prev_node = NULL;
     se = node->Dependencies.Tail;
-#if defined(__REACTOS__) && defined(_MSC_VER)
-    if (GetNTVersion() >= _WIN32_WINNT_WIN8) {
-        expected_exe_dependencies = expected_exe_dependencies_Win8;
-        expected_exe_dependencies_size = ARRAY_SIZE(expected_exe_dependencies_Win8);
-    } else {
-        expected_exe_dependencies = expected_exe_dependencies_Old;
-        expected_exe_dependencies_size = ARRAY_SIZE(expected_exe_dependencies_Old);
-    }
-    for (i = 0; i < expected_exe_dependencies_size; ++i)
-#else
-    for (i = 0; i < ARRAY_SIZE(expected_exe_dependencies); ++i)
+#ifdef __REACTOS__
+    sort_dependencies_by_imports(hexe, expected_exe_dependencies, ARRAY_SIZE(expected_exe_dependencies));
 #endif
+    for (i = 0; i < ARRAY_SIZE(expected_exe_dependencies); ++i)
     {
         winetest_push_context( "Dep %u (%s)", i, debugstr_w(expected_exe_dependencies[i].dllname) );
 
