@@ -113,7 +113,7 @@ set(_mesa_sdk_targets
 if(ARM64EC_RUNTIME)
     list(APPEND _mesa_sdk_targets chpe)
 elseif(ARCH STREQUAL "arm64")
-    list(APPEND _mesa_sdk_targets setjmp)
+    list(APPEND _mesa_sdk_targets setjmp loadconfig)
 endif()
 export_sdk_libraries(mesa_reactos_sdk_libs "${MESA_SDK_LIBDIR}"
     LIBRARIES ${_mesa_sdk_targets}
