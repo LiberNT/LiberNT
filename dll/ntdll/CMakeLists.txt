@@ -44,6 +44,7 @@ list(APPEND SOURCE
     ldr/ldrinit.c
     ldr/ldrnotify.c
     ldr/ldrmui.c
+    ldr/ldrpath.c
     ldr/ldrpe.c
     ldr/ldrddag.c
     ldr/ldrutils.c

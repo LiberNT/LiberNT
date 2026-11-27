@@ -505,8 +505,7 @@ LoadLibraryExW(LPCWSTR lpLibFileName,
     NTSTATUS Status = STATUS_UNSUCCESSFUL;
     PWSTR SearchPath;
     ULONG DllCharacteristics = 0;
-    DWORD SearchFlags;
-    RTL_PATH_TYPE PathType;
+    PWSTR UnknownPath;
     BOOL FreeString = FALSE;
 
     /* Check for any flags LdrLoadDll might be interested in */
@@ -554,48 +553,35 @@ LoadLibraryExW(LPCWSTR lpLibFileName,
         FreeString = TRUE;
     }
 
-    SearchFlags = dwFlags & (LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
-                             LOAD_LIBRARY_SEARCH_APPLICATION_DIR |
-                             LOAD_LIBRARY_SEARCH_USER_DIRS |
-                             LOAD_LIBRARY_SEARCH_SYSTEM32 |
-                             LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-
-    if (!SearchFlags)
-        SearchFlags = BaseDefaultDllDirectoriesFlags;
-    if ((dwFlags & LOAD_WITH_ALTERED_SEARCH_PATH) && SearchFlags)
-        SearchFlags |= LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR;
-
-    if (SearchFlags & LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR)
+    Status = LdrGetDllPath(DllName.Buffer,
+                           dwFlags & (LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+                                      LOAD_LIBRARY_SEARCH_APPLICATION_DIR |
+                                      LOAD_LIBRARY_SEARCH_USER_DIRS |
+                                      LOAD_LIBRARY_SEARCH_SYSTEM32 |
+                                      LOAD_LIBRARY_SEARCH_DEFAULT_DIRS |
+                                      LOAD_WITH_ALTERED_SEARCH_PATH),
+                           &SearchPath,
+                           &UnknownPath);
+    if (Status == STATUS_INVALID_PARAMETER)
     {
-        PathType = RtlDetermineDosPathNameType_U(DllName.Buffer);
-        if (PathType != RtlPathTypeRooted && PathType != RtlPathTypeDriveAbsolute && PathType != RtlPathTypeUncAbsolute && PathType != RtlPathTypeLocalDevice)
+        /* Windows still returns a loaded module or a KnownDLL for a bare name */
+        if (RtlDetermineDosPathNameType_U(DllName.Buffer) == RtlPathTypeRelative &&
+            !wcschr(DllName.Buffer, L'\\') && !wcschr(DllName.Buffer, L'/') &&
+            !(dwFlags & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE)))
         {
-            /* Windows still returns a loaded module or a KnownDLL for a bare name */
-            if (PathType == RtlPathTypeRelative &&
-                !wcschr(DllName.Buffer, L'\\') && !wcschr(DllName.Buffer, L'/') &&
-                !(dwFlags & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE)))
-            {
-                Status = BasepLoadDllWithoutSearch(&DllCharacteristics, &DllName, (PVOID*)&hInst);
-            }
-            else
-            {
-                Status = STATUS_INVALID_PARAMETER;
-            }
-
-            if (FreeString) RtlFreeUnicodeString(&DllName);
-            if (!NT_SUCCESS(Status))
-            {
-                BaseSetLastNTError(Status);
-                return NULL;
-            }
-            return hInst;
+            Status = BasepLoadDllWithoutSearch(&DllCharacteristics, &DllName, (PVOID*)&hInst);
         }
-    }
 
-    if (SearchFlags)
-        SearchPath = BaseComputeSecureDllPath(DllName.Buffer, SearchFlags);
-    else
-        SearchPath = BaseComputeProcessDllPath((dwFlags & LOAD_WITH_ALTERED_SEARCH_PATH) ? DllName.Buffer : NULL, NULL);
+        if (FreeString) RtlFreeUnicodeString(&DllName);
+        if (!NT_SUCCESS(Status))
+        {
+            BaseSetLastNTError(Status);
+            return NULL;
+        }
+        return hInst;
+    }
+    if (!NT_SUCCESS(Status))
+        SearchPath = NULL;
     if (!SearchPath)
     {
         /* Getting DLL path failed, so set last error, free mem and return */

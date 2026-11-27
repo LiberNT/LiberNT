@@ -3433,6 +3433,28 @@ RtlGetCurrentDirectory_U(
 );
 
 NTSYSAPI
+NTSTATUS
+NTAPI
+RtlGetSearchPath(
+    _Outptr_ PWSTR *Path
+);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlGetExePath(
+    _In_z_ PCWSTR Name,
+    _Outptr_ PWSTR *Path
+);
+
+NTSYSAPI
+VOID
+NTAPI
+RtlReleasePath(
+    _In_ PWSTR Path
+);
+
+NTSYSAPI
 ULONG
 NTAPI
 RtlGetFullPathName_U(

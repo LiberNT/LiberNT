@@ -136,6 +136,46 @@ LdrGetDllHandleByName(
     _In_opt_ PUNICODE_STRING FullDllName,
     _Out_ PVOID *DllHandle);
 
+NTSYSAPI
+NTSTATUS
+NTAPI
+LdrSetDllDirectory(
+    _In_ PCUNICODE_STRING Directory);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+LdrGetDllDirectory(
+    _Inout_ PUNICODE_STRING Directory);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+LdrAddDllDirectory(
+    _In_ PCUNICODE_STRING Directory,
+    _Out_ PVOID *Cookie);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+LdrRemoveDllDirectory(
+    _In_ PVOID Cookie);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+LdrSetDefaultDllDirectories(
+    _In_ ULONG Flags);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+LdrGetDllPath(
+    _In_opt_z_ PCWSTR Module,
+    _In_ ULONG Flags,
+    _Outptr_ PWSTR *Path,
+    _Outptr_result_maybenull_ PWSTR *Unknown);
+
 NTSTATUS
 NTAPI
 LdrGetDllFullName(
