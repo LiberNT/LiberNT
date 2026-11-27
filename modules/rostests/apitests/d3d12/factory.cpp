@@ -50,6 +50,37 @@ static void TestSdkConfiguration(PFN_D3D12_GET_INTERFACE_FACTORY get_interface)
     configuration->Release();
 }
 
+static void TestNullQueryInterface(PFN_D3D12_GET_INTERFACE_FACTORY get_interface)
+{
+    static const struct
+    {
+        const char *name;
+        const GUID *clsid;
+    }
+    classes[] =
+    {
+        { "DRED settings", &clsid_dred },
+        { "SDK configuration", &clsid_sdk_configuration },
+        { "device factory", &clsid_device_factory },
+    };
+    IUnknown *object;
+    HRESULT hr;
+    UINT i;
+
+    for (i = 0; i < ARRAYSIZE(classes); i++)
+    {
+        object = NULL;
+        if (FAILED(get_interface(*classes[i].clsid, __uuidof(IUnknown), reinterpret_cast<void **>(&object))) || !object)
+        {
+            skip("no %s\n", classes[i].name);
+            continue;
+        }
+        hr = object->QueryInterface(__uuidof(IUnknown), NULL);
+        ok(hr == E_POINTER, "%s QueryInterface without an output: %#lx\n", classes[i].name, hr);
+        object->Release();
+    }
+}
+
 static void RunFactory(void *)
 {
     const UINT dred_flags = D3D12_DEVICE_FLAG_DRED_AUTO_BREADCRUMBS_ENABLED
@@ -68,6 +99,7 @@ static void RunFactory(void *)
     ok(get_interface != NULL, "D3D12GetInterface is not exported\n");
     if (!get_interface) return;
     TestSdkConfiguration(get_interface);
+    TestNullQueryInterface(get_interface);
 
     hr = get_interface(clsid_device_factory, __uuidof(ID3D12DeviceFactory), reinterpret_cast<void **>(&factory));
     ok(hr == S_OK && factory, "device factory: %#lx\n", hr);
