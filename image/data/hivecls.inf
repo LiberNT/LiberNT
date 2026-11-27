@@ -294,6 +294,8 @@ HKCR,"htmlfile","",0x00000000,"HTML Document"
 HKCR,"htmlfile","FriendlyTypeName",0x00020000,"@%SystemRoot%\system32\mshtml.dll,-7501"
 HKCR,"CLSID\{25336920-03F9-11CF-8FD0-00AA00686F13}\BrowseInPlace","",0x00000000,""
 HKCR,"htmlfile\DefaultIcon","",0x00020000,"%SystemRoot%\system32\ieframe.dll,0"
+HKCR,"htmlfile\shell","",0x00000000,"open"
+HKCR,"htmlfile\shell\open\command","",0x00020000,"""%ProgramFiles%\Internet Explorer\iexplore.exe"" %1"
 
 ; FIXME: Windows takes the image type icons from imageres.dll and opens images in a viewer; these use the shell32 picture icon and Paint
 ; Icons
