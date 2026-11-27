@@ -389,6 +389,7 @@ InterpretLine(
     BOOL bDone = FALSE;
     BOOL bInQuotes = FALSE;
     LPWSTR ptr, pStartQuote, pEndQuote;
+    DWORD dwError;
 
     memset(args_vector, 0, sizeof(args_vector));
 
@@ -433,7 +434,14 @@ InterpretLine(
         }
     }
 
-    return InterpretCommand(args_vector, dwArgCount, &bDone);
+    dwError = InterpretCommand(args_vector, dwArgCount, &bDone);
+    if ((dwError != ERROR_SUCCESS) && (dwError != ERROR_SUPPRESS_OUTPUT))
+    {
+        PWSTR pszCommandString = MergeStrings(args_vector, dwArgCount);
+        PrintError(NULL, dwError, pszCommandString);
+        HeapFree(GetProcessHeap(), 0, pszCommandString);
+    }
+    return dwError;
 }
 
 
