@@ -107,3 +107,28 @@
 @ stdcall -import -arch=win32 UnmapDebugInformation(ptr)
 @ stdcall UpdateDebugInfoFile(str str str ptr)
 @ stdcall UpdateDebugInfoFileEx(str str str ptr long)
+@ stdcall EnumerateLoadedModulesEx(long ptr ptr) dbghelp.EnumerateLoadedModulesEx
+@ stdcall EnumerateLoadedModulesExW(long ptr ptr) dbghelp.EnumerateLoadedModulesExW
+@ stdcall EnumerateLoadedModulesW64(long ptr ptr) dbghelp.EnumerateLoadedModulesW64
+@ stdcall StackWalkEx(long long long ptr ptr ptr ptr ptr ptr long) dbghelp.StackWalkEx
+@ stdcall SymAddrIncludeInlineTrace(long int64) dbghelp.SymAddrIncludeInlineTrace
+@ stdcall SymEnumTypesByName(ptr int64 str ptr ptr) dbghelp.SymEnumTypesByName
+@ stdcall SymEnumTypesByNameW(ptr int64 wstr ptr ptr) dbghelp.SymEnumTypesByNameW
+@ stdcall SymEnumTypesW(ptr int64 ptr ptr) dbghelp.SymEnumTypesW
+@ stdcall SymFindFileInPathW(long wstr wstr ptr long long long ptr ptr ptr) dbghelp.SymFindFileInPathW
+@ stdcall SymFromInlineContext(long int64 long ptr ptr) dbghelp.SymFromInlineContext
+@ stdcall SymFromInlineContextW(long int64 long ptr ptr) dbghelp.SymFromInlineContextW
+@ stdcall SymGetExtendedOption(long) dbghelp.SymGetExtendedOption
+@ stdcall SymGetLineFromInlineContext(long int64 long int64 ptr ptr) dbghelp.SymGetLineFromInlineContext
+@ stdcall SymGetLineFromInlineContextW(long int64 long int64 ptr ptr) dbghelp.SymGetLineFromInlineContextW
+@ stdcall SymGetSourceFileTokenW(ptr int64 wstr ptr ptr) dbghelp.SymGetSourceFileTokenW
+@ stdcall SymMatchFileNameW(wstr wstr ptr ptr) dbghelp.SymMatchFileNameW
+@ stdcall SymMatchStringA(str str long) dbghelp.SymMatchStringA
+@ stdcall SymMatchStringW(wstr wstr long) dbghelp.SymMatchStringW
+@ stdcall SymQueryInlineTrace(long int64 long int64 int64 ptr ptr) dbghelp.SymQueryInlineTrace
+@ stdcall SymSetExtendedOption(long long) dbghelp.SymSetExtendedOption
+@ stdcall SymSetScopeFromAddr(ptr int64) dbghelp.SymSetScopeFromAddr
+@ stdcall SymSetScopeFromIndex(ptr int64 long) dbghelp.SymSetScopeFromIndex
+@ stdcall SymSetScopeFromInlineContext(ptr int64 long) dbghelp.SymSetScopeFromInlineContext
+@ stdcall SymSrvGetFileIndexes(str ptr ptr ptr long) dbghelp.SymSrvGetFileIndexes
+@ stdcall SymSrvGetFileIndexesW(wstr ptr ptr ptr long) dbghelp.SymSrvGetFileIndexesW
