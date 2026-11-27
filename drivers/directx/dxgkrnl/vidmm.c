@@ -2730,7 +2730,7 @@ DxgkVidMmReferenceSubmissionAllocations(
     return Status;
 }
 
-NTSTATUS DxgkVidMmCreatePresentBinding(_In_ PDXGKRNL_DEVICE Device, _In_ PDXGKVMM_ALLOCATION BackingAllocation, _In_ BOOLEAN ReadOnly, _Out_ PHANDLE OutOpenBindingHandle, _Out_ PDXGKVMM_ALLOCATION *OutBindingReference)
+NTSTATUS DxgkVidMmCreatePresentBinding(_In_ PDXGKRNL_DEVICE Device, _In_ PDXGKVMM_ALLOCATION BackingAllocation, _In_ BOOLEAN ReadOnly, _In_ BOOLEAN CddOwner, _Out_ PHANDLE OutOpenBindingHandle, _Out_ PDXGKVMM_ALLOCATION *OutBindingReference)
 {
     PDXGKRNL_ADAPTER Adapter;
     PDXGKVMM_ALLOCATION Binding = NULL;
@@ -2858,6 +2858,8 @@ NTSTATUS DxgkVidMmCreatePresentBinding(_In_ PDXGKRNL_DEVICE Device, _In_ PDXGKVM
     OpenArgs.pPrivateDriverData = ResourcePrivateCopy;
     OpenArgs.PrivateDriverSize = ResourcePrivateSize;
     OpenArgs.Flags.ReadOnly = ReadOnly;
+    OpenArgs.Flags.Create = DxgkPresentCoreBindingCreatesOpen(BackingAllocation->Device != NULL, CddOwner);
+    ASSERT(!OpenArgs.Flags.Create || BackingAllocation->Device == NULL);
     if (!DxgkAcquireMiniportCallback(Adapter))
     {
         Status = STATUS_DEVICE_NOT_READY;
