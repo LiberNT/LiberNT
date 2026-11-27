@@ -11,6 +11,7 @@ list(APPEND SOURCE
     NonClientHitTest.c
     PreferredAppMode.c
     SetWindowTheme.c
+    StatusBarTheme.c
     TextScaling.c
     ThemeChangeRedraw.c
     ThemeDpi.c
