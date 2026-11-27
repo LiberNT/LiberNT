@@ -277,10 +277,14 @@ static BOOL	MIDIMAP_LoadSettings(MIDIMAPDATA* mom)
 
 static	DWORD	modOpen(DWORD_PTR *lpdwUser, LPMIDIOPENDESC lpDesc, DWORD dwFlags)
 {
-    MIDIMAPDATA*	mom = HeapAlloc(GetProcessHeap(), 0, sizeof(MIDIMAPDATA));
+    MIDIMAPDATA*	mom;
 
     TRACE("(%p %p %08lx)\n", lpdwUser, lpDesc, dwFlags);
 
+    if (!numMidiOutPorts)
+        return MMSYSERR_BADDEVICEID;
+
+    mom = HeapAlloc(GetProcessHeap(), 0, sizeof(MIDIMAPDATA));
     if (!mom) return MMSYSERR_NOMEM;
 
     if (MIDIMAP_LoadSettings(mom))
@@ -431,6 +435,10 @@ static	DWORD	modUnprepare(MIDIMAPDATA* mom, LPMIDIHDR lpMidiHdr, DWORD_PTR dwPar
 static	DWORD	modGetDevCaps(UINT wDevID, MIDIMAPDATA* mom, LPMIDIOUTCAPSW lpMidiCaps, DWORD_PTR size)
 {
     static const WCHAR name[] = {'W','i','n','e',' ','m','i','d','i',' ','m','a','p','p','e','r',0};
+
+    if (!numMidiOutPorts)
+        return MMSYSERR_BADDEVICEID;
+
     lpMidiCaps->wMid = 0x00FF;
     lpMidiCaps->wPid = 0x0001;
     lpMidiCaps->vDriverVersion = 0x0100;
