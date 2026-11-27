@@ -197,6 +197,7 @@ DxgkpCreateCddPresentBinding(
                  Device,
                  BackingAllocation,
                  ReadOnly,
+                 TRUE,
                  &OpenBindingHandle,
                  &BindingReference);
     if (!NT_SUCCESS(Status))
@@ -4305,7 +4306,7 @@ DxgkpExecuteFullPresentMeasured(
         {
             BOOLEAN ReadOnly = Entry->hDestination == 0 || Entry->hDestination != Entry->hSource;
 
-            Status = DxgkVidMmCreatePresentBinding(Device, Entry->SourceAllocation, ReadOnly, &SourceDeviceSpecificHandle, &PresentBindingReferences[PresentBindingReferenceCount]);
+            Status = DxgkVidMmCreatePresentBinding(Device, Entry->SourceAllocation, ReadOnly, FALSE, &SourceDeviceSpecificHandle, &PresentBindingReferences[PresentBindingReferenceCount]);
             if (!NT_SUCCESS(Status))
             {
                 DXGKRNL_WARN("DxgkpExecuteFullPresent: invalid hSource=0x%X\n",
@@ -4344,7 +4345,7 @@ DxgkpExecuteFullPresentMeasured(
         }
         else
         {
-            Status = DxgkVidMmCreatePresentBinding(Device, Entry->DestinationAllocation, FALSE, &DestinationDeviceSpecificHandle, &PresentBindingReferences[PresentBindingReferenceCount]);
+            Status = DxgkVidMmCreatePresentBinding(Device, Entry->DestinationAllocation, FALSE, FALSE, &DestinationDeviceSpecificHandle, &PresentBindingReferences[PresentBindingReferenceCount]);
             if (!NT_SUCCESS(Status))
             {
                 DXGKRNL_WARN("DxgkpExecuteFullPresent: invalid hDestination=0x%X\n",
@@ -5702,7 +5703,7 @@ DxgkpBuildMmioFlip(
 
     if (Entry->SourceOpenBindingReference == NULL)
     {
-        Status = DxgkVidMmCreatePresentBinding(Entry->Device, Allocation, TRUE, &OpenHandle, &Entry->MmioFlipBinding);
+        Status = DxgkVidMmCreatePresentBinding(Entry->Device, Allocation, TRUE, FALSE, &OpenHandle, &Entry->MmioFlipBinding);
         if (!NT_SUCCESS(Status))
             goto Cleanup;
     }

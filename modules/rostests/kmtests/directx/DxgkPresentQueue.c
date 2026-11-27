@@ -300,6 +300,15 @@ DxgkPresentQueueTestDmaGeometry(VOID)
 }
 
 static VOID
+DxgkPresentQueueTestBindingCreatesOpen(VOID)
+{
+    ok_bool_true(DxgkPresentCoreBindingCreatesOpen(FALSE, TRUE), "the CDD device creates the open of a surface the graphics kernel made without a device");
+    ok_bool_false(DxgkPresentCoreBindingCreatesOpen(TRUE, TRUE), "a surface with a creating device is only opened by the CDD device");
+    ok_bool_false(DxgkPresentCoreBindingCreatesOpen(FALSE, FALSE), "another device only opens a surface the graphics kernel made");
+    ok_bool_false(DxgkPresentCoreBindingCreatesOpen(TRUE, FALSE), "another device only opens a surface with a creating device");
+}
+
+static VOID
 DxgkPresentQueueTestContract(VOID)
 {
     static const RECT SourceSubRects[] =
@@ -759,6 +768,7 @@ START_TEST(DxgkPresentQueue)
     DxgkPresentQueueTestExecutionOrder();
     DxgkPresentQueueTestDmaGeometry();
     DxgkPresentQueueTestContract();
+    DxgkPresentQueueTestBindingCreatesOpen();
     DxgkPresentQueueTestBltRects();
     DxgkPresentQueueTestLimits();
 

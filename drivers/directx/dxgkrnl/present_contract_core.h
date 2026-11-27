@@ -27,6 +27,17 @@ typedef enum _DXGK_PRESENT_GDI_COMMAND_DDI
     DxgkPresentGdiCommandDdiRenderGdi,
 } DXGK_PRESENT_GDI_COMMAND_DDI;
 
+/* A surface the graphics kernel created without a device gets its creating open from the CDD device that owns it;
+ * any other binding opens an allocation that already has its creator. */
+FORCEINLINE
+BOOLEAN
+DxgkPresentCoreBindingCreatesOpen(
+    _In_ BOOLEAN BackingHasCreatorDevice,
+    _In_ BOOLEAN CddOwnerBinding)
+{
+    return CddOwnerBinding && !BackingHasCreatorDevice;
+}
+
 /* GDI command buffers go to DxgkDdiRenderGdi on a context that supports virtual addressing, to DxgkDdiRenderKm on
  * any other context, and nowhere when the driver lacks that DDI. */
 FORCEINLINE
