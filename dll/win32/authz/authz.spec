@@ -16,7 +16,7 @@
 16 stdcall AuthzInstallSecurityEventSource(long ptr)
 17 stdcall AuthzOpenObjectAudit(long ptr ptr ptr ptr ptr long ptr)
 18 stdcall AuthzRegisterSecurityEventSource(long ptr ptr)
-19 cdecl AuthzReportSecurityEvent(long ptr long ptr long) authz.AuthzReportSecurityEvent
+19 cdecl AuthzReportSecurityEvent(long ptr long ptr long)
 20 stdcall AuthzReportSecurityEventFromParams(long ptr long ptr ptr)
 21 stdcall AuthzUninstallSecurityEventSource(long wstr)
 22 stdcall AuthzUnregisterSecurityEventSource(long ptr)
