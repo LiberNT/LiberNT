@@ -294,6 +294,11 @@ static ULONG STDMETHODCALLTYPE d3d11_swapchain_Release(IDXGISwapChain4 *iface)
 
 /* IDXGIObject methods */
 
+#ifdef __REACTOS__
+static BOOL d3d11_swapchain_composition_rects(struct d3d11_swapchain *swapchain, const RECT *damage,
+        RECT *source, RECT *target);
+#endif
+
 static HRESULT STDMETHODCALLTYPE d3d11_swapchain_SetPrivateData(IDXGISwapChain4 *iface,
         REFGUID guid, UINT data_size, const void *data)
 {
@@ -307,6 +312,9 @@ static HRESULT STDMETHODCALLTYPE d3d11_swapchain_SetPrivateData(IDXGISwapChain4 
 #ifdef __REACTOS__
     if (IsEqualGUID(guid, &GUID_ReactOSDXGICompositionWindow))
     {
+        RECT composition_source, composition_target;
+        BOOL should_present;
+
         if (!data || data_size != sizeof(target))
             return E_INVALIDARG;
         memcpy(&target, data, sizeof(target));
@@ -319,7 +327,18 @@ static HRESULT STDMETHODCALLTYPE d3d11_swapchain_SetPrivateData(IDXGISwapChain4 
                 swapchain->alpha_mode == DXGI_ALPHA_MODE_PREMULTIPLIED,
                 target.offset_x, target.offset_y,
                 target.has_clip ? &target.clip : NULL);
+        should_present = swapchain->composition && swapchain->presented
+                && d3d11_swapchain_composition_rects(swapchain, NULL,
+                &composition_source, &composition_target);
         wined3d_mutex_unlock();
+
+        if (should_present)
+        {
+            HRESULT hr = wined3d_swapchain_present(swapchain->wined3d_swapchain,
+                    &composition_source, &composition_target, NULL, 0, 0);
+            if (FAILED(hr))
+                return hr;
+        }
         return S_OK;
     }
 #endif
@@ -591,7 +610,12 @@ static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
     free(merged);
 #endif
     if (SUCCEEDED(hr))
+    {
+#ifdef __REACTOS__
+        swapchain->presented = TRUE;
+#endif
         InterlockedIncrement(&swapchain->present_count);
+    }
     return hr;
 }
 
@@ -943,6 +967,7 @@ static HRESULT STDMETHODCALLTYPE d3d11_swapchain_ResizeBuffers(IDXGISwapChain4 *
     if (SUCCEEDED(hr))
     {
         swapchain->flags = flags;
+        swapchain->presented = FALSE;
         wined3d_swapchain_get_desc(swapchain->wined3d_swapchain, &wined3d_desc);
         swapchain->source_width = wined3d_desc.backbuffer_width;
         swapchain->source_height = wined3d_desc.backbuffer_height;
