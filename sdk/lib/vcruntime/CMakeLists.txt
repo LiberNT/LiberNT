@@ -141,7 +141,7 @@ if(ARM64EC_RUNTIME)
 endif()
 
 # Linked to every user-mode module; an image that defines its own _load_config_used never pulls it.
-if(ARCH STREQUAL "arm64" AND NOT ARM64EC_RUNTIME)
+if(ARCH STREQUAL "arm64" AND NOT ARM64EC_RUNTIME AND NOT MSVC)
     set(LOADCONFIG_SOURCE arm64/loadcfg.S)
 else()
     set(LOADCONFIG_SOURCE loadconfig.c)

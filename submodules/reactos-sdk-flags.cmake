@@ -34,6 +34,11 @@ function(reactos_sdk_flags _prefix)
     elseif(_sdk_ARCH STREQUAL "aarch64" AND EXISTS "${_sdk_LIBDIR}/libsetjmp.a")
         list(APPEND _libraries "${_sdk_LIBDIR}/libsetjmp.a")
     endif()
+    set(_load_config_link "")
+    if(_sdk_ARCH STREQUAL "aarch64" AND EXISTS "${_sdk_LIBDIR}/libloadconfig.a")
+        list(APPEND _libraries "${_sdk_LIBDIR}/libloadconfig.a")
+        set(_load_config_link " -Wl,-u,_load_config_used")
+    endif()
     if(_sdk_CRT STREQUAL "full")
         list(APPEND _libraries
             "${_sdk_LIBDIR}/libucrtbase.a"
@@ -64,6 +69,6 @@ function(reactos_sdk_flags _prefix)
         "${_sdk_CXX_RUNTIME}/lib/libc++.a ${_sdk_CXX_RUNTIME}/lib/libc++abi.a ${_sdk_CXX_RUNTIME}/lib/libunwind.a ${_libraries}"
         PARENT_SCOPE)
     set(${_prefix}_LINK_FLAGS
-        "-nostdlib -fuse-ld=lld -L${_sdk_LIBDIR} -Wl,--disable-auto-import,--disable-stdcall-fixup"
+        "-nostdlib -fuse-ld=lld -L${_sdk_LIBDIR} -Wl,--disable-auto-import,--disable-stdcall-fixup${_load_config_link}"
         PARENT_SCOPE)
 endfunction()
