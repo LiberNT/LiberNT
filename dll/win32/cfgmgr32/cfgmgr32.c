@@ -509,7 +509,7 @@ static LSTATUS enum_class_property_keys( HKEY hkey, DEVPROPKEY *buffer, ULONG *s
         else buffer[count - 1] = *desc->key;
     }
 
-    if (!open_key( hkey, L"Properties", KEY_QUERY_VALUE, TRUE, &props_key ))
+    if (!open_key( hkey, L"Properties", KEY_QUERY_VALUE | KEY_ENUMERATE_SUB_KEYS, TRUE, &props_key ))
     {
         WCHAR name[MAX_PATH];
         for (ULONG i = 0, len = ARRAY_SIZE(name); !RegEnumValueW( props_key, i, name, &len, 0, NULL, NULL, NULL ); i++, len = ARRAY_SIZE(name))
@@ -523,6 +523,27 @@ static LSTATUS enum_class_property_keys( HKEY hkey, DEVPROPKEY *buffer, ULONG *s
             if (j < ARRAY_SIZE(class_properties)) continue;
             if (capacity < ++count || !buffer) err = ERROR_MORE_DATA;
             else buffer[count - 1] = key;
+        }
+        for (ULONG i = 0, len = ARRAY_SIZE(name); !RegEnumKeyExW( props_key, i, name, &len, NULL, NULL, NULL, NULL ); i++, len = ARRAY_SIZE(name))
+        {
+            WCHAR pid_name[16];
+            HKEY fmtid_key;
+            DEVPROPKEY key;
+
+            if (guid_from_string( name, &key.fmtid )) continue;
+            if (open_key( props_key, name, KEY_ENUMERATE_SUB_KEYS, TRUE, &fmtid_key )) continue;
+            for (ULONG k = 0, pid_len = ARRAY_SIZE(pid_name); !RegEnumKeyExW( fmtid_key, k, pid_name, &pid_len, NULL, NULL, NULL, NULL ); k++, pid_len = ARRAY_SIZE(pid_name))
+            {
+                UINT j;
+
+                if (swscanf( pid_name, L"%04X", &key.pid ) != 1) continue;
+                for (j = 0; j < ARRAY_SIZE(class_properties); j++)
+                    if (!memcmp( class_properties[j].key, &key, sizeof(key) )) break;
+                if (j < ARRAY_SIZE(class_properties)) continue;
+                if (capacity < ++count || !buffer) err = ERROR_MORE_DATA;
+                else buffer[count - 1] = key;
+            }
+            RegCloseKey( fmtid_key );
         }
         RegCloseKey( props_key );
     }
