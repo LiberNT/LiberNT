@@ -5713,7 +5713,13 @@ HRESULT CDefView::SelectAndPositionItem(int Idx, UINT fSVSI, POINT *ppt)
     if (Idx == -1)
         return fSVSI == SVSI_DESELECTOTHERS ? SelectItem(-2, fSVSI) : E_INVALIDARG;
     if (ppt)
+    {
+        DWORD ExStyle = m_ListView.SetExtendedListViewStyle(0, LVS_EX_SNAPTOGRID);
+
         m_ListView.SetItemPosition(Idx, ppt);
+        if (ExStyle & LVS_EX_SNAPTOGRID)
+            m_ListView.SetExtendedListViewStyle(LVS_EX_SNAPTOGRID, LVS_EX_SNAPTOGRID);
+    }
     return SelectItem(Idx, fSVSI); // After SetItemPosition for SVSI_ENSUREVISIBLE
 }
 
