@@ -1,0 +1,114 @@
+name: Performance & Stress
+on:
+  # Manual runs only: the suite boots a VM, so it must not fire on every push.
+  workflow_dispatch:
+    inputs:
+      skip_wifi:
+        description: 'Skip the vwifi install/connect/flood phase'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  perf-amd64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CCACHE_KEY: ccache-clang-amd64-perf-
+    steps:
+    - name: Free disk space
+      run: |
+        df -h /
+        sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/lib/jvm /usr/local/share/powershell /usr/local/share/chromium
+        sudo docker system prune --all --force
+        df -h /
+
+    - name: Source checkout
+      uses: actions/checkout@v6
+
+    - name: Install host build tools
+      run: |
+        for attempt in 1 2 3 4; do
+          if sudo apt-get update && sudo apt-get install -y cmake ninja-build ccache wget xz-utils tar python3-mako python3-yaml python3-packaging glslang-tools msitools qemu-system-x86 ovmf; then
+            break
+          fi
+          if [ "$attempt" -eq 4 ]; then
+            exit 1
+          fi
+          sleep $((30 * attempt))
+        done
+
+    - name: Check KVM
+      run: |
+        if [ -w /dev/kvm ]; then echo "KVM available"; else echo "KVM missing; the suite falls back to TCG"; fi
+
+    - name: Compute RosBE bootstrap SHA
+      id: rosbe_spec
+      run: |
+        curl -fsSL https://raw.githubusercontent.com/LiberNT/libernt-build-toolchain/main/rosbe-unix-bootstrap.sh -o /tmp/rosbe-bootstrap.sh
+        echo "sha=$(sha1sum /tmp/rosbe-bootstrap.sh | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+    - name: Restore RosBE
+      id: cache_rosbe
+      uses: actions/cache/restore@v5
+      with:
+        path: ~/.local/opt/rosbe
+        key: rosbe-${{runner.os}}-${{steps.rosbe_spec.outputs.sha}}
+
+    - name: Install RosBE
+      if: ${{ steps.cache_rosbe.outputs.cache-hit != 'true' }}
+      run: sh /tmp/rosbe-bootstrap.sh
+
+    - name: Restore ccache
+      uses: actions/cache/restore@v5
+      with:
+        path: ccache
+        key: ${{env.CCACHE_KEY}}${{github.run_id}}-${{github.run_attempt}}
+        restore-keys: |
+          ${{env.CCACHE_KEY}}
+          ccache-debug-clang-amd64-
+
+    - name: Set ccache settings
+      run: |
+        echo "CCACHE_BASEDIR=${{github.workspace}}" >> $GITHUB_ENV
+        echo "CCACHE_DIR=${{github.workspace}}/ccache" >> $GITHUB_ENV
+        echo "CCACHE_MAXSIZE=2G" >> $GITHUB_ENV
+        echo "CCACHE_SLOPPINESS=time_macros" >> $GITHUB_ENV
+
+    - name: Configure
+      run: |
+        . "$HOME/.local/opt/rosbe/rosbe-env.sh"
+        ./configure.sh --clang -a amd64 \
+          -DREACTOS_TARGET_NT=0xA00 \
+          -DENABLE_CCACHE=1 \
+          -DENABLE_ROSTESTS=ON
+
+    - name: Build
+      run: |
+        . "$HOME/.local/opt/rosbe/rosbe-env.sh"
+        ninja -C output-Clang-amd64-debug submodules
+        ninja -C output-Clang-amd64-debug liberntimg wsperf benchdisk wlantest -k0
+
+    - name: Run the perf/stress suite
+      env:
+        ROS_QEMU_DISPLAY: none
+      run: |
+        mkdir -p results
+        python3 sdk/tools/perftest/run_perftest.py \
+          --img output-Clang-amd64-debug/bootloader/image/LiberNT.img \
+          --build output-Clang-amd64-debug \
+          --work results \
+          ${{ inputs.skip_wifi && '--skip-wifi' || '' }} \
+          --results results/perftest.txt
+
+    - name: Upload results
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: perftest-amd64
+        path: |
+          results/perftest.txt
+          results/serial.log
