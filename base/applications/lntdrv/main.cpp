@@ -199,7 +199,7 @@ std::wstring CatalogNote(const DeviceInfo &device, const std::vector<CatalogUpda
         return LoadText(IDS_NOTE_NOT_FOUND);
     if (error)
         return FormatText(IDS_NOTE_FAILED, ErrorText(error));
-    switch (CompareVersionText(device, updates.front().Version))
+    switch (CompareVersionText(device, updates.front().Version, updates.front().HardwareIds))
     {
         case DriverOrder::Missing:
             return FormatText(IDS_NOTE_AVAILABLE, updates.front().Version);
@@ -216,7 +216,7 @@ ChoiceState StateOf(const DeviceInfo &device, const CatalogUpdate &update, const
 
     if (entry && _wcsicmp(entry->UpdateId.c_str(), update.Id.c_str()) == 0)
         return ChoiceState::Same;
-    switch (CompareVersionText(device, update.Version))
+    switch (CompareVersionText(device, update.Version, update.HardwareIds))
     {
         case DriverOrder::Missing:
             return ChoiceState::Missing;
