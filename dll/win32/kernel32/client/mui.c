@@ -474,7 +474,7 @@ BasepMapModuleMuiFile(
     _In_ HMODULE Module,
     _In_ LANGID LanguageId)
 {
-    UCHAR NameBuffer[sizeof(MEMORY_SECTION_NAME) + (MAX_PATH * 2 * sizeof(WCHAR))];
+    DECLSPEC_ALIGN(16) UCHAR NameBuffer[sizeof(MEMORY_SECTION_NAME) + (MAX_PATH * 2 * sizeof(WCHAR))];
     PMEMORY_SECTION_NAME SectionName = (PMEMORY_SECTION_NAME)NameBuffer;
     PBASEP_MUI_LANGUAGES Languages;
     BASEP_MUI_CONFIG Config;
