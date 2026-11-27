@@ -209,6 +209,7 @@ list(APPEND SOURCE
     RtlFirstFreeAce.c
     RtlGenerate8dot3Name.c
     RtlGetFullPathName_U.c
+    RtlGetFullPathName_UEx.c
     RtlGetFullPathName_Ustr.c
     RtlGetFullPathName_UstrEx.c
     RtlGetLengthWithoutLastFullDosOrNtPathElement.c

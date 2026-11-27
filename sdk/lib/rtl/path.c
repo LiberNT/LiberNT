@@ -812,6 +812,12 @@ RtlGetFullPathName_Ustr(
      */
     SkipTrailingPathSeparators = !IS_PATH_SEPARATOR(FileNameBuffer[FileNameChars - 1]);
 
+    /* Zero-out the destination buffer. FileName must be different from Buffer */
+    ASSERT(Size == 0 ||
+           (ULONG_PTR)FileNameBuffer + FileName->Length <= (ULONG_PTR)Buffer ||
+           (ULONG_PTR)Buffer + Size <= (ULONG_PTR)FileNameBuffer);
+    RtlZeroMemory(Buffer, Size);
+
     /* Check if this is a DOS name */
     DosLength = RtlIsDosDeviceName_Ustr(FileName);
     DPRINT("DOS length for filename: %lx %wZ\n", DosLength, FileName);
@@ -856,9 +862,6 @@ RtlGetFullPathName_Ustr(
         if ((FullLength + sizeof(UNICODE_NULL)) > UNICODE_STRING_MAX_BYTES) return 0;
         return FullLength + sizeof(UNICODE_NULL);
     }
-
-    /* Zero-out the destination buffer. FileName must be different from Buffer */
-    RtlZeroMemory(Buffer, Size);
 
     /* Get the path type */
     *PathType = RtlDetermineDosPathNameType_U(FileNameBuffer);
@@ -1952,71 +1955,71 @@ Leave:
     return Status;
 }
 
+static
+NTSTATUS
+RtlpGetFullPathName(
+    _In_ PCWSTR FileName,
+    _In_ ULONG Size,
+    _Out_writes_bytes_(Size) PWSTR Buffer,
+    _Out_opt_ PWSTR *ShortName,
+    _Out_ PULONG Length)
+{
+    RTL_PATH_TYPE PathType;
+    UNICODE_STRING FileNameString;
+    PWSTR FileNameCopy = NULL;
+    NTSTATUS Status;
+
+    *Length = 0;
+    Status = RtlInitUnicodeStringEx(&FileNameString, FileName);
+    if (!NT_SUCCESS(Status)) return Status;
+    ASSERT(FileNameString.Length <= FileNameString.MaximumLength);
+
+    if (Buffer && Size &&
+        (ULONG_PTR)FileName < (ULONG_PTR)Buffer + Size &&
+        (ULONG_PTR)Buffer < (ULONG_PTR)FileName + FileNameString.MaximumLength)
+    {
+        FileNameCopy = RtlpAllocateStringMemory(FileNameString.MaximumLength, TAG_USTR);
+        if (!FileNameCopy) return STATUS_NO_MEMORY;
+        RtlCopyMemory(FileNameCopy, FileName, FileNameString.MaximumLength);
+        FileNameString.Buffer = FileNameCopy;
+    }
+
+    *Length = RtlGetFullPathName_Ustr(&FileNameString,
+                                      Size,
+                                      Buffer,
+                                      (PCWSTR*)ShortName,
+                                      NULL,
+                                      &PathType);
+
+    if (FileNameCopy)
+        RtlpFreeStringMemory(FileNameCopy, TAG_USTR);
+
+    return (*Length != 0) ? STATUS_SUCCESS : STATUS_OBJECT_NAME_INVALID;
+}
+
 /*
  * @implemented
- * Note: Win7+ changed this function's return type from ULONG to NTSTATUS.
  */
-#if (NTDDI_VERSION >= NTDDI_WIN7)
 NTSTATUS
 NTAPI
 RtlGetFullPathName_UEx(
-    _In_ PWSTR FileName,
+    _In_ PCWSTR FileName,
     _In_ ULONG BufferLength,
     _Out_writes_bytes_(BufferLength) PWSTR Buffer,
     _Out_opt_ PWSTR *FilePart,
-    _Out_opt_ RTL_PATH_TYPE *InputPathType)
+    _Out_opt_ PULONG BytesRequired)
 {
-    UNICODE_STRING FileNameString;
     NTSTATUS Status;
+    ULONG Length;
 
-    if (InputPathType)
-        *InputPathType = 0;
+    if (FilePart) *FilePart = NULL;
 
-    /* Build the string */
-    Status = RtlInitUnicodeStringEx(&FileNameString, FileName);
-    if (!NT_SUCCESS(Status)) return Status;
+    Status = RtlpGetFullPathName(FileName, BufferLength, Buffer, FilePart, &Length);
+    ASSERT(NT_SUCCESS(Status) == (Length != 0));
 
-    /* Call the extended function */
-    RtlGetFullPathName_Ustr(
-        &FileNameString,
-        BufferLength,
-        Buffer,
-        (PCWSTR*)FilePart,
-        NULL,
-        InputPathType);
-
-    return STATUS_SUCCESS;
+    if (BytesRequired) *BytesRequired = Length;
+    return Status;
 }
-#else
-ULONG
-NTAPI
-RtlGetFullPathName_UEx(
-    _In_ PWSTR FileName,
-    _In_ ULONG BufferLength,
-    _Out_writes_bytes_(BufferLength) PWSTR Buffer,
-    _Out_opt_ PWSTR *FilePart,
-    _Out_opt_ RTL_PATH_TYPE *InputPathType)
-{
-    UNICODE_STRING FileNameString;
-    NTSTATUS status;
-
-    if (InputPathType)
-        *InputPathType = 0;
-
-    /* Build the string */
-    status = RtlInitUnicodeStringEx(&FileNameString, FileName);
-    if (!NT_SUCCESS(status)) return 0;
-
-    /* Call the extended function */
-    return RtlGetFullPathName_Ustr(
-        &FileNameString,
-        BufferLength,
-        Buffer,
-        (PCWSTR*)FilePart,
-        NULL,
-        InputPathType);
-}
-#endif /* NTDDI_VERSION >= NTDDI_WIN7 */
 
 /******************************************************************
  *    RtlGetFullPathName_U  (NTDLL.@)
@@ -2042,37 +2045,9 @@ RtlGetFullPathName_U(
     _Out_z_bytecap_(Size) PWSTR Buffer,
     _Out_opt_ PWSTR *ShortName)
 {
-    RTL_PATH_TYPE PathType;
-    UNICODE_STRING FileNameString;
-    PWSTR FileNameCopy = NULL;
     ULONG Length;
-    NTSTATUS Status;
 
-    Status = RtlInitUnicodeStringEx(&FileNameString, FileName);
-    if (!NT_SUCCESS(Status)) return 0;
-
-    if (Buffer && Size &&
-        (ULONG_PTR)FileName < (ULONG_PTR)Buffer + Size &&
-        (ULONG_PTR)Buffer < (ULONG_PTR)FileName + FileNameString.MaximumLength)
-    {
-        FileNameCopy = RtlpAllocateStringMemory(FileNameString.MaximumLength, TAG_USTR);
-        if (!FileNameCopy) return 0;
-        RtlCopyMemory(FileNameCopy, FileName, FileNameString.MaximumLength);
-        FileNameString.Buffer = FileNameCopy;
-    }
-
-    /* Call the internal function directly to get the ULONG result */
-    Length = RtlGetFullPathName_Ustr(
-        &FileNameString,
-        Size,
-        Buffer,
-        (PCWSTR*)ShortName,
-        NULL,
-        &PathType);
-
-    if (FileNameCopy)
-        RtlpFreeStringMemory(FileNameCopy, TAG_USTR);
-
+    RtlpGetFullPathName(FileName, Size, Buffer, ShortName, &Length);
     return Length;
 }
 

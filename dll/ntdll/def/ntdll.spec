@@ -987,6 +987,7 @@
 @ stdcall -stub -version=0x600+ RtlGetFileMUIPath(long long ptr ptr long long ptr)
 @ stdcall RtlGetFrame()
 @ stdcall RtlGetFullPathName_U(wstr long ptr ptr)
+@ stdcall RtlGetFullPathName_UEx(wstr long ptr ptr ptr)
 @ stdcall RtlGetFullPathName_UstrEx(ptr ptr ptr ptr ptr ptr ptr ptr)
 @ stdcall -arch=win64 RtlGetFunctionTableListHead()
 @ stdcall RtlGetGroupSecurityDescriptor(ptr ptr ptr)
