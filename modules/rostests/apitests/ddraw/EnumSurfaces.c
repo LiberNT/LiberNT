@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     IDirectDraw7::EnumSurfaces refuses colour keys and surface memory in a can-be-created description
+ * PURPOSE:     IDirectDraw7::EnumSurfaces checks its flags and refuses colour keys and memory in a creatable description
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -41,6 +41,24 @@ START_TEST(EnumSurfaces)
         { "destination overlay key", DDSD_CKDESTOVERLAY, 0, DDERR_INVALIDPARAMS },
         { "surface memory", DDSD_LPSURFACE, 0, DDERR_INVALIDPARAMS },
     };
+    static const struct
+    {
+        DWORD flags;
+        BOOL with_desc;
+        HRESULT expected;
+    }
+    flag_tests[] =
+    {
+        { DDENUMSURFACES_ALL | DDENUMSURFACES_DOESEXIST, FALSE, DD_OK },
+        { 0x20 | DDENUMSURFACES_ALL | DDENUMSURFACES_DOESEXIST, FALSE, DDERR_INVALIDPARAMS },
+        { DDENUMSURFACES_ALL | DDENUMSURFACES_MATCH | DDENUMSURFACES_DOESEXIST, FALSE, DDERR_INVALIDPARAMS },
+        { DDENUMSURFACES_MATCH | DDENUMSURFACES_DOESEXIST, FALSE, DDERR_INVALIDPARAMS },
+        { DDENUMSURFACES_MATCH | DDENUMSURFACES_NOMATCH | DDENUMSURFACES_DOESEXIST, TRUE, DDERR_INVALIDPARAMS },
+        { DDENUMSURFACES_ALL, FALSE, DDERR_INVALIDPARAMS },
+        { DDENUMSURFACES_ALL | DDENUMSURFACES_CANBECREATED, FALSE, DDERR_INVALIDPARAMS },
+        { DDENUMSURFACES_NOMATCH | DDENUMSURFACES_CANBECREATED, TRUE, DDERR_INVALIDPARAMS },
+        { DDENUMSURFACES_ALL | DDENUMSURFACES_DOESEXIST | DDENUMSURFACES_CANBECREATED, FALSE, DDERR_INVALIDPARAMS },
+    };
     IDirectDraw7 *ddraw = NULL;
     DDSURFACEDESC2 desc;
     ULONG count;
@@ -70,6 +88,20 @@ START_TEST(EnumSurfaces)
         ok(hr == tests[i].expected, "%s: %#lx\n", tests[i].name, hr);
         if (FAILED(tests[i].expected))
             ok(count == 0, "%s: %lu surfaces\n", tests[i].name, count);
+    }
+
+    for (i = 0; i < ARRAYSIZE(flag_tests); i++)
+    {
+        memset(&desc, 0, sizeof(desc));
+        desc.dwSize = sizeof(desc);
+        desc.dwFlags = DDSD_WIDTH;
+        desc.dwWidth = 8;
+        count = 0;
+        hr = IDirectDraw7_EnumSurfaces(ddraw, flag_tests[i].flags, flag_tests[i].with_desc ? &desc : NULL, &count,
+                                       CountSurface);
+        ok(hr == flag_tests[i].expected, "flags %#lx: %#lx\n", flag_tests[i].flags, hr);
+        if (FAILED(flag_tests[i].expected))
+            ok(count == 0, "flags %#lx: %lu surfaces\n", flag_tests[i].flags, count);
     }
 
     IDirectDraw7_Release(ddraw);

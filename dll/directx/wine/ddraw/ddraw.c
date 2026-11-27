@@ -3372,11 +3372,27 @@ static HRESULT WINAPI ddraw7_EnumSurfaces(IDirectDraw7 *iface, DWORD flags,
 {
     struct ddraw *ddraw = impl_from_IDirectDraw7(iface);
     HRESULT hr = DD_OK;
+    DWORD search;
 
     TRACE("iface %p, flags %#lx, surface_desc %p, context %p, callback %p.\n",
             iface, flags, surface_desc, context, callback);
 
     if (!callback)
+        return DDERR_INVALIDPARAMS;
+
+    if (flags & ~(DDENUMSURFACES_ALL | DDENUMSURFACES_MATCH | DDENUMSURFACES_NOMATCH | DDENUMSURFACES_CANBECREATED
+            | DDENUMSURFACES_DOESEXIST))
+        return DDERR_INVALIDPARAMS;
+
+    search = flags & (DDENUMSURFACES_ALL | DDENUMSURFACES_MATCH | DDENUMSURFACES_NOMATCH);
+    if (search != DDENUMSURFACES_ALL && search != DDENUMSURFACES_MATCH && search != DDENUMSURFACES_NOMATCH)
+        return DDERR_INVALIDPARAMS;
+
+    if ((flags & (DDENUMSURFACES_CANBECREATED | DDENUMSURFACES_DOESEXIST))
+            == (DDENUMSURFACES_CANBECREATED | DDENUMSURFACES_DOESEXIST))
+        return DDERR_INVALIDPARAMS;
+
+    if (search != DDENUMSURFACES_ALL && !surface_desc)
         return DDERR_INVALIDPARAMS;
 
     if (flags & DDENUMSURFACES_CANBECREATED)
