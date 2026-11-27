@@ -577,10 +577,8 @@ NwifiTranslateRxFrame(
     PUCHAR Eth;
     UCHAR Da[IEEE80211_ADDR_LEN];
     UCHAR Sa[IEEE80211_ADDR_LEN];
-    UCHAR Type;
-    UCHAR Subtype;
     UCHAR Dir;
-    ULONG HeaderLength = IEEE80211_MAC_HEADER_LEN;
+    ULONG HeaderLength;
     PNET_BUFFER_LIST Nbl;
 
     if (InLength < IEEE80211_MAC_HEADER_LEN + RFC1042_SNAP_HEADER_LEN)
@@ -589,21 +587,10 @@ NwifiTranslateRxFrame(
     }
 
     MacHeader = (PIEEE80211_MAC_HEADER)In;
-    Type = MacHeader->FrameControl[0] & IEEE80211_FC0_TYPE_MASK;
-    Subtype = MacHeader->FrameControl[0] & IEEE80211_FC0_SUBTYPE_MASK;
     Dir = MacHeader->FrameControl[1] & IEEE80211_FC1_DIR_MASK;
 
-    if (Type != IEEE80211_FC0_TYPE_DATA)
-    {
-        return NULL;
-    }
-    if (Subtype == IEEE80211_FC0_SUBTYPE_QOS)
-    {
-        HeaderLength += IEEE80211_QOS_CONTROL_LEN;
-        if (MacHeader->FrameControl[1] & IEEE80211_FC1_ORDER)
-            HeaderLength += IEEE80211_HT_CONTROL_LEN;
-    }
-    else if (Subtype != IEEE80211_FC0_SUBTYPE_DATA)
+    HeaderLength = NwifiDataHeaderLength(MacHeader->FrameControl[0], MacHeader->FrameControl[1]);
+    if (HeaderLength == 0)
     {
         return NULL;
     }
@@ -710,7 +697,7 @@ NwifiReceiveFromLower(
 
         for (; NetBuffer != NULL; NetBuffer = NET_BUFFER_NEXT_NB(NetBuffer))
         {
-            UCHAR Frame[NWIFI_MAX_80211_FRAME];
+            UCHAR Frame[NWIFI_MAX_80211_RX_FRAME];
             ULONG FrameLength = NET_BUFFER_DATA_LENGTH(NetBuffer);
             PNET_BUFFER_LIST UpNbl;
 
