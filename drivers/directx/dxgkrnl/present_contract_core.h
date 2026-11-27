@@ -38,6 +38,24 @@ DxgkPresentCoreBindingCreatesOpen(
     return CddOwnerBinding && !BackingHasCreatorDevice;
 }
 
+/* An MPO3 flip carries the source's virtual mode and its mapping onto the physical mode; a miniport may build the
+ * complete surface state (compression included) only when the flip describes it. */
+FORCEINLINE BOOLEAN
+DxgkPresentCorePostCompositionRects(
+    _In_ ULONG ModeWidth,
+    _In_ ULONG ModeHeight,
+    _Out_ RECT *SrcRect,
+    _Out_ RECT *DstRect)
+{
+    SrcRect->left = 0;
+    SrcRect->top = 0;
+    SrcRect->right = (LONG)ModeWidth;
+    SrcRect->bottom = (LONG)ModeHeight;
+    /* TODO: a scaled or centered path maps the virtual mode onto part of the target mode; this is the identity mapping */
+    *DstRect = *SrcRect;
+    return ModeWidth != 0 && ModeHeight != 0 && ModeWidth <= MAXLONG && ModeHeight <= MAXLONG;
+}
+
 /* GDI command buffers go to DxgkDdiRenderGdi on a context that supports virtual addressing, to DxgkDdiRenderKm on
  * any other context, and nowhere when the driver lacks that DDI. */
 FORCEINLINE

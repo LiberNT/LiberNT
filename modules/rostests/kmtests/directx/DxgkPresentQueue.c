@@ -309,6 +309,25 @@ DxgkPresentQueueTestBindingCreatesOpen(VOID)
 }
 
 static VOID
+DxgkPresentQueueTestPostComposition(VOID)
+{
+    RECT SrcRect, DstRect;
+
+    ok_bool_true(DxgkPresentCorePostCompositionRects(1920, 1080, &SrcRect, &DstRect), "a committed mode is described");
+    ok_eq_long(SrcRect.left, 0L);
+    ok_eq_long(SrcRect.top, 0L);
+    ok_eq_long(SrcRect.right, 1920L);
+    ok_eq_long(SrcRect.bottom, 1080L);
+    ok_eq_long(DstRect.left, 0L);
+    ok_eq_long(DstRect.top, 0L);
+    ok_eq_long(DstRect.right, 1920L);
+    ok_eq_long(DstRect.bottom, 1080L);
+    ok_bool_false(DxgkPresentCorePostCompositionRects(0, 1080, &SrcRect, &DstRect), "no width, no post-composition");
+    ok_bool_false(DxgkPresentCorePostCompositionRects(1920, 0, &SrcRect, &DstRect), "no height, no post-composition");
+    ok_bool_false(DxgkPresentCorePostCompositionRects(0x80000000UL, 1080, &SrcRect, &DstRect), "a width beyond a RECT is refused");
+}
+
+static VOID
 DxgkPresentQueueTestContract(VOID)
 {
     static const RECT SourceSubRects[] =
@@ -769,6 +788,7 @@ START_TEST(DxgkPresentQueue)
     DxgkPresentQueueTestDmaGeometry();
     DxgkPresentQueueTestContract();
     DxgkPresentQueueTestBindingCreatesOpen();
+    DxgkPresentQueueTestPostComposition();
     DxgkPresentQueueTestBltRects();
     DxgkPresentQueueTestLimits();
 
