@@ -2240,6 +2240,7 @@ MONTHCAL_LButtonDown(MONTHCAL_INFO *infoPtr, LPARAM lParam)
   }
   case MCHT_TODAYLINK:
   {
+    ReleaseCapture();
     if (infoPtr->dwStyle & MCS_MULTISELECT)
     {
         SYSTEMTIME range[2];
