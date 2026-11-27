@@ -16,6 +16,7 @@
 
 /* Data */
 #define IDR_FILESECURITY    120
+#define IDR_COMPONENTFILES  121
 
 /* Icons */
 #define IDI_MAIN            3000

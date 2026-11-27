@@ -31,6 +31,7 @@ typedef struct _FILESEC_RULE
     SIZE_T PathLength;
     BOOLEAN Directory;
     BOOLEAN Recursive;
+    BOOLEAN Component;
     PSECURITY_DESCRIPTOR Descriptor;
 } FILESEC_RULE, *PFILESEC_RULE;
 
@@ -42,6 +43,9 @@ struct _FILESEC_POLICY
     PFILESEC_DEFINE Defines;
     ULONG DefineCount;
     ULONG DefineCapacity;
+    PWSTR ComponentText;
+    PWSTR *Components;
+    ULONG ComponentCount;
 };
 
 typedef struct _FILESEC_WALK
@@ -178,6 +182,87 @@ FileSecExpand(
     return TRUE;
 }
 
+static int
+__cdecl
+FileSecCompareComponents(
+    _In_ const void *First,
+    _In_ const void *Second)
+{
+    return _wcsicmp(*(PCWSTR const *)First, *(PCWSTR const *)Second);
+}
+
+/* The files the image builder makes components, embedded the same way as the policy itself */
+static BOOLEAN
+FileSecLoadComponents(
+    _Inout_ PFILESEC_POLICY Policy)
+{
+    HRSRC Resource;
+    HGLOBAL Loaded;
+    PCSTR Bytes;
+    DWORD Size;
+    PWSTR Line, Next;
+    int Length;
+    ULONG Count = 0;
+
+    if (Policy->ComponentText)
+        return FALSE;
+
+    Resource = FindResourceW(NULL, MAKEINTRESOURCEW(IDR_COMPONENTFILES), (LPCWSTR)RT_RCDATA);
+    Loaded = Resource ? LoadResource(NULL, Resource) : NULL;
+    Bytes = Loaded ? LockResource(Loaded) : NULL;
+    Size = Resource ? SizeofResource(NULL, Resource) : 0;
+    if (!Bytes || Size == 0)
+        return FALSE;
+
+    Length = MultiByteToWideChar(CP_UTF8, 0, Bytes, Size, NULL, 0);
+    if (Length <= 0)
+        return FALSE;
+    Policy->ComponentText = HeapAlloc(GetProcessHeap(), 0, (Length + 1) * sizeof(WCHAR));
+    if (!Policy->ComponentText)
+        return FALSE;
+    MultiByteToWideChar(CP_UTF8, 0, Bytes, Size, Policy->ComponentText, Length);
+    Policy->ComponentText[Length] = UNICODE_NULL;
+
+    for (Line = Policy->ComponentText; *Line; Line++)
+    {
+        if (*Line == L'\n')
+            Count++;
+    }
+    Policy->Components = HeapAlloc(GetProcessHeap(), 0, (Count + 1) * sizeof(PWSTR));
+    if (!Policy->Components)
+        return FALSE;
+
+    for (Line = Policy->ComponentText; Line && *Line; Line = Next)
+    {
+        SIZE_T LineLength;
+
+        Next = wcschr(Line, L'\n');
+        if (Next)
+            *Next++ = UNICODE_NULL;
+        LineLength = wcslen(Line);
+        while (LineLength > 0 && (Line[LineLength - 1] == L'\r' || Line[LineLength - 1] == L' '))
+            Line[--LineLength] = UNICODE_NULL;
+        if (LineLength == 0)
+            continue;
+        ASSERT(Policy->ComponentCount <= Count);
+        FileSecNormalizePath(Line);
+        Policy->Components[Policy->ComponentCount++] = Line;
+    }
+
+    qsort(Policy->Components, Policy->ComponentCount, sizeof(PWSTR), FileSecCompareComponents);
+    return TRUE;
+}
+
+static BOOLEAN
+FileSecIsComponent(
+    _In_ PFILESEC_POLICY Policy,
+    _In_ PCWSTR Path)
+{
+    if (Policy->ComponentCount == 0)
+        return FALSE;
+    return bsearch(&Path, Policy->Components, Policy->ComponentCount, sizeof(PWSTR), FileSecCompareComponents) != NULL;
+}
+
 static BOOLEAN
 FileSecParseLine(
     _In_ PFILESEC_POLICY Policy,
@@ -196,6 +281,8 @@ FileSecParseLine(
         Line[--Length] = UNICODE_NULL;
     if (Length == 0)
         return TRUE;
+    if (wcsncmp(Line, L"componentlist ", 14) == 0)
+        return FileSecLoadComponents(Policy);
 
     Separator = wcschr(Line, L'=');
     Space = wcschr(Line, L' ');
@@ -223,7 +310,7 @@ FileSecParseLine(
 
     if (wcscmp(Line, L"dir") == 0 || wcscmp(Line, L"dirs") == 0)
         Directory = TRUE;
-    else if (wcscmp(Line, L"file") == 0 || wcscmp(Line, L"files") == 0)
+    else if (wcscmp(Line, L"file") == 0 || wcscmp(Line, L"files") == 0 || wcscmp(Line, L"components") == 0)
         Directory = FALSE;
     else
         return FALSE;
@@ -239,6 +326,7 @@ FileSecParseLine(
     Rule->PathLength = wcslen(Rule->Path);
     Rule->Directory = Directory;
     Rule->Recursive = Recursive;
+    Rule->Component = (wcscmp(Line, L"components") == 0);
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(Expanded, SDDL_REVISION_1,
                                                               &Rule->Descriptor, NULL))
     {
@@ -279,6 +367,8 @@ FileSecurityFreePolicy(
     }
     HeapFree(GetProcessHeap(), 0, Policy->Rules);
     HeapFree(GetProcessHeap(), 0, Policy->Defines);
+    HeapFree(GetProcessHeap(), 0, Policy->Components);
+    HeapFree(GetProcessHeap(), 0, Policy->ComponentText);
     HeapFree(GetProcessHeap(), 0, Policy);
 }
 
@@ -342,7 +432,7 @@ FileSecurityLoadPolicy(
     return ERROR_SUCCESS;
 }
 
-/* An exact rule wins; otherwise the deepest recursive rule above the path */
+/* An exact rule wins; otherwise the deepest recursive rule above the path, a components rule over a plain one */
 PSECURITY_DESCRIPTOR
 FileSecurityFindDescriptor(
     _In_ PFILESEC_POLICY Policy,
@@ -359,13 +449,17 @@ FileSecurityFindDescriptor(
         Rule = &Policy->Rules[Index];
         if (Rule->Directory != Directory)
             continue;
+        ASSERT(!Rule->Component || (Rule->Recursive && !Rule->Directory));
+        if (Rule->Component && !FileSecIsComponent(Policy, Path))
+            continue;
         if (!Rule->Recursive)
         {
             if (_wcsicmp(Rule->Path, Path) == 0)
                 Best = Rule;
             continue;
         }
-        if (Best && (!Best->Recursive || Best->PathLength > Rule->PathLength))
+        if (Best && (!Best->Recursive || Best->PathLength > Rule->PathLength ||
+                     (Best->PathLength == Rule->PathLength && Best->Component)))
             continue;
         if (Rule->PathLength == 0 ? PathLength != 0
                                   : (PathLength > Rule->PathLength &&
