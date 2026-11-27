@@ -311,6 +311,21 @@ DxgkVidPnCoreDesktopSurfaceFormat(
     return PinnedFormat == D3DDDIFMT_X8R8G8B8 ? D3DDDIFMT_X8R8G8B8 : D3DDDIFMT_A8R8G8B8;
 }
 
+D3DKMDT_VIDPN_PRESENT_PATH_ROTATION
+DxgkVidPnCoreSelectRotation(
+    _In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION_SUPPORT Support)
+{
+    if (Support.Identity)
+        return D3DKMDT_VPPR_IDENTITY;
+    if (Support.Rotate90)
+        return D3DKMDT_VPPR_ROTATE90;
+    if (Support.Rotate180)
+        return D3DKMDT_VPPR_ROTATE180;
+    if (Support.Rotate270)
+        return D3DKMDT_VPPR_ROTATE270;
+    return D3DKMDT_VPPR_IDENTITY;
+}
+
 /* EOF */
 
 NTSTATUS

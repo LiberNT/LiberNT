@@ -111,6 +111,27 @@ static VOID TestCapacity(VOID)
     { NTSTATUS Observed = DxgkVidPnCoreAddPath(&Topology, 0, 999); ok_eq_hex(Observed, STATUS_INSUFFICIENT_RESOURCES); }
 }
 
+static VOID TestSelectRotation(VOID)
+{
+    D3DKMDT_VIDPN_PRESENT_PATH_ROTATION_SUPPORT Support;
+
+    RtlZeroMemory(&Support, sizeof(Support));
+    ok_eq_int(DxgkVidPnCoreSelectRotation(Support), D3DKMDT_VPPR_IDENTITY);
+    Support.Rotate90 = 1;
+    ok_eq_int(DxgkVidPnCoreSelectRotation(Support), D3DKMDT_VPPR_ROTATE90);
+    Support.Identity = 1;
+    ok_eq_int(DxgkVidPnCoreSelectRotation(Support), D3DKMDT_VPPR_IDENTITY);
+    RtlZeroMemory(&Support, sizeof(Support));
+    Support.Rotate180 = 1;
+    Support.Rotate270 = 1;
+    ok_eq_int(DxgkVidPnCoreSelectRotation(Support), D3DKMDT_VPPR_ROTATE180);
+    Support.Rotate180 = 0;
+    ok_eq_int(DxgkVidPnCoreSelectRotation(Support), D3DKMDT_VPPR_ROTATE270);
+    RtlZeroMemory(&Support, sizeof(Support));
+    Support.Offset90 = 1;
+    ok_eq_int(DxgkVidPnCoreSelectRotation(Support), D3DKMDT_VPPR_IDENTITY);
+}
+
 START_TEST(DxgkVidPnTopology)
 {
     TestAddAndFind();
@@ -118,6 +139,7 @@ START_TEST(DxgkVidPnTopology)
     TestRemoval();
     TestValidation();
     TestCapacity();
+    TestSelectRotation();
 }
 
 /* EOF */
