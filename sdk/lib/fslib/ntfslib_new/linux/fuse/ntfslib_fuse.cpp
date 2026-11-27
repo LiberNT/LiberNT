@@ -2328,8 +2328,15 @@ struct SecurityRule
 {
     bool Directory;
     bool Recursive;
+    bool Component;
     std::string Path;
     std::vector<UCHAR> Descriptor;
+};
+
+struct SecurityPolicy
+{
+    std::vector<SecurityRule> Rules;
+    std::unordered_set<std::string> Components;
 };
 
 static bool
@@ -2624,16 +2631,55 @@ SecurityRulePath(const std::string& Input)
 }
 
 static bool
-LoadSecurityRules(const char* PolicyPath, std::vector<SecurityRule>& Rules)
+LoadComponentList(const char* PolicyPath,
+                  const std::string& Name,
+                  std::unordered_set<std::string>& Components)
+{
+    std::string ListPath = Name;
+    const char* Slash = strrchr(PolicyPath, '/');
+    FILE* List;
+    char* Line = NULL;
+    size_t Capacity = 0;
+    ssize_t Length;
+    bool Result;
+
+    if (Slash && !ListPath.empty() && ListPath.front() != '/')
+        ListPath.insert(0, PolicyPath, (size_t)(Slash - PolicyPath) + 1);
+    List = fopen(ListPath.c_str(), "rb");
+    if (!List)
+    {
+        fprintf(stderr, "%s: %s\n", ListPath.c_str(), strerror(errno));
+        return false;
+    }
+    while ((Length = getline(&Line, &Capacity, List)) >= 0)
+    {
+        while (Length > 0 &&
+               (Line[Length - 1] == '\n' ||
+                Line[Length - 1] == '\r' ||
+                Line[Length - 1] == ' '))
+        {
+            Line[--Length] = '\0';
+        }
+        if (Length != 0)
+            Components.insert(SecurityRulePath(Line));
+    }
+    Result = feof(List) != 0;
+    free(Line);
+    fclose(List);
+    return Result;
+}
+
+static bool
+LoadSecurityRules(const char* PolicyPath, SecurityPolicy& Policy)
 {
     std::unordered_map<std::string, std::string> Definitions;
-    FILE* Policy = fopen(PolicyPath, "rb");
+    FILE* PolicyFile = fopen(PolicyPath, "rb");
     char* Line = NULL;
     size_t Capacity = 0;
     unsigned long LineNumber = 0;
     bool Result = false;
 
-    if (!Policy)
+    if (!PolicyFile)
     {
         fprintf(stderr, "%s: %s\n", PolicyPath, strerror(errno));
         return false;
@@ -2650,10 +2696,10 @@ LoadSecurityRules(const char* PolicyPath, std::vector<SecurityRule>& Rules)
         ssize_t Length;
         size_t Open;
 
-        Length = getline(&Line, &Capacity, Policy);
+        Length = getline(&Line, &Capacity, PolicyFile);
         if (Length < 0)
         {
-            Result = feof(Policy) != 0;
+            Result = feof(PolicyFile) != 0;
             break;
         }
         LineNumber++;
@@ -2666,6 +2712,12 @@ LoadSecurityRules(const char* PolicyPath, std::vector<SecurityRule>& Rules)
         }
         if (Length == 0)
             continue;
+        if (strncmp(Line, "componentlist ", 14) == 0)
+        {
+            if (!LoadComponentList(PolicyPath, Line + 14, Policy.Components))
+                break;
+            continue;
+        }
 
         Separator = strchr(Line, '=');
         Space = strchr(Line, ' ');
@@ -2696,15 +2748,16 @@ LoadSecurityRules(const char* PolicyPath, std::vector<SecurityRule>& Rules)
         }
         if (Kind == "dir" || Kind == "dirs")
             Rule.Directory = true;
-        else if (Kind == "file" || Kind == "files")
+        else if (Kind == "file" || Kind == "files" || Kind == "components")
             Rule.Directory = false;
         else
             break;
         Rule.Recursive = Kind.back() == 's';
+        Rule.Component = Kind == "components";
         Rule.Path = SecurityRulePath(Name);
         if (!ParseSddl(Value, Rule.Descriptor))
             break;
-        Rules.push_back(std::move(Rule));
+        Policy.Rules.push_back(std::move(Rule));
     }
 
     if (!Result)
@@ -2715,20 +2768,23 @@ LoadSecurityRules(const char* PolicyPath, std::vector<SecurityRule>& Rules)
                 LineNumber);
     }
     free(Line);
-    fclose(Policy);
+    fclose(PolicyFile);
     return Result;
 }
 
 static const SecurityRule*
-FindSecurityRule(const std::vector<SecurityRule>& Rules,
+FindSecurityRule(const SecurityPolicy& Policy,
                  const std::string& Path,
                  bool Directory)
 {
     const SecurityRule* Best = NULL;
 
-    for (const SecurityRule& Rule : Rules)
+    for (const SecurityRule& Rule : Policy.Rules)
     {
         if (Rule.Directory != Directory)
+            continue;
+        assert(!Rule.Component || (Rule.Recursive && !Rule.Directory));
+        if (Rule.Component && Policy.Components.count(Path) == 0)
             continue;
         if (!Rule.Recursive)
         {
@@ -2736,8 +2792,13 @@ FindSecurityRule(const std::vector<SecurityRule>& Rules,
                 Best = &Rule;
             continue;
         }
-        if (Best && (!Best->Recursive || Best->Path.size() > Rule.Path.size()))
+        if (Best &&
+            (!Best->Recursive ||
+             Best->Path.size() > Rule.Path.size() ||
+             (Best->Path.size() == Rule.Path.size() && Best->Component)))
+        {
             continue;
+        }
         if (Rule.Path.empty()
                 ? !Path.empty()
                 : (Path.size() > Rule.Path.size() &&
@@ -2752,7 +2813,7 @@ FindSecurityRule(const std::vector<SecurityRule>& Rules,
 
 static NTSTATUS
 ApplySecurityRules(NtfsFuseState* State,
-                   const std::vector<SecurityRule>& Rules,
+                   const SecurityPolicy& Policy,
                    const std::string& Path,
                    bool IsDirectory)
 {
@@ -2766,7 +2827,7 @@ ApplySecurityRules(NtfsFuseState* State,
     Status = Lookup(State->Volume, Path.empty() ? "/" : Path.c_str(), &File);
     if (NT_SUCCESS(Status))
     {
-        Rule = FindSecurityRule(Rules, SecurityRulePath(Path), IsDirectory);
+        Rule = FindSecurityRule(Policy, SecurityRulePath(Path), IsDirectory);
         if (Rule)
         {
             Status = NtfsFileRecordSetSecurityDescriptor(
@@ -2819,7 +2880,7 @@ ApplySecurityRules(NtfsFuseState* State,
 
     for (const auto& Child : Children)
     {
-        Status = ApplySecurityRules(State, Rules, Child.first, Child.second);
+        Status = ApplySecurityRules(State, Policy, Child.first, Child.second);
         if (!NT_SUCCESS(Status))
             return Status;
     }
@@ -2829,11 +2890,11 @@ ApplySecurityRules(NtfsFuseState* State,
 static int
 ApplySecurityFromPolicy(NtfsFuseState* State, const char* PolicyPath)
 {
-    std::vector<SecurityRule> Rules;
+    SecurityPolicy Policy;
 
-    if (!LoadSecurityRules(PolicyPath, Rules))
+    if (!LoadSecurityRules(PolicyPath, Policy))
         return 1;
-    return NT_SUCCESS(ApplySecurityRules(State, Rules, std::string(), true))
+    return NT_SUCCESS(ApplySecurityRules(State, Policy, std::string(), true))
         ? 0
         : 1;
 }

@@ -629,6 +629,7 @@ if(_preinstall_rpi_overlays)
     endforeach()
 endif()
 set(_preinstall_partition_deps native-fatten native-ntfsimg
+    ${REACTOS_SOURCE_DIR}/image/data/filesecurity.txt ${REACTOS_SOURCE_DIR}/image/data/componentfiles.txt
     ${_preinstall_overlay_deps} ${ARM64_BOOT_FILE_DEPS})
 set(_liberntimg_mbr_args)
 set(_liberntimg_deps native-mkdiskimg)
