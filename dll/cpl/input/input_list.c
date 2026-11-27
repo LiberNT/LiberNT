@@ -9,126 +9,11 @@
 #include "input_list.h"
 #define NOTHING
 
-typedef struct
-{
-    PWCHAR FontName;
-    PWCHAR SubFontName;
-} MUI_SUBFONT;
-
-#include "../../../base/setup/lib/muifonts.h"
-
-BOOL UpdateRegistryForFontSubstitutes(MUI_SUBFONT *pSubstitutes)
-{
-    DWORD cbData;
-    HKEY hKey;
-    static const WCHAR pszKey[] =
-        L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\FontSubstitutes";
-
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, pszKey, 0, KEY_ALL_ACCESS, &hKey) != ERROR_SUCCESS)
-        return FALSE;
-
-    /* Overwrite only */
-    for (; pSubstitutes->FontName; ++pSubstitutes)
-    {
-        cbData = (lstrlenW(pSubstitutes->SubFontName) + 1) * sizeof(WCHAR);
-        RegSetValueExW(hKey, pSubstitutes->FontName, 0,
-            REG_SZ, (LPBYTE)pSubstitutes->SubFontName, cbData);
-    }
-
-    RegCloseKey(hKey);
-    return TRUE;
-}
-
 VOID GetSystemLibraryPath(LPWSTR pszPath, INT cchPath, LPCWSTR pszFileName)
 {
     WCHAR szSysDir[MAX_PATH];
     GetSystemDirectoryW(szSysDir, ARRAYSIZE(szSysDir));
     StringCchPrintfW(pszPath, cchPath, L"%s\\%s", szSysDir, pszFileName);
-}
-
-BOOL
-InputList_SetFontSubstitutes(LCID dwLocaleId)
-{
-    MUI_SUBFONT *pSubstitutes;
-    WORD wLangID, wPrimaryLangID, wSubLangID;
-
-    wLangID = LANGIDFROMLCID(dwLocaleId);
-    wPrimaryLangID = PRIMARYLANGID(wLangID);
-    wSubLangID = SUBLANGID(wLangID);
-
-    /* FIXME: Add more if necessary */
-    switch (wPrimaryLangID)
-    {
-        default:
-            pSubstitutes = LatinFonts;
-            break;
-        case LANG_AZERI:
-        case LANG_BELARUSIAN:
-        case LANG_BULGARIAN:
-        case LANG_KAZAK:
-        case LANG_RUSSIAN:
-        case LANG_SERBIAN:
-        case LANG_TATAR:
-        case LANG_UKRAINIAN:
-        case LANG_UZBEK:
-            pSubstitutes = CyrillicFonts;
-            break;
-        case LANG_GREEK:
-            pSubstitutes = GreekFonts;
-            break;
-        case LANG_HEBREW:
-            pSubstitutes = HebrewFonts;
-            break;
-        case LANG_CHINESE:
-            switch (wSubLangID)
-            {
-                case SUBLANG_CHINESE_SIMPLIFIED:
-                case SUBLANG_CHINESE_SINGAPORE:
-                    pSubstitutes = ChineseSimplifiedFonts;
-                    break;
-                case SUBLANG_CHINESE_TRADITIONAL:
-                case SUBLANG_CHINESE_HONGKONG:
-                case SUBLANG_CHINESE_MACAU:
-                    pSubstitutes = ChineseTraditionalFonts;
-                    break;
-                default:
-                    pSubstitutes = NULL;
-                    DebugBreak();
-                    break;
-            }
-            break;
-        case LANG_JAPANESE:
-            pSubstitutes = JapaneseFonts;
-            break;
-        case LANG_KOREAN:
-            pSubstitutes = KoreanFonts;
-            break;
-        case LANG_ARABIC:
-        case LANG_ARMENIAN:
-        case LANG_BENGALI:
-        case LANG_FARSI:
-        case LANG_GEORGIAN:
-        case LANG_GUJARATI:
-        case LANG_HINDI:
-        case LANG_KONKANI:
-        case LANG_MARATHI:
-        case LANG_PUNJABI:
-        case LANG_SANSKRIT:
-        case LANG_TAMIL:
-        case LANG_TELUGU:
-        case LANG_THAI:
-        case LANG_URDU:
-        case LANG_VIETNAMESE:
-            pSubstitutes = UnicodeFonts;
-            break;
-    }
-
-    if (pSubstitutes)
-    {
-        UpdateRegistryForFontSubstitutes(pSubstitutes);
-        return TRUE;
-    }
-    return FALSE;
 }
 
 static INPUT_LIST_NODE *_InputList = NULL;
@@ -473,7 +358,6 @@ InputList_Process(VOID)
 
         if (pCurrent->wFlags & INPUT_LIST_NODE_FLAG_DEFAULT)
         {
-            bRet = InputList_SetFontSubstitutes(pCurrent->pLocale->dwId);
             InputList_AddInputMethodToUserRegistry(hPreloadKey, hSubstKey, 1, pCurrent);
 
             /* Activate the DEFAULT entry */

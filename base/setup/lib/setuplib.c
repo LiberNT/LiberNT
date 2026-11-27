@@ -1137,8 +1137,7 @@ UpdateRegistry(
     /**/IN PPARTLIST PartitionList,      /* HACK HACK! */
     /**/IN WCHAR DestinationDriveLetter, /* HACK HACK! */
     /**/IN PCWSTR SelectedLanguageId,    /* HACK HACK! */
-    IN PREGISTRY_STATUS_ROUTINE StatusRoutine OPTIONAL,
-    IN PFONTSUBSTSETTINGS SubstSettings OPTIONAL)
+    IN PREGISTRY_STATUS_ROUTINE StatusRoutine OPTIONAL)
 {
     ERROR_NUMBER ErrorNumber;
     NTSTATUS Status;
@@ -1360,14 +1359,6 @@ DoUpdate:
         // FIXME: This should technically be done by mountmgr (if AutoMount is enabled)!
         SetMountedDeviceValues(PartitionList, &pSetupData->DestinationRootPath);
     }
-
-#ifdef __REACTOS__
-    if (SubstSettings)
-    {
-        /* HACK */
-        DoRegistryFontFixup(SubstSettings, wcstoul(SelectedLanguageId, NULL, 16));
-    }
-#endif
 
 Cleanup:
     RegRestoreKeptSettings(KeptSettings);

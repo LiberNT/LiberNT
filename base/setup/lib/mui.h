@@ -1,11 +1,5 @@
 #pragma once
 
-typedef struct
-{
-    PCWSTR FontName;
-    PCWSTR SubFontName;
-} MUI_SUBFONT;
-
 typedef USHORT LANGID;
 typedef ULONG KLID;
 
@@ -35,7 +29,6 @@ typedef struct
     UINT MACCPage;
     PCWSTR LanguageDescriptor;
     GEOID GeoID;
-    const MUI_SUBFONT* MuiSubFonts;
     const MUI_LAYOUTS* MuiLayouts;
 } MUI_LANGUAGE;
 

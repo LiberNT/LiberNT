@@ -28,10 +28,8 @@
 
 #include "precomp.h"
 #include "mui.h"
-#include "muifonts.h"
 #include "muilanguages.h"
 #include "registry.h"
-#include "substset.h"
 
 #define NDEBUG
 #include <debug.h>
@@ -467,69 +465,6 @@ Quit:
     return NT_SUCCESS(Status);
 }
 
-static
-BOOLEAN
-AddFontsSettingsToRegistry(
-    IN const MUI_SUBFONT * MuiSubFonts)
-{
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    UNICODE_STRING KeyName;
-    UNICODE_STRING ValueName;
-    HANDLE KeyHandle;
-    NTSTATUS Status;
-    ULONG uIndex = 0;
-
-    RtlInitUnicodeString(&KeyName,
-                         L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\FontSubstitutes");
-    InitializeObjectAttributes(&ObjectAttributes,
-                               &KeyName,
-                               OBJ_CASE_INSENSITIVE,
-                               GetRootKeyByPredefKey(HKEY_LOCAL_MACHINE, NULL),
-                               NULL);
-    Status = NtOpenKey(&KeyHandle,
-                       KEY_WRITE,
-                       &ObjectAttributes);
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("NtOpenKey() failed (Status %lx)\n", Status);
-        return FALSE;
-    }
-
-    while (MuiSubFonts[uIndex].FontName != NULL)
-    {
-        RtlInitUnicodeString(&ValueName, MuiSubFonts[uIndex].FontName);
-        if (MuiSubFonts[uIndex].SubFontName)
-        {
-            Status = NtSetValueKey(KeyHandle,
-                                   &ValueName,
-                                   0,
-                                   REG_SZ,
-                                   (PVOID)MuiSubFonts[uIndex].SubFontName,
-                                   (wcslen(MuiSubFonts[uIndex].SubFontName)+1) * sizeof(WCHAR));
-            if (!NT_SUCCESS(Status))
-            {
-                DPRINT1("NtSetValueKey() failed (Status = %lx, uIndex = %d)\n", Status, uIndex);
-                NtClose(KeyHandle);
-                return FALSE;
-            }
-        }
-        else
-        {
-            Status = NtDeleteValueKey(KeyHandle, &ValueName);
-            if (!NT_SUCCESS(Status))
-            {
-                DPRINT1("NtDeleteValueKey failed, Status = %lx\n", Status);
-            }
-        }
-
-        uIndex++;
-    }
-
-    NtClose(KeyHandle);
-
-    return TRUE;
-}
-
 BOOLEAN
 AddCodePage(
     IN PCWSTR LanguageId)
@@ -540,17 +475,9 @@ AddCodePage(
     {
         if (_wcsicmp(MUILanguageList[lngIndex].LanguageID, LanguageId) == 0)
         {
-            if (AddCodepageToRegistry(MUILanguageList[lngIndex].ACPage,
-                                      MUILanguageList[lngIndex].OEMCPage,
-                                      MUILanguageList[lngIndex].MACCPage) &&
-                AddFontsSettingsToRegistry(MUILanguageList[lngIndex].MuiSubFonts))
-            {
-                return TRUE;
-            }
-            else
-            {
-                return FALSE;
-            }
+            return AddCodepageToRegistry(MUILanguageList[lngIndex].ACPage,
+                                         MUILanguageList[lngIndex].OEMCPage,
+                                         MUILanguageList[lngIndex].MACCPage);
         }
 
         lngIndex++;
@@ -558,54 +485,5 @@ AddCodePage(
 
     return FALSE;
 }
-
-#ifdef __REACTOS__ /* HACK */
-BOOL
-DoRegistryFontFixup(PFONTSUBSTSETTINGS pSettings, LANGID LangID)
-{
-    if (pSettings->bFoundFontMINGLIU)
-        AddFontsSettingsToRegistry(FontFixupMINGLIU);
-    if (pSettings->bFoundFontSIMSUN)
-        AddFontsSettingsToRegistry(FontFixupSIMSUN);
-    if (pSettings->bFoundFontMSSONG)
-        AddFontsSettingsToRegistry(FontFixupMSSONG);
-    if (pSettings->bFoundFontMSGOTHIC)
-        AddFontsSettingsToRegistry(FontFixupMSGOTHIC);
-    if (pSettings->bFoundFontMSMINCHO)
-        AddFontsSettingsToRegistry(FontFixupMSMINCHO);
-    if (pSettings->bFoundFontGULIM)
-        AddFontsSettingsToRegistry(FontFixupGULIM);
-    if (pSettings->bFoundFontBATANG)
-        AddFontsSettingsToRegistry(FontFixupBATANG);
-
-    switch (PRIMARYLANGID(LangID))
-    {
-        case LANG_CHINESE:
-            if (SUBLANGID(LangID) == SUBLANG_CHINESE_SIMPLIFIED)
-            {
-                if (pSettings->bFoundFontSIMSUN)
-                    AddFontsSettingsToRegistry(SimplifiedChineseFontFixup);
-            }
-            else
-            {
-                if (pSettings->bFoundFontMINGLIU)
-                    AddFontsSettingsToRegistry(TraditionalChineseFontFixup);
-            }
-            break;
-
-        case LANG_JAPANESE:
-            if (pSettings->bFoundFontMSGOTHIC)
-                AddFontsSettingsToRegistry(JapaneseFontFixup);
-            break;
-
-        case LANG_KOREAN:
-            if (pSettings->bFoundFontBATANG)
-                AddFontsSettingsToRegistry(KoreanFontFixup);
-            break;
-    }
-
-    return TRUE;
-}
-#endif /* HACK */
 
 /* EOF */
