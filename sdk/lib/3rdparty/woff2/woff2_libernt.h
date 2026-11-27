@@ -7,5 +7,8 @@
 
 #pragma once
 
+#include <stdint.h>
+#include <stdlib.h>
+
 #define _byteswap_ushort(Value) __builtin_bswap16(Value)
 #define _byteswap_ulong(Value) __builtin_bswap32(Value)
