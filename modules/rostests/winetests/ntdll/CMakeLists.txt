@@ -59,6 +59,8 @@ endif()
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(ntdll_winetest PRIVATE "-Wno-int-conversion")
     target_compile_options(ntdll_winetest PRIVATE "-Wno-unused-variable")
+    # The stack commit checks count pages that unoptimized frames overrun, on Windows 11 too
+    set_property(SOURCE virtual.c APPEND PROPERTY COMPILE_OPTIONS -O2)
 endif()
 
 set_module_type(ntdll_winetest win32cui)
