@@ -1,6 +1,5 @@
 
 add_subdirectory(arp)
-add_subdirectory(captiveportal)
 add_subdirectory(dwnl)
 add_subdirectory(finger)
 add_subdirectory(ftp)

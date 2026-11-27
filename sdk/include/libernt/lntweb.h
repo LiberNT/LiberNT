@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Web View
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Small HTML/CSS view used by the network sign-in window
+ * PURPOSE:     Small HTML, CSS and JavaScript view used by the web browser
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 

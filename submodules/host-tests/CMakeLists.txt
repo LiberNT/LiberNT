@@ -27,7 +27,6 @@ option(HOST_TEST_HALTIME "Build native HAL time arithmetic tests" ON)
 option(HOST_TEST_NDIS "Build native NDIS WDI tests" ON)
 option(HOST_TEST_DHCPCSVC "Build native DHCP client tests" ON)
 option(HOST_TEST_NLASVC "Build native network location awareness tests" ON)
-option(HOST_TEST_CAPTIVEPORTAL "Build native captive portal sign-in tests" ON)
 option(HOST_TEST_LNTWEB "Build native web view page script tests" ON)
 option(HOST_TEST_IEXPLORE "Build native web browser helper tests" ON)
 option(HOST_TEST_EXT4 "Build native ext4 driver core tests" ON)
@@ -43,10 +42,6 @@ endif()
 
 if(BUILD_TESTING AND HOST_TEST_NLASVC)
     add_subdirectory(nlasvc)
-endif()
-
-if(BUILD_TESTING AND HOST_TEST_CAPTIVEPORTAL)
-    add_subdirectory(captiveportal)
 endif()
 
 if(BUILD_TESTING AND HOST_TEST_LNTWEB)

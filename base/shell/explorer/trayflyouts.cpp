@@ -3,6 +3,7 @@
 #include <commctrl.h>
 #include <windowsx.h>
 #include <libernt/dwmframe.h>
+#include <libernt/nlaprobe.h>
 #include <shellframe.h>
 #include <winioctl.h>
 #include <ntddvdeo.h>
@@ -3861,31 +3862,25 @@ TfyConnectionIsHotspot(INetworkConnection *pConnection)
 }
 
 static VOID
-TfyOpenPortalSignIn(INetworkConnection *pConnection)
+TfyOpenPortalSignIn(VOID)
 {
-    CComPtr<INetwork> pNetwork;
-    CComBSTR Name;
-    WCHAR szPath[MAX_PATH], szCommand[MAX_PATH + 300];
-    STARTUPINFOW Startup = { sizeof(Startup) };
-    PROCESS_INFORMATION Process;
-    UINT cch = GetSystemDirectoryW(szPath, _countof(szPath));
+    WCHAR szHost[256] = L"www.msftconnecttest.com", szUrl[300], szBrowser[MAX_PATH];
+    DWORD cbHost = sizeof(szHost) - sizeof(WCHAR), cbBrowser = sizeof(szBrowser);
 
-    if (cch == 0 || cch >= _countof(szPath) ||
-        FAILED(StringCchCatW(szPath, _countof(szPath), L"\\captiveportal.exe")) ||
-        FAILED(StringCchPrintfW(szCommand, _countof(szCommand), L"\"%s\"", szPath)))
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, NLA_SERVICE_KEY L"\\Parameters\\Internet", L"ActiveWebProbeHost",
+                     RRF_RT_REG_SZ, NULL, szHost, &cbHost) != ERROR_SUCCESS ||
+        !szHost[0] || wcspbrk(szHost, L"/\\\" "))
     {
-        return;
+        StringCchCopyW(szHost, _countof(szHost), L"www.msftconnecttest.com");
     }
-    if (SUCCEEDED(pConnection->GetNetwork(&pNetwork)) && SUCCEEDED(pNetwork->GetName(&Name)) && Name.m_str &&
-        Name.m_str[0] && !wcschr(Name.m_str, L'"'))
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\IEXPLORE.EXE", NULL,
+                     RRF_RT_REG_SZ, NULL, szBrowser, &cbBrowser) != ERROR_SUCCESS ||
+        !szBrowser[0])
     {
-        StringCchPrintfW(szCommand, _countof(szCommand), L"\"%s\" \"%s\"", szPath, Name.m_str);
+        StringCchCopyW(szBrowser, _countof(szBrowser), L"iexplore.exe");
     }
-    if (CreateProcessW(szPath, szCommand, NULL, NULL, FALSE, 0, NULL, NULL, &Startup, &Process))
-    {
-        CloseHandle(Process.hThread);
-        CloseHandle(Process.hProcess);
-    }
+    if (SUCCEEDED(StringCchPrintfW(szUrl, _countof(szUrl), L"http://%s/redirect", szHost)))
+        ShellExecuteW(NULL, L"open", szBrowser, szUrl, NULL, SW_SHOWNORMAL);
 }
 
 static DWORD WINAPI
@@ -3932,7 +3927,7 @@ TfyPortalWatchThread(LPVOID lpParameter)
                 if (cCurrent < _countof(Current))
                     Current[cCurrent++] = Id;
                 if (!bKnown)
-                    TfyOpenPortalSignIn(pConnection);
+                    TfyOpenPortalSignIn();
             }
         }
         CopyMemory(Prompted, Current, cCurrent * sizeof(Current[0]));

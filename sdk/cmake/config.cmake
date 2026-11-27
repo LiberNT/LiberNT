@@ -215,7 +215,7 @@ cmake_dependent_option(MESA_LLVMPIPE_FROM_SOURCE
                        "Build LLVM and LLVMpipe into mesa_gallium.dll instead of using the LiberNT release payload." OFF
                        "ENABLE_MESA_LLVMPIPE" OFF)
 
-option(ENABLE_LNTWEB "Whether to build lntweb.dll, the HTML, CSS and JavaScript view of the network sign-in window
+option(ENABLE_LNTWEB "Whether to build lntweb.dll, the HTML, CSS and JavaScript view of the web browser
 (litehtml, plutovg, lunasvg and QuickJS). Clang builds only; CI turns it on for its clang release builds." OFF)
 
 # TODO: build the Linux GPU renderer for riscv64
