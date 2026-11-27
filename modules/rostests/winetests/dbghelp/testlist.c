@@ -5,12 +5,16 @@
 
 extern void func_dbghelp(void);
 extern void func_minidump(void);
+extern void func_minidump_full(void);
+extern void func_minidump_retry(void);
 extern void func_path(void);
 
 const struct test winetest_testlist[] =
 {
     { "dbghelp", func_dbghelp },
     { "minidump", func_minidump },
+    { "minidump_full", func_minidump_full },
+    { "minidump_retry", func_minidump_retry },
     { "path", func_path },
     { 0, 0 }
 };
