@@ -6,6 +6,7 @@ include_directories(
     ${REACTOS_SOURCE_DIR}/base/setup/lib)
 
 list(APPEND SOURCE
+    BcdPartitionPresent.c
     ForeignBootManager.c
     IsValidInstallDirectory.c
     PartitionListRegions.c
@@ -14,7 +15,7 @@ list(APPEND SOURCE
     precomp.h)
 
 add_executable(setuplib_unittest ${SOURCE})
-target_link_libraries(setuplib_unittest setuplib_static ${PSEH_LIB})
+target_link_libraries(setuplib_unittest setuplib_static vfatlib ntfslib ${PSEH_LIB})
 set_module_type(setuplib_unittest win32cui)
 add_importlibs(setuplib_unittest setupapi msvcrt kernel32 ntdll)
 #add_pch(setuplib_unittest precomp.h SOURCE)
