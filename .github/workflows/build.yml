@@ -32,6 +32,11 @@ jobs:
           - compiler: clang
             arch: arm64
             profile: profile_raspberry
+            build: release
+          - compiler: clang
+            arch: arm64
+            profile: profile_raspberry
+            build: debug
           - compiler: clang
             arch: arm
           - compiler: clang
