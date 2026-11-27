@@ -8,6 +8,7 @@ list(APPEND SOURCE
     HString.c
     HttpClient.c
     NotificationData.c
+    PackageManager.c
     PenDevice.c
     shortcut.c
     ToastHistory.c
