@@ -398,12 +398,26 @@ ExpectedHanGroup(void)
     return -1;
 }
 
+static int
+ExpectedGdiplusHanGroup(void)
+{
+    switch (PRIMARYLANGID(GetSystemDefaultLangID()))
+    {
+        case LANG_JAPANESE:
+        case LANG_KOREAN:
+        case LANG_CHINESE:
+            return ExpectedHanGroup();
+        default:
+            return GroupExists(GRP_SC) ? GRP_SC : ExpectedHanGroup();
+    }
+}
+
 static void
 TestLinkedHanRender(PCWSTR pszBase, RENDER_MODE Mode)
 {
     int Expected, Actual;
 
-    Expected = ExpectedHanGroup();
+    Expected = (Mode == RENDER_GDIPLUS) ? ExpectedGdiplusHanGroup() : ExpectedHanGroup();
     Actual = ActualGroup(pszBase, TEST_HAN_STRING, Mode);
     ok(Actual == Expected, "%ls (mode %d) Han drew %ls glyphs, expected %ls\n",
        pszBase, Mode,
