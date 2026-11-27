@@ -247,6 +247,12 @@ TDI_STATUS InfoTdiQueryGetConnectionTcpTable(PADDRESS_FILE AddrFile,
         Size = sizeof(MIB_TCPROW);
     }
 
+    /* The entity list keeps this pointer registered until late in AddrFileFree,
+     * so the object may already be mid-teardown with a zero reference count.
+     * Pin it only if it is still live; a dead or dying file contributes no rows. */
+    if (!AddrFileReferenceByPointer(AddrFile))
+        return TDI_INVALID_REQUEST;
+
     /* Accepted endpoints chain onto the listening address file; emit one row per endpoint. */
     KeEnterCriticalRegion();
     Locked = ExAcquireResourceExclusiveLite(&AddrFile->Resource, FALSE);
@@ -301,7 +307,10 @@ TDI_STATUS InfoTdiQueryGetConnectionTcpTable(PADDRESS_FILE AddrFile,
     KeLeaveCriticalRegion();
 
     if (Count == 0)
+    {
+        DereferenceObject(AddrFile);
         return TDI_INVALID_REQUEST;
+    }
 
     Rows = ExAllocatePoolWithTag(NonPagedPool, Count * Size, QUERY_CONTEXT_TAG);
     if (!Rows)
@@ -312,6 +321,7 @@ TDI_STATUS InfoTdiQueryGetConnectionTcpTable(PADDRESS_FILE AddrFile,
                 DereferenceObject(Connections[i]);
             ExFreePoolWithTag(Connections, QUERY_CONTEXT_TAG);
         }
+        DereferenceObject(AddrFile);
         return TDI_NO_RESOURCES;
     }
 
@@ -413,6 +423,8 @@ TDI_STATUS InfoTdiQueryGetConnectionTcpTable(PADDRESS_FILE AddrFile,
 
     ExFreePoolWithTag(Rows, QUERY_CONTEXT_TAG);
 
+    DereferenceObject(AddrFile);
+
     TI_DbgPrint(DEBUG_INFO, ("Returning %08x\n", Status));
 
     return Status;
@@ -483,6 +495,12 @@ TDI_STATUS InfoTdiQueryGetConnectionUdpTable(PADDRESS_FILE AddrFile,
         Size = sizeof(MIB_UDPROW);
     }
 
+    /* Same entity-context lifetime race as the TCP table: pin or bail. The
+     * fields read below are immutable after creation, so no lock is needed
+     * once the object is known-live. */
+    if (!AddrFileReferenceByPointer(AddrFile))
+        return TDI_INVALID_REQUEST;
+
     UdpRow.dwLocalAddr = AddrFile->Address.Address.IPv4Address;
     UdpRow.dwLocalPort = AddrFile->Port;
     UdpRow.dwOwningPid = HandleToUlong(AddrFile->ProcessId);
@@ -496,6 +514,8 @@ TDI_STATUS InfoTdiQueryGetConnectionUdpTable(PADDRESS_FILE AddrFile,
 
     Status = InfoCopyOut( (PCHAR)&UdpRow,
 			  Size, Buffer, BufferSize );
+
+    DereferenceObject(AddrFile);
 
     TI_DbgPrint(DEBUG_INFO, ("Returning %08x\n", Status));
 
