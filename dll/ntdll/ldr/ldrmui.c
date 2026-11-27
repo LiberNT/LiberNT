@@ -404,7 +404,7 @@ LdrpLoadMuiFile(
     _Out_ PSIZE_T ViewSize)
 {
     static const WCHAR Extension[] = L".mui";
-    UCHAR NameBuffer[sizeof(MEMORY_SECTION_NAME) + (MAX_PATH * 2 * sizeof(WCHAR))];
+    DECLSPEC_ALIGN(16) UCHAR NameBuffer[sizeof(MEMORY_SECTION_NAME) + (MAX_PATH * 2 * sizeof(WCHAR))];
     PMEMORY_SECTION_NAME SectionName = (PMEMORY_SECTION_NAME)NameBuffer;
     UNICODE_STRING Path, Directory, Name, LanguageName;
     PWSTR FileName;
@@ -486,7 +486,7 @@ LdrpLoadMunFile(
 {
     static const WCHAR Directory[] = L"\\SystemRoot\\SystemResources\\";
     static const WCHAR Extension[] = L".mun";
-    UCHAR NameBuffer[sizeof(MEMORY_SECTION_NAME) + (MAX_PATH * 2 * sizeof(WCHAR))];
+    DECLSPEC_ALIGN(16) UCHAR NameBuffer[sizeof(MEMORY_SECTION_NAME) + (MAX_PATH * 2 * sizeof(WCHAR))];
     PMEMORY_SECTION_NAME SectionName = (PMEMORY_SECTION_NAME)NameBuffer;
     UNICODE_STRING Path, Name;
     PWSTR FileName, Parent;
