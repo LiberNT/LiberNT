@@ -2446,8 +2446,9 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
             ExistingRecordNumber != NtfsFileRecordGetNumber(FileCB->FileRec) &&
             !ExistingIsDirectory)
         {
-            Status = NtfsCheckNamespaceAccess(VolCB, &ParentName, NULL,
-                                              ExistingRecord, FILE_DELETE_CHILD, AccessMode);
+            Status = FileCB->RestoreAccess && (FileCB->CreateOptions & FILE_OPEN_FOR_BACKUP_INTENT)
+                ? STATUS_SUCCESS
+                : NtfsCheckNamespaceAccess(VolCB, &ParentName, NULL, ExistingRecord, FILE_DELETE_CHILD, AccessMode);
             if (NT_SUCCESS(Status))
                 Status = NtfsCheckReplacedReadOnly(ExistingRecord, RenameFlags, AccessMode);
             if (!NT_SUCCESS(Status))

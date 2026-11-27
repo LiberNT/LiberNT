@@ -177,6 +177,7 @@ list(APPEND SOURCE
     RemoteThreadInit.c
     RenameAsyncHandle.c
     RenameDirectoryOldPath.c
+    RenameReplaceRestore.c
     ResizePseudoConsole.c
     SetCalendarInfo.c
     SetComputerNameExW.c
