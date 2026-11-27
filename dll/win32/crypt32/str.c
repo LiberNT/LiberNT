@@ -376,6 +376,9 @@ DWORD cert_name_to_str_with_indent(DWORD dwCertEncodingType, DWORD indentLevel,
             {
                 LPCSTR prefixA = NULL;
                 LPCWSTR prefixW = NULL;
+#ifdef __REACTOS__
+                BOOL oidPrefix = FALSE;
+#endif
 
                 if (psz && ret + 1 == csz) break;
 
@@ -391,7 +394,12 @@ DWORD cert_name_to_str_with_indent(DWORD dwCertEncodingType, DWORD indentLevel,
                     if (oidInfo)
                         prefixW = oidInfo->pwszName;
                     else
+                    {
                         prefixA = rdn->rgRDNAttr[j].pszObjId;
+#ifdef __REACTOS__
+                        oidPrefix = TRUE;
+#endif
+                    }
                 }
                 if (dwStrType & CERT_NAME_STR_CRLF_FLAG)
                 {
@@ -410,6 +418,20 @@ DWORD cert_name_to_str_with_indent(DWORD dwCertEncodingType, DWORD indentLevel,
                     }
                     if (psz && ret + 1 == csz) break;
                 }
+#ifdef __REACTOS__
+                if (oidPrefix)
+                {
+                    if (psz)
+                    {
+                        chars = min(4, csz - ret - 1);
+                        memcpy(psz + ret, L"OID.", chars * sizeof(WCHAR));
+                    }
+                    else
+                        chars = 4;
+                    ret += chars;
+                    if (psz && ret + 1 == csz) break;
+                }
+#endif
                 if (prefixW)
                 {
                     /* - 1 is needed to account for the NULL terminator. */
@@ -810,6 +832,7 @@ BOOL WINAPI CertStrToNameW(DWORD dwCertEncodingType, LPCWSTR pszX500,
             CRYPT_KeynameKeeperFromTokenW(&keeper, &token);
             keyOID = CryptFindOIDInfo(CRYPT_OID_INFO_NAME_KEY, keeper.keyName,
              CRYPT_RDN_ATTR_OID_GROUP_ID);
+            /* TODO: accept an object identifier key, OID.1.2.3.4= or 1.2.3.4= */
             if (!keyOID)
             {
                 if (ppszError)

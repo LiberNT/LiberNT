@@ -10,6 +10,7 @@ list(APPEND SOURCE
     CryptStringToBinary.c
     FindOIDInfo.c
     GeneralizedTime.c
+    NameToStr.c
     RevocationTimeout.c
     RootProgram.c
     testlist.c)
