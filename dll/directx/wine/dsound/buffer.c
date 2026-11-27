@@ -860,7 +860,6 @@ static HRESULT WINAPI IDirectSoundBufferImpl_SetFX(IDirectSoundBuffer8 *iface, D
 	DSFilter *filters;
 	HRESULT hr, hr2;
 	DMO_MEDIA_TYPE dmt;
-	WAVEFORMATEX wfx;
 
 	TRACE("(%p,%lu,%p,%p)\n", This, dwEffectsCount, pDSFXDesc, pdwResultCodes);
 
@@ -912,23 +911,21 @@ static HRESULT WINAPI IDirectSoundBufferImpl_SetFX(IDirectSoundBuffer8 *iface, D
 
 	hr = DS_OK;
 
-	wfx.wFormatTag = WAVE_FORMAT_IEEE_FLOAT;
-	wfx.nChannels = This->pwfx->nChannels;
-	wfx.nSamplesPerSec = This->pwfx->nSamplesPerSec;
-	wfx.wBitsPerSample = sizeof(float) * 8;
-	wfx.nBlockAlign = (wfx.nChannels * wfx.wBitsPerSample)/8;
-	wfx.nAvgBytesPerSec = wfx.nSamplesPerSec * wfx.nBlockAlign;
-	wfx.cbSize = sizeof(wfx);
-
 	dmt.majortype = KSDATAFORMAT_TYPE_AUDIO;
-	dmt.subtype = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+	if (This->pwfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT)
+		dmt.subtype = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+	else if (This->pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
+		 This->pwfx->cbSize >= sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX))
+		dmt.subtype = ((WAVEFORMATEXTENSIBLE *)This->pwfx)->SubFormat;
+	else
+		dmt.subtype = KSDATAFORMAT_SUBTYPE_PCM;
 	dmt.bFixedSizeSamples = TRUE;
 	dmt.bTemporalCompression = FALSE;
-	dmt.lSampleSize = sizeof(float) * This->pwfx->nChannels / 8;
+	dmt.lSampleSize = This->pwfx->nBlockAlign;
 	dmt.formattype = FORMAT_WaveFormatEx;
 	dmt.pUnk = NULL;
-	dmt.cbFormat = sizeof(WAVEFORMATEX);
-	dmt.pbFormat = (BYTE*)&wfx;
+	dmt.cbFormat = sizeof(WAVEFORMATEX) + This->pwfx->cbSize;
+	dmt.pbFormat = (BYTE*)This->pwfx;
 
 	for (u = 0; u < dwEffectsCount; u++) {
 		TRACE("%ld: 0x%08lx, %s\n", u, pDSFXDesc[u].dwFlags, dump_DSFX_guid(&pDSFXDesc[u]));
@@ -952,7 +949,7 @@ static HRESULT WINAPI IDirectSoundBufferImpl_SetFX(IDirectSoundBuffer8 *iface, D
 				hr = hr2;
 
 			if (pdwResultCodes)
-				pdwResultCodes[u] = (hr2 == REGDB_E_CLASSNOTREG) ? DSFXR_UNKNOWN : DSFXR_FAILED;
+				pdwResultCodes[u] = DSFXR_UNKNOWN;
 		} else {
 			if (pdwResultCodes)
 				pdwResultCodes[u] = DSFXR_LOCSOFTWARE;
@@ -962,7 +959,7 @@ static HRESULT WINAPI IDirectSoundBufferImpl_SetFX(IDirectSoundBuffer8 *iface, D
 	if (FAILED(hr)) {
 		for (u = 0; u < dwEffectsCount; u++) {
 			if (pdwResultCodes)
-				pdwResultCodes[u] = (pdwResultCodes[u] != DSFXR_UNKNOWN) ? DSFXR_PRESENT : DSFXR_UNKNOWN;
+				pdwResultCodes[u] = (pdwResultCodes[u] == DSFXR_LOCSOFTWARE) ? DSFXR_PRESENT : DSFXR_UNKNOWN;
 
 			if (filters[u].obj)
 				IMediaObject_Release(filters[u].obj);
