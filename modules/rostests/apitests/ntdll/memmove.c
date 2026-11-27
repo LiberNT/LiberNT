@@ -103,15 +103,18 @@ TestLargeCopy(const char *Name, PMEMMOVE Function, BOOL AllowOverlap)
         { 4097, 0, 40 << 20, TRUE },
     };
     SIZE_T Size = 48 << 20, CaseIndex, Index;
-    PUCHAR Buffer, Copy;
+    PUCHAR Buffer, Copy, Pristine;
 
     if (Function == NULL)
         return;
     Buffer = VirtualAlloc(NULL, Size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     Copy = VirtualAlloc(NULL, Size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-    ok(Buffer != NULL && Copy != NULL, "VirtualAlloc failed with %lu\n", GetLastError());
-    if (Buffer == NULL || Copy == NULL)
-        return;
+    Pristine = VirtualAlloc(NULL, Size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    ok(Buffer != NULL && Copy != NULL && Pristine != NULL, "VirtualAlloc failed with %lu\n", GetLastError());
+    if (Buffer == NULL || Copy == NULL || Pristine == NULL)
+        goto Cleanup;
+    for (Index = 0; Index < Size; ++Index)
+        Pristine[Index] = (UCHAR)((Index >> 12) * 131u + Index * 7u);
 
     for (CaseIndex = 0; CaseIndex < _countof(Cases); ++CaseIndex)
     {
@@ -122,34 +125,17 @@ TestLargeCopy(const char *Name, PMEMMOVE Function, BOOL AllowOverlap)
 
         if (Cases[CaseIndex].Overlap && !AllowOverlap)
             continue;
-        for (Index = 0; Index < Size; ++Index)
-            Buffer[Index] = (UCHAR)((Index >> 12) * 131u + Index * 7u);
-        if (Cases[CaseIndex].Overlap)
-        {
-            Target = Buffer + Destination;
-            Origin = Buffer + Source;
-            for (Index = 0; Index < Size; ++Index)
-                Copy[Index] = Buffer[Index];
-        }
-        else
-        {
-            Target = Copy + Destination;
-            Origin = Buffer + Source;
+        CopyMemory(Buffer, Pristine, Size);
+        Target = Cases[CaseIndex].Overlap ? Buffer + Destination : Copy + Destination;
+        Origin = Buffer + Source;
+        if (!Cases[CaseIndex].Overlap)
             FillMemory(Copy, Size, 0xCC);
-        }
 
         Result = Function(Target, Origin, Length);
         ok(Result == Target, "%s case %Iu returned %p instead of %p\n", Name, (size_t)CaseIndex, Result, Target);
-        for (Index = 0; Index < Length; ++Index)
-        {
-            UCHAR Want = Cases[CaseIndex].Overlap ? Copy[Source + Index] : Buffer[Source + Index];
-
-            if (Target[Index] != Want)
-            {
-                Mismatch = Index;
-                break;
-            }
-        }
+        Index = RtlCompareMemory(Target, Pristine + Source, Length);
+        if (Index != Length)
+            Mismatch = Index;
         ok(Mismatch == (SIZE_T)-1, "%s case %Iu differs at byte %Iu\n", Name, (size_t)CaseIndex, (size_t)Mismatch);
         if (!Cases[CaseIndex].Overlap)
         {
@@ -159,8 +145,13 @@ TestLargeCopy(const char *Name, PMEMMOVE Function, BOOL AllowOverlap)
         }
     }
 
-    VirtualFree(Buffer, 0, MEM_RELEASE);
-    VirtualFree(Copy, 0, MEM_RELEASE);
+Cleanup:
+    if (Buffer != NULL)
+        VirtualFree(Buffer, 0, MEM_RELEASE);
+    if (Copy != NULL)
+        VirtualFree(Copy, 0, MEM_RELEASE);
+    if (Pristine != NULL)
+        VirtualFree(Pristine, 0, MEM_RELEASE);
 }
 
 START_TEST(memmove)
