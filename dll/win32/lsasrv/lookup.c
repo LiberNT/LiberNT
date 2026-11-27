@@ -82,6 +82,7 @@ PSID LsapWorldSid = NULL;
 PSID LsapNetworkSid = NULL;
 PSID LsapBatchSid = NULL;
 PSID LsapInteractiveSid = NULL;
+PSID LsapRemoteInteractiveSid = NULL;
 PSID LsapServiceSid = NULL;
 PSID LsapLocalSystemSid = NULL;
 PSID LsapAdministratorsSid = NULL;
@@ -459,7 +460,7 @@ LsapInitSids(VOID)
                   szAccountName,
                   szDomainName,
                   SidTypeWellKnownGroup,
-                  NULL);
+                  &LsapRemoteInteractiveSid);
 
     /* This Organization Sid */
     LsapLoadString(hInstance, IDS_THIS_ORGANIZATION_RID, szAccountName, ARRAYSIZE(szAccountName));
