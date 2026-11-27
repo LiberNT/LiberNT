@@ -278,6 +278,8 @@ do { ok(TestResult == Test.Expected,                                    \
         TestResult ? "TRUE" : "FALSE");                                 \
 } while(0)
 
+static WCHAR FullUpcaseTable[0x10000];
+
 static void RtlIsNameInExpressionTest()
 {
     if (!pRtlIsNameInExpression)
@@ -285,6 +287,9 @@ static void RtlIsNameInExpressionTest()
         skip("RtlIsNameInExpression unavailable\n");
         return;
     }
+
+    for (ULONG c = 0; c < ARRAYSIZE(FullUpcaseTable); c++)
+        FullUpcaseTable[c] = (c < ARRAYSIZE(UpcaseTable)) ? UpcaseTable[c] : RtlUpcaseUnicodeChar((WCHAR)c);
 
     for (ULONG i = 0; i < ARRAYSIZE(RtlExpressionTests); i++)
     {
@@ -301,7 +306,7 @@ static void RtlIsNameInExpressionTest()
         if (RtlExpressionTests[i].UpcaseTable == NULL)
         {
             /* System upcase table tests should also pass with a normal upcase table. */
-            Result = pRtlIsNameInExpression(&Expression, &Name, RtlExpressionTests[i].IgnoreCase, (PWCH)UpcaseTable);
+            Result = pRtlIsNameInExpression(&Expression, &Name, RtlExpressionTests[i].IgnoreCase, FullUpcaseTable);
             RtlIsNameInExpressionOk(RtlExpressionTests[i], Result);
         }
     }
