@@ -47,6 +47,9 @@ KiArmDispatchService(
     PULONG Stack;
     NTSTATUS Status = STATUS_SUCCESS;
 
+    Thread->SystemCallNumber = Service;
+    Thread->FirstArgument = (PVOID)TrapFrame->R0;
+
     if ((Table >= SSDT_MAX_ENTRIES) || (Table && !Thread->GuiThread))
         return (ULONG)STATUS_INVALID_SYSTEM_SERVICE;
 
