@@ -9288,6 +9288,9 @@ static void test_breakpoint(DWORD numexc)
     void *vectored_handler;
 
     memcpy(code_mem, breakpoint_code, sizeof(breakpoint_code));
+#ifdef __REACTOS__
+    FlushInstructionCache(GetCurrentProcess(), code_mem, sizeof(breakpoint_code));
+#endif
 #ifdef __arm__
     func = (void *)((char *)code_mem + 1);  /* thumb */
 #endif
