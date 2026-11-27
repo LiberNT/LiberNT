@@ -47,6 +47,11 @@ INBV_DISPLAY_STATE
 NTAPI
 InbvGetDisplayState(VOID);
 
+VOID
+NTAPI
+InbvNotifyDisplayOwnershipChange(
+    _In_ BOOLEAN DisplayOwned);
+
 BOOLEAN
 NTAPI
 InbvGetGopFrameBufferInfo(

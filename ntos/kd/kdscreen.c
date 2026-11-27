@@ -276,7 +276,7 @@ KdpScreenRelease(
     if (!DisplayAcquired)
         return;
 
-    InbvNotifyDisplayOwnershipLost(NULL);
+    InbvNotifyDisplayOwnershipChange(FALSE);
 }
 
 VOID

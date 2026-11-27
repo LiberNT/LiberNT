@@ -120,6 +120,11 @@ NTAPI
 InbvSetDisplayWriteRoutine(
     _In_opt_ PVID_DISPLAY_WRITE_ROUTINE Routine);
 
+VOID
+NTAPI
+InbvNotifyDisplayOwnershipChange(
+    _In_ BOOLEAN DisplayOwned);
+
 /* ========================================================================
  * POST (boot) display ownership
  *
@@ -1262,10 +1267,7 @@ DxgkpStartStopScreen(
 }
 
 static VOID
-NTAPI
-DxgkpBugCheckCallback(
-    _In_opt_ PVOID Buffer,
-    _In_ ULONG Length)
+DxgkpEnableSystemDisplay(VOID)
 {
     PDXGKRNL_ADAPTER Owner;
     PDXGKDDI_SYSTEM_DISPLAY_ENABLE PfnEnable;
@@ -1278,9 +1280,6 @@ DxgkpBugCheckCallback(
     KIRQL CurrentIrql;
     KIRQL OldIrql = PASSIVE_LEVEL;
     BOOLEAN LockAtDpcLevel;
-
-    UNREFERENCED_PARAMETER(Buffer);
-    UNREFERENCED_PARAMETER(Length);
 
     CurrentIrql = KeGetCurrentIrql();
     LockAtDpcLevel = (CurrentIrql >= DISPATCH_LEVEL);
@@ -1315,7 +1314,18 @@ ReleaseLock:
         KeReleaseSpinLock(&g_PostDisplayOwnerLock, OldIrql);
 }
 
-/* Marks the boot frame buffer as no longer scanned out; DxgkpBugCheckCallback brings it back. */
+static VOID
+NTAPI
+DxgkpBugCheckCallback(
+    _In_opt_ PVOID Buffer,
+    _In_ ULONG Length)
+{
+    UNREFERENCED_PARAMETER(Buffer);
+    UNREFERENCED_PARAMETER(Length);
+
+    DxgkpEnableSystemDisplay();
+}
+
 static
 BOOLEAN
 NTAPI
@@ -1326,6 +1336,7 @@ DxgkpInbvResetDisplay(
     UNREFERENCED_PARAMETER(Cols);
     UNREFERENCED_PARAMETER(Rows);
 
+    DxgkpEnableSystemDisplay();
     return TRUE;
 }
 
@@ -14961,6 +14972,11 @@ DxgkAdapterStart(
                                                            DxgkpScreenLogRequested());
     if (BootScreenAction == DxgkBootScreenDrawToCopy && !NT_SUCCESS(DxgkpDetachWholeBootScreen()))
         BootScreenAction = DxgkBootScreenRelease;
+    if (BootScreenAction == DxgkBootScreenDrawToCopy && !Adapter->MiniportContext->IsBasicDisplayFallback)
+    {
+        InbvNotifyDisplayOwnershipLost(DxgkpInbvResetDisplay);
+        InbvNotifyDisplayOwnershipChange(TRUE);
+    }
     if (BootScreenAction == DxgkBootScreenRelease)
     {
         /* TODO: keep boot output in a virtual frame buffer for the boot image relay instead of dropping it */
