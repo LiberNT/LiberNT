@@ -205,8 +205,11 @@ LdrpReferenceModule(PLDR_DATA_TABLE_ENTRY Entry, BOOLEAN Pin)
     {
         if (Pin)
         {
-            InterlockedIncrement((PLONG)&Entry->ReferenceCount);
-            LdrpPinNode(Entry->DdagNode);
+            if (!Entry->ProcessStaticImport)
+            {
+                InterlockedIncrement((PLONG)&Entry->ReferenceCount);
+                LdrpPinNode(Entry->DdagNode);
+            }
         }
         else
             ++Entry->DdagNode->LoadCount;
@@ -288,12 +291,15 @@ LdrpAddDependency(PLDR_DATA_TABLE_ENTRY OwnerEntry, PLDR_DATA_TABLE_ENTRY Target
     PLDR_DDAG_NODE Owner, Target;
     PLDR_DEPENDENCY_RECORD Edge;
     BOOLEAN Transfer = Reason != LoadReasonStaticDependency;
+    BOOLEAN StaticTarget;
     NTSTATUS Status = STATUS_SUCCESS;
 
     RtlAcquireSRWLockExclusive(&LdrpModuleDatatableLock);
     Owner = OwnerEntry->DdagNode;
     Target = TargetEntry->DdagNode;
-    if (Target->LoadCount == MAXULONG || LdrpNodesLinked(Owner, Target))
+    StaticTarget = TargetEntry->ProcessStaticImport && !OwnerEntry->ProcessStaticImport &&
+                   OwnerEntry->DllBase != NtCurrentPeb()->ImageBaseAddress;
+    if (Target->LoadCount == MAXULONG || StaticTarget || LdrpNodesLinked(Owner, Target))
     {
         if (Transfer) LdrpReleaseNode(Target);
     }
