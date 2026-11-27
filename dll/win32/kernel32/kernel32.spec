@@ -82,7 +82,6 @@
 @ stdcall ClearCommError(long ptr ptr)
 @ stdcall -thunk CloseConsoleHandle(long) kernelbase.CloseConsoleHandle
 @ stdcall CloseHandle(long)
-@ stdcall -version=0x602+ ClosePackageInfo(ptr)
 @ stdcall -thunk -version=0xA00+ ClosePseudoConsole(ptr) kernelbase.ClosePseudoConsole
 @ stdcall -version=0x600+ ClosePrivateNamespace(ptr long)
 @ stdcall CloseProfileUserMapping()
@@ -976,7 +975,6 @@
 @ stdcall OpenJobObjectW(long long wstr)
 @ stdcall OpenMutexA(long long str)
 @ stdcall OpenMutexW(long long wstr)
-@ stdcall -version=0x602+ OpenPackageInfoByFullName(wstr long ptr)
 @ stdcall -version=0x600+ OpenPrivateNamespaceA(ptr str)
 @ stdcall -version=0x600+ OpenPrivateNamespaceW(ptr wstr)
 @ stdcall OpenProcess(long long long)
@@ -991,6 +989,7 @@
 @ stdcall OutputDebugStringA(str)
 @ stdcall OutputDebugStringW(wstr)
 @ stdcall -version=0x602+ PackageFamilyNameFromFullName(wstr ptr ptr) kernelbase.PackageFamilyNameFromFullName
+@ stdcall -version=0x602+ PackageFamilyNameFromId(ptr ptr ptr) kernelbase.PackageFamilyNameFromId
 @ stdcall -version=0x602+ PackageIdFromFullName(wstr long ptr ptr) kernelbase.PackageIdFromFullName
 @ stdcall -version=0x602+ ParseApplicationUserModelId(wstr ptr ptr ptr ptr) kernelbase.ParseApplicationUserModelId
 @ stdcall -thunk PeekConsoleInputA(ptr ptr long ptr) kernelbase.PeekConsoleInputA
@@ -1525,3 +1524,6 @@
 @ stdcall GetAppContainerAce(ptr long ptr ptr) kernelbase.GetAppContainerAce
 @ stdcall MapViewOfFileFromApp(long long int64 long) kernelbase.MapViewOfFileFromApp
 @ stdcall SetCachedSigningLevel(ptr long long long) kernelbase.SetCachedSigningLevel
+@ stdcall -version=0x602+ ClosePackageInfo(ptr) kernelbase.ClosePackageInfo
+@ stdcall -version=0x602+ GetPackageInfo(ptr long ptr ptr ptr) kernelbase.GetPackageInfo
+@ stdcall -version=0x602+ OpenPackageInfoByFullName(wstr long ptr) kernelbase.OpenPackageInfoByFullName

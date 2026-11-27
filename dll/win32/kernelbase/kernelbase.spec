@@ -858,6 +858,7 @@
 @ stdcall -thunk OutputDebugStringA(str) kernel32.OutputDebugStringA
 @ stdcall -thunk OutputDebugStringW(wstr) kernel32.OutputDebugStringW
 @ stdcall PackageFamilyNameFromFullName(wstr ptr ptr)
+@ stdcall PackageFamilyNameFromId(ptr ptr ptr)
 @ stdcall PackageIdFromFullName(wstr long ptr ptr)
 @ stdcall ParseApplicationUserModelId(wstr ptr ptr ptr ptr)
 @ stdcall ParseURLA(str ptr)
@@ -1527,3 +1528,6 @@
 # TODO: Windows 11 kernelbase forwards this to NTDLL
 @ stdcall QueryUnbiasedInterruptTime(ptr) ntdll.RtlQueryUnbiasedInterruptTime
 @ stdcall -thunk QueryUnbiasedInterruptTimePrecise(ptr) kernel32.QueryUnbiasedInterruptTimePrecise
+@ stdcall ClosePackageInfo(ptr)
+@ stdcall GetPackageInfo(ptr long ptr ptr ptr)
+@ stdcall OpenPackageInfoByFullName(wstr long ptr)

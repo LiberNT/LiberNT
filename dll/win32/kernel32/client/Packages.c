@@ -46,34 +46,6 @@ GetPackagePathByFullName(
 
 LONG
 WINAPI
-OpenPackageInfoByFullName(
-    _In_ PCWSTR packageFullName,
-    _In_ const UINT32 reserved,
-    _Out_ PACKAGE_INFO_REFERENCE *packageInfoReference)
-{
-    UNREFERENCED_PARAMETER(reserved);
-
-    if (!packageFullName || !packageInfoReference)
-        return ERROR_INVALID_PARAMETER;
-
-    /* TODO: look the package up once a package repository exists */
-    return ERROR_NOT_FOUND;
-}
-
-LONG
-WINAPI
-ClosePackageInfo(
-    _In_ PACKAGE_INFO_REFERENCE packageInfoReference)
-{
-    if (!packageInfoReference)
-        return ERROR_INVALID_PARAMETER;
-
-    /* TODO: resolve package references once a package repository exists */
-    return ERROR_INVALID_PARAMETER;
-}
-
-LONG
-WINAPI
 GetPackageApplicationIds(
     _In_ PACKAGE_INFO_REFERENCE packageInfoReference,
     _Inout_ UINT32 *bufferLength,
