@@ -19,6 +19,10 @@ InstallBootManagerAndBootEntries(
     _In_ PCUNICODE_STRING DestinationArcPath,
     _In_ ULONG_PTR Options);
 
+BOOLEAN
+IsBcdPartitionElementPresent(
+    _In_reads_bytes_(0x58) const UCHAR *Element);
+
 NTSTATUS
 NTAPI
 RemoveHostSetupBoot(
