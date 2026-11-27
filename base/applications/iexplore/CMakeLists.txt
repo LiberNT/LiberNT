@@ -7,5 +7,5 @@ add_executable(iexplore
     browser.c
     iexplore.rc)
 set_module_type(iexplore win32gui UNICODE)
-add_importlibs(iexplore winhttp comctl32 comdlg32 user32 gdi32 shell32 msvcrt kernel32)
+add_importlibs(iexplore winhttp comctl32 comdlg32 shlwapi user32 gdi32 shell32 msvcrt kernel32)
 add_cd_file(TARGET iexplore DESTINATION "Program Files/Internet Explorer" FOR all)

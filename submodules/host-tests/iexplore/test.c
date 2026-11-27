@@ -62,6 +62,11 @@ TestNormalize(void)
     Normalize("http://", NULL);
     Normalize("https:///path", NULL);
     Normalize("/relative", NULL);
+    Normalize("view-source:example.com", "view-source:http://example.com/");
+    Normalize("VIEW-SOURCE:https://a.example/x", "view-source:https://a.example/x");
+    Normalize("view-source:view-source:example.com", NULL);
+    Normalize("view-source:about:blank", NULL);
+    Normalize("view-source:", NULL);
     CHECK(!BrowserNormalizeUrl("example.com/long", Small, sizeof(Small)), "too long for the buffer");
 }
 

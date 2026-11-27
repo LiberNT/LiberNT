@@ -85,6 +85,17 @@ BrowserNormalizeUrl(const char *Input, char *Url, size_t Size)
     Url[0] = 0;
     while (*Start && isspace((unsigned char)*Start))
         Start++;
+    if (StartsWithNoCase(Start, "view-source:"))
+    {
+        if (Size <= 12 || StartsWithNoCase(Start + 12, "view-source:") || StartsWithNoCase(Start + 12, "about:") ||
+            !BrowserNormalizeUrl(Start + 12, Url + 12, Size - 12))
+        {
+            Url[0] = 0;
+            return 0;
+        }
+        memcpy(Url, "view-source:", 12);
+        return 1;
+    }
     End = Start + strlen(Start);
     while (End > Start && isspace((unsigned char)End[-1]))
         End--;

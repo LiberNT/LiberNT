@@ -16,6 +16,7 @@
 #include <commctrl.h>
 #include <commdlg.h>
 #include <shellapi.h>
+#include <shlwapi.h>
 #include <strsafe.h>
 
 #include <libernt/lntweb.h>
@@ -24,6 +25,7 @@
 #include "resource.h"
 
 #define WB_CLASS_NAME L"LiberNTWebBrowser"
+#define WB_PROGRESS_CLASS_NAME L"LiberNTWebBrowserProgress"
 #define WB_USER_AGENT_TEXT "Mozilla/5.0 (Windows NT 10.0; Win64; x64) LiberNT-WebBrowser/1.0"
 #define WB_WIDEN_(Text) L##Text
 #define WB_WIDEN(Text) WB_WIDEN_(Text)
@@ -41,6 +43,10 @@
 #define WB_ID_ADDRESS 104
 #define WB_ID_VIEW 105
 #define WB_ID_STATUS 106
+#define WB_ID_MENU 107
+#define WB_ID_PROGRESS 108
+#define WB_TIMER_PROGRESS 1
+#define WB_TIMER_ANIMATE 2
 
 typedef struct _WB_REQUEST
 {
@@ -51,6 +57,7 @@ typedef struct _WB_REQUEST
     char *Body;
     DWORD BodyLength;
     PWSTR Headers;
+    BOOL Source;
 } WB_REQUEST;
 
 typedef struct _WB_RESPONSE
@@ -67,6 +74,7 @@ typedef struct _WB_RESPONSE
     BOOL WantHeaders;
     char *Headers;
     BOOL Download;
+    BOOL Source;
     WCHAR TempFile[MAX_PATH];
 } WB_RESPONSE;
 
@@ -76,7 +84,9 @@ static HWND AddressBox;
 static HWND BackButton;
 static HWND ForwardButton;
 static HWND ReloadButton;
-static HWND StatusText;
+static HWND MenuButton;
+static HWND Progress;
+static HWND StatusBar;
 static HWND WebWindow;
 static HFONT UiFont;
 static PFN_LNTWEB_LOAD WebLoad;
@@ -86,6 +96,16 @@ static PWSTR History[WB_HISTORY];
 static int HistoryCount;
 static int HistoryIndex = -1;
 static WCHAR CurrentUrl[WB_URL_LENGTH];
+static WCHAR StatusBase[WB_TEXT_LENGTH + MAX_PATH];
+static char *CurrentSource;
+static SIZE_T CurrentSourceLength;
+static BOOL CurrentSourceHtml;
+static BOOL Loading;
+static CRITICAL_SECTION RequestLock;
+static HINTERNET ActiveRequest;
+static volatile LONG64 ProgressRead;
+static volatile LONG64 ProgressTotal;
+static LONG ProgressPhase;
 static int Dpi = 96;
 
 static int
@@ -173,7 +193,14 @@ SetStatus(UINT Id, PCWSTR Argument)
 
     LoadText(Id, Format, ARRAYSIZE(Format));
     StringCchPrintfW(Text, ARRAYSIZE(Text), Format, Argument ? Argument : L"");
-    SetWindowTextW(StatusText, Text);
+    StringCchCopyW(StatusBase, ARRAYSIZE(StatusBase), Text);
+    SendMessageW(StatusBar, SB_SETTEXTW, 0, (LPARAM)StatusBase);
+}
+
+static BOOL
+StartsWithNoCase(PCWSTR Text, PCWSTR Prefix)
+{
+    return !_wcsnicmp(Text, Prefix, wcslen(Prefix));
 }
 
 static BOOL
@@ -201,8 +228,15 @@ ShouldDownload(const WB_RESPONSE *Response)
     return BrowserContentKind(ContentType) == BrowserContentDownload;
 }
 
+static void
+ReportProgress(LONG Progress, SIZE_T Length)
+{
+    if (Progress && Progress == NavigationSequence)
+        InterlockedExchange64(&ProgressRead, (LONG64)Length);
+}
+
 static DWORD
-ReadToFile(HINTERNET Request, WB_RESPONSE *Response)
+ReadToFile(HINTERNET Request, WB_RESPONSE *Response, LONG Progress)
 {
     WCHAR Folder[MAX_PATH];
     HANDLE File;
@@ -241,6 +275,7 @@ ReadToFile(HINTERNET Request, WB_RESPONSE *Response)
             break;
         }
         Response->Length += Read;
+        ReportProgress(Progress, Response->Length);
     }
     CloseHandle(File);
     free(Buffer);
@@ -257,7 +292,7 @@ ReadToFile(HINTERNET Request, WB_RESPONSE *Response)
 }
 
 static DWORD
-ReadToMemory(HINTERNET Request, WB_RESPONSE *Response)
+ReadToMemory(HINTERNET Request, WB_RESPONSE *Response, LONG Progress)
 {
     for (;;)
     {
@@ -282,12 +317,13 @@ ReadToMemory(HINTERNET Request, WB_RESPONSE *Response)
             return NO_ERROR;
         Response->Length += Read;
         Response->Body[Response->Length] = 0;
+        ReportProgress(Progress, Response->Length);
     }
 }
 
 static DWORD
 HttpFetch(PCWSTR Url, PCWSTR Method, const char *Body, DWORD BodyLength, PCWSTR Headers, BOOL AllowDownload,
-          WB_RESPONSE *Response)
+          LONG Progress, WB_RESPONSE *Response)
 {
     URL_COMPONENTSW Parts;
     WCHAR Host[256];
@@ -337,6 +373,13 @@ HttpFetch(PCWSTR Url, PCWSTR Method, const char *Body, DWORD BodyLength, PCWSTR 
         Error = GetLastError();
         goto Cleanup;
     }
+    if (Progress)
+    {
+        EnterCriticalSection(&RequestLock);
+        if (Progress == NavigationSequence)
+            ActiveRequest = Request;
+        LeaveCriticalSection(&RequestLock);
+    }
     Option = WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS;
     WinHttpSetOption(Request, WINHTTP_OPTION_REDIRECT_POLICY, &Option, sizeof(Option));
     Option = WINHTTP_DECOMPRESSION_FLAG_ALL;
@@ -365,6 +408,16 @@ HttpFetch(PCWSTR Url, PCWSTR Method, const char *Body, DWORD BodyLength, PCWSTR 
     Size = sizeof(Response->Url);
     if (!WinHttpQueryOption(Request, WINHTTP_OPTION_URL, Response->Url, &Size))
         StringCchCopyW(Response->Url, ARRAYSIZE(Response->Url), Url);
+    if (Progress && Progress == NavigationSequence)
+    {
+        DWORD Total = 0;
+        Size = sizeof(Total);
+        if (WinHttpQueryHeaders(Request, WINHTTP_QUERY_CONTENT_LENGTH | WINHTTP_QUERY_FLAG_NUMBER,
+                                WINHTTP_HEADER_NAME_BY_INDEX, &Total, &Size, WINHTTP_NO_HEADER_INDEX))
+        {
+            InterlockedExchange64(&ProgressTotal, Total);
+        }
+    }
     if (Response->WantHeaders)
     {
         PWSTR Raw;
@@ -380,9 +433,19 @@ HttpFetch(PCWSTR Url, PCWSTR Method, const char *Body, DWORD BodyLength, PCWSTR 
         }
         free(Raw);
     }
-    Error = AllowDownload && ShouldDownload(Response) ? ReadToFile(Request, Response) : ReadToMemory(Request, Response);
+    Error = AllowDownload && ShouldDownload(Response) ? ReadToFile(Request, Response, Progress)
+                                                      : ReadToMemory(Request, Response, Progress);
 
 Cleanup:
+    if (Request && Progress)
+    {
+        EnterCriticalSection(&RequestLock);
+        if (ActiveRequest == Request)
+            ActiveRequest = NULL;
+        else
+            Request = NULL;
+        LeaveCriticalSection(&RequestLock);
+    }
     if (Request)
         WinHttpCloseHandle(Request);
     if (Connect)
@@ -412,9 +475,10 @@ NavigateThread(LPVOID Context)
     {
         Response->Sequence = Request->Sequence;
         Response->Push = Request->Push;
+        Response->Source = Request->Source;
         StringCchCopyW(Response->Url, ARRAYSIZE(Response->Url), Request->Url);
         Response->Error = HttpFetch(Request->Url, Request->Method, Request->Body, Request->BodyLength, Request->Headers,
-                                    TRUE, Response);
+                                    !Request->Source, Request->Sequence, Response);
         if (!PostMessageW(MainWindow, WM_WB_PAGE, 0, (LPARAM)Response))
             FreeResponse(Response);
     }
@@ -424,6 +488,122 @@ NavigateThread(LPVOID Context)
     free(Request->Headers);
     free(Request);
     return 0;
+}
+
+static void
+AbortActive(void)
+{
+    EnterCriticalSection(&RequestLock);
+    if (ActiveRequest)
+    {
+        WinHttpCloseHandle(ActiveRequest);
+        ActiveRequest = NULL;
+    }
+    LeaveCriticalSection(&RequestLock);
+}
+
+static void
+SetLoading(BOOL Value)
+{
+    WCHAR Text[64];
+
+    Loading = Value;
+    LoadText(Value ? IDS_STOP : IDS_RELOAD, Text, ARRAYSIZE(Text));
+    SetWindowTextW(ReloadButton, Text);
+    ProgressPhase = 0;
+    ShowWindow(Progress, Value ? SW_SHOWNA : SW_HIDE);
+    if (Value)
+    {
+        SetTimer(MainWindow, WB_TIMER_PROGRESS, 300, NULL);
+        SetTimer(MainWindow, WB_TIMER_ANIMATE, 30, NULL);
+    }
+    else
+    {
+        KillTimer(MainWindow, WB_TIMER_PROGRESS);
+        KillTimer(MainWindow, WB_TIMER_ANIMATE);
+    }
+}
+
+static LRESULT CALLBACK
+ProgressProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
+{
+    if (Message == WM_PAINT)
+    {
+        PAINTSTRUCT Paint;
+        HDC Dc = BeginPaint(Hwnd, &Paint);
+        LONG64 Received = ProgressRead, Expected = ProgressTotal;
+        RECT Client, Part;
+
+        GetClientRect(Hwnd, &Client);
+        FillRect(Dc, &Client, GetSysColorBrush(COLOR_BTNFACE));
+        Part = Client;
+        if (Expected > 0)
+        {
+            Part.right = (LONG)(Client.right * min(Received, Expected) / Expected);
+        }
+        else
+        {
+            LONG Width = max(Client.right / 4, 1), Span = Client.right + Width;
+            Part.left = ProgressPhase % Span - Width;
+            Part.right = Part.left + Width;
+        }
+        FillRect(Dc, &Part, GetSysColorBrush(COLOR_HIGHLIGHT));
+        EndPaint(Hwnd, &Paint);
+        return 0;
+    }
+    if (Message == WM_ERASEBKGND)
+        return TRUE;
+    return DefWindowProcW(Hwnd, Message, WParam, LParam);
+}
+
+static void
+ShowProgress(void)
+{
+    WCHAR Read[32], Total[32], Format[WB_TEXT_LENGTH], Text[WB_TEXT_LENGTH];
+    LONG64 Received = ProgressRead, Expected = ProgressTotal;
+
+    if (!Loading || !Received)
+        return;
+    StrFormatByteSizeW(Received, Read, ARRAYSIZE(Read));
+    if (Expected > 0)
+    {
+        StrFormatByteSizeW(Expected, Total, ARRAYSIZE(Total));
+        LoadText(IDS_RECEIVED_OF, Format, ARRAYSIZE(Format));
+        StringCchPrintfW(Text, ARRAYSIZE(Text), Format, Read, Total);
+    }
+    else
+    {
+        LoadText(IDS_RECEIVED, Format, ARRAYSIZE(Format));
+        StringCchPrintfW(Text, ARRAYSIZE(Text), Format, Read);
+    }
+    StringCchCopyW(StatusBase, ARRAYSIZE(StatusBase), Text);
+    SendMessageW(StatusBar, SB_SETTEXTW, 0, (LPARAM)StatusBase);
+}
+
+static void
+SetSecurity(PCWSTR Url)
+{
+    WCHAR Text[64] = L"";
+
+    if (StartsWithNoCase(Url, L"view-source:"))
+        Url += 12;
+    if (StartsWithNoCase(Url, L"https://"))
+        LoadText(IDS_SECURE, Text, ARRAYSIZE(Text));
+    else if (StartsWithNoCase(Url, L"http://"))
+        LoadText(IDS_NOT_SECURE, Text, ARRAYSIZE(Text));
+    SendMessageW(StatusBar, SB_SETTEXTW, 1, (LPARAM)Text);
+}
+
+static void
+Stop(void)
+{
+    if (!Loading)
+        return;
+    InterlockedIncrement(&NavigationSequence);
+    AbortActive();
+    SetLoading(FALSE);
+    SetWindowTextW(AddressBox, _wcsicmp(CurrentUrl, L"about:blank") ? CurrentUrl : L"");
+    SetStatus(IDS_STOPPED, NULL);
 }
 
 static void
@@ -550,7 +730,9 @@ ShowResponse(WB_RESPONSE *Response)
     char *Page = NULL, *Text = NULL;
     size_t PageLength = 0;
     SIZE_T TextLength = 0;
+    WCHAR Shown[WB_URL_LENGTH];
 
+    SetLoading(FALSE);
     if (Response->Error != NO_ERROR)
     {
         ShowMessage(Response->Error == ERROR_WINHTTP_SECURE_FAILURE ? IDS_CERTIFICATE : IDS_LOAD_FAILED, Response->Url,
@@ -569,6 +751,33 @@ ShowResponse(WB_RESPONSE *Response)
         ContentType[0] = 0;
     BrowserCharset(ContentType, Response->Body, Response->Length, Charset, sizeof(Charset));
     Title[0] = 0;
+    free(CurrentSource);
+    CurrentSource = NULL;
+    CurrentSourceLength = 0;
+    CurrentSourceHtml = BrowserContentKind(ContentType) == BrowserContentHtml;
+    if (Response->Body && (CurrentSource = malloc(Response->Length + 1)))
+    {
+        memcpy(CurrentSource, Response->Body, Response->Length);
+        CurrentSource[Response->Length] = 0;
+        CurrentSourceLength = Response->Length;
+    }
+    if (Response->Source)
+    {
+        StringCchPrintfW(Shown, ARRAYSIZE(Shown), L"view-source:%s", Response->Url);
+        Text = ToUtf8(Response->Body ? Response->Body : "", Response->Length, BrowserCodePage(Charset), &TextLength);
+        Page = Text ? BrowserTextPage(Text, TextLength, &PageLength) : NULL;
+        if (Page)
+            ShowPage(Page, PageLength, Response->Url);
+        Utf8Url = WideToUtf8(Shown);
+        if (Utf8Url)
+            StringCchCopyA(Title, sizeof(Title), Utf8Url);
+        free(Utf8Url);
+    }
+    else
+    {
+        StringCchCopyW(Shown, ARRAYSIZE(Shown), Response->Url);
+    }
+    if (!Response->Source)
     switch (BrowserContentKind(ContentType))
     {
         case BrowserContentHtml:
@@ -602,7 +811,8 @@ ShowResponse(WB_RESPONSE *Response)
     free(Page);
     free(Text);
 
-    StringCchCopyW(CurrentUrl, ARRAYSIZE(CurrentUrl), Response->Url);
+    StringCchCopyW(CurrentUrl, ARRAYSIZE(CurrentUrl), Shown);
+    SetSecurity(CurrentUrl);
     SetWindowTextW(AddressBox, CurrentUrl);
     if (Response->Push)
         PushHistory(CurrentUrl);
@@ -638,6 +848,9 @@ Navigate(PCWSTR Url, const char *Body, SIZE_T BodyLength, PCWSTR ContentType, BO
     if (!_wcsicmp(Url, L"about:blank"))
     {
         InterlockedIncrement(&NavigationSequence);
+        AbortActive();
+        SetLoading(FALSE);
+        SetSecurity(L"");
         ShowPage("<!DOCTYPE html><html><body></body></html>", 41, L"about:blank");
         StringCchCopyW(CurrentUrl, ARRAYSIZE(CurrentUrl), L"about:blank");
         SetWindowTextW(AddressBox, L"");
@@ -653,9 +866,13 @@ Navigate(PCWSTR Url, const char *Body, SIZE_T BodyLength, PCWSTR ContentType, BO
     Request = calloc(1, sizeof(*Request));
     if (!Request)
         return;
+    Request->Source = StartsWithNoCase(Url, L"view-source:");
+    if (Request->Source)
+        Body = NULL;
     Request->Sequence = InterlockedIncrement(&NavigationSequence);
+    AbortActive();
     Request->Push = Push;
-    Request->Url = _wcsdup(Url);
+    Request->Url = _wcsdup(Url + (Request->Source ? 12 : 0));
     Request->Method = _wcsdup(Body ? L"POST" : L"GET");
     if (Body)
     {
@@ -677,7 +894,17 @@ Navigate(PCWSTR Url, const char *Body, SIZE_T BodyLength, PCWSTR ContentType, BO
         goto Failed;
 
     SetWindowTextW(AddressBox, Url);
-    SetStatus(IDS_LOADING, NULL);
+    InterlockedExchange64(&ProgressRead, 0);
+    InterlockedExchange64(&ProgressTotal, 0);
+    {
+        URL_COMPONENTSW Parts = { sizeof(Parts) };
+        WCHAR Host[256] = L"";
+        Parts.lpszHostName = Host;
+        Parts.dwHostNameLength = ARRAYSIZE(Host);
+        WinHttpCrackUrl(Request->Url, 0, 0, &Parts);
+        SetStatus(IDS_LOADING, Host[0] ? Host : Request->Url);
+    }
+    SetLoading(TRUE);
     Thread = CreateThread(NULL, 0, NavigateThread, Request, 0, NULL);
     if (Thread)
     {
@@ -686,6 +913,7 @@ Navigate(PCWSTR Url, const char *Body, SIZE_T BodyLength, PCWSTR ContentType, BO
     }
 
 Failed:
+    SetLoading(FALSE);
     free(Request->Url);
     free(Request->Method);
     free(Request->Body);
@@ -755,7 +983,7 @@ HostFetch(PVOID Context, PCSTR Url, PSTR *Data, SIZE_T *Length)
 
     UNREFERENCED_PARAMETER(Context);
 
-    if (Response && Wide && HttpFetch(Wide, L"GET", NULL, 0, NULL, FALSE, Response) == NO_ERROR &&
+    if (Response && Wide && HttpFetch(Wide, L"GET", NULL, 0, NULL, FALSE, 0, Response) == NO_ERROR &&
         Response->Status >= 200 && Response->Status < 300 && Response->Body)
     {
         *Data = Response->Body;
@@ -783,7 +1011,7 @@ HostRequest(PVOID Context, PCSTR Method, PCSTR Url, PCSTR Headers, PCSTR Body, S
         BodyLength <= WB_MAX_BODY)
     {
         Response->WantHeaders = TRUE;
-        if (HttpFetch(WideUrl, WideMethod, Body, (DWORD)BodyLength, WideHeaders, FALSE, Response) == NO_ERROR)
+        if (HttpFetch(WideUrl, WideMethod, Body, (DWORD)BodyLength, WideHeaders, FALSE, 0, Response) == NO_ERROR)
         {
             *Status = Response->Status;
             *ResponseHeaders = Response->Headers;
@@ -821,6 +1049,168 @@ HostNavigate(PVOID Context, PCSTR Url, PCSTR Body, SIZE_T BodyLength, PCSTR Cont
     free(WideType);
 }
 
+static VOID CALLBACK
+HostHover(PVOID Context, PCSTR Url)
+{
+    PWSTR Wide = Url ? Utf8ToWide(Url) : NULL;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    SendMessageW(StatusBar, SB_SETTEXTW, 0, (LPARAM)(Wide ? Wide : StatusBase));
+    free(Wide);
+}
+
+static void
+SavePage(void)
+{
+    WCHAR Filter[WB_TEXT_LENGTH * 2], Target[MAX_PATH] = L"", Part[WB_TEXT_LENGTH];
+    char Name[MAX_PATH], *Url;
+    PWSTR WideName;
+    OPENFILENAMEW Dialog;
+    size_t Length = 0;
+    HANDLE File;
+    DWORD Written = 0;
+    BOOL Saved = FALSE;
+
+    if (!CurrentSource)
+        return;
+    Url = WideToUtf8(StartsWithNoCase(CurrentUrl, L"view-source:") ? CurrentUrl + 12 : CurrentUrl);
+    BrowserFileName(NULL, Url, Name, sizeof(Name));
+    free(Url);
+    if (CurrentSourceHtml && !strchr(Name, '.'))
+        StringCchCatA(Name, sizeof(Name), ".html");
+    WideName = Utf8ToWide(Name);
+    if (WideName)
+        StringCchCopyW(Target, ARRAYSIZE(Target), WideName);
+    free(WideName);
+
+    ZeroMemory(Filter, sizeof(Filter));
+    LoadText(IDS_WEB_PAGES, Part, ARRAYSIZE(Part));
+    StringCchCopyW(Filter, ARRAYSIZE(Filter), Part);
+    Length = wcslen(Filter) + 1;
+    StringCchCopyW(Filter + Length, ARRAYSIZE(Filter) - Length, L"*.html;*.htm");
+    Length += wcslen(Filter + Length) + 1;
+    LoadText(IDS_ALL_FILES, Part, ARRAYSIZE(Part));
+    StringCchCopyW(Filter + Length, ARRAYSIZE(Filter) - Length, Part);
+    Length += wcslen(Filter + Length) + 1;
+    StringCchCopyW(Filter + Length, ARRAYSIZE(Filter) - Length, L"*.*");
+
+    ZeroMemory(&Dialog, sizeof(Dialog));
+    Dialog.lStructSize = sizeof(Dialog);
+    Dialog.hwndOwner = MainWindow;
+    Dialog.lpstrFilter = Filter;
+    Dialog.nFilterIndex = CurrentSourceHtml ? 1 : 2;
+    Dialog.lpstrFile = Target;
+    Dialog.nMaxFile = ARRAYSIZE(Target);
+    Dialog.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    if (!GetSaveFileNameW(&Dialog))
+        return;
+    File = CreateFileW(Target, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (File != INVALID_HANDLE_VALUE)
+    {
+        Saved = CurrentSourceLength <= MAXDWORD &&
+                WriteFile(File, CurrentSource, (DWORD)CurrentSourceLength, &Written, NULL) &&
+                Written == CurrentSourceLength;
+        CloseHandle(File);
+        if (!Saved)
+            DeleteFileW(Target);
+    }
+    if (Saved)
+        SetStatus(IDS_SAVED, Target);
+    else
+        SetStatus(IDS_SAVE_FAILED, NULL);
+}
+
+static void
+CopyAddress(void)
+{
+    size_t Size = (wcslen(CurrentUrl) + 1) * sizeof(WCHAR);
+    HGLOBAL Memory;
+    PWSTR Copy;
+
+    if (!CurrentUrl[0] || !OpenClipboard(MainWindow))
+        return;
+    EmptyClipboard();
+    Memory = GlobalAlloc(GMEM_MOVEABLE, Size);
+    Copy = Memory ? GlobalLock(Memory) : NULL;
+    if (Copy)
+    {
+        CopyMemory(Copy, CurrentUrl, Size);
+        GlobalUnlock(Memory);
+        if (!SetClipboardData(CF_UNICODETEXT, Memory))
+            GlobalFree(Memory);
+    }
+    else if (Memory)
+    {
+        GlobalFree(Memory);
+    }
+    CloseClipboard();
+}
+
+static void
+NewWindow(void)
+{
+    WCHAR Path[MAX_PATH];
+
+    if (GetModuleFileNameW(NULL, Path, ARRAYSIZE(Path)))
+        ShellExecuteW(MainWindow, NULL, Path, NULL, NULL, SW_SHOWNORMAL);
+}
+
+static void
+ViewSource(void)
+{
+    WCHAR Url[WB_URL_LENGTH];
+
+    if (!CurrentUrl[0] || !_wcsicmp(CurrentUrl, L"about:blank") || StartsWithNoCase(CurrentUrl, L"view-source:"))
+        return;
+    StringCchPrintfW(Url, ARRAYSIZE(Url), L"view-source:%s", CurrentUrl);
+    Navigate(Url, NULL, 0, NULL, TRUE);
+}
+
+static void
+ShowAbout(void)
+{
+    WCHAR Title[WB_TEXT_LENGTH], Text[WB_TEXT_LENGTH * 2];
+
+    LoadText(IDS_APP_TITLE, Title, ARRAYSIZE(Title));
+    LoadText(IDS_ABOUT_TEXT, Text, ARRAYSIZE(Text));
+    MessageBoxW(MainWindow, Text, Title, MB_ICONINFORMATION);
+}
+
+static void
+ShowMenu(void)
+{
+    static const UINT Items[] = { IDM_NEW_WINDOW, IDS_NEW_WINDOW, IDM_SAVE, IDS_SAVE_PAGE, IDM_SOURCE, IDS_VIEW_SOURCE,
+                                  IDM_COPY, IDS_COPY_ADDRESS, 0, 0, IDM_ABOUT, IDS_ABOUT };
+    HMENU Menu = CreatePopupMenu();
+    WCHAR Text[WB_TEXT_LENGTH];
+    RECT Button;
+    BOOL Page = CurrentUrl[0] && _wcsicmp(CurrentUrl, L"about:blank");
+
+    if (!Menu)
+        return;
+    for (size_t Index = 0; Index < ARRAYSIZE(Items); Index += 2)
+    {
+        UINT Flags = MF_STRING;
+        if (!Items[Index])
+        {
+            AppendMenuW(Menu, MF_SEPARATOR, 0, NULL);
+            continue;
+        }
+        if ((Items[Index] == IDM_SAVE && !CurrentSource) ||
+            (Items[Index] == IDM_SOURCE && (!Page || StartsWithNoCase(CurrentUrl, L"view-source:"))) ||
+            (Items[Index] == IDM_COPY && !Page))
+        {
+            Flags |= MF_GRAYED;
+        }
+        LoadText(Items[Index + 1], Text, ARRAYSIZE(Text));
+        AppendMenuW(Menu, Flags, Items[Index], Text);
+    }
+    GetWindowRect(MenuButton, &Button);
+    TrackPopupMenuEx(Menu, TPM_RIGHTALIGN | TPM_TOPALIGN | TPM_LEFTBUTTON, Button.right, Button.bottom, MainWindow, NULL);
+    DestroyMenu(Menu);
+}
+
 static LRESULT CALLBACK
 AddressProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam, UINT_PTR Id, DWORD_PTR Data)
 {
@@ -830,6 +1220,12 @@ AddressProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam, UINT_PTR Id, 
     if (Message == WM_KEYDOWN && WParam == VK_RETURN)
     {
         GoToAddress();
+        return 0;
+    }
+    if (Message == WM_KEYDOWN && WParam == VK_ESCAPE && !Loading)
+    {
+        SetWindowTextW(Hwnd, _wcsicmp(CurrentUrl, L"about:blank") ? CurrentUrl : L"");
+        SendMessageW(Hwnd, EM_SETSEL, 0, -1);
         return 0;
     }
     if (Message == WM_CHAR && WParam == L'\r')
@@ -860,18 +1256,27 @@ Layout(void)
     RECT Client;
     int Bar = Scale(34), Button = Scale(76), Gap = Scale(4), Status = Scale(22), X = Gap;
 
+    RECT StatusRect = { 0 };
+    int Parts[2];
+
     GetClientRect(MainWindow, &Client);
+    SendMessageW(StatusBar, WM_SIZE, 0, 0);
+    if (GetWindowRect(StatusBar, &StatusRect))
+        Status = StatusRect.bottom - StatusRect.top;
+    Parts[0] = max(Client.right - Scale(150), 0);
+    Parts[1] = -1;
+    SendMessageW(StatusBar, SB_SETPARTS, 2, (LPARAM)Parts);
     MoveWindow(BackButton, X, Gap, Button, Bar - 2 * Gap, TRUE);
     X += Button + Gap;
     MoveWindow(ForwardButton, X, Gap, Button, Bar - 2 * Gap, TRUE);
     X += Button + Gap;
     MoveWindow(ReloadButton, X, Gap, Button, Bar - 2 * Gap, TRUE);
     X += Button + Gap;
-    MoveWindow(AddressBox, X, Gap, max(Client.right - X - Gap, 0), Bar - 2 * Gap, TRUE);
+    MoveWindow(AddressBox, X, Gap, max(Client.right - X - 2 * Gap - Button, 0), Bar - 2 * Gap, TRUE);
+    MoveWindow(MenuButton, max(Client.right - Gap - Button, X), Gap, Button, Bar - 2 * Gap, TRUE);
+    MoveWindow(Progress, 0, Bar - Scale(3), Client.right, Scale(3), TRUE);
     if (WebWindow)
         MoveWindow(WebWindow, 0, Bar, Client.right, max(Client.bottom - Bar - Status, 0), TRUE);
-    MoveWindow(StatusText, Gap * 2, Client.bottom - Status + Scale(3), max(Client.right - 4 * Gap, 0), Status - Scale(4),
-               TRUE);
 }
 
 static LRESULT CALLBACK
@@ -881,9 +1286,8 @@ MainProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
     {
         case WM_CREATE:
         {
-            static const LNTWEB_HOST Host = { sizeof(LNTWEB_HOST), NULL,          HostFetch,
-                                              HostFree,            HostNavigate,  HostRequest,
-                                              WB_USER_AGENT_TEXT };
+            static const LNTWEB_HOST Host = { sizeof(LNTWEB_HOST), NULL,        HostFetch,          HostFree,
+                                              HostNavigate,        HostRequest, WB_USER_AGENT_TEXT, HostHover };
             HMODULE Web = LoadLibraryW(L"lntweb.dll");
             PFN_LNTWEB_CREATE CreateView = Web ? (PFN_LNTWEB_CREATE)GetProcAddress(Web, "LntWebCreate") : NULL;
 
@@ -894,12 +1298,19 @@ MainProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
                                         WB_ID_FORWARD);
             ReloadButton = CreateChild(WC_BUTTONW, IDS_RELOAD, WS_TABSTOP | BS_PUSHBUTTON, 0, WB_ID_RELOAD);
             AddressBox = CreateChild(WC_EDITW, 0, WS_TABSTOP | ES_AUTOHSCROLL, WS_EX_CLIENTEDGE, WB_ID_ADDRESS);
-            StatusText = CreateChild(WC_STATICW, 0, SS_LEFT | SS_ENDELLIPSIS | SS_NOPREFIX, 0, WB_ID_STATUS);
+            MenuButton = CreateChild(WC_BUTTONW, IDS_MENU, WS_TABSTOP | BS_PUSHBUTTON, 0, WB_ID_MENU);
+            Progress = CreateChild(WB_PROGRESS_CLASS_NAME, 0, 0, 0, WB_ID_PROGRESS);
+            StatusBar = CreateChild(STATUSCLASSNAMEW, 0, SBARS_SIZEGRIP, 0, WB_ID_STATUS);
+            if (Progress)
+                ShowWindow(Progress, SW_HIDE);
             if (AddressBox)
                 SetWindowSubclass(AddressBox, AddressProc, 1, 0);
             WebWindow = CreateView && WebLoad ? CreateView(Hwnd, WB_ID_VIEW, &Host) : NULL;
-            if (!WebWindow || !BackButton || !ForwardButton || !ReloadButton || !AddressBox || !StatusText)
+            if (!WebWindow || !BackButton || !ForwardButton || !ReloadButton || !AddressBox || !MenuButton || !Progress ||
+                !StatusBar)
+            {
                 return -1;
+            }
             Layout();
             return 0;
         }
@@ -918,9 +1329,32 @@ MainProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
             {
                 case WB_ID_BACK: GoHistory(-1); return 0;
                 case WB_ID_FORWARD: GoHistory(1); return 0;
-                case WB_ID_RELOAD: Reload(); return 0;
+                case WB_ID_RELOAD:
+                    if (Loading)
+                        Stop();
+                    else
+                        Reload();
+                    return 0;
+                case WB_ID_MENU: ShowMenu(); return 0;
+                case IDM_NEW_WINDOW: NewWindow(); return 0;
+                case IDM_SAVE: SavePage(); return 0;
+                case IDM_SOURCE: ViewSource(); return 0;
+                case IDM_COPY: CopyAddress(); return 0;
+                case IDM_ABOUT: ShowAbout(); return 0;
             }
             break;
+
+        case WM_TIMER:
+            if (WParam == WB_TIMER_PROGRESS)
+            {
+                ShowProgress();
+            }
+            else if (WParam == WB_TIMER_ANIMATE)
+            {
+                ProgressPhase += Scale(10);
+                InvalidateRect(Progress, NULL, FALSE);
+            }
+            return 0;
 
         case WM_WB_PAGE:
         {
@@ -948,6 +1382,18 @@ HandleShortcut(const MSG *Message)
         Reload();
         return TRUE;
     }
+    if (Message->message == WM_KEYDOWN && Message->wParam == VK_ESCAPE && Loading)
+    {
+        Stop();
+        return TRUE;
+    }
+    if (Message->message == WM_KEYDOWN && Control && (Message->wParam == 'N' || Message->wParam == 'S' ||
+                                                      Message->wParam == 'U'))
+    {
+        PostMessageW(MainWindow, WM_COMMAND,
+                     Message->wParam == 'N' ? IDM_NEW_WINDOW : Message->wParam == 'S' ? IDM_SAVE : IDM_SOURCE, 0);
+        return TRUE;
+    }
     if (Message->message == WM_SYSKEYDOWN && (Message->wParam == VK_LEFT || Message->wParam == VK_RIGHT))
     {
         GoHistory(Message->wParam == VK_LEFT ? -1 : 1);
@@ -966,7 +1412,8 @@ HandleShortcut(const MSG *Message)
 int WINAPI
 wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nShowCmd)
 {
-    INITCOMMONCONTROLSEX Controls = { sizeof(Controls), ICC_STANDARD_CLASSES };
+    INITCOMMONCONTROLSEX Controls = { sizeof(Controls), ICC_STANDARD_CLASSES | ICC_BAR_CLASSES };
+    WNDCLASSEXW ProgressClass = { sizeof(ProgressClass) };
     NONCLIENTMETRICSW Metrics = { sizeof(Metrics) };
     WNDCLASSEXW Class = { sizeof(Class) };
     WCHAR Title[WB_TEXT_LENGTH];
@@ -982,6 +1429,7 @@ wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nSh
     UNREFERENCED_PARAMETER(lpCmdLine);
 
     Instance = hInstance;
+    InitializeCriticalSection(&RequestLock);
     InitCommonControlsEx(&Controls);
     Screen = GetDC(NULL);
     if (Screen)
@@ -1003,11 +1451,15 @@ wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nSh
     Class.hIcon = LoadIconW(NULL, (LPCWSTR)IDI_APPLICATION);
     Class.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
     Class.lpszClassName = WB_CLASS_NAME;
+    ProgressClass.lpfnWndProc = ProgressProc;
+    ProgressClass.hInstance = hInstance;
+    ProgressClass.hCursor = Class.hCursor;
+    ProgressClass.lpszClassName = WB_PROGRESS_CLASS_NAME;
     LoadText(IDS_APP_TITLE, Title, ARRAYSIZE(Title));
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &Work, 0);
     Width = min(Scale(1024), (int)(Work.right - Work.left));
     Height = min(Scale(720), (int)(Work.bottom - Work.top));
-    if (!Session || !RegisterClassExW(&Class) ||
+    if (!Session || !RegisterClassExW(&Class) || !RegisterClassExW(&ProgressClass) ||
         !CreateWindowExW(0, WB_CLASS_NAME, Title, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
                          Work.left + (Work.right - Work.left - Width) / 2, Work.top + (Work.bottom - Work.top - Height) / 2,
                          Width, Height, NULL, NULL, hInstance, NULL))
