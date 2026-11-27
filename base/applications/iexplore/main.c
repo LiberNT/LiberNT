@@ -22,6 +22,7 @@
 #include <libernt/lntweb.h>
 
 #include "browser.h"
+#include "plainview.h"
 #include "resource.h"
 
 #define WB_CLASS_NAME L"LiberNTWebBrowser"
@@ -1306,6 +1307,11 @@ MainProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
             if (AddressBox)
                 SetWindowSubclass(AddressBox, AddressProc, 1, 0);
             WebWindow = CreateView && WebLoad ? CreateView(Hwnd, WB_ID_VIEW, &Host) : NULL;
+            if (!WebWindow)
+            {
+                WebLoad = PlainViewLoad;
+                WebWindow = PlainViewCreate(Hwnd, WB_ID_VIEW, &Host);
+            }
             if (!WebWindow || !BackButton || !ForwardButton || !ReloadButton || !AddressBox || !MenuButton || !Progress ||
                 !StatusBar)
             {
@@ -1465,7 +1471,7 @@ wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nSh
                          Width, Height, NULL, NULL, hInstance, NULL))
     {
         WCHAR Text[WB_TEXT_LENGTH];
-        LoadText(IDS_NO_VIEW, Text, ARRAYSIZE(Text));
+        LoadText(IDS_START_FAILED, Text, ARRAYSIZE(Text));
         MessageBoxW(NULL, Text, Title, MB_ICONERROR);
         return 1;
     }

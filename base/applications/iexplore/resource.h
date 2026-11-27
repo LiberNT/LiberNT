@@ -17,7 +17,7 @@
 #define IDS_LOAD_FAILED     107
 #define IDS_CERTIFICATE     108
 #define IDS_UNSUPPORTED     109
-#define IDS_NO_VIEW         110
+#define IDS_START_FAILED    110
 #define IDS_SAVED           111
 #define IDS_SAVE_FAILED     112
 #define IDS_ALL_FILES       113
@@ -35,6 +35,8 @@
 #define IDS_ABOUT           125
 #define IDS_ABOUT_TEXT      126
 #define IDS_WEB_PAGES       127
+#define IDS_SUBMIT          128
+#define IDS_NO_SCRIPTS      129
 
 #define IDM_NEW_WINDOW      201
 #define IDM_SAVE            202

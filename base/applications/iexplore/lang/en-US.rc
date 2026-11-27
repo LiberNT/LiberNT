@@ -19,7 +19,7 @@ BEGIN
     IDS_LOAD_FAILED "This page could not be opened."
     IDS_CERTIFICATE "The security certificate of this site is not valid, so the page was not opened."
     IDS_UNSUPPORTED "This address is not supported."
-    IDS_NO_VIEW "The web view is not part of this build of LiberNT, so web pages cannot be shown."
+    IDS_START_FAILED "The web browser could not be started."
     IDS_SAVED "Saved %s"
     IDS_SAVE_FAILED "The file could not be saved."
     IDS_ALL_FILES "All files"
@@ -37,4 +37,6 @@ BEGIN
     IDS_ABOUT "&About Web Browser"
     IDS_ABOUT_TEXT "Web Browser\n\nShows web pages with the LiberNT web view: HTML and CSS by litehtml, JavaScript by QuickJS."
     IDS_WEB_PAGES "Web pages"
+    IDS_SUBMIT "Submit"
+    IDS_NO_SCRIPTS "This page uses scripts, which this build of the browser does not run, so parts of it may be missing."
 END
