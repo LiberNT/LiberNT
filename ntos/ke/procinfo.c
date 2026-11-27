@@ -223,8 +223,17 @@ KipSampleCurrentProcessor(
             KipCpuId(4, 0, Regs);
             Cores = ((Regs[0] >> 26) & 0x3F) + 1;
         }
+        else if (IsAmd && (MaxExtLeaf >= 0x8000001E))
+        {
+            KipCpuId(0x80000001, 0, Regs);
+            if (Regs[2] & (1UL << 22))   /* TopologyExtensions */
+            {
+                KipCpuId(0x8000001E, 0, Regs);
+                Cores = max(Logical / (((Regs[1] >> 8) & 0xFF) + 1), 1UL);
+            }
+        }
 
-        /* TODO: AMD parts without leaf 0x0B give their threads per core in leaf 0x8000001E */
+        ASSERT(Cores != 0);
         Sample->PackageShift = KipCeilLog2(Logical);
         Sample->CoreShift = KipCeilLog2(max(Logical / Cores, 1UL));
     }
