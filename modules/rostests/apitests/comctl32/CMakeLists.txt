@@ -8,6 +8,7 @@ list(APPEND SOURCE
     imagelist.c
     ListViewActivate.c
     ListViewGroups.c
+    ListViewRedrawHeader.c
     ListViewSnapToGrid.c
     ListViewWorkAreas.c
     LoadIconWithScaleDown.c
