@@ -2340,7 +2340,7 @@ SmpProcessFileRenames(VOID)
                             &ObjectAttributes,
                             &IoStatusBlock,
                             FILE_SHARE_READ | FILE_SHARE_WRITE,
-                            FILE_SYNCHRONOUS_IO_NONALERT);
+                            FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_FOR_BACKUP_INTENT);
         if (!NT_SUCCESS(Status)) goto Quickie;
 
         /* Check if it's a rename or just a delete */
@@ -2420,7 +2420,7 @@ SmpProcessFileRenames(VOID)
                                     &ObjectAttributes,
                                     &IoStatusBlock,
                                     FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                    FILE_SYNCHRONOUS_IO_NONALERT);
+                                    FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_FOR_BACKUP_INTENT);
                 if (!NT_SUCCESS(Status))
                 {
                     /* That didn't work, so bail out */
