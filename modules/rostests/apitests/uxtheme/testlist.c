@@ -17,6 +17,7 @@ extern void func_NonClientHitTest(void);
 extern void func_PreferredAppMode(void);
 extern void func_SetThemeAppProperties(void);
 extern void func_SetWindowTheme(void);
+extern void func_StatusBarTheme(void);
 extern void func_TextScaling(void);
 extern void func_ThemeChangeRedraw(void);
 extern void func_ThemeDpi(void);
@@ -40,6 +41,7 @@ const struct test winetest_testlist[] =
     { "NonClientHitTest", func_NonClientHitTest },
     { "PreferredAppMode", func_PreferredAppMode },
     { "SetWindowTheme", func_SetWindowTheme },
+    { "StatusBarTheme", func_StatusBarTheme },
     { "TextScaling",    func_TextScaling },
     { "ThemeChangeRedraw", func_ThemeChangeRedraw },
     { "SetThemeAppProperties", func_SetThemeAppProperties },
