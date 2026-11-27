@@ -5,6 +5,8 @@ add_rc_deps(iexplore.rc
 add_executable(iexplore
     main.c
     browser.c
+    html.c
+    plainview.c
     iexplore.rc)
 set_module_type(iexplore win32gui UNICODE)
 add_importlibs(iexplore winhttp comctl32 comdlg32 shlwapi user32 gdi32 shell32 msvcrt kernel32)
