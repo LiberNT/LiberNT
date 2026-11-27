@@ -870,3 +870,6 @@
 @ varargs wnsprintfW(ptr long wstr)
 @ stdcall wvnsprintfA(ptr long str ptr)
 @ stdcall wvnsprintfW(ptr long wstr ptr)
+@ stdcall PathMatchSpecExA(str str long) kernelbase.PathMatchSpecExA
+@ stdcall PathMatchSpecExW(wstr wstr long) kernelbase.PathMatchSpecExW
+@ stdcall SHRegGetValueFromHKCUHKLM(wstr wstr long ptr ptr ptr) shcore.SHRegGetValueFromHKCUHKLM

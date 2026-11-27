@@ -10,3 +10,5 @@
 @ stdcall LZRead(long ptr long) kernel32.LZRead
 @ stdcall LZSeek(long long long) kernel32.LZSeek
 @ stdcall LZStart() kernel32.LZStart
+@ stdcall LZCloseFile(long) kernel32.LZCloseFile
+@ stdcall LZCreateFileW(ptr long long long ptr) kernel32.LZCreateFileW

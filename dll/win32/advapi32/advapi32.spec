@@ -787,3 +787,4 @@
 @ stdcall -thunk -version=0x600+ RegLoadMUIStringW(ptr wstr wstr long ptr long wstr) kernelbase.RegLoadMUIStringW
 @ stdcall -thunk -version=0x600+ RegLoadMUIStringA(ptr str str long ptr long str) kernelbase.RegLoadMUIStringA
 1000 stdcall -noname GetServiceRegistryStateKey(ptr long long ptr)
+@ stdcall TraceSetInformation(int64 long ptr long) sechost.TraceSetInformation

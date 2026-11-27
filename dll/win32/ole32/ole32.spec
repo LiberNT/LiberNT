@@ -410,3 +410,4 @@
 @ stdcall WriteFmtUserTypeStg(ptr long ptr)
 @ stub WriteOleStg
 @ stub WriteStringStream
+@ stdcall CoDecodeProxy(long int64 ptr) combase.CoDecodeProxy
