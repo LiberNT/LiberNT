@@ -153,7 +153,12 @@ static BOOL read_adapter(D3DKMT_HANDLE adapter, const LUID *luid, AdapterData *d
 
 static BOOL adapter_renders(const AdapterData *data)
 {
-    return data->Type.RenderSupported || data->Type.DisplaySupported;
+    return data->Type.RenderSupported;
+}
+
+static BOOL adapter_visible(const AdapterData *data)
+{
+    return data->Type.RenderSupported || data->Type.ComputeOnly;
 }
 
 static BOOL adapter_has_attribute(const AdapterData *data, REFGUID attribute)
@@ -757,7 +762,7 @@ HRESULT Factory::BuildList(const GUID *const *attributes, uint32_t count, REFIID
         AdapterData data;
         Adapter *adapter;
 
-        if (read_adapter(infos[i].hAdapter, &infos[i].AdapterLuid, &data))
+        if (read_adapter(infos[i].hAdapter, &infos[i].AdapterLuid, &data) && adapter_visible(&data))
         {
             for (j = 0; j < count; j++)
             {
@@ -838,7 +843,7 @@ HRESULT STDMETHODCALLTYPE Factory::GetAdapterByLuid(const LUID &adapterLUID, REF
     {
         open.AdapterLuid = adapterLUID;
         if (!NT_SUCCESS(D3DKMTOpenAdapterFromLuid(&open))) return E_INVALIDARG;
-        if (read_adapter(open.hAdapter, &adapterLUID, &data))
+        if (read_adapter(open.hAdapter, &adapterLUID, &data) && adapter_visible(&data))
             adapter = FindOrCreate(adapterLUID, &data);
         close_adapter(open.hAdapter);
         if (!adapter) return E_INVALIDARG;
