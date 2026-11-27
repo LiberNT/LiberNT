@@ -1949,6 +1949,44 @@ static void find_fallback_font(enum usp10_script scriptid, WCHAR *FaceName)
     }
     else
         lstrcpyW(FaceName,scriptInformation[scriptid].fallbackFont);
+
+#ifdef __REACTOS__
+    switch (scriptid)
+    {
+        case Script_CJK_Han:
+        case Script_Ideograph:
+        case Script_Bopomofo:
+        case Script_Kana:
+            if (!*FaceName || !lstrcmpW(FaceName, L"SimSun"))
+            {
+                LANGID lang = GetSystemDefaultLangID();
+                if (PRIMARYLANGID(lang) == LANG_CHINESE)
+                {
+                    if (SUBLANGID(lang) == SUBLANG_CHINESE_TRADITIONAL ||
+                        SUBLANGID(lang) == SUBLANG_CHINESE_HONGKONG ||
+                        SUBLANGID(lang) == SUBLANG_CHINESE_MACAU)
+                        lstrcpyW(FaceName, L"PMingLiU");
+                    else
+                        lstrcpyW(FaceName, L"SimSun");
+                }
+                else if (PRIMARYLANGID(lang) == LANG_KOREAN)
+                {
+                    lstrcpyW(FaceName, L"Gulim");
+                }
+                else
+                {
+                    lstrcpyW(FaceName, L"MS UI Gothic");
+                }
+            }
+            break;
+        case Script_Hangul:
+            if (!*FaceName)
+                lstrcpyW(FaceName, L"Gulim");
+            break;
+        default:
+            break;
+    }
+#endif
 }
 
 /***********************************************************************
