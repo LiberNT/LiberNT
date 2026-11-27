@@ -49,6 +49,7 @@ extern void func_SetupInstallRegisterDlls(void);
 extern void func_AddRegRegistryView(void);
 extern void func_SysButtonDevices(void);
 extern void func_UsbHubInformation(void);
+extern void func_SwDevice(void);
 extern void func_UsbInterfaceIds(void);
 
 const struct test winetest_testlist[] =
@@ -100,6 +101,7 @@ const struct test winetest_testlist[] =
     { "AddRegRegistryView", func_AddRegRegistryView },
     { "SysButtonDevices", func_SysButtonDevices },
     { "UsbHubInformation", func_UsbHubInformation },
+    { "SwDevice", func_SwDevice },
     { "UsbInterfaceIds", func_UsbInterfaceIds },
     { 0, 0 }
 };
