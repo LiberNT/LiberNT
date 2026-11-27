@@ -1816,29 +1816,65 @@ CreateDialogParamW(
 /*
  * @implemented
  */
-LRESULT
-WINAPI
-DefDlgProcA(
+static LRESULT
+DefDlgProcInt(
   HWND hDlg,
   UINT Msg,
   WPARAM wParam,
-  LPARAM lParam)
+  LPARAM lParam,
+  BOOL Ansi)
 {
     DIALOGINFO *dlgInfo;
     WNDPROC dlgproc;
     BOOL result = FALSE;
+    BOOL Hook, msgOverride = FALSE;
+    LRESULT Result = 0;
+    DWORD Data = 0;
+
+    LoadUserApiHook();
+
+    Hook = BeginIfHookedUserApiHook();
+    if (Hook)
+    {
+        msgOverride = IsMsgOverride(Msg, &guah.DlgProcArray);
+        if (!msgOverride)
+        {
+            EndUserApiHook();
+        }
+        else
+        {
+            BOOL PreResult = FALSE;
+
+            _SEH2_TRY
+            {
+                PreResult = guah.PreDefDlgProc(hDlg, Msg, wParam, lParam, (ULONG_PTR)&Result, &Data);
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                ERR("Got exception in hooked PreDefDlgProc\n");
+            }
+            _SEH2_END;
+
+            if (PreResult)
+            {
+                EndUserApiHook();
+                return Result;
+            }
+        }
+    }
 
     /* Perform DIALOGINFO initialization if not done */
-    if(!(dlgInfo = DIALOG_get_info( hDlg, TRUE ))) return 0; //// REACTOS : Always TRUE! See RealGetWindowClass.
+    if(!(dlgInfo = DIALOG_get_info( hDlg, TRUE ))) //// REACTOS : Always TRUE! See RealGetWindowClass.
+        goto finish;
 
     SetWindowLongPtrW( hDlg, DWLP_MSGRESULT, 0 );
 
     if ((dlgproc = (WNDPROC)IntGetWindowLong( hDlg, DWLP_DLGPROC, sizeof(LONG_PTR), !(dlgInfo->flags & DF_ANSIDLGPROC) )))
     {
         /* Call dialog procedure */
-        result = CallWindowProcA( dlgproc, hDlg, Msg, wParam, lParam );
+        result = Ansi ? CallWindowProcA( dlgproc, hDlg, Msg, wParam, lParam )
+                      : CallWindowProcW( dlgproc, hDlg, Msg, wParam, lParam );
     }
-
     if (!result && IsWindow(hDlg))
     {
         /* callback didn't process this message */
@@ -1861,7 +1897,8 @@ DefDlgProcA(
             case WM_ENTERMENULOOP:
             case WM_LBUTTONDOWN:
             case WM_NCLBUTTONDOWN:
-                 return DEFDLG_Proc( hDlg, Msg, wParam, lParam, dlgInfo );
+                 Result = DEFDLG_Proc( hDlg, Msg, wParam, lParam, dlgInfo );
+                 goto finish;
             case WM_INITDIALOG:
             case WM_VKEYTOITEM:
             case WM_COMPAREITEM:
@@ -1869,10 +1906,42 @@ DefDlgProcA(
                  break;
 
             default:
-                 return DefWindowProcA( hDlg, Msg, wParam, lParam );
+                 Result = Ansi ? DefWindowProcA( hDlg, Msg, wParam, lParam )
+                               : DefWindowProcW( hDlg, Msg, wParam, lParam );
+                 goto finish;
         }
     }
-    return DEFDLG_Epilog(hDlg, Msg, wParam, lParam, result, TRUE);
+    Result = DEFDLG_Epilog(hDlg, Msg, wParam, lParam, result, Ansi);
+
+finish:
+    if (Hook && msgOverride)
+    {
+        _SEH2_TRY
+        {
+            guah.PostDefDlgProc(hDlg, Msg, wParam, lParam, (ULONG_PTR)&Result, &Data);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            ERR("Got exception in hooked PostDefDlgProc\n");
+        }
+        _SEH2_END;
+        EndUserApiHook();
+    }
+    return Result;
+}
+
+/*
+ * @implemented
+ */
+LRESULT
+WINAPI
+DefDlgProcA(
+  HWND hDlg,
+  UINT Msg,
+  WPARAM wParam,
+  LPARAM lParam)
+{
+    return DefDlgProcInt(hDlg, Msg, wParam, lParam, TRUE);
 }
 
 
@@ -1887,54 +1956,7 @@ DefDlgProcW(
   WPARAM wParam,
   LPARAM lParam)
 {
-    DIALOGINFO *dlgInfo;
-    WNDPROC dlgproc;
-    BOOL result = FALSE;
-
-    /* Perform DIALOGINFO initialization if not done */
-    if(!(dlgInfo = DIALOG_get_info( hDlg, TRUE ))) return 0; //// REACTOS : Always TRUE! See RealGetWindowClass.
-
-    SetWindowLongPtrW( hDlg, DWLP_MSGRESULT, 0 );
-
-    if ((dlgproc = (WNDPROC)IntGetWindowLong( hDlg, DWLP_DLGPROC, sizeof(LONG_PTR), !(dlgInfo->flags & DF_ANSIDLGPROC) )))
-    {
-        /* Call dialog procedure */
-        result = CallWindowProcW( dlgproc, hDlg, Msg, wParam, lParam );
-    }
-    if (!result && IsWindow(hDlg))
-    {
-        /* callback didn't process this message */
-
-        switch(Msg)
-        {
-            case WM_ERASEBKGND:
-            case WM_SHOWWINDOW:
-            case WM_ACTIVATE:
-            case WM_SETFOCUS:
-            case DM_SETDEFID:
-            case DM_GETDEFID:
-#ifdef __REACTOS__
-            case DM_REPOSITION:
-#endif
-            case WM_NEXTDLGCTL:
-            case WM_GETFONT:
-            case WM_CLOSE:
-            case WM_NCDESTROY:
-            case WM_ENTERMENULOOP:
-            case WM_LBUTTONDOWN:
-            case WM_NCLBUTTONDOWN:
-                 return DEFDLG_Proc( hDlg, Msg, wParam, lParam, dlgInfo );
-            case WM_INITDIALOG:
-            case WM_VKEYTOITEM:
-            case WM_COMPAREITEM:
-            case WM_CHARTOITEM:
-                 break;
-
-            default:
-                 return DefWindowProcW( hDlg, Msg, wParam, lParam );
-        }
-    }
-    return DEFDLG_Epilog(hDlg, Msg, wParam, lParam, result, FALSE);
+    return DefDlgProcInt(hDlg, Msg, wParam, lParam, FALSE);
 }
 
 
