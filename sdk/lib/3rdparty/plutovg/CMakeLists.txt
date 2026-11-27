@@ -20,3 +20,7 @@ target_compile_definitions(plutovg PUBLIC PLUTOVG_BUILD_STATIC
                                            _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS)
 target_compile_options(plutovg PRIVATE -w)
 add_dependencies(plutovg psdk)
+if(ARCH STREQUAL "ppc" AND CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    # FIXME: clang's PowerPC MI peephole pass asserts (MachineOperand::getImm) on stbi__jpeg_test above -O0
+    set_source_files_properties(source/plutovg-surface.c PROPERTIES COMPILE_OPTIONS "-O0")
+endif()
