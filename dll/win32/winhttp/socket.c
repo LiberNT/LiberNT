@@ -1134,7 +1134,11 @@ DWORD WINAPI WinHttpWebSocketClose( HINTERNET hsocket, USHORT status, void *reas
     enum socket_state prev_state;
     LONG pending_receives = 0;
     struct socket *socket;
+#ifdef __REACTOS__
+    DWORD ret = ERROR_SUCCESS;
+#else
     DWORD ret;
+#endif
 
     TRACE( "%p, %u, %p, %lu\n", hsocket, status, reason, len );
 
