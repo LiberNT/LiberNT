@@ -356,6 +356,7 @@ KMT_TESTFUNC Test_CrtSecureKM;
 KMT_TESTFUNC Test_RtlQueryRegistryKM;
 KMT_TESTFUNC Test_RtlRandomKM;
 KMT_TESTFUNC Test_ZwSystemInfoKM;
+KMT_TESTFUNC Test_KePulseWaiter;
 KMT_TESTFUNC Test_KeQueue;
 KMT_TESTFUNC Test_KeSemaphore;
 KMT_TESTFUNC Test_KeProcessStackCount;
@@ -829,6 +830,7 @@ const KMT_TEST TestList[] =
     { "KeIpiKM",                            Test_KeIpiKM },
     { "KeMutex",                            Test_KeMutex },
     { "KePcr",                              Test_KePcr },
+    { "KePulseWaiter",                      Test_KePulseWaiter },
     { "KeQueue",                            Test_KeQueue },
     { "KeProcessStackCount",                Test_KeProcessStackCount },
     { "KeQueryBasePriority",                Test_KeQueryBasePriority },

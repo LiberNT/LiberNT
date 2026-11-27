@@ -1162,6 +1162,19 @@ KiLockCommittedWaiter(
 
 VOID
 FASTCALL
+KiPulseWaitTest(
+    _In_ PVOID ObjectPointer,
+    _In_ KPRIORITY Increment);
+
+PKTHREAD
+FASTCALL
+KiLockWaiterOrSatisfy(
+    _Inout_ PKWAIT_BLOCK WaitBlock,
+    _In_ NTSTATUS WaitStatus,
+    _Out_opt_ PBOOLEAN Satisfied);
+
+VOID
+FASTCALL
 KiUnlinkWaitBlock(
     _Inout_ PKWAIT_BLOCK WaitBlock);
 

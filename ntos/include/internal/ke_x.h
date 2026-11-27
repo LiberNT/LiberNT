@@ -1336,6 +1336,7 @@ KxIsThreadWaitInterrupted(IN PKTHREAD Thread)
 #define KI_WAIT_IN_PROGRESS 0
 #define KI_WAIT_COMMITTED   1
 #define KI_WAIT_ABORTED     2
+#define KI_WAIT_SATISFIED   3
 
 /* No block of an earlier wait is still on an object here, so nothing can reach the register until the first block of this wait is published */
 FORCEINLINE
@@ -1358,7 +1359,8 @@ KxTryBeginThreadWait(IN PKTHREAD Thread)
         KiIsKernelApcDeliverable(Thread, Thread->WaitIrql) ||
         KxIsThreadWaitInterrupted(Thread))
     {
-        Thread->WaitRegister.State = KI_WAIT_ABORTED;
+        if (Thread->WaitRegister.State == KI_WAIT_IN_PROGRESS)
+            Thread->WaitRegister.State = KI_WAIT_ABORTED;
         KiReleaseThreadLock(Thread);
         return FALSE;
     }

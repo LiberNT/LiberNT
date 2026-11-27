@@ -126,7 +126,8 @@ KePulseEvent(
     PreviousState = Event->Header.SignalState;
     Event->Header.SignalState = 1;
 
-    KiSignalWaiters(&Event->Header, Increment);
+    if (!IsListEmpty(&Event->Header.WaitListHead))
+        KiPulseWaitTest(&Event->Header, Increment);
 
     Event->Header.SignalState = 0;
 

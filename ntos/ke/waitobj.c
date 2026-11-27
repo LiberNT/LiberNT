@@ -319,6 +319,8 @@ KeWaitForSingleObject(
             KiEndThreadWait(Thread);
             Thread->WaitBlockList = NULL;
             KxExitDispatcherForRetry(Thread);
+            if (Thread->WaitRegister.State == KI_WAIT_SATISFIED)
+                return Thread->WaitStatus;
             if ((Timeout != NULL) && (DueTime.QuadPart != 0))
             {
                 Timeout = KiRecalculateDueTime(OriginalDueTime,
@@ -560,6 +562,8 @@ KeWaitForMultipleObjects(
             KiEndThreadWait(Thread);
             Thread->WaitBlockList = NULL;
             KxExitDispatcherForRetry(Thread);
+            if (Thread->WaitRegister.State == KI_WAIT_SATISFIED)
+                return Thread->WaitStatus;
             if ((Timeout != NULL) && (DueTime.QuadPart != 0))
             {
                 Timeout = KiRecalculateDueTime(OriginalDueTime,
