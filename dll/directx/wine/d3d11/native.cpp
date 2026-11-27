@@ -9178,7 +9178,7 @@ HRESULT NativeSwapChain::PresentMeasured(UINT interval, UINT flags, const DXGI_P
     args.hDevice = reinterpret_cast<DXGI_DDI_HDEVICE>(device->driver_device.pDrvPrivate);
     args.hSurfaceToPresent = reinterpret_cast<DXGI_DDI_HRESOURCE>(source->handle.pDrvPrivate);
     args.pDXGIContext = &context;
-    if (exclusive) args.Flags.Flip = 1;
+    if (exclusive || primary) args.Flags.Flip = 1;
     else args.Flags.Blt = 1;
     args.FlipInterval = static_cast<DXGI_DDI_FLIP_INTERVAL_TYPE>(interval);
     device->BeginCall();
