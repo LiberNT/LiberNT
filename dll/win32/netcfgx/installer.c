@@ -973,14 +973,9 @@ RemoveNetDevice(
     _In_ PSP_DEVINFO_DATA DeviceInfoData)
 {
     WCHAR InstanceGuid[40];
-    WCHAR InstanceId[MAX_DEVICE_ID_LEN];
-    WCHAR ClassKeyPath[300];
     WCHAR KeyPath[360];
-    HKEY hDriverKey, hClassKey, hEntry;
-    DWORD dwType, dwLength, dwIndex, dwSize;
-    WCHAR EntryName[16];
-    WCHAR EntryInstance[MAX_DEVICE_ID_LEN];
-    FILETIME LastWrite;
+    HKEY hDriverKey;
+    DWORD dwType, dwLength;
     LONG rc;
 
     if (DeviceInfoData == NULL)
@@ -999,7 +994,6 @@ RemoveNetDevice(
 
     if (rc == ERROR_SUCCESS && dwType == REG_SZ && InstanceGuid[0] != UNICODE_NULL)
     {
-        /* Configuration written by WriteNetSetupInterface for this instance */
         StringCchPrintfW(KeyPath, ARRAYSIZE(KeyPath),
                          L"%s\\%s", NETSETUP_INTERFACES_KEY, InstanceGuid);
         RegDeleteTreeW(HKEY_LOCAL_MACHINE, KeyPath);
@@ -1015,51 +1009,6 @@ RemoveNetDevice(
         RegDeleteTreeW(HKEY_LOCAL_MACHINE, KeyPath);
     }
 
-    /* The adapter entry under the network class key keeps the binding state
-     * NDIS reuses for a later install; a removed adapter must not leave it
-     * behind, or the next install inherits a stale NetCfgInstanceId. */
-    if (!SetupDiGetDeviceInstanceIdW(DeviceInfoSet, DeviceInfoData, InstanceId,
-                                     ARRAYSIZE(InstanceId), NULL))
-    {
-        return ERROR_DI_DO_DEFAULT;
-    }
-
-    StringCchPrintfW(ClassKeyPath, ARRAYSIZE(ClassKeyPath),
-                     L"SYSTEM\\CurrentControlSet\\Control\\Class\\{4D36E972-E325-11CE-BFC1-08002BE10318}");
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, ClassKeyPath, 0,
-                      KEY_READ | KEY_WRITE, &hClassKey) != ERROR_SUCCESS)
-    {
-        return ERROR_DI_DO_DEFAULT;
-    }
-
-    for (dwIndex = 0; ; dwIndex++)
-    {
-        dwSize = ARRAYSIZE(EntryName);
-        rc = RegEnumKeyExW(hClassKey, dwIndex, EntryName, &dwSize,
-                           NULL, NULL, NULL, &LastWrite);
-        if (rc != ERROR_SUCCESS)
-            break;
-
-        if (RegOpenKeyExW(hClassKey, EntryName, 0, KEY_READ, &hEntry) != ERROR_SUCCESS)
-            continue;
-
-        dwLength = sizeof(EntryInstance) - sizeof(WCHAR);
-        ZeroMemory(EntryInstance, sizeof(EntryInstance));
-        rc = RegQueryValueExW(hEntry, L"DeviceInstanceID", NULL, &dwType,
-                              (LPBYTE)EntryInstance, &dwLength);
-        RegCloseKey(hEntry);
-        if (rc == ERROR_SUCCESS && dwType == REG_SZ &&
-            _wcsicmp(EntryInstance, InstanceId) == 0)
-        {
-            RegCloseKey(hClassKey);
-            StringCchPrintfW(KeyPath, ARRAYSIZE(KeyPath),
-                             L"%s\\%s", ClassKeyPath, EntryName);
-            RegDeleteTreeW(HKEY_LOCAL_MACHINE, KeyPath);
-            return ERROR_DI_DO_DEFAULT;
-        }
-    }
-
-    RegCloseKey(hClassKey);
     return ERROR_DI_DO_DEFAULT;
 }
 
