@@ -189,7 +189,7 @@ START_TEST(broadcast)
         return;
     }
 
-    TestBroadcastLoopback(htonl(INADDR_BROADCAST), 0, TRUE);
+    TestBroadcastLoopback(htonl(INADDR_BROADCAST), 0, FALSE);
 
     Directed = GetDirectedBroadcast();
     if (Directed)
@@ -201,7 +201,7 @@ START_TEST(broadcast)
     if (UnicastInterface)
         TestBroadcastLoopback(htonl(INADDR_BROADCAST), UnicastInterface, TRUE);
     else
-        skip("No configured adapter for IP_UNICAST_IF broadcast\n");
+        skip("No configured adapter for IP_UNICAST_IF limited-broadcast source\n");
 
     WSACleanup();
 }
