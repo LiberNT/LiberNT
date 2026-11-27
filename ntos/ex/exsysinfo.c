@@ -493,7 +493,7 @@ VOID NTAPI ExpFreeCapturedUnicodeString(_Inout_ PUNICODE_STRING);
 
 /* The classes served by this subsystem's other files */
 NTSTATUS NTAPI ExpQueryProcessInformation(_Out_opt_ PVOID, _In_ ULONG,
-    _Out_ PULONG, _In_ BOOLEAN, _In_ ULONG, _In_ BOOLEAN);
+    _Out_ PULONG, _In_ BOOLEAN, _In_ BOOLEAN, _In_ ULONG, _In_ BOOLEAN);
 NTSTATUS NTAPI ExpQueryProcessIdInformation(
     _Inout_ PSYSTEM_PROCESS_ID_INFORMATION);
 NTSTATUS NTAPI ExpQuerySessionProcessInformation(
@@ -1130,12 +1130,14 @@ NtQuerySystemInformation(
             case SystemExtendedProcessInformation:
             case SystemFullProcessInformation:
             {
+                /* TODO: the full form adds the user, package and app id strings the extension's offsets name */
                 Status = ExpQueryProcessInformation(
                              SystemInformation,
                              Length,
                              &ResultLength,
                              (BOOLEAN)(SystemInformationClass !=
                                        SystemProcessInformation),
+                             TRUE,
                              0,
                              FALSE);
                 break;

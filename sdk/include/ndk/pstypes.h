@@ -2564,6 +2564,48 @@ typedef struct _PROCESS_DISK_COUNTERS
     ULONGLONG FlushOperationCount;
 } PROCESS_DISK_COUNTERS, *PPROCESS_DISK_COUNTERS;
 
+typedef enum _SYSTEM_PROCESS_CLASSIFICATION
+{
+    SystemProcessClassificationNormal,
+    SystemProcessClassificationSystem
+} SYSTEM_PROCESS_CLASSIFICATION;
+
+typedef struct _SYSTEM_PROCESS_INFORMATION_EXTENSION
+{
+    PROCESS_DISK_COUNTERS DiskCounters;
+    ULONGLONG ContextSwitches;
+    union
+    {
+        ULONG Flags;
+        struct
+        {
+            ULONG HasStrongId:1;
+            ULONG Classification:4;
+            ULONG BackgroundActivityModerated:1;
+            ULONG Spare:26;
+        };
+    };
+    ULONG UserSidOffset;
+    ULONG PackageFullNameOffset;
+    ULONGLONG EnergyValues[0x110 / sizeof(ULONGLONG)];
+    ULONG AppIdOffset;
+    SIZE_T SharedCommitCharge;
+    ULONG JobObjectId;
+    ULONG SpareUlong;
+    ULONGLONG ProcessSequenceNumber;
+} SYSTEM_PROCESS_INFORMATION_EXTENSION, *PSYSTEM_PROCESS_INFORMATION_EXTENSION;
+#ifdef _WIN64
+C_ASSERT(FIELD_OFFSET(SYSTEM_PROCESS_INFORMATION_EXTENSION, ContextSwitches) == 0x28);
+C_ASSERT(FIELD_OFFSET(SYSTEM_PROCESS_INFORMATION_EXTENSION, Flags) == 0x30);
+C_ASSERT(FIELD_OFFSET(SYSTEM_PROCESS_INFORMATION_EXTENSION, UserSidOffset) == 0x34);
+C_ASSERT(FIELD_OFFSET(SYSTEM_PROCESS_INFORMATION_EXTENSION, EnergyValues) == 0x40);
+C_ASSERT(FIELD_OFFSET(SYSTEM_PROCESS_INFORMATION_EXTENSION, AppIdOffset) == 0x150);
+C_ASSERT(FIELD_OFFSET(SYSTEM_PROCESS_INFORMATION_EXTENSION, SharedCommitCharge) == 0x158);
+C_ASSERT(FIELD_OFFSET(SYSTEM_PROCESS_INFORMATION_EXTENSION, JobObjectId) == 0x160);
+C_ASSERT(FIELD_OFFSET(SYSTEM_PROCESS_INFORMATION_EXTENSION, ProcessSequenceNumber) == 0x168);
+C_ASSERT(sizeof(SYSTEM_PROCESS_INFORMATION_EXTENSION) == 0x170);
+#endif
+
 typedef struct _PROCESS_NETWORK_COUNTERS
 {
     ULONGLONG BytesIn;
