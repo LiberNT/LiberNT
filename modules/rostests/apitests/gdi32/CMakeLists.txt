@@ -90,6 +90,7 @@ list(APPEND SOURCE
     TypoMetrics.c)
 
 list(APPEND PCH_SKIP_SOURCE
+    ArabicJoining.c
     FontLinkCjk.c
     ScriptGetFontTags.c
     ScriptGetLogicalWidths.c
@@ -103,6 +104,6 @@ add_executable(gdi32_apitest
 
 target_link_libraries(gdi32_apitest ${PSEH_LIB} gditools)
 set_module_type(gdi32_apitest win32cui)
-add_importlibs(gdi32_apitest gdi32 user32 msvcrt kernel32 ntdll)
+add_importlibs(gdi32_apitest usp10 gdi32 user32 msvcrt kernel32 ntdll)
 add_pch(gdi32_apitest precomp.h "${PCH_SKIP_SOURCE}")
 add_rostests_file(TARGET gdi32_apitest)
