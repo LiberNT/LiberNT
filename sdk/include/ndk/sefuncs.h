@@ -334,6 +334,18 @@ NtQueryInformationToken(
     _In_ ULONG TokenInformationLength,
     _Out_ PULONG ReturnLength);
 
+__kernel_entry
+NTSYSCALLAPI
+NTSTATUS
+NTAPI
+NtQuerySecurityAttributesToken(
+    _In_ HANDLE TokenHandle,
+    _In_reads_opt_(NumberOfAttributes) PUNICODE_STRING Attributes,
+    _In_ ULONG NumberOfAttributes,
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _Out_ PULONG ReturnLength);
+
 _Must_inspect_result_
 __kernel_entry
 NTSYSCALLAPI

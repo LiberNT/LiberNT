@@ -132,6 +132,7 @@ extern void func_NtQueryObjectName(void);
 extern void func_NtQueryOpenSubKeys(void);
 extern void func_NtQuerySection(void);
 extern void func_NtQuerySectionImageNoExecute(void);
+extern void func_NtQuerySecurityAttributesToken(void);
 extern void func_NtQuerySecurityObject(void);
 extern void func_NtSetSecurityObjectStatus(void);
 extern void func_PipeMailslotSecurity(void);
@@ -403,6 +404,7 @@ const struct test winetest_testlist[] =
     { "NtQueryOpenSubKeys",             func_NtQueryOpenSubKeys },
     { "NtQuerySection",                 func_NtQuerySection },
     { "NtQuerySectionImageNoExecute",   func_NtQuerySectionImageNoExecute },
+    { "NtQuerySecurityAttributesToken", func_NtQuerySecurityAttributesToken },
     { "NtQuerySecurityObject",          func_NtQuerySecurityObject },
     { "NtSetSecurityObjectStatus",      func_NtSetSecurityObjectStatus },
     { "PipeMailslotSecurity",           func_PipeMailslotSecurity },
