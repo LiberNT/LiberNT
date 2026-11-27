@@ -2711,6 +2711,10 @@ static HRESULT WINAPI ddraw7_GetDeviceIdentifier(IDirectDraw7 *iface,
     if (!DDDI)
         return DDERR_INVALIDPARAMS;
 
+    memset(DDDI, 0, FIELD_OFFSET(DDDEVICEIDENTIFIER2, dwWHQLLevel));
+    if (Flags & ~DDGDI_GETHOSTIDENTIFIER)
+        return DDERR_INVALIDPARAMS;
+
     if (Flags & DDGDI_GETHOSTIDENTIFIER)
     {
         /* The DDGDI_GETHOSTIDENTIFIER returns the information about the 2D
@@ -2752,6 +2756,9 @@ static HRESULT WINAPI ddraw4_GetDeviceIdentifier(IDirectDraw4 *iface,
     HRESULT hr;
 
     TRACE("iface %p, identifier %p, flags %#lx.\n", iface, identifier, flags);
+
+    if (!identifier)
+        return DDERR_INVALIDPARAMS;
 
     hr = ddraw7_GetDeviceIdentifier(&ddraw->IDirectDraw7_iface, &identifier2, flags);
     DDRAW_Convert_DDDEVICEIDENTIFIER_2_To_1(&identifier2, identifier);
