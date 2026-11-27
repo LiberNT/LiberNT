@@ -1045,6 +1045,8 @@ KiSetAffinityThread(
     if (!KiIsProcessorInSet(Affinity, Thread->IdealProcessor))
         Thread->IdealProcessor = KiFirstSetProcessor(Usable);
 
+    /* The state is read without the lock that changes it, so a thread that moved on is looked at again */
+Retry:
     switch (Thread->State)
     {
         case Ready:
@@ -1054,7 +1056,7 @@ KiSetAffinityThread(
 
             Prcb = KiAcquireReadyThreadPrcb(Thread);
             if (Prcb == NULL)
-                break;
+                goto Retry;
 
             if (KiIsProcessorInSet(Affinity, Prcb->Number))
             {
@@ -1091,7 +1093,7 @@ KiSetAffinityThread(
             }
 
             KiReleasePrcbLock(Prcb);
-            break;
+            goto Retry;
         }
 
         case Running:
@@ -1107,12 +1109,18 @@ KiSetAffinityThread(
              */
             Prcb = KiProcessorBlock[Processor];
             KiAcquirePrcbLock(Prcb);
+            if (Prcb->CurrentThread != Thread)
+            {
+                KiReleasePrcbLock(Prcb);
+                goto Retry;
+            }
             if (Prcb->NextThread == NULL)
             {
                 /* What it picks is off the ready queue from here on, so it must not still look ready */
                 Prcb->NextThread = KiSelectNextThread(Prcb);
                 Prcb->NextThread->State = Standby;
             }
+            ASSERT(Prcb->NextThread != Thread);
             KiReleasePrcbLock(Prcb);
             KiRescheduleThread(TRUE, Processor);
             break;
