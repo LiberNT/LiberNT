@@ -110,6 +110,7 @@ static void put_logical_proc_info_ex( SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX32 
 }
 
 
+/* TODO: the per-process extension that follows the threads is not repacked for 32-bit callers */
 static NTSTATUS put_system_proc_info( SYSTEM_PROCESS_INFORMATION32 *info32,
                                       const SYSTEM_PROCESS_INFORMATION *info,
                                       BOOL ext_info, ULONG len, ULONG *retlen )

@@ -257,6 +257,7 @@ extern void func_StackOverflow(void);
 extern void func_ThreadStackRelease(void);
 extern void func_ScanfSecure(void);
 extern void func_StackProbe(void);
+extern void func_SystemProcessExtension(void);
 extern void func_SystemTimeAtBoot(void);
 extern void func_TimerResolution(void);
 extern void func_SehHandlerLocals(void);
@@ -528,6 +529,7 @@ const struct test winetest_testlist[] =
     { "StackOverflow",                  func_StackOverflow },
     { "ScanfSecure",                    func_ScanfSecure },
     { "StackProbe",                     func_StackProbe },
+    { "SystemProcessExtension",         func_SystemProcessExtension },
     { "SystemTimeAtBoot",               func_SystemTimeAtBoot },
     { "TimerResolution",                func_TimerResolution },
     { "SehHandlerLocals",               func_SehHandlerLocals },

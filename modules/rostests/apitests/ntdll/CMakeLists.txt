@@ -272,6 +272,7 @@ list(APPEND SOURCE
     StackOverflow.c
     StackProbe.c
     SystemInfo.c
+    SystemProcessExtension.c
     SystemTimeAtBoot.c
     Timer.c
     UserHiveLinks.c

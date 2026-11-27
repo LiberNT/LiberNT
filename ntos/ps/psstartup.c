@@ -325,6 +325,8 @@ PspBuildSystemProcess(VOID)
     Process->DefaultHardErrorProcessing = SEM_FAILCRITICALERRORS;
     RtlCopyMemory(Process->ImageFileName, "System", sizeof("System"));
     KeQuerySystemTime(&Process->CreateTime);
+    ASSERT(PspProcessSequenceNumber == 1);
+    Process->SequenceNumber = (ULONGLONG)PspProcessSequenceNumber;
 
     Status = PspInitializeProcessSecurity(Process, NULL);
     if (!NT_SUCCESS(Status))

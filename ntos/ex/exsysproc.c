@@ -23,6 +23,37 @@ static const WCHAR ExpIdleProcessName[] = L"Idle";
 
 static
 VOID
+ExpWriteProcessExtension(
+    _In_ PEPROCESS Process,
+    _Out_ PSYSTEM_PROCESS_INFORMATION_EXTENSION Extension)
+{
+    PETHREAD Thread;
+
+    RtlZeroMemory(Extension, sizeof(*Extension));
+
+    if (Process->DiskCounters != NULL)
+        Extension->DiskCounters = *Process->DiskCounters;
+
+    /* FIXME: switches of threads that already ended are not counted */
+    for (Thread = PsGetNextProcessThread(Process, NULL);
+         Thread != NULL;
+         Thread = PsGetNextProcessThread(Process, Thread))
+    {
+        Extension->ContextSwitches += Thread->Tcb.ContextSwitches;
+    }
+
+    /* TODO: only the system process is classified; secure system, memory compression and registry processes are not */
+    Extension->Classification = (Process == PsInitialSystemProcess) ?
+                                SystemProcessClassificationSystem :
+                                SystemProcessClassificationNormal;
+    /* TODO: energy values are not kept */
+    Extension->SharedCommitCharge = Process->SharedCommitCharge;
+    Extension->JobObjectId = (Process->Job != NULL) ? Process->Job->JobId : 0;
+    Extension->ProcessSequenceNumber = Process->SequenceNumber;
+}
+
+static
+VOID
 ExpGetImageBaseName(
     _In_ PEPROCESS Process,
     _Out_ PUNICODE_STRING BaseName)
@@ -238,6 +269,7 @@ ExpQueryProcessInformation(
     _In_ ULONG Length,
     _Out_ PULONG ReturnLength,
     _In_ BOOLEAN Extended,
+    _In_ BOOLEAN WithExtension,
     _In_ ULONG SessionId,
     _In_ BOOLEAN OneSessionOnly)
 {
@@ -249,6 +281,8 @@ ExpQueryProcessInformation(
     ULONG ThreadSize = Extended ?
         (ULONG)sizeof(SYSTEM_EXTENDED_THREAD_INFORMATION) :
         (ULONG)sizeof(SYSTEM_THREAD_INFORMATION);
+    ULONG ExtensionSize = WithExtension ?
+        (ULONG)sizeof(SYSTEM_PROCESS_INFORMATION_EXTENSION) : 0;
     ULONG Used = 0;
     NTSTATUS Status = STATUS_SUCCESS;
 
@@ -275,7 +309,7 @@ ExpQueryProcessInformation(
          * next record starts on a pointer boundary.
          */
         Needed = (ULONG)sizeof(SYSTEM_PROCESS_INFORMATION) +
-                 ThreadCount * ThreadSize +
+                 ThreadCount * ThreadSize + ExtensionSize +
                  NameLength + (ULONG)sizeof(WCHAR);
         Needed = ALIGN_UP_BY(Needed, sizeof(ULONG_PTR));
 
@@ -293,7 +327,8 @@ ExpQueryProcessInformation(
                                    NameLength,
                                    (PWCHAR)(Current +
                                             sizeof(SYSTEM_PROCESS_INFORMATION) +
-                                            ThreadCount * ThreadSize),
+                                            ThreadCount * ThreadSize +
+                                            ExtensionSize),
                                    ThreadCount);
 
         if (ThreadCount != 0)
@@ -334,6 +369,16 @@ ExpQueryProcessInformation(
 
             /* A thread that went away leaves one record fewer to read. */
             Info->NumberOfThreads = Written;
+        }
+        ASSERT(Info->NumberOfThreads <= ThreadCount);
+
+        /* The extension follows the threads that were written, wherever the name was put */
+        if (WithExtension)
+        {
+            ExpWriteProcessExtension(Process,
+                                     (PSYSTEM_PROCESS_INFORMATION_EXTENSION)(Current +
+                                         sizeof(SYSTEM_PROCESS_INFORMATION) +
+                                         Info->NumberOfThreads * ThreadSize));
         }
 
         if (Previous != NULL)
@@ -451,9 +496,11 @@ ExpQuerySessionProcessInformation(
         return STATUS_INVALID_PARAMETER;
     }
 
+    /* TODO: whether the session form carries the per-process extension is not known */
     Status = ExpQueryProcessInformation(Information->Buffer,
                                         Information->SizeOfBuf,
                                         &Used,
+                                        FALSE,
                                         FALSE,
                                         Information->SessionId,
                                         TRUE);
