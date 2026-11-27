@@ -686,6 +686,7 @@ list(APPEND KMTEST_SOURCE
     ntos_io/IoFilterRequirements_user.c
     ntos_io/IoRemoveChild_user.c
     ntos_io/IoRemoveUnload_user.c
+    ntos_io/IoSwDeviceInUse_user.c
     ntos_io/IoCreateFile_user.c
     ntos_io/IoDeviceObject_user.c
     ntos_io/IoHandleAccess_user.c
@@ -747,7 +748,7 @@ set_module_type(kmtest win32cui)
 target_link_libraries(kmtest ${PSEH_LIB})
 # kmtest/filter.c resolves fltlib.dll at runtime so kmtest still starts on
 # NT 5.x systems without Filter Manager.
-add_importlibs(kmtest advapi32 ws2_32 setupapi newdev fwpuclnt user32 msvcrt kernel32 ntdll)
+add_importlibs(kmtest advapi32 ws2_32 setupapi newdev cfgmgr32 fwpuclnt user32 msvcrt kernel32 ntdll)
 target_compile_definitions(kmtest PRIVATE KMT_USER_MODE NTDDI_VERSION=${REACTOS_TARGET_NTDDI})
 #add_pch(kmtest include/kmt_test.h)
 add_rostests_file(TARGET kmtest)
@@ -761,6 +762,8 @@ configure_file(ntos_io/kmtest_remchild.inf kmtest_remchild.inf COPYONLY)
 add_rostests_file(FILE "${CMAKE_CURRENT_BINARY_DIR}/kmtest_remchild.inf")
 configure_file(ntos_io/kmtest_rmunload.inf kmtest_rmunload.inf COPYONLY)
 add_rostests_file(FILE "${CMAKE_CURRENT_BINARY_DIR}/kmtest_rmunload.inf")
+configure_file(ntos_io/kmtest_swdinuse.inf kmtest_swdinuse.inf COPYONLY)
+add_rostests_file(FILE "${CMAKE_CURRENT_BINARY_DIR}/kmtest_swdinuse.inf")
 
 #
 # Group targets
@@ -785,6 +788,7 @@ add_dependencies(kmtest_drivers
     ioreadwrite_drv
     ioremovechild_drv
     ioremoveunload_drv
+    ioswdeviceinuse_drv
     kernel32_drv
     mmmaplockedpagesspecifycache_drv
     ntcreatesection_drv

@@ -94,6 +94,14 @@ add_importlibs(ioremoveunload_drv ntoskrnl hal)
 add_rostests_file(TARGET ioremoveunload_drv)
 
 #
+# IoSwDeviceInUse
+#
+add_library(ioswdeviceinuse_drv MODULE IoSwDeviceInUse_drv.c)
+set_module_type(ioswdeviceinuse_drv kernelmodedriver)
+add_importlibs(ioswdeviceinuse_drv ntoskrnl hal)
+add_rostests_file(TARGET ioswdeviceinuse_drv)
+
+#
 # IoHelper
 #
 list(APPEND IOHELPER_DRV_SOURCE
