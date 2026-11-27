@@ -548,12 +548,36 @@ PiDriverListFree(
 }
 
 static
+BOOLEAN
+PiIsServiceDisabled(
+    _In_ HANDLE ServiceKey)
+{
+    PKEY_VALUE_FULL_INFORMATION Information = NULL;
+    BOOLEAN Disabled = FALSE;
+
+    PAGED_CODE();
+
+    if (!NT_SUCCESS(IopGetRegistryValue(ServiceKey, L"Start", &Information)))
+        return FALSE;
+
+    if ((Information->Type == REG_DWORD) &&
+        (Information->DataLength == sizeof(ULONG)))
+    {
+        Disabled = (*(PULONG)((PUCHAR)Information + Information->DataOffset) == SERVICE_DISABLED);
+    }
+
+    ExFreePool(Information);
+    return Disabled;
+}
+
+static
 NTSTATUS
 PiResolveServiceDriver(
     _In_ PUNICODE_STRING ServiceName,
     _In_ BOOLEAN SafeBootClassAllowed,
     _Out_ PDRIVER_OBJECT *DriverObject,
-    _Out_opt_ PBOOLEAN NoServiceKey)
+    _Out_opt_ PBOOLEAN NoServiceKey,
+    _Out_opt_ PBOOLEAN Disabled)
 {
     HANDLE ServicesKey;
     HANDLE ServiceKey;
@@ -561,6 +585,7 @@ PiResolveServiceDriver(
 
     *DriverObject = NULL;
     if (NoServiceKey != NULL) *NoServiceKey = FALSE;
+    if (Disabled != NULL) *Disabled = FALSE;
 
     Status = IopOpenRegistryKeyEx(&ServicesKey,
                                   NULL,
@@ -576,9 +601,17 @@ PiResolveServiceDriver(
         return Status;
     }
 
+    if (Disabled != NULL && PiIsServiceDisabled(ServiceKey))
+    {
+        ZwClose(ServiceKey);
+        *Disabled = TRUE;
+        return STATUS_DRIVER_UNABLE_TO_LOAD;
+    }
+
     Status = IopLoadDriverForDevice(ServiceKey, SafeBootClassAllowed, DriverObject);
     ZwClose(ServiceKey);
 
+    ASSERT(NT_SUCCESS(Status) || *DriverObject == NULL);
     return Status;
 }
 
@@ -610,7 +643,7 @@ PiCollectFilters(
 
     for (Index = 0; Index < FilterCount; Index++)
     {
-        Status = PiResolveServiceDriver(&Filters[Index], SafeBootClassAllowed, &DriverObject, NULL);
+        Status = PiResolveServiceDriver(&Filters[Index], SafeBootClassAllowed, &DriverObject, NULL, NULL);
         if (!NT_SUCCESS(Status))
         {
             /* Before the system drivers can load, the whole stack waits for them */
@@ -670,6 +703,7 @@ PiCollectFunctionDriver(
     PDRIVER_OBJECT DriverObject;
     UNICODE_STRING ServiceName;
     BOOLEAN NoServiceKey;
+    BOOLEAN Disabled;
     NTSTATUS Status;
     PWCHAR Buffer;
 
@@ -709,12 +743,20 @@ PiCollectFunctionDriver(
         }
     }
 
-    Status = PiResolveServiceDriver(&ServiceName, SafeBootClassAllowed, &DriverObject, &NoServiceKey);
+    Status = PiResolveServiceDriver(&ServiceName, SafeBootClassAllowed, &DriverObject, &NoServiceKey, &Disabled);
     ExFreePool(Information);
 
     if (NoServiceKey)
     {
         PiSetDevNodeProblem(DeviceNode, CM_PROB_DEVICE_NOT_THERE);
+        return Status;
+    }
+
+    if (Disabled)
+    {
+        ASSERT(!NT_SUCCESS(Status));
+        ASSERT(DriverObject == NULL);
+        PiSetDevNodeProblem(DeviceNode, CM_PROB_DISABLED_SERVICE);
         return Status;
     }
 
