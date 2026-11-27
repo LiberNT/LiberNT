@@ -331,6 +331,10 @@ DxgkPostDisplayTestBootScreenAction(VOID)
     ok_eq_int(DxgkPostDisplayCoreBootScreenAction(TRUE, TRUE, FALSE), DxgkBootScreenKeep);
     ok_eq_int(DxgkPostDisplayCoreBootScreenAction(FALSE, FALSE, TRUE), DxgkBootScreenKeep);
     ok_eq_int(DxgkPostDisplayCoreBootScreenAction(FALSE, FALSE, FALSE), DxgkBootScreenKeep);
+    ok_bool_true(DxgkPostDisplayCoreBootLogHoldsDisplay(TRUE, FALSE), "the boot log drawing into the scanned-out frame buffer holds the screen");
+    ok_bool_false(DxgkPostDisplayCoreBootLogHoldsDisplay(TRUE, TRUE), "the boot log drawing into a copy leaves the screen to the desktop");
+    ok_bool_false(DxgkPostDisplayCoreBootLogHoldsDisplay(FALSE, FALSE), "a boot log that gave the display up does not hold it");
+    ok_bool_false(DxgkPostDisplayCoreBootLogHoldsDisplay(FALSE, TRUE), "a boot log that gave the display up does not hold it, copy or not");
 }
 
 START_TEST(DxgkPostDisplayHandoff)

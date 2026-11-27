@@ -489,7 +489,7 @@ DxgkpLoadTdrConfig(VOID)
 BOOLEAN
 DxgkpBootLogHoldsDisplay(VOID)
 {
-    return InbvCheckDisplayOwnership();
+    return DxgkPostDisplayCoreBootLogHoldsDisplay(InbvCheckDisplayOwnership(), DxgkBootScreenDrawsToCopy());
 }
 
 BOOLEAN
