@@ -61,7 +61,7 @@ if(ARCH STREQUAL "i386")
             math/i386/aullshr_asm.s
             math/i386/ftoul2_legacy_asm.s)
     endif()
-    if (CMAKE_C_COMPILER_ID STREQUAL "Clang" AND NOT MSVC)
+    if(NOT MSVC)
         list(APPEND MSVCRTEX_ASM_SOURCE
             math/i386/ceilf.S
             math/i386/floorf.S)
