@@ -125,6 +125,7 @@ windows/system32/amstream.dll
 windows/system32/apphelp.dll
 windows/system32/appwiz.cpl
 windows/system32/appxalluserstore.dll
+windows/system32/appxdeploymentclient.dll
 windows/system32/arp.exe
 windows/system32/at.exe
 windows/system32/atl.dll

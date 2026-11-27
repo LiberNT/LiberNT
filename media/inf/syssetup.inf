@@ -263,6 +263,7 @@ stdole2.tlb
 stdole32.tlb
 mshtml.tlb
 coremessaging.dll
+appxdeploymentclient.dll
 cryptowinrt.dll
 installservice.dll
 threadpoolwinrt.dll
