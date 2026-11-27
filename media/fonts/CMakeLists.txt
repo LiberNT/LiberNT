@@ -27,7 +27,9 @@ list(APPEND FONT_FILES
     Marlett.ttf
     micross.ttf
     NotoSansJP-Regular.otf
+    NotoSansKR-Regular.otf
     NotoSansSC-Regular.otf
+    NotoSansTC-Regular.otf
     pala.ttf
     palab.ttf
     palabi.ttf
@@ -75,5 +77,9 @@ endforeach(item)
 
 add_cd_file(FILE "${CMAKE_CURRENT_SOURCE_DIR}/doc/NotoSansJP/LICENSE.txt"
     DESTINATION reactos NAME_ON_CD NotoSansJP-LICENSE.txt NO_CAB FOR all)
+add_cd_file(FILE "${CMAKE_CURRENT_SOURCE_DIR}/doc/NotoSansKR/LICENSE.txt"
+    DESTINATION reactos NAME_ON_CD NotoSansKR-LICENSE.txt NO_CAB FOR all)
 add_cd_file(FILE "${CMAKE_CURRENT_SOURCE_DIR}/doc/NotoSansSC/LICENSE.txt"
     DESTINATION reactos NAME_ON_CD NotoSansSC-LICENSE.txt NO_CAB FOR all)
+add_cd_file(FILE "${CMAKE_CURRENT_SOURCE_DIR}/doc/NotoSansTC/LICENSE.txt"
+    DESTINATION reactos NAME_ON_CD NotoSansTC-LICENSE.txt NO_CAB FOR all)

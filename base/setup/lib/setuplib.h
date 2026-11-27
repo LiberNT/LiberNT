@@ -162,8 +162,6 @@ typedef struct _USETUP_DATA
 
 /* FUNCTIONS ****************************************************************/
 
-#include "substset.h"
-
 BOOLEAN
 NTAPI
 CheckUnattendedSetup(
@@ -250,8 +248,7 @@ UpdateRegistry(
     /**/IN PPARTLIST PartitionList,      /* HACK HACK! */
     /**/IN WCHAR DestinationDriveLetter, /* HACK HACK! */
     /**/IN PCWSTR SelectedLanguageId,    /* HACK HACK! */
-    IN PREGISTRY_STATUS_ROUTINE StatusRoutine OPTIONAL,
-    IN PFONTSUBSTSETTINGS SubstSettings OPTIONAL);
+    IN PREGISTRY_STATUS_ROUTINE StatusRoutine OPTIONAL);
 
 PVOID
 RegSaveKeptSettings(

@@ -749,8 +749,7 @@ PrepareAndDoCopyThread(
                                  pSetupData->PartitionList,
                                  InstallVolume->Info.DriveLetter,
                                  pSetupData->SelectedLanguageId,
-                                 RegistryStatus,
-                                 NULL);
+                                 RegistryStatus);
     if (ErrorNumber != NOT_AN_ERROR)
     {
         ReportStepFailure(IDS_CREATE_REGISTRY, (ULONG)ErrorNumber);

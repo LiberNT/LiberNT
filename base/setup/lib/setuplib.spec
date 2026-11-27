@@ -65,7 +65,7 @@
 @ stdcall InitDestinationPaths(ptr wstr ptr)
 @ stdcall InitializeSetup(ptr ptr ptr ptr)
 @ stdcall InitSystemPartition(ptr ptr ptr ptr ptr)
-@ stdcall UpdateRegistry(ptr long ptr long wstr ptr ptr)
+@ stdcall UpdateRegistry(ptr long ptr long wstr ptr)
 @ stdcall MountTargetRegistry(ptr)
 @ stdcall UnmountTargetRegistry()
 
