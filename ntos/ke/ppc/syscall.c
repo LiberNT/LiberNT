@@ -66,6 +66,9 @@ KiPpcDispatchSystemService(_Inout_ PKTRAP_FRAME Frame)
     if (Service == PPC_DEBUG_SERVICE_CALL)
         return KiPpcUserDebugService(Frame);
 
+    Thread->SystemCallNumber = Service;
+    Thread->FirstArgument = (PVOID)(ULONG_PTR)Gpr[3];
+
     if ((Table >= SSDT_MAX_ENTRIES) || (Table && !KiPpcIsGuiThread(Thread)))
         return (LONG_PTR)STATUS_INVALID_SYSTEM_SERVICE;
     Descriptor = &((PKSERVICE_TABLE_DESCRIPTOR)Thread->ServiceTable)[Table];
