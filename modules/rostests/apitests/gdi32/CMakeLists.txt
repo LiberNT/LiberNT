@@ -7,6 +7,7 @@ list(APPEND SOURCE
     AddFontResourceEx.c
     AlphaBlend.c
     BeginPath.c
+    BrushOrgState.c
     CjkFaceNames.c
     CombineRgn.c
     CombineTransform.c

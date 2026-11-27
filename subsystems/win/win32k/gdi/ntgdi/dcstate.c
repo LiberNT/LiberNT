@@ -19,6 +19,9 @@ DC_vCopyState(PDC pdcSrc, PDC pdcDst, BOOL To)
 
     /* Copy full DC attribute */
     *pdcDst->pdcattr = *pdcSrc->pdcattr;
+    DC_vSetBrushOrigin(pdcDst, pdcDst->pdcattr->ptlBrushOrigin.x, pdcDst->pdcattr->ptlBrushOrigin.y);
+    ASSERT(pdcDst->ptlFillOrigin.x == pdcDst->dclevel.ptlBrushOrigin.x + pdcDst->ptlDCOrig.x);
+    ASSERT(pdcDst->ptlFillOrigin.y == pdcDst->dclevel.ptlBrushOrigin.y + pdcDst->ptlDCOrig.y);
 
     /* Get/SetDCState() don't change hVisRgn field ("Undoc. Windows" p.559). */
     /* The VisRectRegion field needs to be set to a valid state */
