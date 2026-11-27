@@ -934,8 +934,9 @@ InitDestinationPaths(
         }
         else if (DiskEntry->PartList->SystemPartition == PartEntry)
         {
-            PathBuffer[0] = UNICODE_NULL;
-            Status = STATUS_SUCCESS;
+            /* A leading separator marks the path as relative to the system partition; the boot configuration
+             * code reads anything else as an ARC name */
+            Status = RtlStringCchCopyW(PathBuffer, ARRAYSIZE(PathBuffer), L"\\");
             DPRINT1("Fixed disk not found by BIOS, using a path relative to the system partition\n");
         }
         else if (DiskEntry->PartList->SystemPartition &&
