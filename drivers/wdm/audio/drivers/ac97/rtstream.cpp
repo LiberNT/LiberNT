@@ -222,6 +222,14 @@ STDMETHODIMP_(NTSTATUS) CAC97MiniportWaveRTStream::AllocateAudioBuffer
     {
         return STATUS_UNSUCCESSFUL;
     }
+    //
+    // Every BDL entry describes the whole buffer and counts it in 16-bit samples, at most 0xFFFE of them. Return
+    // the largest buffer one entry can describe when more is asked; WaveRT lets the miniport return less.
+    //
+    if (size > 0xFFFE * 2)
+    {
+        size = 0xFFFE * 2;
+    }
     size -= size % (NumberOfChannels * 2);
 
     //
@@ -285,7 +293,7 @@ STDMETHODIMP_(NTSTATUS) CAC97MiniportWaveRTStream::AllocateAudioBuffer
     for (UINT loop = 0; loop < MAX_BDL_ENTRIES; loop++)
     {
         BDList[loop].dwPtrToPhyAddress = PortStream->GetPhysicalPageAddress (audioBufferMdl, 0).LowPart;
-        BDList[loop].wLength = (WORD)size/2;
+        BDList[loop].wLength = (WORD)(size / 2);
         if ((loop == MAX_BDL_ENTRIES / 2) || (loop == MAX_BDL_ENTRIES - 1))
             BDList[loop].wPolicyBits = IOC_ENABLE;
         else
