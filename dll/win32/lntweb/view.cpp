@@ -58,6 +58,7 @@ struct View
     std::shared_ptr<Script> Engine;
     std::map<std::string, std::deque<std::string>> Sent;
     std::string FocusText;
+    std::string HoverUrl;
     LONG Sequence = 0;
     int ScrollY = 0;
     int ContentHeight = 0;
@@ -715,6 +716,36 @@ OnAnchor(void *Context, const std::string &Url)
 }
 
 static void
+ReportHover(View *Self, const std::string &Url)
+{
+    if (Url == Self->HoverUrl)
+        return;
+    Self->HoverUrl = Url;
+    if (Self->Host.Hover)
+        Self->Host.Hover(Self->Host.Context, Url.empty() ? nullptr : Url.c_str());
+}
+
+static void
+HoverAt(View *Self, int X, int Y)
+{
+    litehtml::element::ptr Element = Self->Document->root_render()->get_element_by_point(
+        (litehtml::pixel_t)X, (litehtml::pixel_t)(Y + Self->ScrollY), (litehtml::pixel_t)X, (litehtml::pixel_t)Y, nullptr);
+    std::string Url;
+
+    for (; Element; Element = Element->parent())
+    {
+        const char *Tag = Element->get_tagName();
+        const char *Href = Element->get_attr("href");
+        if (Tag && strcmp(Tag, "a") == 0 && Href && *Href && strncmp(Href, "javascript:", 11) != 0)
+        {
+            Url = Self->Owner->Resolve(Href);
+            break;
+        }
+    }
+    ReportHover(Self, Url);
+}
+
+static void
 Adopt(View *Self, LoadResult *Result)
 {
     std::vector<std::shared_ptr<Control>> Old = std::move(Self->Controls);
@@ -751,6 +782,8 @@ Adopt(View *Self, LoadResult *Result)
     OldOwner.reset();
     if (HadFocus && !IsChild(Self->Hwnd, GetFocus()))
         SetFocus(Self->Hwnd);
+    if (!Keep)
+        ReportHover(Self, std::string());
     Layout(Self);
     InvalidateRect(Self->Hwnd, nullptr, TRUE);
 }
@@ -901,6 +934,7 @@ ViewProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
                 {
                     InvalidateRect(Hwnd, nullptr, FALSE);
                 }
+                HoverAt(Self, X, Y);
             }
             return 0;
 
@@ -910,6 +944,7 @@ ViewProc(HWND Hwnd, UINT Message, WPARAM WParam, LPARAM LParam)
                 Self->Tracking = false;
                 if (Self->Document && Self->Document->on_mouse_leave(Boxes))
                     InvalidateRect(Hwnd, nullptr, FALSE);
+                ReportHover(Self, std::string());
             }
             return 0;
 

@@ -18,6 +18,7 @@ typedef VOID (CALLBACK *LNTWEB_NAVIGATE_ROUTINE)(PVOID Context, PCSTR Url, PCSTR
 typedef BOOL (CALLBACK *LNTWEB_REQUEST_ROUTINE)(PVOID Context, PCSTR Method, PCSTR Url, PCSTR Headers, PCSTR Body,
                                                 SIZE_T BodyLength, ULONG *Status, PSTR *ResponseHeaders, PSTR *Data,
                                                 SIZE_T *Length);
+typedef VOID (CALLBACK *LNTWEB_HOVER_ROUTINE)(PVOID Context, PCSTR Url);
 
 typedef struct _LNTWEB_HOST
 {
@@ -28,6 +29,7 @@ typedef struct _LNTWEB_HOST
     LNTWEB_NAVIGATE_ROUTINE Navigate;
     LNTWEB_REQUEST_ROUTINE Request;
     PCSTR UserAgent;
+    LNTWEB_HOVER_ROUTINE Hover;
 } LNTWEB_HOST, *PLNTWEB_HOST;
 
 typedef HWND (WINAPI *PFN_LNTWEB_CREATE)(HWND Parent, INT Id, const LNTWEB_HOST *Host);
