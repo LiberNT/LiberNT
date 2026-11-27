@@ -90,6 +90,7 @@ list(APPEND SOURCE
     TypoMetrics.c)
 
 list(APPEND PCH_SKIP_SOURCE
+    FontLinkCjk.c
     ScriptGetFontTags.c
     ScriptGetLogicalWidths.c
     ScriptShapeCache.c
