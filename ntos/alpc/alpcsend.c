@@ -176,7 +176,11 @@ AlpcpReplyToMessage(
             (Message->PortMessage.ClientId.UniqueProcess == Header->ClientId.UniqueProcess) &&
             (Message->PortMessage.ClientId.UniqueThread == Header->ClientId.UniqueThread))
         {
-            if (!Message->WaitingThread && !Message->SenderProcess && AlpcpReclaimCanceledMessage(Message))
+            if (AlpcpReclaimCanceledMessage(Message) &&
+                !Message->WaitingThread &&
+                !(Message->State & (ALPC_MSG_STATE_IMPERSONATING |
+                                    ALPC_MSG_STATE_ACCEPT_IN_PROGRESS |
+                                    ALPC_MSG_STATE_REPLY_IN_PROGRESS)))
             {
                 AlpcpFreeMessage(Message);
             }
