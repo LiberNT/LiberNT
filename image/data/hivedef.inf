@@ -1945,6 +1945,8 @@ HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\CabinetState",,0x000000
 HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\CabinetState","FullPath",0x00010003,0
 HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\CabinetState","FullPathAddress",0x00010003,1
 HKCU,"SOFTWARE\Microsoft\Internet Explorer\Main","StatusBarOther",0x00010003,1
+HKCU,"SOFTWARE\Microsoft\Internet Explorer\Main","Start Page",0x00000000,"http://go.microsoft.com/fwlink/p/?LinkId=255141"
+HKCU,"SOFTWARE\Microsoft\Internet Explorer\Main","Search Page",0x00000000,"http://go.microsoft.com/fwlink/?LinkId=54896"
 HKCU,"SOFTWARE\Microsoft\Internet Explorer\Toolbar","Locked",0x00010003,1
 
 ; Default visual style
