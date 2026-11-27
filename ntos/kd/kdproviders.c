@@ -399,19 +399,30 @@ KdBugCheckDebuggerRequested(VOID)
 
     for (Tick = 0; Tick < KDP_BUGCHECK_DEBUGGER_SECONDS * KDP_BUGCHECK_POLLS_PER_SECOND; Tick++)
     {
-        if (KdpKeyboardChordHeld() || KdpUsbKeyboardChordHeld())
-            return TRUE;
-
-        if (KdTermSerial && (KdbpTryGetCharSerial(1) == 0x03))
-            return TRUE;
-
-        if (KdpDebugMode.Net && KdpNetPollBreakIn())
+        if (KdBugCheckBreakInPending())
             return TRUE;
 
         KeStallExecutionProcessor(1000000 / KDP_BUGCHECK_POLLS_PER_SECOND);
     }
 
     return FALSE;
+}
+
+/* One look, without waiting, for a request to enter the debugger during a bug check */
+BOOLEAN
+NTAPI
+KdBugCheckBreakInPending(VOID)
+{
+    if (KdPitchDebugger || !KdDebuggerEnabled || KdDebuggerNotPresent)
+        return FALSE;
+
+    if (KdpKeyboardChordHeld() || KdpUsbKeyboardChordHeld())
+        return TRUE;
+
+    if (KdTermSerial && (KdbpTryGetCharSerial(1) == 0x03))
+        return TRUE;
+
+    return (BOOLEAN)(KdpDebugMode.Net && KdpNetPollBreakIn());
 }
 
 /*

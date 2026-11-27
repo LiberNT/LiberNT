@@ -211,6 +211,10 @@ BOOLEAN
 NTAPI
 KdBugCheckDebuggerRequested(VOID);
 
+BOOLEAN
+NTAPI
+KdBugCheckBreakInPending(VOID);
+
 VOID
 NTAPI
 KdEnableBugCheckDebugger(VOID);
