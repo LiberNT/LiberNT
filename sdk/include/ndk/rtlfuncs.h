@@ -3012,6 +3012,18 @@ RtlCreateProcessParametersEx (
 NTSYSAPI
 NTSTATUS
 NTAPI
+RtlCreateProcessReflection(
+    _In_ HANDLE ProcessHandle,
+    _In_ ULONG Flags,
+    _In_opt_ PVOID StartRoutine,
+    _In_opt_ PVOID StartContext,
+    _In_opt_ HANDLE EventHandle,
+    _Out_opt_ PRTLP_PROCESS_REFLECTION_REFLECTION_INFORMATION ReflectionInformation
+);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
 RtlCreateUserProcess(
     _In_ PUNICODE_STRING ImageFileName,
     _In_ ULONG Attributes,

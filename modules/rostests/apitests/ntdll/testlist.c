@@ -173,6 +173,7 @@ extern void func_RtlCaptureContext(void);
 extern void func_RtlComputePrivatizedDllName_U(void);
 extern void func_RtlConditionVariable(void);
 extern void func_RtlCopyMappedMemory(void);
+extern void func_RtlCreateProcessReflection(void);
 extern void func_RtlCreateServiceSid(void);
 extern void func_RtlCriticalSection(void);
 extern void func_RtlCurrentTransaction(void);
@@ -445,6 +446,7 @@ const struct test winetest_testlist[] =
     { "RtlComputePrivatizedDllName_U",  func_RtlComputePrivatizedDllName_U },
     { "RtlConditionVariable",           func_RtlConditionVariable },
     { "RtlCopyMappedMemory",            func_RtlCopyMappedMemory },
+    { "RtlCreateProcessReflection",     func_RtlCreateProcessReflection },
     { "RtlCreateServiceSid",            func_RtlCreateServiceSid },
     { "RtlCriticalSection",             func_RtlCriticalSection },
     { "RtlCurrentTransaction",          func_RtlCurrentTransaction },
