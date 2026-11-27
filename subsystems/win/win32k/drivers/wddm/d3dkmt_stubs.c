@@ -4148,9 +4148,13 @@ D3DKMTSetVidPnSourceOwner2(
     if (Captured.Version1.Version0.VidPnSourceCount != 0 && Captured.Version1.Version0.pType != NULL && Captured.Version1.Version0.pVidPnSourceId != NULL)
     {
         Status = WddmBridgeCaptureArray(Captured.Version1.Version0.pType, Captured.Version1.Version0.VidPnSourceCount, sizeof(*OwnerTypes), D3DKMT_BRIDGE_MAX_ALLOCATIONS, TRUE, FALSE, (PVOID *)&OwnerTypes, &OwnerTypesSize);
+        if (Status == STATUS_ACCESS_VIOLATION)
+            Status = STATUS_INVALID_PARAMETER;
         if (!NT_SUCCESS(Status))
             goto Cleanup;
         Status = WddmBridgeCaptureArray(Captured.Version1.Version0.pVidPnSourceId, Captured.Version1.Version0.VidPnSourceCount, sizeof(*SourceIds), D3DKMT_BRIDGE_MAX_ALLOCATIONS, TRUE, FALSE, (PVOID *)&SourceIds, &SourceIdsSize);
+        if (Status == STATUS_ACCESS_VIOLATION)
+            Status = STATUS_INVALID_PARAMETER;
         if (!NT_SUCCESS(Status))
             goto Cleanup;
         Captured.Version1.Version0.pType = OwnerTypes;
