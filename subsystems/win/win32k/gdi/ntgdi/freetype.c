@@ -1370,22 +1370,34 @@ FontLink_Create(
 }
 
 static PFONTLINK_ENTRY
-FontLink_FindEntry(const LOGFONTW *pLogFont)
+FontLink_FindEntryByName(_In_ PCWSTR pszFaceName)
 {
     PLIST_ENTRY Entry;
     PFONTLINK_ENTRY pEntry;
-    LOGFONTW lf = *pLogFont;
-
-    SubstituteFontRecurse(&lf);
 
     for (Entry = g_FontLinkEntries.Flink; Entry != &g_FontLinkEntries; Entry = Entry->Flink)
     {
         pEntry = CONTAINING_RECORD(Entry, FONTLINK_ENTRY, ListEntry);
-        if (!_wcsicmp(pEntry->lfFaceName, lf.lfFaceName))
+        if (!_wcsicmp(pEntry->lfFaceName, pszFaceName))
             return pEntry;
     }
 
     return NULL;
+}
+
+static PFONTLINK_ENTRY
+FontLink_FindEntry(const LOGFONTW *pLogFont)
+{
+    PFONTLINK_ENTRY pEntry;
+    LOGFONTW lf = *pLogFont;
+
+    /* The requested face itself may have a FontLink entry ("Segoe UI" is substituted to "Selawik") */
+    pEntry = FontLink_FindEntryByName(lf.lfFaceName);
+    if (pEntry)
+        return pEntry;
+
+    SubstituteFontRecurse(&lf);
+    return FontLink_FindEntryByName(lf.lfFaceName);
 }
 
 static NTSTATUS
@@ -1405,6 +1417,156 @@ FontLink_Chain_FindEntry(
 
     pChain->pszzFontLink = pEntry->pszzFontLink;
     return STATUS_SUCCESS;
+}
+
+/* Windows stores the SystemLink values already ordered for the system language; LiberNT ships a single static table */
+typedef enum _FONTLINK_CJK
+{
+    FONTLINK_CJK_NONE = 0,
+    FONTLINK_CJK_JAPANESE,
+    FONTLINK_CJK_CHINESE_SIMPLIFIED,
+    FONTLINK_CJK_CHINESE_TRADITIONAL,
+    FONTLINK_CJK_KOREAN,
+    FONTLINK_CJK_MAX
+} FONTLINK_CJK;
+
+static FONTLINK_CJK
+FontLink_CjkGroup(_In_ PCWSTR pszFaceName)
+{
+    static const struct
+    {
+        PCWSTR pszFaceName;
+        FONTLINK_CJK Group;
+    } s_Faces[] =
+    {
+        { L"MS UI Gothic",            FONTLINK_CJK_JAPANESE },
+        { L"MS Gothic",               FONTLINK_CJK_JAPANESE },
+        { L"MS PGothic",              FONTLINK_CJK_JAPANESE },
+        { L"MS Mincho",               FONTLINK_CJK_JAPANESE },
+        { L"MS PMincho",              FONTLINK_CJK_JAPANESE },
+        { L"Meiryo",                  FONTLINK_CJK_JAPANESE },
+        { L"Yu Gothic",               FONTLINK_CJK_JAPANESE },
+        { L"Yu Mincho",               FONTLINK_CJK_JAPANESE },
+        { L"Noto Sans JP",            FONTLINK_CJK_JAPANESE },
+        { L"Noto Serif JP",           FONTLINK_CJK_JAPANESE },
+        { L"Noto Sans CJK JP",        FONTLINK_CJK_JAPANESE },
+        { L"Noto Serif CJK JP",       FONTLINK_CJK_JAPANESE },
+        { L"SimSun",                  FONTLINK_CJK_CHINESE_SIMPLIFIED },
+        { L"NSimSun",                 FONTLINK_CJK_CHINESE_SIMPLIFIED },
+        { L"Microsoft YaHei",         FONTLINK_CJK_CHINESE_SIMPLIFIED },
+        { L"DengXian",                FONTLINK_CJK_CHINESE_SIMPLIFIED },
+        { L"SimHei",                  FONTLINK_CJK_CHINESE_SIMPLIFIED },
+        { L"FangSong",                FONTLINK_CJK_CHINESE_SIMPLIFIED },
+        { L"KaiTi",                   FONTLINK_CJK_CHINESE_SIMPLIFIED },
+        { L"Noto Sans SC",            FONTLINK_CJK_CHINESE_SIMPLIFIED },
+        { L"Noto Serif SC",           FONTLINK_CJK_CHINESE_SIMPLIFIED },
+        { L"Noto Sans CJK SC",        FONTLINK_CJK_CHINESE_SIMPLIFIED },
+        { L"Noto Serif CJK SC",       FONTLINK_CJK_CHINESE_SIMPLIFIED },
+        { L"MingLiU",                 FONTLINK_CJK_CHINESE_TRADITIONAL },
+        { L"PMingLiU",                FONTLINK_CJK_CHINESE_TRADITIONAL },
+        { L"Microsoft JhengHei",      FONTLINK_CJK_CHINESE_TRADITIONAL },
+        { L"DFKai-SB",                FONTLINK_CJK_CHINESE_TRADITIONAL },
+        { L"Noto Sans TC",            FONTLINK_CJK_CHINESE_TRADITIONAL },
+        { L"Noto Serif TC",           FONTLINK_CJK_CHINESE_TRADITIONAL },
+        { L"Noto Sans HK",            FONTLINK_CJK_CHINESE_TRADITIONAL },
+        { L"Noto Serif HK",           FONTLINK_CJK_CHINESE_TRADITIONAL },
+        { L"Noto Sans CJK TC",        FONTLINK_CJK_CHINESE_TRADITIONAL },
+        { L"Noto Serif CJK TC",       FONTLINK_CJK_CHINESE_TRADITIONAL },
+        { L"Noto Sans CJK HK",        FONTLINK_CJK_CHINESE_TRADITIONAL },
+        { L"Noto Serif CJK HK",       FONTLINK_CJK_CHINESE_TRADITIONAL },
+        { L"Gulim",                   FONTLINK_CJK_KOREAN },
+        { L"Batang",                  FONTLINK_CJK_KOREAN },
+        { L"Malgun Gothic",           FONTLINK_CJK_KOREAN },
+        { L"Dotum",                   FONTLINK_CJK_KOREAN },
+        { L"Gungsuh",                 FONTLINK_CJK_KOREAN },
+        { L"Noto Sans KR",            FONTLINK_CJK_KOREAN },
+        { L"Noto Serif KR",           FONTLINK_CJK_KOREAN },
+        { L"Noto Sans CJK KR",        FONTLINK_CJK_KOREAN },
+        { L"Noto Serif CJK KR",       FONTLINK_CJK_KOREAN },
+    };
+    UINT i;
+
+    for (i = 0; i < ARRAYSIZE(s_Faces); ++i)
+    {
+        if (_wcsnicmp(pszFaceName, s_Faces[i].pszFaceName, wcslen(s_Faces[i].pszFaceName)) == 0)
+            return s_Faces[i].Group;
+    }
+
+    return FONTLINK_CJK_NONE;
+}
+
+static VOID
+FontLink_Chain_OrderCjk(
+    _Inout_ PFONTLINK_CHAIN pChain,
+    _In_ LANGID LangID)
+{
+    FONTLINK_CJK Order[FONTLINK_CJK_MAX - 1];
+    PLIST_ENTRY Head = &pChain->FontLinkList;
+    PFONTLINK Links[32], SortedCjk[ARRAYSIZE(Links)];
+    PLIST_ENTRY Entry;
+    UINT i, Rank, CjkCount = 0, Fill = 0, LinkCount = 0;
+
+    switch (PRIMARYLANGID(LangID))
+    {
+        case LANG_JAPANESE:
+            Order[0] = FONTLINK_CJK_JAPANESE;
+            Order[1] = FONTLINK_CJK_CHINESE_TRADITIONAL;
+            Order[2] = FONTLINK_CJK_CHINESE_SIMPLIFIED;
+            Order[3] = FONTLINK_CJK_KOREAN;
+            break;
+        case LANG_KOREAN:
+            Order[0] = FONTLINK_CJK_KOREAN;
+            Order[1] = FONTLINK_CJK_JAPANESE;
+            Order[2] = FONTLINK_CJK_CHINESE_TRADITIONAL;
+            Order[3] = FONTLINK_CJK_CHINESE_SIMPLIFIED;
+            break;
+        case LANG_CHINESE:
+            switch (SUBLANGID(LangID))
+            {
+                case SUBLANG_CHINESE_TRADITIONAL:
+                case SUBLANG_CHINESE_HONGKONG:
+                case SUBLANG_CHINESE_MACAU:
+                    Order[0] = FONTLINK_CJK_CHINESE_TRADITIONAL;
+                    Order[1] = FONTLINK_CJK_CHINESE_SIMPLIFIED;
+                    Order[2] = FONTLINK_CJK_JAPANESE;
+                    Order[3] = FONTLINK_CJK_KOREAN;
+                    break;
+                default:
+                    Order[0] = FONTLINK_CJK_CHINESE_SIMPLIFIED;
+                    Order[1] = FONTLINK_CJK_CHINESE_TRADITIONAL;
+                    Order[2] = FONTLINK_CJK_JAPANESE;
+                    Order[3] = FONTLINK_CJK_KOREAN;
+                    break;
+            }
+            break;
+        default:
+            return;
+    }
+
+    for (Entry = Head->Flink; Entry != Head; Entry = Entry->Flink)
+    {
+        if (LinkCount == ARRAYSIZE(Links))
+            return;
+        Links[LinkCount++] = CONTAINING_RECORD(Entry, FONTLINK, ListEntry);
+    }
+
+    for (Rank = 0; Rank < ARRAYSIZE(Order); ++Rank)
+    {
+        for (i = 0; i < LinkCount; ++i)
+        {
+            if (FontLink_CjkGroup(Links[i]->LogFont.lfFaceName) == Order[Rank])
+                SortedCjk[CjkCount++] = Links[i];
+        }
+    }
+
+    for (i = 0; i < LinkCount; ++i)
+    {
+        PFONTLINK pLink = Links[i];
+        if (FontLink_CjkGroup(pLink->LogFont.lfFaceName) != FONTLINK_CJK_NONE)
+            pLink = SortedCjk[Fill++];
+        RemoveEntryList(&pLink->ListEntry);
+        InsertTailList(Head, &pLink->ListEntry);
+    }
 }
 
 static NTSTATUS
@@ -1461,6 +1623,8 @@ FontLink_Chain_Populate(
             InsertTailList(&pChain->FontLinkList, &pLink->ListEntry);
         pszLink += wcslen(pszLink) + 1;
     }
+
+    FontLink_Chain_OrderCjk(pChain, gusLanguageID);
 
     // Use default settings (if any)
     if (s_szDefFontLinkFileName[0] && s_szDefFontLinkFontName[0])
