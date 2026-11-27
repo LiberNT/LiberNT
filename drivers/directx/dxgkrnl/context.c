@@ -3088,14 +3088,7 @@ DxgkCreateContextVirtual(
                     CreateContextArg.pPrivateDriverData,
                     CreateContextArg.PrivateDriverDataSize,
                     sizeof(CreateContextArg));
-        if (CreateContextArg.hContext != NULL && CreateContextArg.hContext != (HANDLE)Context)
-        {
-            Context->hMiniportContext = CreateContextArg.hContext;
-            DxgkpRollbackCreatedContext(Context);
-            DxgkEndKmdTransaction(Adapter);
-            DxgkDereferenceAdapter(Adapter);
-            return Status;
-        }
+        ASSERT(Context->hMiniportContext == NULL);
         DxgkEndKmdTransaction(Adapter);
         DxgkDereferenceAdapter(Adapter);
         ExFreePoolWithTag(Context, TAG_DXGK_CONTEXT);
