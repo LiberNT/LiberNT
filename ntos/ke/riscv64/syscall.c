@@ -151,6 +151,9 @@ KiRiscvDispatchSystemService(_Inout_ PKTRAP_FRAME Frame)
     if (Service == RISCV_DEBUG_SERVICE_CALL)
         return KiRiscvUserDebugService(Frame);
 
+    Thread->SystemCallNumber = (ULONG)Service;
+    Thread->FirstArgument = (PVOID)Frame->Context.X[10];
+
     /* The outer entry completes GUI conversion before argument capture. */
     if ((Table >= SSDT_MAX_ENTRIES) || (Table && !Thread->GuiThread))
         return (LONG_PTR)STATUS_INVALID_SYSTEM_SERVICE;

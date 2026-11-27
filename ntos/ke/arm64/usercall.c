@@ -218,6 +218,8 @@ KiSystemService(
     DescriptorTable = (PKSERVICE_TABLE_DESCRIPTOR)(ServiceTable + TableIndex);
 
     ServiceNumber = Instruction & SERVICE_NUMBER_MASK;
+    Thread->SystemCallNumber = Instruction;
+    Thread->FirstArgument = (PVOID)TrapFrame->X0;
 
     if ((TableIndex == SERVICE_TABLE_TEST) &&
         PsGetCurrentProcess()->MitigationFlagsValues.DisallowWin32kSystemCalls)
