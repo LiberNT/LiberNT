@@ -96,6 +96,44 @@ PVOID GetContext(TDIEntityID ID)
     return Context;
 }
 
+static BOOLEAN IsInterfaceEntity(ULONG Entity)
+{
+    return Entity == IF_ENTITY || Entity == AT_ENTITY ||
+           Entity == CL_NL_ENTITY || Entity == CO_NL_ENTITY;
+}
+
+static PIP_INTERFACE ReferenceInterfaceEntity(TDIEntityID ID)
+{
+    PIP_INTERFACE Interface = NULL;
+    KIRQL OldIrql;
+    UINT i;
+
+    TcpipAcquireSpinLock(&EntityListLock, &OldIrql);
+
+    for (i = 0; i < EntityCount; i++)
+    {
+        if (EntityList[i].tei_entity == ID.tei_entity &&
+            EntityList[i].tei_instance == ID.tei_instance)
+        {
+            if (IPReferenceInterface(EntityList[i].context))
+                Interface = EntityList[i].context;
+            break;
+        }
+    }
+
+    TcpipReleaseSpinLock(&EntityListLock, OldIrql);
+
+    return Interface;
+}
+
+static PVOID InfoEntityContext(TDIObjectID *ID, PIP_INTERFACE Interface)
+{
+    if (IsInterfaceEntity(ID->toi_entity.tei_entity))
+        return Interface;
+
+    return GetContext(ID->toi_entity);
+}
+
 TDI_STATUS InfoCopyOut( PCHAR DataOut, UINT SizeOut,
 			PNDIS_BUFFER ClientBuf, PUINT ClientBufSize ) {
     UINT RememberedCBSize = *ClientBufSize;
@@ -212,12 +250,13 @@ InfoTdiQueryGetATInfo(
     return Status;
 }
 
-TDI_STATUS InfoTdiQueryInformationEx(
+static TDI_STATUS InfoTdiQueryInformationExForEntity(
   PTDI_REQUEST Request,
   TDIObjectID *ID,
   PNDIS_BUFFER Buffer,
   PUINT BufferSize,
-  PVOID Context)
+  PVOID Context,
+  PIP_INTERFACE Interface)
 /*
  * FUNCTION: Returns extended information
  * ARGUMENTS:
@@ -265,7 +304,7 @@ TDI_STATUS InfoTdiQueryInformationEx(
         case INFO_CLASS_PROTOCOL:
            if (ID->toi_type == INFO_TYPE_ADDRESS_OBJECT)
            {
-               if ((EntityListContext = GetContext(ID->toi_entity)))
+               if ((EntityListContext = InfoEntityContext(ID, Interface)))
                     return GetAddressFileInfo(ID, EntityListContext, Buffer, BufferSize);
                else
                     return TDI_INVALID_PARAMETER;
@@ -278,18 +317,18 @@ TDI_STATUS InfoTdiQueryInformationEx(
                      return TDI_INVALID_PARAMETER;
 
                  if (ID->toi_entity.tei_entity == IF_ENTITY)
-                     if ((EntityListContext = GetContext(ID->toi_entity)))
+                     if ((EntityListContext = InfoEntityContext(ID, Interface)))
                          return InfoTdiQueryGetInterfaceMIB(ID->toi_entity, EntityListContext, Buffer, BufferSize);
                      else
                          return TDI_INVALID_PARAMETER;
                  else if (ID->toi_entity.tei_entity == CL_NL_ENTITY ||
                           ID->toi_entity.tei_entity == CO_NL_ENTITY)
-                     if ((EntityListContext = GetContext(ID->toi_entity)))
+                     if ((EntityListContext = InfoEntityContext(ID, Interface)))
                          return InfoTdiQueryGetIPSnmpInfo(ID->toi_entity, EntityListContext, Buffer, BufferSize);
                      else
                          return TDI_INVALID_PARAMETER;
                  else if (ID->toi_entity.tei_entity == AT_ENTITY)
-                     if ((EntityListContext = GetContext(ID->toi_entity)))
+                     if ((EntityListContext = InfoEntityContext(ID, Interface)))
                          return InfoTdiQueryGetATInfo(ID->toi_entity, EntityListContext, Buffer, BufferSize);
                      else
                          return TDI_INVALID_PARAMETER;
@@ -304,12 +343,12 @@ TDI_STATUS InfoTdiQueryInformationEx(
                      ID->toi_entity.tei_entity == CO_NL_ENTITY)
                     return InfoTdiQueryGetAddrTable(ID->toi_entity, Buffer, BufferSize);
                 else if (ID->toi_entity.tei_entity == CO_TL_ENTITY)
-                     if ((EntityListContext = GetContext(ID->toi_entity)))
+                     if ((EntityListContext = InfoEntityContext(ID, Interface)))
                          return InfoTdiQueryGetConnectionTcpTable(EntityListContext, Buffer, BufferSize, TcpUdpClassOwnerPid);
                      else
                          return TDI_INVALID_PARAMETER;
                 else if (ID->toi_entity.tei_entity == CL_TL_ENTITY)
-                     if ((EntityListContext = GetContext(ID->toi_entity)))
+                     if ((EntityListContext = InfoEntityContext(ID, Interface)))
                          return InfoTdiQueryGetConnectionUdpTable(EntityListContext, Buffer, BufferSize, TcpUdpClassOwnerPid);
                      else
                          return TDI_INVALID_PARAMETER;
@@ -321,24 +360,24 @@ TDI_STATUS InfoTdiQueryInformationEx(
                      return TDI_INVALID_PARAMETER;
 
                  if (ID->toi_entity.tei_entity == AT_ENTITY)
-                     if ((EntityListContext = GetContext(ID->toi_entity)))
+                     if ((EntityListContext = InfoEntityContext(ID, Interface)))
                          return InfoTdiQueryGetArptableMIB(ID->toi_entity, EntityListContext,
                                                            Buffer, BufferSize);
                      else
                          return TDI_INVALID_PARAMETER;
                  else if (ID->toi_entity.tei_entity == CO_NL_ENTITY ||
                           ID->toi_entity.tei_entity == CL_NL_ENTITY)
-                     if ((EntityListContext = GetContext(ID->toi_entity)))
+                     if ((EntityListContext = InfoEntityContext(ID, Interface)))
                          return InfoTdiQueryGetRouteTable(EntityListContext, Buffer, BufferSize);
                      else
                          return TDI_INVALID_PARAMETER;
                  else if (ID->toi_entity.tei_entity == CO_TL_ENTITY)
-                     if ((EntityListContext = GetContext(ID->toi_entity)))
+                     if ((EntityListContext = InfoEntityContext(ID, Interface)))
                          return InfoTdiQueryGetConnectionTcpTable(EntityListContext, Buffer, BufferSize, TcpUdpClassBasic);
                      else
                          return TDI_INVALID_PARAMETER;
                  else if (ID->toi_entity.tei_entity == CL_TL_ENTITY)
-                     if ((EntityListContext = GetContext(ID->toi_entity)))
+                     if ((EntityListContext = InfoEntityContext(ID, Interface)))
                          return InfoTdiQueryGetConnectionUdpTable(EntityListContext, Buffer, BufferSize, TcpUdpClassBasic);
                      else
                          return TDI_INVALID_PARAMETER;
@@ -350,12 +389,12 @@ TDI_STATUS InfoTdiQueryInformationEx(
                      return TDI_INVALID_PARAMETER;
 
                  if (ID->toi_entity.tei_entity == CO_TL_ENTITY)
-                     if ((EntityListContext = GetContext(ID->toi_entity)))
+                     if ((EntityListContext = InfoEntityContext(ID, Interface)))
                          return InfoTdiQueryGetConnectionTcpTable(EntityListContext, Buffer, BufferSize, TcpUdpClassOwner);
                      else
                          return TDI_INVALID_PARAMETER;
                  else if (ID->toi_entity.tei_entity == CL_TL_ENTITY)
-                     if ((EntityListContext = GetContext(ID->toi_entity)))
+                     if ((EntityListContext = InfoEntityContext(ID, Interface)))
                          return InfoTdiQueryGetConnectionUdpTable(EntityListContext, Buffer, BufferSize, TcpUdpClassOwner);
                      else
                          return TDI_INVALID_PARAMETER;
@@ -377,11 +416,12 @@ TDI_STATUS InfoTdiQueryInformationEx(
     }
 }
 
-TDI_STATUS InfoTdiSetInformationEx
+static TDI_STATUS InfoTdiSetInformationExForEntity
 (PTDI_REQUEST Request,
  TDIObjectID *ID,
  PVOID Buffer,
- UINT BufferSize)
+ UINT BufferSize,
+ PIP_INTERFACE Interface)
 /*
  * FUNCTION: Sets extended information
  * ARGUMENTS:
@@ -403,14 +443,14 @@ TDI_STATUS InfoTdiSetInformationEx
             {
                 case INFO_TYPE_ADDRESS_OBJECT:
                 {
-                    if ((EntityListContext = GetContext(ID->toi_entity)))
+                    if ((EntityListContext = InfoEntityContext(ID, Interface)))
                         return SetAddressFileInfo(ID, EntityListContext, Buffer, BufferSize);
                     else
                         return TDI_INVALID_PARAMETER;
                 }
                 case INFO_TYPE_CONNECTION:
                 {
-                    PADDRESS_FILE AddressFile = GetContext(ID->toi_entity);
+                    PADDRESS_FILE AddressFile = InfoEntityContext(ID, Interface);
                     if (AddressFile == NULL)
                         return TDI_INVALID_PARAMETER;
                     return SetConnectionInfo(ID, AddressFile, Buffer, BufferSize);
@@ -424,19 +464,19 @@ TDI_STATUS InfoTdiSetInformationEx
                                 return TDI_INVALID_PARAMETER;
 
                             if (ID->toi_entity.tei_entity == AT_ENTITY)
-                                if ((EntityListContext = GetContext(ID->toi_entity)))
+                                if ((EntityListContext = InfoEntityContext(ID, Interface)))
                                     return InfoTdiSetArptableMIB(EntityListContext, Buffer,
                                         BufferSize);
                                 else
                                     return TDI_INVALID_PARAMETER;
                             else if (ID->toi_entity.tei_entity == CL_NL_ENTITY
                                 || ID->toi_entity.tei_entity == CO_NL_ENTITY)
-                                if ((EntityListContext = GetContext(ID->toi_entity)))
+                                if ((EntityListContext = InfoEntityContext(ID, Interface)))
                                     return InfoTdiSetRoute(EntityListContext, Buffer, BufferSize);
                                 else
                                     return TDI_INVALID_PARAMETER;
                             else if (ID->toi_entity.tei_entity == CO_TL_ENTITY)
-                                if ((EntityListContext = GetContext(ID->toi_entity)))
+                                if ((EntityListContext = InfoEntityContext(ID, Interface)))
                                     return InfoTdiSetConnectionTcp(EntityListContext, Buffer, BufferSize);
                                 else
                                     return TDI_INVALID_PARAMETER;
@@ -457,4 +497,45 @@ TDI_STATUS InfoTdiSetInformationEx
             DbgPrint("TCPIP: IOCTL_TCP_SET_INFORMATION_EX - Unrecognized information class %#x.\n", ID->toi_class);
             return TDI_INVALID_REQUEST;
     }
+}
+
+TDI_STATUS InfoTdiQueryInformationEx(
+  PTDI_REQUEST Request,
+  TDIObjectID *ID,
+  PNDIS_BUFFER Buffer,
+  PUINT BufferSize,
+  PVOID Context)
+{
+    PIP_INTERFACE Interface = NULL;
+    TDI_STATUS Status;
+
+    if (IsInterfaceEntity(ID->toi_entity.tei_entity))
+        Interface = ReferenceInterfaceEntity(ID->toi_entity);
+
+    Status = InfoTdiQueryInformationExForEntity(Request, ID, Buffer, BufferSize, Context, Interface);
+
+    if (Interface)
+        IPDereferenceInterface(Interface);
+
+    return Status;
+}
+
+TDI_STATUS InfoTdiSetInformationEx
+(PTDI_REQUEST Request,
+ TDIObjectID *ID,
+ PVOID Buffer,
+ UINT BufferSize)
+{
+    PIP_INTERFACE Interface = NULL;
+    TDI_STATUS Status;
+
+    if (IsInterfaceEntity(ID->toi_entity.tei_entity))
+        Interface = ReferenceInterfaceEntity(ID->toi_entity);
+
+    Status = InfoTdiSetInformationExForEntity(Request, ID, Buffer, BufferSize, Interface);
+
+    if (Interface)
+        IPDereferenceInterface(Interface);
+
+    return Status;
 }
