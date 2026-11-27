@@ -345,6 +345,78 @@ DxgkpFreeDeferredResources(
         ExFreePoolWithTag(TranslatedResources, TAG_DXGK_RESOURCES);
 }
 
+typedef struct _DXGKP_ADAPTER_START_THREAD
+{
+    PDXGKRNL_ADAPTER Adapter;
+    PCM_RESOURCE_LIST AllocatedResources;
+    PCM_RESOURCE_LIST TranslatedResources;
+    NTSTATUS Status;
+    KEVENT Done;
+} DXGKP_ADAPTER_START_THREAD, *PDXGKP_ADAPTER_START_THREAD;
+
+static KSTART_ROUTINE DxgkpAdapterStartThread;
+
+static
+VOID
+NTAPI
+DxgkpAdapterStartThread(
+    _In_ PVOID Context)
+{
+    PDXGKP_ADAPTER_START_THREAD Start = (PDXGKP_ADAPTER_START_THREAD)Context;
+
+    PAGED_CODE();
+    ASSERT(Start != NULL);
+    ASSERT(Start->Adapter != NULL);
+    ASSERT(PsGetCurrentProcess() == PsInitialSystemProcess);
+
+    Start->Status = DxgkAdapterStart(Start->Adapter,
+                                     Start->AllocatedResources,
+                                     Start->TranslatedResources);
+    KeSetEvent(&Start->Done, IO_NO_INCREMENT, FALSE);
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+/* The miniport starts on a system thread of its own, whose stack is free, not on the stack of the PnP or session request that asked for it. */
+static
+NTSTATUS
+DxgkpStartAdapterOnOwnThread(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_opt_ PCM_RESOURCE_LIST AllocatedResources,
+    _In_opt_ PCM_RESOURCE_LIST TranslatedResources)
+{
+    DXGKP_ADAPTER_START_THREAD Start;
+    OBJECT_ATTRIBUTES Attributes;
+    HANDLE Thread;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    ASSERT(Adapter != NULL);
+
+    Start.Adapter = Adapter;
+    Start.AllocatedResources = AllocatedResources;
+    Start.TranslatedResources = TranslatedResources;
+    Start.Status = STATUS_UNSUCCESSFUL;
+    KeInitializeEvent(&Start.Done, NotificationEvent, FALSE);
+    InitializeObjectAttributes(&Attributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
+
+    Status = PsCreateSystemThread(&Thread,
+                                  THREAD_ALL_ACCESS,
+                                  &Attributes,
+                                  NULL,
+                                  NULL,
+                                  DxgkpAdapterStartThread,
+                                  &Start);
+    if (!NT_SUCCESS(Status))
+    {
+        DXGKRNL_ERR("DxgkpStartAdapterOnOwnThread: adapter %p start thread not created 0x%08lX\n", Adapter, Status);
+        return Status;
+    }
+    ZwClose(Thread);
+
+    KeWaitForSingleObject(&Start.Done, Executive, KernelMode, FALSE, NULL);
+    return Start.Status;
+}
+
 static
 BOOLEAN
 DxgkpDeferAdapterStart(
@@ -457,7 +529,7 @@ DxgkStartDeferredAdapters(VOID)
         if (InterlockedCompareExchange(&Adapter->RemoveRundownStarted, 0, 0) == 0 &&
             ExAcquireRundownProtection(&Adapter->RemoveRundownRef))
         {
-            Status = DxgkAdapterStart(Adapter, Resources, Translated);
+            Status = DxgkpStartAdapterOnOwnThread(Adapter, Resources, Translated);
             if (!NT_SUCCESS(Status))
             {
                 DXGKRNL_ERR("DxgkStartDeferredAdapters: adapter %p did not start (0x%08lX)\n", Adapter, Status);
@@ -14855,6 +14927,7 @@ DxgkAdapterStart(
     /* Call miniport start. */
     DXGKRNL_TRACE("DxgkAdapterStart: calling DxgkDdiStartDevice MiniportCtx=%p\n",
                   Adapter->MiniportDeviceContext);
+    ASSERT(PsGetCurrentProcess() == PsInitialSystemProcess);
     InterlockedExchange(&Adapter->MiniportStartFailed, 0);
     StepStart100ns = DxgkpTraceNow100ns();
     Status = Adapter->MiniportContext->InitData.s.DxgkDdiStartDevice(
@@ -16900,7 +16973,7 @@ DxgkpMiniportPnpDispatch(
                                             Stack->Parameters.StartDevice.AllocatedResources,
                                             Stack->Parameters.StartDevice.AllocatedResourcesTranslated))
                 {
-                    Status = DxgkAdapterStart(
+                    Status = DxgkpStartAdapterOnOwnThread(
                                  Adapter,
                                  Stack->Parameters.StartDevice.AllocatedResources,
                                  Stack->Parameters.StartDevice.AllocatedResourcesTranslated);
