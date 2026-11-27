@@ -3748,6 +3748,12 @@ NTSTATUS NTAPI ChpeAutoRtlConsoleMultiByteToUnicodeN(PVOID a0, ULONG a1, PVOID a
     return RtlConsoleMultiByteToUnicodeN(a0, a1, a2, a3, a4, a5);
 }
 
+DWORD NTAPI ChpeAutoRtlConvertDeviceFamilyInfoToString(PDWORD a0, PDWORD a1, PWSTR a2, PWSTR a3)
+{
+    return RtlConvertDeviceFamilyInfoToString(a0, a1, a2, a3);
+}
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlConvertDeviceFamilyInfoToString), __typeof__(&RtlConvertDeviceFamilyInfoToString)), "RtlConvertDeviceFamilyInfoToString bridge signature mismatch");
+
 void NTAPI ChpeAutoRtlConvertExclusiveToShared(PRTL_RESOURCE a0)
 {
     RtlConvertExclusiveToShared(a0);
