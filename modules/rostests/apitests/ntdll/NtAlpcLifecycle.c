@@ -892,6 +892,119 @@ Cleanup:
     AlpcTestCloseConnectedPorts(ConnectionPort, ServerPort, ClientPort);
 }
 
+typedef struct _ALPC_TIMED_OUT_SERVER
+{
+    HANDLE ConnectionPort;
+    HANDLE ServerPort;
+    volatile LONG Stop;
+    ULONG Received;
+    ULONG Replied;
+    ULONG Canceled;
+    ULONG Other;
+    NTSTATUS OtherStatus;
+} ALPC_TIMED_OUT_SERVER, *PALPC_TIMED_OUT_SERVER;
+
+static
+DWORD
+WINAPI
+AlpcTimedOutRequestServerThread(
+    _In_ PVOID Parameter)
+{
+    PALPC_TIMED_OUT_SERVER Server = Parameter;
+    ALPC_TEST_MESSAGE Request;
+    LARGE_INTEGER Timeout;
+    SIZE_T Length;
+    NTSTATUS Status;
+
+    while (!Server->Stop)
+    {
+        Timeout = AlpcTestRelativeTimeout(100);
+        Length = sizeof(Request);
+        RtlZeroMemory(&Request, sizeof(Request));
+        Status = NtAlpcSendWaitReceivePort(Server->ConnectionPort, 0, NULL, NULL, &Request.Header, &Length, NULL, &Timeout);
+        if (Status != STATUS_SUCCESS || (Request.Header.u2.s2.Type & 0xFF) != LPC_REQUEST)
+            continue;
+
+        Server->Received++;
+        Request.Value++;
+        Status = NtAlpcSendWaitReceivePort(Server->ServerPort, ALPC_MSGFLG_REPLY_MESSAGE, &Request.Header, NULL, NULL, NULL, NULL, NULL);
+        if (Status == STATUS_SUCCESS)
+            Server->Replied++;
+        else if (Status == STATUS_REQUEST_CANCELED)
+            Server->Canceled++;
+        else
+        {
+            Server->Other++;
+            Server->OtherStatus = Status;
+        }
+    }
+    return 0;
+}
+
+static
+VOID
+AlpcTestTimedOutRequestReply(VOID)
+{
+    static UNICODE_STRING PortName = RTL_CONSTANT_STRING(L"\\RPC Control\\NtdllApitestNtAlpcTimedOutReply");
+    ALPC_TIMED_OUT_SERVER Server;
+    ALPC_TEST_MESSAGE Request, Reply;
+    LARGE_INTEGER Timeout;
+    HANDLE ClientPort = NULL;
+    HANDLE Thread;
+    SIZE_T Length;
+    NTSTATUS Status;
+    ULONGLONG Deadline;
+    ULONG Sent = 0, TimedOut = 0, Answered = 0, Unexpected = 0;
+    NTSTATUS UnexpectedStatus = STATUS_SUCCESS;
+    DWORD WaitStatus;
+
+    RtlZeroMemory(&Server, sizeof(Server));
+    Status = AlpcTestCreateConnectedPorts(&PortName, 0, &Server.ConnectionPort, &Server.ServerPort, &ClientPort);
+    ok_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Thread = CreateThread(NULL, 0, AlpcTimedOutRequestServerThread, &Server, 0, NULL);
+    ok(Thread != NULL, "CreateThread failed: %lu\n", GetLastError());
+    if (!Thread)
+    {
+        AlpcTestCloseConnectedPorts(Server.ConnectionPort, Server.ServerPort, ClientPort);
+        return;
+    }
+
+    Deadline = GetTickCount64() + 3000;
+    while (Sent < 20000 && GetTickCount64() < Deadline)
+    {
+        AlpcTestInitializeMessage(&Request, ALPC_LIFECYCLE_REQUEST_COOKIE, Sent);
+        Length = sizeof(Reply);
+        Timeout.QuadPart = 0;
+        Status = NtAlpcSendWaitReceivePort(ClientPort, ALPC_MSGFLG_SYNC_REQUEST, &Request.Header, NULL, &Reply.Header, &Length, NULL, &Timeout);
+        Sent++;
+        if (Status == STATUS_TIMEOUT)
+            TimedOut++;
+        else if (Status == STATUS_SUCCESS)
+            Answered++;
+        else
+        {
+            Unexpected++;
+            UnexpectedStatus = Status;
+        }
+    }
+
+    InterlockedExchange(&Server.Stop, 1);
+    WaitStatus = WaitForSingleObject(Thread, ALPC_TEST_TIMEOUT_MS);
+    ok_eq_ulong(WaitStatus, WAIT_OBJECT_0);
+    CloseHandle(Thread);
+    AlpcTestCloseConnectedPorts(Server.ConnectionPort, Server.ServerPort, ClientPort);
+
+    trace("ALPC_OBSERVE value TimedOutReply.sent=%lu timed_out=%lu answered=%lu received=%lu replied=%lu canceled=%lu other=%lu\n",
+          Sent, TimedOut, Answered, Server.Received, Server.Replied, Server.Canceled, Server.Other);
+    ok(Unexpected == 0, "%lu requests failed, last with %08lx\n", Unexpected, UnexpectedStatus);
+    ok(TimedOut != 0, "no request timed out\n");
+    ok(Server.Other == 0, "%lu replies to timed out requests failed, last with %08lx\n", Server.Other, Server.OtherStatus);
+    ok(Server.Replied == Answered, "%lu replies delivered, %lu requests answered\n", Server.Replied, Answered);
+}
+
 START_TEST(NtAlpcLifecycle)
 {
     if (AlpcTestIsChildMode("auto-release-timeout"))
@@ -916,5 +1029,6 @@ START_TEST(NtAlpcLifecycle)
     AlpcTestCancellation();
     AlpcTestCallback();
     AlpcTestLostReply();
+    AlpcTestTimedOutRequestReply();
     AlpcTestRunIsolatedCase(L"NtAlpcLifecycle", L"close-while-blocked", ALPC_TEST_CHILD_TIMEOUT_MS);
 }

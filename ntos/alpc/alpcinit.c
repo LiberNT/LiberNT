@@ -1004,6 +1004,23 @@ AlpcpReclaimCanceledMessage(
     return TRUE;
 }
 
+BOOLEAN
+NTAPI
+AlpcpRequeueCanceledMessage(
+    _In_ PKALPC_MESSAGE Message)
+{
+    ASSERT(!(Message->State & ALPC_MSG_STATE_IN_CANCELED_QUEUE));
+    ASSERT(!Message->CancelQueuePort);
+
+    if (!Message->QueuePort || (Message->QueuePort->Flags & ALPC_PORT_FLAG_CLOSED)) return FALSE;
+
+    Message->CancelQueuePort = Message->QueuePort;
+    Message->State |= ALPC_MSG_STATE_IN_CANCELED_QUEUE;
+    InsertTailList(&Message->CancelQueuePort->CanceledQueue, &Message->CanceledEntry);
+    Message->CancelQueuePort->CanceledQueueLength++;
+    return TRUE;
+}
+
 VOID
 NTAPI
 AlpcpMakePending(
