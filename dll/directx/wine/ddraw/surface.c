@@ -3237,6 +3237,9 @@ static HRESULT WINAPI ddraw_surface4_EnumAttachedSurfaces(IDirectDrawSurface4 *i
 
     TRACE("iface %p, context %p, callback %p.\n", iface, context, callback);
 
+    if (!callback)
+        return DDERR_INVALIDPARAMS;
+
     info.callback = callback;
     info.context  = context;
 
@@ -3251,6 +3254,9 @@ static HRESULT WINAPI ddraw_surface3_EnumAttachedSurfaces(IDirectDrawSurface3 *i
     struct callback_info info;
 
     TRACE("iface %p, context %p, callback %p.\n", iface, context, callback);
+
+    if (!callback)
+        return DDERR_INVALIDPARAMS;
 
     info.callback = callback;
     info.context  = context;
@@ -3267,6 +3273,9 @@ static HRESULT WINAPI ddraw_surface2_EnumAttachedSurfaces(IDirectDrawSurface2 *i
 
     TRACE("iface %p, context %p, callback %p.\n", iface, context, callback);
 
+    if (!callback)
+        return DDERR_INVALIDPARAMS;
+
     info.callback = callback;
     info.context  = context;
 
@@ -3281,6 +3290,9 @@ static HRESULT WINAPI ddraw_surface1_EnumAttachedSurfaces(IDirectDrawSurface *if
     struct callback_info info;
 
     TRACE("iface %p, context %p, callback %p.\n", iface, context, callback);
+
+    if (!callback)
+        return DDERR_INVALIDPARAMS;
 
     info.callback = callback;
     info.context  = context;
