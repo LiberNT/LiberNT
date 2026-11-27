@@ -49,6 +49,116 @@ LoadPrintfW(
     va_end(Args);
 }
 
+static PCWSTR
+SetupUiFaceName(VOID)
+{
+    LANGID LangId = GetThreadUILanguage();
+
+    switch (PRIMARYLANGID(LangId))
+    {
+        case LANG_JAPANESE:
+            return L"Yu Gothic UI";
+        case LANG_KOREAN:
+            return L"Malgun Gothic";
+        case LANG_CHINESE:
+            switch (SUBLANGID(LangId))
+            {
+                case SUBLANG_CHINESE_TRADITIONAL:
+                case SUBLANG_CHINESE_HONGKONG:
+                case SUBLANG_CHINESE_MACAU:
+                    return L"Microsoft JhengHei UI";
+                default:
+                    return L"Microsoft YaHei UI";
+            }
+        default:
+            return NULL;
+    }
+}
+
+static HFONT
+CreateFrameFont(
+    _In_ INT PointSize,
+    _In_ LONG Weight)
+{
+    NONCLIENTMETRICSW Metrics;
+    PCWSTR FaceName;
+    LOGFONTW Font;
+    HDC hdc;
+
+    Metrics.cbSize = sizeof(Metrics);
+    if (!SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(Metrics), &Metrics, 0))
+        return NULL;
+
+    Font = Metrics.lfMessageFont;
+    Font.lfWeight = Weight;
+    FaceName = SetupUiFaceName();
+    if (FaceName)
+    {
+        Font.lfCharSet = DEFAULT_CHARSET;
+        StringCchCopyW(Font.lfFaceName, ARRAYSIZE(Font.lfFaceName), FaceName);
+    }
+    if (PointSize)
+    {
+        hdc = GetDC(NULL);
+        Font.lfHeight = -MulDiv(PointSize, GetDeviceCaps(hdc, LOGPIXELSY), 72);
+        ReleaseDC(NULL, hdc);
+    }
+    return CreateFontIndirectW(&Font);
+}
+
+static BOOL CALLBACK
+ApplyChildFontProc(
+    _In_ HWND hwnd,
+    _In_ LPARAM lParam)
+{
+    PSETUPDATA pSetupData = (PSETUPDATA)lParam;
+    HFONT hCurrent = (HFONT)SendMessageW(hwnd, WM_GETFONT, 0, 0);
+    LOGFONTW CurrentLf, TitleLf;
+
+    if (hCurrent == pSetupData->hTitleFont || hCurrent == pSetupData->hBoldFont)
+        return TRUE;
+
+    if (hCurrent && pSetupData->hTitleFont &&
+        GetObjectW(hCurrent, sizeof(CurrentLf), &CurrentLf) &&
+        GetObjectW(pSetupData->hTitleFont, sizeof(TitleLf), &TitleLf) &&
+        abs(CurrentLf.lfHeight) >= abs(TitleLf.lfHeight))
+    {
+        SendMessageW(hwnd, WM_SETFONT, (WPARAM)pSetupData->hTitleFont, TRUE);
+        return TRUE;
+    }
+
+    SendMessageW(hwnd, WM_SETFONT, (WPARAM)pSetupData->hBodyFont, TRUE);
+    return TRUE;
+}
+
+VOID
+SetupApplyDialogFont(
+    _In_ HWND hwndDlg)
+{
+    if (!Frame.SetupData || !Frame.SetupData->hBodyFont)
+        return;
+
+    SendMessageW(hwndDlg, WM_SETFONT, (WPARAM)Frame.SetupData->hBodyFont, FALSE);
+    EnumChildWindows(hwndDlg, ApplyChildFontProc, (LPARAM)Frame.SetupData);
+}
+
+static HRESULT CALLBACK
+SetupMessageCallback(
+    _In_ HWND hwnd,
+    _In_ UINT msg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam,
+    _In_ LONG_PTR lpRefData)
+{
+    UNREFERENCED_PARAMETER(wParam);
+    UNREFERENCED_PARAMETER(lParam);
+    UNREFERENCED_PARAMETER(lpRefData);
+
+    if (msg == TDN_CREATED)
+        SetupApplyDialogFont(hwnd);
+    return S_OK;
+}
+
 INT
 SetupMessage(
     _In_opt_ HWND hwndOwner,
@@ -72,33 +182,11 @@ SetupMessage(
     Config.pszMainInstruction = MainInstruction;
     Config.pszContent = Content;
     Config.nDefaultButton = DefaultButton;
+    Config.pfCallback = SetupMessageCallback;
 
     if (FAILED(TaskDialogIndirect(&Config, &Button, NULL, NULL)))
         return IDCANCEL;
     return Button;
-}
-
-static HFONT
-CreateFrameFont(
-    _In_ INT PointSize)
-{
-    NONCLIENTMETRICSW Metrics;
-    LOGFONTW Font;
-    HDC hdc;
-
-    Metrics.cbSize = sizeof(Metrics);
-    if (!SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(Metrics), &Metrics, 0))
-        return NULL;
-
-    Font = Metrics.lfMessageFont;
-    Font.lfWeight = FW_BOLD;
-    if (PointSize)
-    {
-        hdc = GetDC(NULL);
-        Font.lfHeight = -MulDiv(PointSize, GetDeviceCaps(hdc, LOGPIXELSY), 72);
-        ReleaseDC(NULL, hdc);
-    }
-    return CreateFontIndirectW(&Font);
 }
 
 VOID
@@ -443,10 +531,12 @@ SetupFrameProc(
             hIcon = LoadIconW(pSetupData->hInstance, MAKEINTRESOURCEW(IDI_MAIN));
             SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
             SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+            if (!pSetupData->hBodyFont && SetupUiFaceName())
+                pSetupData->hBodyFont = CreateFrameFont(8, FW_NORMAL);
             if (!pSetupData->hTitleFont)
-                pSetupData->hTitleFont = CreateFrameFont(12);
+                pSetupData->hTitleFont = CreateFrameFont(12, FW_BOLD);
             if (!pSetupData->hBoldFont)
-                pSetupData->hBoldFont = CreateFrameFont(0);
+                pSetupData->hBoldFont = CreateFrameFont(0, FW_BOLD);
             SetDlgItemFont(hwnd, IDC_FRAME_TITLE, pSetupData->hTitleFont, FALSE);
 
             Frame.hWatermark = LoadImageW(pSetupData->hInstance, MAKEINTRESOURCEW(IDB_WATERMARK),
@@ -484,6 +574,7 @@ SetupFrameProc(
                 SetWindowPos(Frame.Pages[Page], HWND_TOP, rc.left, rc.top,
                              rc.right - rc.left, rc.bottom - rc.top, SWP_NOACTIVATE);
             }
+            SetupApplyDialogFont(hwnd);
 
             FrameCenter(hwnd);
             Frame.First = FrameNextPage(0);
@@ -519,10 +610,13 @@ SetupFrameProc(
             break;
 
         case WM_DESTROY:
+            if (Frame.SetupData->hBodyFont)
+                DeleteObject(Frame.SetupData->hBodyFont);
             if (Frame.SetupData->hTitleFont)
                 DeleteObject(Frame.SetupData->hTitleFont);
             if (Frame.SetupData->hBoldFont)
                 DeleteObject(Frame.SetupData->hBoldFont);
+            Frame.SetupData->hBodyFont = NULL;
             Frame.SetupData->hTitleFont = NULL;
             Frame.SetupData->hBoldFont = NULL;
             if (Frame.hWatermark)

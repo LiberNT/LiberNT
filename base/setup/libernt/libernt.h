@@ -85,6 +85,7 @@ typedef struct _SETUPDATA
     BOOL bUnattendTried;
     BOOL bMustReboot;
 
+    HFONT hBodyFont;
     HFONT hTitleFont;
     HFONT hBoldFont;
 
@@ -370,6 +371,10 @@ VOID
 SetResText(
     _In_ HWND hWnd,
     _In_ UINT uID);
+
+VOID
+SetupApplyDialogFont(
+    _In_ HWND hwndDlg);
 
 INT_PTR
 CALLBACK
