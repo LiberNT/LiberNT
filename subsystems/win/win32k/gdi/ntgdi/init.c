@@ -159,6 +159,9 @@ BOOL
 APIENTRY
 NtGdiInit(VOID)
 {
+    /* OOBE and intl.cpl can change the system language without rebooting; let every new GUI process pick it up */
+    gusLanguageID = UserGetLanguageID();
+
     return TRUE;
 }
 

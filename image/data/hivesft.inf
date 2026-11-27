@@ -1278,6 +1278,24 @@ HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\FontLink","FontLinkDefaultCha
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\FontLink\SystemLink",,0x00000012
 
 ; FontLink (Latin to others)
+; CJK links use the neutral (Japanese-first) order; win32k re-orders them by system language
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\FontLink\SystemLink","Segoe UI",0x00010000,\
+	"tahoma.ttf,Tahoma",\
+	"yugothm.ttc,Yu Gothic UI,128,96",\
+	"yugothm.ttc,Yu Gothic UI",\
+	"meiryo.ttc,Meiryo UI,128,96",\
+	"meiryo.ttc,Meiryo UI",\
+	"msgothic.ttc,MS UI Gothic",\
+	"msjh.ttc,Microsoft JhengHei UI,128,96",\
+	"msjh.ttc,Microsoft JhengHei UI",\
+	"mingliu.ttc,PMingLiU",\
+	"msyh.ttc,Microsoft YaHei UI,128,96",\
+	"msyh.ttc,Microsoft YaHei UI",\
+	"simsun.ttc,SimSun",\
+	"malgun.ttf,Malgun Gothic,128,96",\
+	"malgun.ttf,Malgun Gothic",\
+	"gulim.ttc,Gulim",\
+	"seguisym.ttf,Segoe UI Symbol"
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\FontLink\SystemLink","Tahoma",0x00010000,\
 	"msgothic.ttc,MS UI Gothic",\
 	"simsun.ttc,SimSun",\
@@ -1363,6 +1381,7 @@ HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\FontLink\SystemLink","Gulim",
 	"micross.ttf,Microsoft Sans Serif",\
 	"msgothic.ttc,MS UI Gothic",\
 	"mingliu.ttc,PMingLiU",\
+	"simsun.ttc,SimSun",\
 	"tahoma.ttf,Tahoma"
 HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\FontLink\SystemLink","GulimChe",0x00010000,\
 	"msgothic.ttc,MS Gothic",\
