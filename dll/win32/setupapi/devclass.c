@@ -1009,6 +1009,10 @@ SetupDiInstallClassExW(
             if (!ret)
                 goto cleanup;
 
+            ret = SETUP_InstallClassProperties(hInf, SectionName);
+            if (!ret)
+                goto cleanup;
+
             /* OPTIONAL: Install .Services section */
             lstrcatW(SectionName, DotServices);
             ret = SetupInstallServicesFromInfSectionExW(

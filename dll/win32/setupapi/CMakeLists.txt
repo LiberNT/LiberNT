@@ -13,6 +13,7 @@ add_definitions(
 spec2def(setupapi.dll setupapi.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE
+    addprop.c
     devclass.c
     devinst.c
     dialog.c
