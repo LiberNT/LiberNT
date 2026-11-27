@@ -3774,6 +3774,13 @@ DWORD WINAPI GetOwnerModuleFromUdpEntry(PMIB_UDPROW_OWNER_MODULE entry, TCPIP_OW
     if (!entry) return ERROR_INVALID_PARAMETER;
     return get_owner_module(class, buffer, size, entry->dwOwningPid, entry->OwningModuleInfo[0]);
 }
+
+DWORD WINAPI GetOwnerModuleFromUdp6Entry(PMIB_UDP6ROW_OWNER_MODULE entry, TCPIP_OWNER_MODULE_INFO_CLASS class, void *buffer, DWORD *size)
+{
+    TRACE("entry %p, class %d, buffer %p, size %p.\n", entry, class, buffer, size);
+    if (!entry) return ERROR_INVALID_PARAMETER;
+    return get_owner_module(class, buffer, size, entry->dwOwningPid, entry->OwningModuleInfo[0]);
+}
 #endif
 
 /******************************************************************

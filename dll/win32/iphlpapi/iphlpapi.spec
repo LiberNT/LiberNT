@@ -125,7 +125,7 @@
 #@ stub GetOwnerModuleFromPidAndInfo
 @ stdcall GetOwnerModuleFromTcp6Entry( ptr long ptr ptr )
 @ stdcall GetOwnerModuleFromTcpEntry( ptr long ptr ptr )
-#@ stub GetOwnerModuleFromUdp6Entry
+@ stdcall GetOwnerModuleFromUdp6Entry(ptr long ptr ptr)
 @ stdcall GetOwnerModuleFromUdpEntry(ptr long ptr ptr)
 @ stdcall GetPerAdapterInfo( long ptr ptr )
 @ stdcall GetPerTcp6ConnectionEStats( ptr long ptr long long ptr long long ptr long long )
