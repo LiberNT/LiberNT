@@ -865,7 +865,7 @@ PortMapDataBuffer(
         return STATUS_INSUFFICIENT_RESOURCES;
 
     SrbContext->OriginalDataBuffer = Srb->DataBuffer;
-    Srb->DataBuffer = SystemVa + ((PUCHAR)Srb->DataBuffer - (PUCHAR)MmGetMdlVirtualAddress(Mdl));
+    Srb->DataBuffer = SystemVa + ((ULONG_PTR)Srb->DataBuffer - (ULONG_PTR)MmGetMdlVirtualAddress(Mdl));
     return STATUS_SUCCESS;
 }
 
