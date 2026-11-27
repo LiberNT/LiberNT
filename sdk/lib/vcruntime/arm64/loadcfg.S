@@ -3,13 +3,20 @@
  * This file is part of the mingw-w64 runtime package.
  * No warranty is given; refer to the file DISCLAIMER.PD within this package.
  *
- * ARM64 Control Flow Guard runtime metadata for PE/COFF images.
+ * ARM64 load configuration and Control Flow Guard runtime metadata for PE/COFF images.
  */
 
 #define PTR .8byte
 #define ALIGN 16
 #define EXPORT_SYM(x) .globl x; x:
 #define SYM(x) x
+
+#ifndef LOAD_LIBRARY_SEARCH_SYSTEM32
+#define LOAD_LIBRARY_SEARCH_SYSTEM32 0x00000800
+#endif
+#ifndef LOADCONFIG_DEPENDENT_LOAD_FLAGS
+#define LOADCONFIG_DEPENDENT_LOAD_FLAGS 0
+#endif
 
 .text
 .balign ALIGN
@@ -35,6 +42,11 @@ EXPORT_SYM(__guard_check_icall_fptr)
 EXPORT_SYM(__guard_dispatch_icall_fptr)
   PTR SYM(__guard_dispatch_icall_dummy)
 
+.data
+.balign 8
+SYM(ImageSecurityCookie):
+  .8byte 0x00002B992DDFA232
+
 /* IMAGE_LOAD_CONFIG_DIRECTORY64 as published by the Windows 11 SDK. */
 .section .rdata, "dr"
 .globl SYM(_load_config_used)
@@ -55,9 +67,9 @@ SYM(_load_config_used):
   PTR 0 /* ProcessAffinityMask */
   .4byte 0 /* ProcessHeapFlags */
   .2byte 0 /* CSDVersion */
-  .2byte 0 /* DependentLoadFlags */
+  .2byte LOADCONFIG_DEPENDENT_LOAD_FLAGS /* DependentLoadFlags */
   PTR 0 /* EditList */
-  PTR 0 /* SecurityCookie */
+  PTR SYM(ImageSecurityCookie) /* SecurityCookie */
   PTR 0 /* SEHandlerTable */
   PTR 0 /* SEHandlerCount */
   PTR SYM(__guard_check_icall_fptr) /* GuardCFCheckFunctionPointer */

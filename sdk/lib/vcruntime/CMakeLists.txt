@@ -55,7 +55,6 @@ elseif(${ARCH} STREQUAL "arm64")
     )
     list(APPEND VCRT_SETJMP_ASM_SOURCES
         arm64/__longjmp_noframe.s
-        arm64/guardcf.S
         arm64/_setjmp.s
     )
 elseif(${ARCH} STREQUAL "riscv64")
@@ -142,9 +141,15 @@ if(ARM64EC_RUNTIME)
 endif()
 
 # Linked to every user-mode module; an image that defines its own _load_config_used never pulls it.
-add_library(loadconfig loadconfig.c)
+if(ARCH STREQUAL "arm64" AND NOT ARM64EC_RUNTIME)
+    set(LOADCONFIG_SOURCE arm64/loadcfg.S)
+else()
+    set(LOADCONFIG_SOURCE loadconfig.c)
+endif()
+
+add_library(loadconfig ${LOADCONFIG_SOURCE})
 add_dependencies(loadconfig psdk)
 
-add_library(loadconfig_system32 OBJECT loadconfig.c)
+add_library(loadconfig_system32 OBJECT ${LOADCONFIG_SOURCE})
 target_compile_definitions(loadconfig_system32 PRIVATE LOADCONFIG_DEPENDENT_LOAD_FLAGS=LOAD_LIBRARY_SEARCH_SYSTEM32)
 add_dependencies(loadconfig_system32 psdk)
