@@ -181,7 +181,7 @@ NtfsSubmitDirectIoRun(_In_ PVolumeContextBlock VolCB,
     Irp = IoAllocateIrp(VolCB->StorageDevice->StackSize, FALSE);
     if (!Irp)
         return STATUS_INSUFFICIENT_RESOURCES;
-    RunVa = (PUCHAR)MmGetMdlVirtualAddress(MasterIrp->MdlAddress) + BufferOffset;
+    RunVa = (PUCHAR)((ULONG_PTR)MmGetMdlVirtualAddress(MasterIrp->MdlAddress) + BufferOffset);
     Mdl = IoAllocateMdl(RunVa, Run->Length, FALSE, FALSE, NULL);
     if (!Mdl)
     {
