@@ -432,7 +432,7 @@ TestLinkedHangulRender(PCWSTR pszBase, RENDER_MODE Mode)
 
     if (!GroupExists(GRP_KO))
     {
-        skip("no Korean font installed\n");
+        ok(FALSE, "%ls (mode %d) has no Korean font to draw Hangul with\n", pszBase, Mode);
         return;
     }
 
