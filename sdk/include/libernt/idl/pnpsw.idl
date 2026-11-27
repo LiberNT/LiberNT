@@ -1,0 +1,57 @@
+/*
+ * PROJECT:     LiberNT Plug and Play
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Private software device interface between cfgmgr32 and umpnpmgr
+ * COPYRIGHT:   Copyright 2026 mikuta0407 <mikuta0407@mikuta0407.net>
+ */
+
+import "wtypes.idl";
+
+const unsigned long PNPSW_MAX_DEVICE_ID_LEN = 200;
+const unsigned long PNPSW_MAX_ID_LIST_LEN = 32767;
+
+typedef [context_handle] void *PNP_SWDEVICE_HANDLE;
+typedef PNP_SWDEVICE_HANDLE *PPNP_SWDEVICE_HANDLE;
+typedef [range(0, PNPSW_MAX_ID_LIST_LEN)] unsigned long PNPSW_ID_LIST_LEN;
+
+[
+    uuid(cb844d4d-2e74-4f95-abc0-99f7375f4f61),
+    version(1.0),
+    pointer_default(unique)
+]
+interface pnpsw
+{
+    HRESULT
+    __stdcall
+    PNP_SwDeviceCreate(
+        [in] handle_t hBinding,
+        [in, string, ref] LPWSTR pszEnumeratorName,
+        [in, string, ref] LPWSTR pszParentDeviceInstance,
+        [in, string, ref] LPWSTR pszInstanceId,
+        [in, unique, size_is(ulHardwareIdsLength)] WCHAR *pszzHardwareIds,
+        [in] PNPSW_ID_LIST_LEN ulHardwareIdsLength,
+        [in, unique, size_is(ulCompatibleIdsLength)] WCHAR *pszzCompatibleIds,
+        [in] PNPSW_ID_LIST_LEN ulCompatibleIdsLength,
+        [in] DWORD ulCapabilityFlags,
+        [in, string, unique] LPWSTR pszDeviceDescription,
+        [in, string, unique] LPWSTR pszDeviceLocation,
+        [out] WCHAR szDeviceInstanceId[PNPSW_MAX_DEVICE_ID_LEN],
+        [out] PPNP_SWDEVICE_HANDLE phSwDevice);
+
+    HRESULT
+    __stdcall
+    PNP_SwDeviceClose(
+        [in, out] PPNP_SWDEVICE_HANDLE phSwDevice);
+
+    HRESULT
+    __stdcall
+    PNP_SwDeviceSetLifetime(
+        [in] PNP_SWDEVICE_HANDLE hSwDevice,
+        [in] DWORD ulLifetime);
+
+    HRESULT
+    __stdcall
+    PNP_SwDeviceGetLifetime(
+        [in] PNP_SWDEVICE_HANDLE hSwDevice,
+        [out] DWORD *pulLifetime);
+}

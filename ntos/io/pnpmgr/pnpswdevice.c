@@ -19,7 +19,12 @@ typedef struct _PNP_SW_DEVICE
     PDEVICE_OBJECT PhysicalDeviceObject;
     UNICODE_STRING Name;
     UNICODE_STRING InstanceId;
+    ULONG Capabilities;
+    BOOLEAN Created;
+    BOOLEAN Listed;
     BOOLEAN Reported;
+    BOOLEAN Handed;
+    BOOLEAN Retired;
 } PNP_SW_DEVICE, *PPNP_SW_DEVICE;
 
 typedef struct _PNP_SW_PDO_EXTENSION
@@ -37,6 +42,9 @@ static const UNICODE_STRING PnpSwDriverName =
 static const UNICODE_STRING PnpSwDevicesKeyName =
     RTL_CONSTANT_STRING(L"Devices");
 
+static const UNICODE_STRING PnpSwCreatedKeyName =
+    RTL_CONSTANT_STRING(ENUM_ROOT L"\\SWD");
+
 /* Windows 11 enumerates a driver's component as SWD\DRIVERENUM\<component>&<prefix the parent gives its children> */
 static const WCHAR PnpSwDeviceId[] = L"SWD\\DRIVERENUM";
 static const WCHAR PnpSwCompatibleIds[] = L"SWD\\GenericRaw\0SWD\\Generic\0";
@@ -44,6 +52,12 @@ static const WCHAR PnpSwNoIds[] = L"";
 static const WCHAR PnpSwContainerId[] = L"{00000000-0000-0000-ffff-ffffffffffff}";
 
 #define PNP_SW_MAX_DEVICE_ID_CHARS 200
+
+#define CM_DEVCAP_REMOVABLE         0x00000004
+#define CM_DEVCAP_UNIQUEID          0x00000010
+#define CM_DEVCAP_SILENTINSTALL     0x00000020
+#define CM_DEVCAP_RAWDEVICEOK       0x00000040
+#define CM_DEVCAP_SURPRISEREMOVALOK 0x00000080
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -107,9 +121,20 @@ PnpSwOpenComponentKey(
     PAGED_CODE();
 
     ASSERT(PnpSwIsLockHeld());
-    ASSERT(Device->Parent != NULL);
 
     *ComponentKey = NULL;
+
+    if (Device->Created)
+    {
+        Status = IopOpenRegistryKeyEx(&DevicesKey, NULL, (PUNICODE_STRING)&PnpSwCreatedKeyName, KEY_READ);
+        if (!NT_SUCCESS(Status)) return Status;
+
+        Status = IopOpenRegistryKeyEx(ComponentKey, DevicesKey, &Device->Name, KEY_READ);
+        ZwClose(DevicesKey);
+        return Status;
+    }
+
+    ASSERT(Device->Parent != NULL);
 
     Status = PnpDeviceObjectToDeviceInstance(Device->Parent, &InstanceKey, KEY_READ);
     if (!NT_SUCCESS(Status)) return Status;
@@ -244,6 +269,34 @@ PnpSwCopyString(
 
 static
 NTSTATUS
+PnpSwFormatCreatedDeviceId(
+    _In_ PPNP_SW_DEVICE Device,
+    _Out_ PWSTR *Id)
+{
+    USHORT Enumerator = 0;
+    PWCHAR Buffer;
+    SIZE_T Size;
+
+    PAGED_CODE();
+
+    ASSERT(Device->Created);
+
+    while (Enumerator < Device->Name.Length / sizeof(WCHAR) && Device->Name.Buffer[Enumerator] != L'\\') Enumerator++;
+    ASSERT(Enumerator < Device->Name.Length / sizeof(WCHAR));
+
+    *Id = NULL;
+    Size = sizeof(L"SWD\\") + Enumerator * sizeof(WCHAR);
+    Buffer = ExAllocatePoolZero(PagedPool, Size, TAG_PNP_SWDEVICE);
+    if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlCopyMemory(Buffer, L"SWD\\", sizeof(L"SWD\\") - sizeof(WCHAR));
+    RtlCopyMemory(&Buffer[4], Device->Name.Buffer, Enumerator * sizeof(WCHAR));
+    *Id = Buffer;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
 PnpSwQueryId(
     _In_ PPNP_SW_DEVICE Device,
     _In_ BUS_QUERY_ID_TYPE IdType,
@@ -256,6 +309,7 @@ PnpSwQueryId(
     switch (IdType)
     {
         case BusQueryDeviceID:
+            if (Device->Created) return PnpSwFormatCreatedDeviceId(Device, Id);
             return PnpSwCopyString(PnpSwDeviceId, Id);
 
         case BusQueryInstanceID:
@@ -263,12 +317,16 @@ PnpSwQueryId(
             return PnpSwCopyString(Device->InstanceId.Buffer, Id);
 
         case BusQueryHardwareIDs:
+            if (Device->Created) return PnpSwQueryIds(Device, L"HardwareID", PnpSwNoIds, sizeof(PnpSwNoIds), Id);
             return PnpSwQueryIds(Device, L"HardwareIds", PnpSwNoIds, sizeof(PnpSwNoIds), Id);
 
         case BusQueryCompatibleIDs:
+            if (Device->Created) return PnpSwQueryIds(Device, L"CompatibleIDs", PnpSwNoIds, sizeof(PnpSwNoIds), Id);
             return PnpSwQueryIds(Device, L"CompatibleIds", PnpSwCompatibleIds, sizeof(PnpSwCompatibleIds), Id);
 
         case BusQueryContainerID:
+            /* TODO: the container ID SwDeviceCreate was given */
+            if (Device->Created) return STATUS_NOT_SUPPORTED;
             return PnpSwCopyString(PnpSwContainerId, Id);
 
         default:
@@ -291,7 +349,7 @@ PnpSwQueryDescription(
 
     *Text = NULL;
 
-    Status = PnpSwQueryValue(Device, L"Description", REG_SZ, &Information);
+    Status = PnpSwQueryValue(Device, Device->Created ? L"DeviceDesc" : L"Description", REG_SZ, &Information);
     if (!NT_SUCCESS(Status)) return STATUS_NOT_SUPPORTED;
 
     Chars = Information->DataLength / sizeof(WCHAR);
@@ -332,7 +390,8 @@ PnpSwFindDevice(
     {
         Device = CONTAINING_RECORD(Entry, PNP_SW_DEVICE, ListEntry);
 
-        if (Device->Parent == Parent && RtlEqualUnicodeString(&Device->Name, Name, TRUE)) return Device;
+        if (Device->Parent == Parent && !Device->Retired && RtlEqualUnicodeString(&Device->Name, Name, TRUE))
+            return Device;
     }
 
     return NULL;
@@ -380,10 +439,48 @@ PnpSwFormatInstanceId(
 }
 
 static
+NTSTATUS
+PnpSwSetCreatedInstance(
+    _In_ PPNP_SW_DEVICE Device)
+{
+    PKEY_VALUE_FULL_INFORMATION Information;
+    USHORT Enumerator = 0;
+    UNICODE_STRING Instance;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    ASSERT(Device->Created);
+
+    while (Enumerator < Device->Name.Length / sizeof(WCHAR) && Device->Name.Buffer[Enumerator] != L'\\') Enumerator++;
+    if (Enumerator + 1 >= Device->Name.Length / sizeof(WCHAR)) return STATUS_OBJECT_NAME_INVALID;
+
+    Instance.Buffer = &Device->Name.Buffer[Enumerator + 1];
+    Instance.Length = Device->Name.Length - (Enumerator + 1) * sizeof(WCHAR);
+    Instance.MaximumLength = Instance.Length;
+
+    Device->InstanceId.Buffer = ExAllocatePoolZero(PagedPool, Instance.Length + sizeof(WCHAR), TAG_PNP_SWDEVICE);
+    if (Device->InstanceId.Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+    Device->InstanceId.MaximumLength = Instance.Length + sizeof(WCHAR);
+    RtlCopyUnicodeString(&Device->InstanceId, &Instance);
+
+    Status = PnpSwQueryValue(Device, L"Capabilities", REG_DWORD, &Information);
+    if (NT_SUCCESS(Status))
+    {
+        if (Information->DataLength == sizeof(ULONG))
+            Device->Capabilities = *(PULONG)((PUCHAR)Information + Information->DataOffset);
+        ExFreePool(Information);
+    }
+
+    return STATUS_SUCCESS;
+}
+
+static
 PPNP_SW_DEVICE
 PnpSwCreateDevice(
     _In_ PDEVICE_NODE ParentNode,
-    _In_ PCUNICODE_STRING Name)
+    _In_ PCUNICODE_STRING Name,
+    _In_ BOOLEAN Created)
 {
     PPNP_SW_PDO_EXTENSION Extension;
     PPNP_SW_DEVICE Device;
@@ -406,8 +503,12 @@ PnpSwCreateDevice(
     }
     Device->Name.MaximumLength = Name->Length + sizeof(WCHAR);
     RtlCopyUnicodeString(&Device->Name, Name);
+    Device->Created = Created;
 
-    Status = PnpSwFormatInstanceId(ParentNode, Name, &Device->InstanceId);
+    if (Created)
+        Status = PnpSwSetCreatedInstance(Device);
+    else
+        Status = PnpSwFormatInstanceId(ParentNode, Name, &Device->InstanceId);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("PnP: component %wZ of %wZ gets no instance (%lx)\n", Name, &ParentNode->InstancePath, Status);
@@ -563,6 +664,173 @@ PnpSwFreeNames(
 }
 
 static
+BOOLEAN
+PnpSwIsCreatedInstanceReported(
+    _In_ HANDLE InstanceKey)
+{
+    UNICODE_STRING ControlName = RTL_CONSTANT_STRING(L"Control");
+    PKEY_VALUE_FULL_INFORMATION Information;
+    BOOLEAN Reported = FALSE;
+    HANDLE ControlKey;
+
+    PAGED_CODE();
+
+    if (!NT_SUCCESS(IopOpenRegistryKeyEx(&ControlKey, InstanceKey, &ControlName, KEY_QUERY_VALUE))) return FALSE;
+
+    if (NT_SUCCESS(IopGetRegistryValue(ControlKey, L"DeviceReported", &Information)))
+    {
+        Reported = Information->Type == REG_DWORD && Information->DataLength == sizeof(ULONG) &&
+                   *(PULONG)((PUCHAR)Information + Information->DataOffset) != 0;
+        ExFreePool(Information);
+    }
+
+    ZwClose(ControlKey);
+    return Reported;
+}
+
+static
+NTSTATUS
+PnpSwAppendName(
+    _Inout_ PUNICODE_STRING *Names,
+    _Inout_ PULONG Count,
+    _Inout_ PULONG Capacity,
+    _In_ PCUNICODE_STRING Enumerator,
+    _In_ PCUNICODE_STRING Instance)
+{
+    PUNICODE_STRING List;
+    USHORT Size;
+
+    PAGED_CODE();
+
+    ASSERT(*Count <= *Capacity);
+
+    if (*Count == *Capacity)
+    {
+        List = ExAllocatePoolZero(PagedPool, (*Capacity + 8) * sizeof(UNICODE_STRING), TAG_PNP_SWDEVICE);
+        if (List == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+        if (*Names != NULL)
+        {
+            RtlCopyMemory(List, *Names, *Count * sizeof(UNICODE_STRING));
+            ExFreePoolWithTag(*Names, TAG_PNP_SWDEVICE);
+        }
+        *Names = List;
+        *Capacity += 8;
+    }
+
+    Size = Enumerator->Length + sizeof(WCHAR) + Instance->Length + sizeof(WCHAR);
+    List = &(*Names)[*Count];
+    List->Buffer = ExAllocatePoolZero(PagedPool, Size, TAG_PNP_SWDEVICE);
+    if (List->Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+    List->MaximumLength = Size;
+    RtlCopyUnicodeString(List, Enumerator);
+    RtlAppendUnicodeToString(List, L"\\");
+    RtlAppendUnicodeStringToString(List, Instance);
+    (*Count)++;
+
+    return STATUS_SUCCESS;
+}
+
+/* The devices SwDeviceCreate reports under the root, which umpnpmgr marks with Control\DeviceReported */
+static
+NTSTATUS
+PnpSwReadCreatedNames(
+    _Out_ PUNICODE_STRING *Names,
+    _Out_ PULONG Count)
+{
+    UNICODE_STRING Enumerator, Instance;
+    PKEY_BASIC_INFORMATION EnumeratorInformation, InstanceInformation;
+    HANDLE CreatedKey, EnumeratorKey, InstanceKey;
+    ULONG Length, Returned, EnumeratorIndex, InstanceIndex, Capacity = 0;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    *Names = NULL;
+    *Count = 0;
+
+    Status = IopOpenRegistryKeyEx(&CreatedKey, NULL, (PUNICODE_STRING)&PnpSwCreatedKeyName, KEY_READ);
+    if (!NT_SUCCESS(Status)) return STATUS_SUCCESS;
+
+    Length = FIELD_OFFSET(KEY_BASIC_INFORMATION, Name) + PNP_SW_MAX_DEVICE_ID_CHARS * sizeof(WCHAR);
+    EnumeratorInformation = ExAllocatePoolZero(PagedPool, Length, TAG_PNP_SWDEVICE);
+    InstanceInformation = ExAllocatePoolZero(PagedPool, Length, TAG_PNP_SWDEVICE);
+    if (EnumeratorInformation == NULL || InstanceInformation == NULL)
+    {
+        if (EnumeratorInformation != NULL) ExFreePoolWithTag(EnumeratorInformation, TAG_PNP_SWDEVICE);
+        if (InstanceInformation != NULL) ExFreePoolWithTag(InstanceInformation, TAG_PNP_SWDEVICE);
+        ZwClose(CreatedKey);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Status = STATUS_SUCCESS;
+    for (EnumeratorIndex = 0; NT_SUCCESS(Status); EnumeratorIndex++)
+    {
+        Status = ZwEnumerateKey(CreatedKey, EnumeratorIndex, KeyBasicInformation, EnumeratorInformation, Length,
+                                &Returned);
+        if (Status == STATUS_NO_MORE_ENTRIES)
+        {
+            Status = STATUS_SUCCESS;
+            break;
+        }
+        if (Status == STATUS_BUFFER_OVERFLOW || Status == STATUS_BUFFER_TOO_SMALL)
+        {
+            Status = STATUS_SUCCESS;
+            continue;
+        }
+        if (!NT_SUCCESS(Status)) break;
+
+        Enumerator.Buffer = EnumeratorInformation->Name;
+        Enumerator.Length = Enumerator.MaximumLength = (USHORT)EnumeratorInformation->NameLength;
+        if (!PnpSwIsValidName(&Enumerator)) continue;
+        if (!NT_SUCCESS(IopOpenRegistryKeyEx(&EnumeratorKey, CreatedKey, &Enumerator, KEY_READ))) continue;
+
+        for (InstanceIndex = 0; NT_SUCCESS(Status); InstanceIndex++)
+        {
+            Status = ZwEnumerateKey(EnumeratorKey, InstanceIndex, KeyBasicInformation, InstanceInformation, Length,
+                                    &Returned);
+            if (Status == STATUS_NO_MORE_ENTRIES)
+            {
+                Status = STATUS_SUCCESS;
+                break;
+            }
+            if (Status == STATUS_BUFFER_OVERFLOW || Status == STATUS_BUFFER_TOO_SMALL)
+            {
+                Status = STATUS_SUCCESS;
+                continue;
+            }
+            if (!NT_SUCCESS(Status)) break;
+
+            Instance.Buffer = InstanceInformation->Name;
+            Instance.Length = Instance.MaximumLength = (USHORT)InstanceInformation->NameLength;
+            if (!PnpSwIsValidName(&Instance)) continue;
+            if (Enumerator.Length + sizeof(WCHAR) + Instance.Length + sizeof(L"SWD\\") >=
+                PNP_SW_MAX_DEVICE_ID_CHARS * sizeof(WCHAR))
+                continue;
+            if (!NT_SUCCESS(IopOpenRegistryKeyEx(&InstanceKey, EnumeratorKey, &Instance, KEY_READ))) continue;
+
+            if (PnpSwIsCreatedInstanceReported(InstanceKey))
+                Status = PnpSwAppendName(Names, Count, &Capacity, &Enumerator, &Instance);
+            ZwClose(InstanceKey);
+        }
+
+        ZwClose(EnumeratorKey);
+    }
+
+    ExFreePoolWithTag(EnumeratorInformation, TAG_PNP_SWDEVICE);
+    ExFreePoolWithTag(InstanceInformation, TAG_PNP_SWDEVICE);
+    ZwClose(CreatedKey);
+
+    if (!NT_SUCCESS(Status))
+    {
+        PnpSwFreeNames(*Names, *Count);
+        *Names = NULL;
+        *Count = 0;
+    }
+
+    return Status;
+}
+
+static
 NTSTATUS
 NTAPI
 PnpSwDevicePnp(
@@ -632,6 +900,20 @@ PnpSwDevicePnp(
             Capabilities->SurpriseRemovalOK = TRUE;
             Capabilities->Address = MAXULONG;
             Capabilities->UINumber = MAXULONG;
+
+            KeEnterCriticalRegion();
+            ExAcquireResourceSharedLite(&PnpSwDeviceLock, TRUE);
+            Device = Extension->Device;
+            if (Device != NULL && Device->Created)
+            {
+                Capabilities->Removable = !!(Device->Capabilities & CM_DEVCAP_REMOVABLE);
+                Capabilities->UniqueID = !!(Device->Capabilities & CM_DEVCAP_UNIQUEID);
+                Capabilities->SilentInstall = !!(Device->Capabilities & CM_DEVCAP_SILENTINSTALL);
+                Capabilities->RawDeviceOK = !!(Device->Capabilities & CM_DEVCAP_RAWDEVICEOK);
+                Capabilities->SurpriseRemovalOK = !!(Device->Capabilities & CM_DEVCAP_SURPRISEREMOVALOK);
+            }
+            ExReleaseResourceLite(&PnpSwDeviceLock);
+            KeLeaveCriticalRegion();
 
             Status = STATUS_SUCCESS;
             break;
@@ -777,6 +1059,8 @@ PnpSwDeviceAddChildren(
     PPNP_SW_DEVICE Device;
     PLIST_ENTRY Entry;
     ULONG Count = 0, Existing = 0, Reported = 0, Previous, Index;
+    BOOLEAN Created = (DeviceNode == IopRootDeviceNode);
+    BOOLEAN Dropped = FALSE;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -784,24 +1068,32 @@ PnpSwDeviceAddChildren(
     ASSERT(Parent != NULL);
 
     if (!NT_SUCCESS(QueryStatus) && QueryStatus != STATUS_NOT_SUPPORTED) return QueryStatus;
-    if (PnpSwDriverObject == NULL || DeviceNode == IopRootDeviceNode) return QueryStatus;
+    if (PnpSwDriverObject == NULL) return QueryStatus;
 
     Relations = DeviceNode->OverUsed1.PendingDeviceRelations;
     ASSERT(NT_SUCCESS(QueryStatus) || Relations == NULL);
+    Previous = (Relations != NULL) ? Relations->Count : 0;
 
-    Status = PnpSwReadComponentNames(Parent, &Names, &Count);
+    if (Created)
+        Status = PnpSwReadCreatedNames(&Names, &Count);
+    else
+        Status = PnpSwReadComponentNames(Parent, &Names, &Count);
     if (!NT_SUCCESS(Status)) Count = 0;
+
+    Merged = ExAllocatePoolZero(PagedPool,
+                                FIELD_OFFSET(DEVICE_RELATIONS, Objects) + (Previous + Count) * sizeof(PDEVICE_OBJECT),
+                                TAG_PNP_SWDEVICE);
 
     KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(&PnpSwDeviceLock, TRUE);
 
-    /* A component stays reported only while the parent's instance key lists it */
     for (Entry = PnpSwDeviceList.Flink; Entry != &PnpSwDeviceList; Entry = Entry->Flink)
     {
         Device = CONTAINING_RECORD(Entry, PNP_SW_DEVICE, ListEntry);
-        if (Device->Parent != Parent) continue;
+        if (Device->Parent != Parent || Device->Retired) continue;
 
-        Device->Reported = FALSE;
+        ASSERT(Device->Created == Created);
+        Device->Listed = FALSE;
         Existing++;
     }
 
@@ -809,57 +1101,61 @@ PnpSwDeviceAddChildren(
     {
         ExReleaseResourceLite(&PnpSwDeviceLock);
         KeLeaveCriticalRegion();
+        if (Merged != NULL) ExFreePoolWithTag(Merged, TAG_PNP_SWDEVICE);
         PnpSwFreeNames(Names, Count);
         return QueryStatus;
     }
 
-    for (Index = 0; Index < Count; Index++)
+    /* A dropped device keeps its record until its remove request, and its name gets a new device meanwhile */
+    for (Index = 0; Index < Count && Merged != NULL; Index++)
     {
         Device = PnpSwFindDevice(Parent, &Names[Index]);
-        if (Device == NULL) Device = PnpSwCreateDevice(DeviceNode, &Names[Index]);
-        if (Device == NULL || Device->Reported) continue;
-
-        Device->Reported = TRUE;
-        Reported++;
+        if (Device == NULL) Device = PnpSwCreateDevice(DeviceNode, &Names[Index], Created);
+        if (Device != NULL) Device->Listed = TRUE;
     }
 
-    Previous = (Relations != NULL) ? Relations->Count : 0;
-    Merged = ExAllocatePoolZero(PagedPool,
-                                FIELD_OFFSET(DEVICE_RELATIONS, Objects) +
-                                    (Previous + Reported) * sizeof(PDEVICE_OBJECT),
-                                TAG_PNP_SWDEVICE);
-    if (Merged == NULL)
+    if (Merged != NULL)
     {
-        /* The components go unreported this time, and their devices go with them */
-        for (Entry = PnpSwDeviceList.Flink; Entry != &PnpSwDeviceList; Entry = Entry->Flink)
-        {
-            Device = CONTAINING_RECORD(Entry, PNP_SW_DEVICE, ListEntry);
-            if (Device->Parent == Parent) Device->Reported = FALSE;
-        }
-
-        ExReleaseResourceLite(&PnpSwDeviceLock);
-        KeLeaveCriticalRegion();
-        PnpSwFreeNames(Names, Count);
-        return QueryStatus;
+        if (Previous != 0) RtlCopyMemory(Merged->Objects, Relations->Objects, Previous * sizeof(PDEVICE_OBJECT));
+        Merged->Count = Previous;
     }
-
-    if (Previous != 0) RtlCopyMemory(Merged->Objects, Relations->Objects, Previous * sizeof(PDEVICE_OBJECT));
-    Merged->Count = Previous;
 
     for (Entry = PnpSwDeviceList.Flink; Entry != &PnpSwDeviceList; Entry = Entry->Flink)
     {
         Device = CONTAINING_RECORD(Entry, PNP_SW_DEVICE, ListEntry);
-        if (Device->Parent != Parent || !Device->Reported) continue;
+        if (Device->Parent != Parent || Device->Retired) continue;
 
-        ASSERT(Merged->Count < Previous + Reported);
-        ObReferenceObject(Device->PhysicalDeviceObject);
-        Merged->Objects[Merged->Count++] = Device->PhysicalDeviceObject;
+        if (Device->Listed)
+        {
+            ASSERT(Merged != NULL);
+            ASSERT(Merged->Count < Previous + Count);
+            Device->Reported = TRUE;
+            Device->Handed = TRUE;
+            ObReferenceObject(Device->PhysicalDeviceObject);
+            Merged->Objects[Merged->Count++] = Device->PhysicalDeviceObject;
+            Reported++;
+            continue;
+        }
+
+        Device->Reported = FALSE;
+        if (Device->Handed)
+        {
+            Device->Retired = TRUE;
+            Dropped = TRUE;
+        }
     }
-    ASSERT(Merged->Count == Previous + Reported);
+    ASSERT(Merged == NULL || Merged->Count == Previous + Reported);
 
     ExReleaseResourceLite(&PnpSwDeviceLock);
     KeLeaveCriticalRegion();
     PnpSwFreeNames(Names, Count);
+
+    if (Merged == NULL)
+    {
+        /* The devices go unreported this time; the next enumeration reports them again */
+        if (Dropped) IoInvalidateDeviceRelations(Parent, BusRelations);
+        return QueryStatus;
+    }
 
     if (Relations != NULL) ExFreePool(Relations);
     DeviceNode->OverUsed1.PendingDeviceRelations = Merged;
