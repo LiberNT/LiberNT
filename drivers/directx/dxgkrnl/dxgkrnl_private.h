@@ -539,6 +539,7 @@ typedef struct _TDR_CONFIG
 extern TDR_CONFIG g_TdrConfig;
 BOOLEAN DxgkpBootLogHoldsDisplay(VOID);
 BOOLEAN DxgkpScreenLogRequested(VOID);
+BOOLEAN DxgkBootScreenDrawsToCopy(VOID);
 
 NTSTATUS
 DxgkDetachBootScreen(

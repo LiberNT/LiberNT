@@ -162,6 +162,16 @@ DxgkPostDisplayCoreBootScreenAction(
     return ScreenLogRequested ? DxgkBootScreenDrawToCopy : DxgkBootScreenRelease;
 }
 
+/* The boot log holds the screen only while it draws into the scanned-out frame buffer; drawing into a copy, it leaves the screen to the desktop. */
+FORCEINLINE
+BOOLEAN
+DxgkPostDisplayCoreBootLogHoldsDisplay(
+    _In_ BOOLEAN BootDriverOwnsDisplay,
+    _In_ BOOLEAN BootScreenDrawsToCopy)
+{
+    return BootDriverOwnsDisplay && !BootScreenDrawsToCopy;
+}
+
 /* A headless desktop keeps its own mode, then the firmware one, then the size of the desktop it took over. */
 FORCEINLINE
 VOID

@@ -141,6 +141,12 @@ static PDXGKRNL_ADAPTER g_PostDisplayOwnerAdapter = NULL;
 static PVOID g_BootScreenCopy;
 static volatile LONG g_BootScreenDetached;
 
+BOOLEAN
+DxgkBootScreenDrawsToCopy(VOID)
+{
+    return InterlockedCompareExchange(&g_BootScreenDetached, 0, 0) != 0;
+}
+
 static
 NTSTATUS
 DxgkpDetachBootScreenToCopy(
