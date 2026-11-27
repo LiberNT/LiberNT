@@ -227,6 +227,7 @@ struct d3d11_swapchain
     DXGI_RGBA background;
     BOOL null_driver;
     BOOL composition;
+    BOOL presented;
     UINT source_width;
     UINT source_height;
     DXGI_MATRIX_3X2_F transform;
