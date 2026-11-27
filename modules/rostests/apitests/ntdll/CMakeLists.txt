@@ -145,6 +145,7 @@ list(APPEND SOURCE
     NtQueryOpenSubKeys.c
     NtQuerySection.c
     NtQuerySectionImageNoExecute.c
+    NtQuerySecurityAttributesToken.c
     NtQuerySecurityObject.c
     NtSetSecurityObjectStatus.c
     PipeMailslotSecurity.c

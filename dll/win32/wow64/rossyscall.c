@@ -409,6 +409,7 @@ NTSYSAPI NTSTATUS WINAPI NtSetDriverEntryOrder( ULONG *, ULONG * );
 NTSYSAPI NTSTATUS WINAPI NtSetQuotaInformationFile( HANDLE, IO_STATUS_BLOCK *, void *, ULONG );
 NTSYSAPI NTSTATUS WINAPI NtSetSystemEnvironmentValueEx( UNICODE_STRING *, GUID *, void *, ULONG, ULONG );
 NTSYSAPI NTSTATUS WINAPI NtSetTimerEx( HANDLE, ULONG, void *, ULONG );
+NTSYSAPI NTSTATUS WINAPI NtQuerySecurityAttributesToken( HANDLE, UNICODE_STRING *, ULONG, void *, ULONG, ULONG * );
 NTSYSAPI NTSTATUS WINAPI NtSetUuidSeed( char * );
 NTSYSAPI NTSTATUS WINAPI NtSubscribeWnfStateChange( const WNF_STATE_NAME *, ULONG, ULONG, ULONG64 * );
 NTSYSAPI NTSTATUS WINAPI NtTraceEvent( HANDLE, ULONG, ULONG, void * );
@@ -2064,6 +2065,159 @@ NTSTATUS WINAPI wow64_NtSetSystemPowerState( UINT *args )
     ULONG flags = get_ulong( &args );
 
     return NtSetSystemPowerState( action, state, flags );
+}
+
+
+/* The self-relative security attribute answer, 64-bit form and the 32-bit form it is repacked into */
+struct sec_attr64
+{
+    UNICODE_STRING Name;
+    USHORT ValueType;
+    USHORT Reserved;
+    ULONG Flags;
+    ULONG ValueCount;
+    void *Values;
+};
+
+struct sec_attr32
+{
+    UNICODE_STRING32 Name;
+    USHORT ValueType;
+    USHORT Reserved;
+    ULONG Flags;
+    ULONG ValueCount;
+    ULONG Values;
+};
+
+struct sec_attrs64
+{
+    USHORT Version;
+    USHORT Reserved;
+    ULONG AttributeCount;
+    struct sec_attr64 *Attributes;
+};
+
+struct sec_attrs32
+{
+    USHORT Version;
+    USHORT Reserved;
+    ULONG AttributeCount;
+    ULONG Attributes;
+};
+
+static ULONG sec_attr_place( UCHAR *base, ULONG *pos, const void *data, ULONG size, ULONG align )
+{
+    ULONG at = (*pos + align - 1) & ~(align - 1);
+
+    if (base && size) memcpy( base + at, data, size );
+    *pos = at + size;
+    return base ? PtrToUlong( base + at ) : 0;
+}
+
+/* Lays out the 32-bit answer at base, or only measures it when base is NULL */
+static NTSTATUS sec_attrs_64to32( const struct sec_attrs64 *in, UCHAR *base, ULONG *size )
+{
+    struct sec_attrs32 *out = (struct sec_attrs32 *)base;
+    struct sec_attr32 *attrs32;
+    ULONG pos = sizeof(*out), i, j;
+
+    attrs32 = base ? (struct sec_attr32 *)(base + pos) : NULL;
+    pos += in->AttributeCount * sizeof(*attrs32);
+    for (i = 0; i < in->AttributeCount; i++)
+    {
+        const struct sec_attr64 *a = &in->Attributes[i];
+        struct sec_attr32 a32;
+
+        a32.Name.Length = a->Name.Length;
+        a32.Name.MaximumLength = a->Name.Length;
+        a32.Name.Buffer = sec_attr_place( base, &pos, a->Name.Buffer, a->Name.Length, sizeof(WCHAR) );
+        a32.ValueType = a->ValueType;
+        a32.Reserved = a->Reserved;
+        a32.Flags = a->Flags;
+        a32.ValueCount = a->ValueCount;
+        switch (a->ValueType)
+        {
+        case 1: /* TOKEN_SECURITY_ATTRIBUTE_TYPE_INT64 */
+        case 2: /* TOKEN_SECURITY_ATTRIBUTE_TYPE_UINT64 */
+        case 6: /* TOKEN_SECURITY_ATTRIBUTE_TYPE_BOOLEAN */
+            a32.Values = sec_attr_place( base, &pos, a->Values, a->ValueCount * sizeof(ULONG64), sizeof(ULONG64) );
+            break;
+        case 3: /* TOKEN_SECURITY_ATTRIBUTE_TYPE_STRING */
+        {
+            const UNICODE_STRING *str = a->Values;
+            UNICODE_STRING32 *str32;
+
+            a32.Values = sec_attr_place( base, &pos, NULL, 0, sizeof(ULONG) );
+            str32 = base ? (UNICODE_STRING32 *)ULongToPtr( a32.Values ) : NULL;
+            pos += a->ValueCount * sizeof(*str32);
+            for (j = 0; j < a->ValueCount; j++)
+            {
+                ULONG buffer = sec_attr_place( base, &pos, str[j].Buffer, str[j].Length, sizeof(WCHAR) );
+                if (!str32) continue;
+                str32[j].Length = str[j].Length;
+                str32[j].MaximumLength = str[j].Length;
+                str32[j].Buffer = buffer;
+            }
+            break;
+        }
+        default:
+            /* TODO: FQBN, SID and octet string values are not repacked for 32-bit callers */
+            return STATUS_NOT_IMPLEMENTED;
+        }
+        if (attrs32) attrs32[i] = a32;
+    }
+    if (out)
+    {
+        out->Version = in->Version;
+        out->Reserved = in->Reserved;
+        out->AttributeCount = in->AttributeCount;
+        out->Attributes = in->AttributeCount ? PtrToUlong( attrs32 ) : 0;
+    }
+    *size = pos;
+    return STATUS_SUCCESS;
+}
+
+
+/**********************************************************************
+ *           wow64_NtQuerySecurityAttributesToken
+ */
+NTSTATUS WINAPI wow64_NtQuerySecurityAttributesToken( UINT *args )
+{
+    HANDLE handle = get_handle( &args );
+    UNICODE_STRING32 *names32 = get_ptr( &args );
+    ULONG count = get_ulong( &args );
+    void *buffer = get_ptr( &args );
+    ULONG len = get_ulong( &args );
+    ULONG *retlen = get_ptr( &args );
+    UNICODE_STRING *names = NULL;
+    void *answer;
+    ULONG size = ~0u, size32 = 0, i;
+    NTSTATUS status;
+
+    if (count && !names32) return NtQuerySecurityAttributesToken( handle, NULL, count, NULL, 0, retlen );
+    if (!retlen) return STATUS_ACCESS_VIOLATION;
+    if (count)
+    {
+        if (count > ~0u / sizeof(*names)) return STATUS_INVALID_PARAMETER;
+        if (!(names = Wow64AllocateTemp( count * sizeof(*names) ))) return STATUS_NO_MEMORY;
+        for (i = 0; i < count; i++) unicode_str_32to64( &names[i], &names32[i] );
+    }
+
+    status = NtQuerySecurityAttributesToken( handle, names, count, NULL, 0, &size );
+    if (status != STATUS_BUFFER_TOO_SMALL)
+    {
+        if (size != ~0u) *retlen = size;
+        return status;
+    }
+    if (!(answer = Wow64AllocateTemp( size ))) return STATUS_NO_MEMORY;
+    status = NtQuerySecurityAttributesToken( handle, names, count, answer, size, &size );
+    if (status) return status;
+
+    status = sec_attrs_64to32( answer, NULL, &size32 );
+    if (status) return status;
+    *retlen = size32;
+    if (!buffer || len < size32) return STATUS_BUFFER_TOO_SMALL;
+    return sec_attrs_64to32( answer, buffer, &size32 );
 }
 
 

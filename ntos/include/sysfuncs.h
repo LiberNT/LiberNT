@@ -437,6 +437,7 @@
     SVC_(TraceControl, 6)
     SVC_(CreateTimer2, 5)
     SVC_(SetTimerEx, 4)
+    SVC_(QuerySecurityAttributesToken, 6)
 #if defined(WOW64_I386_RUNTIME) || defined(SYSFUNCS_WOW64)
     /* User-mode WoW64 services follow the native syscall table. */
     SVC_(Wow64GetNativeSystemInformation, 4)

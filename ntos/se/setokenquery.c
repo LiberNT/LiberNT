@@ -269,6 +269,83 @@ SepAnswerWithOneHolder(
 }
 
 /*
+ * The security attributes of a token in the self-relative form both the
+ * token information query and the attribute query answer with. Names given
+ * pick attributes, compared without case; a name the token does not carry
+ * fails the whole answer.
+ */
+static
+NTSTATUS
+SepAnswerSecurityAttributes(
+    _In_ PTOKEN Token,
+    _In_reads_opt_(NameCount) PCUNICODE_STRING Names,
+    _In_ ULONG NameCount,
+    _Out_writes_bytes_opt_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _In_ ULONG_PTR Placed,
+    _Out_ PULONG Needed)
+{
+    UNICODE_STRING ProcUniqueName;
+    PSEP_TOKEN_ATTRIBUTES Answer = Buffer;
+    PSEP_TOKEN_ATTRIBUTE Attribute;
+    PUCHAR Name;
+    PULONG64 Values;
+    BOOLEAN Present = (Token->ProcUnique.LowPart != 0 || Token->ProcUnique.HighPart != 0);
+    ULONG Room;
+    ULONG i;
+
+    PAGED_CODE();
+    ASSERT(Names != NULL || NameCount == 0);
+
+    ProcUniqueName.Length = (USHORT)(sizeof(SepProcUniqueAttribute) - sizeof(WCHAR));
+    ProcUniqueName.MaximumLength = ProcUniqueName.Length;
+    ProcUniqueName.Buffer = (PWCH)SepProcUniqueAttribute;
+
+    *Needed = 0;
+    for (i = 0; i < NameCount; i++)
+    {
+        /* TODO: a token carries no attributes beyond its TSA://ProcUnique */
+        if (!Present || !RtlEqualUnicodeString(&Names[i], &ProcUniqueName, TRUE))
+            return STATUS_NOT_FOUND;
+    }
+
+    Room = (ULONG)sizeof(*Answer);
+    if (Present)
+    {
+        Room = ALIGN_UP_BY(Room, sizeof(PVOID)) + (ULONG)sizeof(*Attribute) + ProcUniqueName.Length;
+        Room = ALIGN_UP_BY(Room, sizeof(ULONG64)) + 2 * (ULONG)sizeof(ULONG64);
+    }
+    *Needed = Room;
+
+    if (Buffer == NULL || Length < Room) return STATUS_BUFFER_TOO_SMALL;
+
+    RtlZeroMemory(Buffer, Room);
+    Answer->Version = SEP_TOKEN_ATTRIBUTES_VERSION;
+    if (!Present) return STATUS_SUCCESS;
+
+    Attribute = (PSEP_TOKEN_ATTRIBUTE)ALIGN_UP_POINTER_BY((PUCHAR)Buffer + sizeof(*Answer), sizeof(PVOID));
+    Name = (PUCHAR)(Attribute + 1);
+    Values = (PULONG64)ALIGN_UP_POINTER_BY(Name + ProcUniqueName.Length, sizeof(ULONG64));
+    ASSERT((PUCHAR)(Values + 2) == (PUCHAR)Buffer + Room);
+
+    RtlCopyMemory(Name, ProcUniqueName.Buffer, ProcUniqueName.Length);
+    Values[0] = (ULONG)Token->ProcUnique.HighPart;
+    Values[1] = Token->ProcUnique.LowPart;
+
+    Attribute->Name.Length = ProcUniqueName.Length;
+    Attribute->Name.MaximumLength = ProcUniqueName.Length;
+    Attribute->Name.Buffer = SepPlaced(Buffer, Placed, Name);
+    Attribute->ValueType = CLAIM_SECURITY_ATTRIBUTE_TYPE_UINT64;
+    Attribute->Flags = CLAIM_SECURITY_ATTRIBUTE_NON_INHERITABLE | SEP_ATTRIBUTE_COMPARE_IGNORE;
+    Attribute->ValueCount = 2;
+    Attribute->Values = SepPlaced(Buffer, Placed, Values);
+
+    Answer->AttributeCount = 1;
+    Answer->Attributes = SepPlaced(Buffer, Placed, Attribute);
+    return STATUS_SUCCESS;
+}
+
+/*
  * Reads one thing out of a token into the caller's own room. The token is
  * held while it is read, so what comes back is what it said at one moment.
  */
@@ -675,49 +752,7 @@ SepAnswerAboutToken(
             break;
 
         case TokenSecurityAttributes:
-        {
-            PSEP_TOKEN_ATTRIBUTES Answer = Buffer;
-            PSEP_TOKEN_ATTRIBUTE Attribute;
-            PUCHAR Name;
-            PULONG64 Values;
-            BOOLEAN Present = (Token->ProcUnique.LowPart != 0 || Token->ProcUnique.HighPart != 0);
-
-            /* TODO: a token carries no attributes beyond its TSA://ProcUnique */
-            Room = (ULONG)sizeof(*Answer);
-            if (Present)
-            {
-                Room = ALIGN_UP_BY(Room, sizeof(PVOID)) + (ULONG)sizeof(*Attribute) +
-                       (ULONG)sizeof(SepProcUniqueAttribute);
-                Room = ALIGN_UP_BY(Room, sizeof(ULONG64)) + 2 * (ULONG)sizeof(ULONG64);
-            }
-            *Needed = Room;
-
-            if (Buffer == NULL || Length < Room) return STATUS_BUFFER_TOO_SMALL;
-
-            RtlZeroMemory(Buffer, Room);
-            Answer->Version = SEP_TOKEN_ATTRIBUTES_VERSION;
-            if (!Present) break;
-
-            Attribute = (PSEP_TOKEN_ATTRIBUTE)ALIGN_UP_POINTER_BY((PUCHAR)Buffer + sizeof(*Answer), sizeof(PVOID));
-            Name = (PUCHAR)(Attribute + 1);
-            Values = (PULONG64)ALIGN_UP_POINTER_BY(Name + sizeof(SepProcUniqueAttribute), sizeof(ULONG64));
-
-            RtlCopyMemory(Name, SepProcUniqueAttribute, sizeof(SepProcUniqueAttribute));
-            Values[0] = (ULONG)Token->ProcUnique.HighPart;
-            Values[1] = Token->ProcUnique.LowPart;
-
-            Attribute->Name.Length = (USHORT)(sizeof(SepProcUniqueAttribute) - sizeof(WCHAR));
-            Attribute->Name.MaximumLength = (USHORT)sizeof(SepProcUniqueAttribute);
-            Attribute->Name.Buffer = SepPlaced(Buffer, Placed, Name);
-            Attribute->ValueType = CLAIM_SECURITY_ATTRIBUTE_TYPE_UINT64;
-            Attribute->Flags = CLAIM_SECURITY_ATTRIBUTE_NON_INHERITABLE | SEP_ATTRIBUTE_COMPARE_IGNORE;
-            Attribute->ValueCount = 2;
-            Attribute->Values = SepPlaced(Buffer, Placed, Values);
-
-            Answer->AttributeCount = 1;
-            Answer->Attributes = SepPlaced(Buffer, Placed, Attribute);
-            break;
-        }
+            return SepAnswerSecurityAttributes(Token, NULL, 0, Buffer, Length, Placed, Needed);
 
         case TokenMandatoryPolicy:
             ((PTOKEN_MANDATORY_POLICY)Buffer)->Policy = Token->MandatoryPolicy;
@@ -1102,6 +1137,107 @@ NtQueryInformationToken(
     _SEH2_END;
 
     if (Room != NULL) ExFreePoolWithTag(Room, TAG_SE);
+
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+NtQuerySecurityAttributesToken(
+    _In_ HANDLE TokenHandle,
+    _In_reads_opt_(NumberOfAttributes) PUNICODE_STRING Attributes,
+    _In_ ULONG NumberOfAttributes,
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _Out_ PULONG ReturnLength)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    PUNICODE_STRING Names = NULL;
+    PTOKEN Token;
+    PVOID Room = NULL;
+    ULONG Needed = 0;
+    ULONG Captured = 0;
+    ULONG i;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    PAGED_CODE();
+
+    if (NumberOfAttributes != 0 && Attributes == NULL)
+        return STATUS_INVALID_PARAMETER;
+    if (NumberOfAttributes > MAXULONG / sizeof(UNICODE_STRING))
+        return STATUS_INVALID_PARAMETER;
+
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            if (Length != 0) ProbeForWrite(Buffer, Length, sizeof(ULONG));
+            ProbeForWriteUlong(ReturnLength);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+
+    if (NumberOfAttributes != 0)
+    {
+        Names = ExAllocatePoolZero(PagedPool, NumberOfAttributes * sizeof(UNICODE_STRING), TAG_SE);
+        if (Names == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+        for (Captured = 0; Captured < NumberOfAttributes; Captured++)
+        {
+            Status = ProbeAndCaptureUnicodeString(&Names[Captured], PreviousMode, &Attributes[Captured]);
+            if (!NT_SUCCESS(Status)) break;
+        }
+    }
+
+    if (NT_SUCCESS(Status))
+        Status = SepReferenceTokenToQuery(TokenHandle, TOKEN_QUERY, PreviousMode, &Token);
+
+    if (NT_SUCCESS(Status))
+    {
+        /* The answer is built where it cannot fault, as the token is not held while the caller's memory is written */
+        if (Length != 0)
+        {
+            Room = ExAllocatePoolWithTag(PagedPool, Length, TAG_SE);
+            if (Room == NULL) Status = STATUS_INSUFFICIENT_RESOURCES;
+        }
+
+        if (NT_SUCCESS(Status))
+        {
+            SepAcquireTokenLockShared(Token);
+            Status = SepAnswerSecurityAttributes(Token,
+                                                 Names,
+                                                 NumberOfAttributes,
+                                                 Room,
+                                                 Length,
+                                                 (ULONG_PTR)Buffer,
+                                                 &Needed);
+            SepReleaseTokenLock(Token);
+            ASSERT(!NT_SUCCESS(Status) || Needed <= Length);
+
+            _SEH2_TRY
+            {
+                *ReturnLength = Needed;
+                if (NT_SUCCESS(Status) && Room != NULL)
+                    RtlCopyMemory(Buffer, Room, Needed);
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
+        }
+
+        if (Room != NULL) ExFreePoolWithTag(Room, TAG_SE);
+        ObDereferenceObject(Token);
+    }
+
+    for (i = 0; i < Captured; i++)
+        ReleaseCapturedUnicodeString(&Names[i], PreviousMode);
+    if (Names != NULL) ExFreePoolWithTag(Names, TAG_SE);
 
     return Status;
 }
