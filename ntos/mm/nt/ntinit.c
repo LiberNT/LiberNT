@@ -516,7 +516,8 @@ MiInitializePhase0(
         SystemPteBytes = MI_SYSPTE_64BIT_PAGES << PAGE_SHIFT;
         if (SystemPteBytes > SystemBytes / 8)
             SystemPteBytes = SystemBytes / 8;
-        NonPagedBytes = MiClampBytes(PhysicalBytes / 2, 64 * _1MB, 4ULL * _1GB);
+        /* TODO: INFO_NEEDED: cap allocations like the MaximumNonPagedPoolThreshold derived from physical memory; this window only reserves address space */
+        NonPagedBytes = MiClampBytes(PhysicalBytes * 2, 64 * _1MB, 128ULL * _1GB);
         PagedBytes = MiClampBytes(PhysicalBytes, 128 * _1MB, 4ULL * _1GB);
     }
     else
