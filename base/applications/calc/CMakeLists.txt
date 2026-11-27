@@ -1,24 +1,21 @@
+# PROJECT:     LiberNT Calculator
+# LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+# PURPOSE:     Build the calculator
+# COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
 
-list(APPEND SOURCE
-    convert.c
-    fun_ieee.c
-    rpn_ieee.c
-    utl_ieee.c
-    winmain.c
-    htmlhelp.c
-    theme.c
-    modern_ui.c
-    calc.h)
-
-file(GLOB calc_rc_deps res/*.*)
-add_rc_deps(resource.rc ${calc_rc_deps})
-add_executable(calc ${SOURCE} resource.rc)
+add_rc_deps(calc.rc
+    ${CMAKE_CURRENT_SOURCE_DIR}/calcres.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/lang/en-US.rc
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/calc.ico
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/calc.exe.manifest)
+add_executable(calc
+    number.c
+    engine.c
+    main.cpp
+    calc.rc)
+set_property(TARGET calc PROPERTY CXX_STANDARD 17)
+set_property(TARGET calc PROPERTY CXX_STANDARD_REQUIRED ON)
 set_module_type(calc win32gui UNICODE)
-add_importlibs(calc advapi32 comctl32 user32 shell32 gdi32 msvcrt kernel32)
-
-if(MSVC)
-    add_importlibs(calc ntdll)
-endif()
-
-add_pch(calc calc.h SOURCE)
+target_link_libraries(calc shellframe cpprt)
+add_importlibs(calc user32 gdi32 gdiplus shell32 comctl32 dwmapi uxtheme advapi32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET calc DESTINATION reactos/system32 FOR all)

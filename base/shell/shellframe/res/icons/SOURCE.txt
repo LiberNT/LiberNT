@@ -21,10 +21,13 @@ Files used, copied unmodified and drawn from their path data at run time:
 - assets/Arrow Sync/SVG/ic_fluent_arrow_sync_20_regular.svg
 - assets/Arrow Sync Circle/SVG/ic_fluent_arrow_sync_circle_20_regular.svg
 - assets/Arrow Up/SVG/ic_fluent_arrow_up_16_regular.svg
+- assets/Backspace/SVG/ic_fluent_backspace_20_regular.svg
 - assets/Battery 10/SVG/ic_fluent_battery_10_20_regular.svg
 - assets/Battery Saver/SVG/ic_fluent_battery_saver_20_regular.svg
 - assets/Bluetooth/SVG/ic_fluent_bluetooth_20_regular.svg
 - assets/Brightness High/SVG/ic_fluent_brightness_high_20_regular.svg
+- assets/Calculator/SVG/ic_fluent_calculator_20_regular.svg
+- assets/Calculator/SVG/ic_fluent_calculator_24_regular.svg
 - assets/Calendar Clock/SVG/ic_fluent_calendar_clock_20_regular.svg
 - assets/Checkmark/SVG/ic_fluent_checkmark_16_regular.svg
 - assets/Checkmark/SVG/ic_fluent_checkmark_20_regular.svg
