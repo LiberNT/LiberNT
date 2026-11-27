@@ -1876,7 +1876,7 @@
 @ stdcall -arch=win64 RtlCultureNameToLCID()
 @ stdcall RtlDowncaseUnicodeChar(long)
 @ stdcall RtlDuplicateUnicodeString(long ptr ptr)
-@ stdcall -arch=win64 RtlFindExportedRoutineByName()
+@ stdcall RtlFindExportedRoutineByName(ptr str)
 @ stdcall -arch=win64 RtlFindNextForwardRunSet()
 @ stdcall -arch=win64 RtlFirstFreeAce()
 @ stdcall -arch=win64 RtlFormatMessage()
