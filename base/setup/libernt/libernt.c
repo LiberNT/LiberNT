@@ -984,35 +984,28 @@ static VOID
 LoadUnattendedAccountSettings(
     _Inout_ PSETUPDATA pSetupData)
 {
-    WCHAR Path[MAX_PATH];
+    PUSETUP_DATA Unattend = &pSetupData->USetupData;
     WCHAR Value[MAX_PATH];
-    PWSTR Name;
-    DWORD Length;
 
-    Length = GetModuleFileNameW(NULL, Path, ARRAYSIZE(Path));
-    if (Length == 0 || Length >= ARRAYSIZE(Path) || !(Name = wcsrchr(Path, L'\\')))
-        return;
-    *Name = UNICODE_NULL;
-    if (FAILED(StringCchCatW(Path, ARRAYSIZE(Path), L"\\unattend.inf")))
-        return;
-
-    if (GetPrivateProfileStringW(L"Unattend", L"ComputerName", L"", Value, ARRAYSIZE(Value), Path) &&
-        IsValidSetupComputerName(Value))
+    /* CheckUnattendedSetup read these from the unattend.inf that enabled the unattended setup, which is
+     * not always the one next to this program: a removable or CD drive can carry it */
+    if (*Unattend->UnattendComputerName && IsValidSetupComputerName(Unattend->UnattendComputerName))
     {
+        StringCchCopyW(Value, ARRAYSIZE(Value), Unattend->UnattendComputerName);
         CharUpperW(Value);
         StringCchCopyW(pSetupData->ComputerName, ARRAYSIZE(pSetupData->ComputerName), Value);
     }
 
-    GetPrivateProfileStringW(L"Unattend", L"UserName", L"User", Value, ARRAYSIZE(Value), Path);
+    StringCchCopyW(Value, ARRAYSIZE(Value), *Unattend->UnattendUserName ? Unattend->UnattendUserName : L"User");
     if (IsValidSetupUserName(Value))
         StringCchCopyW(pSetupData->UserName, ARRAYSIZE(pSetupData->UserName), Value);
 
-    GetPrivateProfileStringW(L"Unattend", L"UserPassword", L"",
-                             pSetupData->Password, ARRAYSIZE(pSetupData->Password), Path);
+    StringCchCopyW(pSetupData->Password, ARRAYSIZE(pSetupData->Password), Unattend->UnattendUserPassword);
+    SecureZeroMemory(Unattend->UnattendUserPassword, sizeof(Unattend->UnattendUserPassword));
 
-    pSetupData->TimeZoneIndex = GetPrivateProfileIntW(L"Unattend", L"TimeZoneIndex",
-                                                      pSetupData->TimeZoneIndex, Path);
-    pSetupData->AutoDaylight = !GetPrivateProfileIntW(L"Unattend", L"DisableAutoDaylightTimeSet", 0, Path);
+    if (Unattend->UnattendTimeZoneIndex >= 0)
+        pSetupData->TimeZoneIndex = (DWORD)Unattend->UnattendTimeZoneIndex;
+    pSetupData->AutoDaylight = Unattend->UnattendDisableAutoDaylightTimeSet <= 0;
 }
 
 static BOOL
