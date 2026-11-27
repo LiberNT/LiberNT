@@ -12,6 +12,7 @@ BthUsb.Files = 12
 BthMini.Files = 12
 
 [ClassInstall32.NT]
+AddProperty=ClassProperties.AddProperty
 AddReg=BluetoothClass.NT.AddReg
 CopyFiles=BluetoothClass.NT.Files
 
@@ -79,6 +80,10 @@ AddService = , 0x00000002
 AddService = , 0x00000002
 
 ;-------------------------------- STRINGS -------------------------------
+
+[ClassProperties.AddProperty]
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},4,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},6,0x11,,1
 
 [Strings]
 ; Non-localizable

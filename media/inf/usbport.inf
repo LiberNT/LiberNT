@@ -15,6 +15,7 @@ DriverVer  = 10/19/1999,5.00.2157.1
 DefaultDestDir = 12
 
 [ClassInstall32.NT]
+AddProperty=ClassProperties.AddProperty
 AddReg = USBClass.NT.AddReg
 
 [USBClass.NT.AddReg]
@@ -171,6 +172,11 @@ ServiceBinary = %12%\usbhub.sys
 LoadOrderGroup = Base
 
 ;-------------------------------- STRINGS -------------------------------
+
+[ClassProperties.AddProperty]
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},3,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},4,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},6,0x11,,1
 
 [Strings]
 ; Non-localizable

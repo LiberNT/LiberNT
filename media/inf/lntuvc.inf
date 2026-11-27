@@ -12,6 +12,7 @@ Provider   = %LiberNT%
 DriverVer  = 10/02/2005,1.00.0.0
 
 [ClassInstall32.NT]
+AddProperty=ClassProperties.AddProperty
 AddReg = lntuvc_ClassReg
 
 [lntuvc_ClassReg]
@@ -58,6 +59,10 @@ ServiceBinary = %12%\lntuvc.sys
 LoadOrderGroup = Base
 
 ;-------------------------------- STRINGS -------------------------------
+
+[ClassProperties.AddProperty]
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},4,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},6,0x11,,1
 
 [Strings]
 ; Non-localizable

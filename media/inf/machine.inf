@@ -15,6 +15,7 @@ DriverVer  = 08/07/2006,1.02
 DefaultDestDir = 12
 
 [ClassInstall32.NT]
+AddProperty=ClassProperties.AddProperty
 AddReg = SystemClass.NT.AddReg
 
 [SystemClass.NT.AddReg]
@@ -165,6 +166,11 @@ ServiceBinary = %12%\pci.sys
 LoadOrderGroup = Boot Bus Extender
 
 ;-------------------------------- STRINGS -------------------------------
+
+[ClassProperties.AddProperty]
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},3,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},4,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},6,0x11,,1
 
 [Strings]
 ; Non-localizable

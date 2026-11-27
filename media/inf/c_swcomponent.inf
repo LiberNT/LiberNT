@@ -8,6 +8,7 @@ DriverVer   = 11/15/2026,1.00
 PnpLockdown = 1
 
 [ClassInstall32]
+AddProperty=ClassProperties.AddProperty
 AddReg = ClassInstall_AddReg
 
 ; TODO: [ClassInstall32.Configuration] naming each component after the description its parent's driver gave it
@@ -32,6 +33,10 @@ ExcludeFromSelect = *
 ; TODO: AddProperty of DEVPKEY_Device_GenericDriverInstalled once INF AddProperty is supported
 [SoftwareComponent_Inst.NT.Services]
 AddService = , 0x00000002
+
+[ClassProperties.AddProperty]
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},4,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},6,0x11,,1
 
 [Strings]
 ; Non-localizable

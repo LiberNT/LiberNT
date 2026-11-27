@@ -7,12 +7,17 @@ Provider  = %LiberNT%
 DriverVer = 06/21/2006,10.0.26100.1
 
 [ClassInstall32]
+AddProperty=ClassProperties.AddProperty
 AddReg = ClassInstall_AddReg
 
 [ClassInstall_AddReg]
 HKR, , ,     0, %WpdClassName%
 HKR, , Icon, 0, "-21"
 HKR, , Installer32, 0, "wpd_ci.dll,WpdClassInstaller"
+
+[ClassProperties.AddProperty]
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},4,0x11,,0
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},6,0x11,,1
 
 [Strings]
 ; Non-localizable

@@ -13,6 +13,7 @@ DriverVer  = 02/28/2010,1.00
 DefaultDestDir = 12
 
 [ClassInstall32.NT]
+AddProperty=ClassProperties.AddProperty
 AddReg = BatteryClass.NT.AddReg
 
 [BatteryClass.NT.AddReg]
@@ -61,6 +62,11 @@ ServiceType   = 1
 StartType     = 3
 ErrorControl  = 1
 ServiceBinary = %12%\cmbatt.sys
+
+[ClassProperties.AddProperty]
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},3,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},4,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},6,0x11,,1
 
 [Strings]
 ; Non-localizable

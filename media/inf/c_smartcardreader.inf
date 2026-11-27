@@ -7,6 +7,7 @@ Provider  = %ReactOS%
 DriverVer = 11/12/2026,1.00
 
 [ClassInstall32]
+AddProperty=ClassProperties.AddProperty
 AddReg = ClassInstall_AddReg
 
 [ClassInstall_AddReg]
@@ -14,6 +15,10 @@ HKR, , , 0, %SmartCardReaderClassName%
 ; TODO: append the scfilter upper filter once the smart card filter driver exists
 HKR, , NoInstallClass, 0, 1
 HKR, , IconPath, 0x00010000, "%%SystemRoot%%\System32\setupapi.dll,-25"
+
+[ClassProperties.AddProperty]
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},4,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},6,0x11,,1
 
 [Strings]
 ; Non-localizable

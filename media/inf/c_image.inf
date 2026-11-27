@@ -12,6 +12,7 @@ DefaultDestDir = 12
 Class_CopyFiles = 11
 
 [ClassInstall32]
+AddProperty=ClassProperties.AddProperty
 AddReg = ClassInstall_AddReg
 CopyFiles = Class_CopyFiles
 
@@ -22,6 +23,11 @@ sti_ci.dll
 HKR, , ,               0, %ImageClassName%
 HKR, , Icon, 0, "2"
 HKR,,Installer32, 0,"sti_ci.dll,ClassInstall"
+
+[ClassProperties.AddProperty]
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},4,0x11,,0
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},6,0x11,,1
+{6a3433f4-5626-40e8-a9b9-dbd9ecd2884b},13,0x11,,1
 
 [Strings]
 ; Non-localizable
