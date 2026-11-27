@@ -105,6 +105,15 @@ FORCEINLINE BOOLEAN DxgkHotPlugWorkCoreSourceHasOwnPrimary(_In_ ULONG SourceId, 
     return SourceId != 0 && SourceId != DesktopSourceId && SourceId < NumSources && SourceId < MaxSourcePrimaries;
 }
 
+/* A connector change is taken only by a worker that can drain it; before start completes it stays pending for the
+ * start path to queue again. */
+FORCEINLINE BOOLEAN DxgkHotPlugWorkCoreTakeConnectorChange(_Inout_ volatile LONG *Pending, _In_ BOOLEAN AdapterStarted)
+{
+    if (!AdapterStarted)
+        return FALSE;
+    return InterlockedExchange(Pending, 0) != 0;
+}
+
 FORCEINLINE BOOLEAN DxgkHotPlugWorkCoreCanAcquireLevel3AfterRundown(_In_ volatile const LONG *Active)
 {
     return *Active == 0;
