@@ -515,13 +515,23 @@ AlpcpReturnMessageToQueue(
         AlpcpReleasePortLock(Port);
         return STATUS_PORT_DISCONNECTED;
     }
-    Message->QueuePort = Port;
-    Message->State |= ALPC_MSG_STATE_QUEUED;
-    InsertHeadList(&Port->MainQueue, &Message->Entry);
-    Port->MainQueueLength++;
-    if (Port->Flags & ALPC_PORT_FLAG_WAITABLE) KeSetEvent(&Port->WaitEvent, IO_NO_INCREMENT, FALSE);
-    AlpcpWakeWaiter(Port);
-    AlpcpReleasePortLock(Port);
+    if (AlpcpReclaimCanceledMessage(Message))
+    {
+        ASSERT(!Message->WaitingThread);
+        AlpcpReleasePortLock(Port);
+        AlpcpFreeMessage(Message);
+    }
+    else
+    {
+        ASSERT(!(Message->State & ALPC_MSG_STATE_CANCELED));
+        Message->QueuePort = Port;
+        Message->State |= ALPC_MSG_STATE_QUEUED;
+        InsertHeadList(&Port->MainQueue, &Message->Entry);
+        Port->MainQueueLength++;
+        if (Port->Flags & ALPC_PORT_FLAG_WAITABLE) KeSetEvent(&Port->WaitEvent, IO_NO_INCREMENT, FALSE);
+        AlpcpWakeWaiter(Port);
+        AlpcpReleasePortLock(Port);
+    }
 
     Status = BufferLength ? AlpcpCopyOut(BufferLength, &RequiredLength, sizeof(RequiredLength), PreviousMode) : STATUS_SUCCESS;
     return NT_SUCCESS(Status) ? STATUS_BUFFER_TOO_SMALL : Status;
