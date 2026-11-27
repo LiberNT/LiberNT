@@ -267,6 +267,7 @@ NTSTATUS RawIPSendDatagram(
         if (!NCE)
         {
             UnlockObject(AddrFile);
+            TCPIP_STATS_INC(IPSnmpStats.ipsi_outnoroutes);
             return STATUS_NETWORK_UNREACHABLE;
         }
         if (AddrIsUnspecified(&LocalAddress)) GetInterfaceSourceAddress(NCE->Interface, &RemoteAddress, &NCE->Address, &LocalAddress);
@@ -294,6 +295,7 @@ NTSTATUS RawIPSendDatagram(
         NCE = RouteGetRouteToDestination( &RemoteAddress );
         if(!NCE) {
             UnlockObject(AddrFile);
+            TCPIP_STATS_INC(IPSnmpStats.ipsi_outnoroutes);
             return STATUS_NETWORK_UNREACHABLE;
         }
 
@@ -312,6 +314,7 @@ NTSTATUS RawIPSendDatagram(
         IPDereferenceInterface(Interface);
         if (!NCE) {
             UnlockObject(AddrFile);
+            TCPIP_STATS_INC(IPSnmpStats.ipsi_outnoroutes);
             return STATUS_NETWORK_UNREACHABLE;
         }
     }

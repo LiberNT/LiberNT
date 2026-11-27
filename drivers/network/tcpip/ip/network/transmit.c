@@ -235,6 +235,7 @@ NTSTATUS SendFragments(
 
     while (PrepareNextFragment(IFC))
     {
+        TCPIP_STATS_INC(IPSnmpStats.ipsi_fragcreates);
         NdisStatus = IPSendFragment(IFC->NdisPacket, NCE, IFC);
         if (NT_SUCCESS(NdisStatus))
         {
@@ -249,6 +250,11 @@ NTSTATUS SendFragments(
         if (!NT_SUCCESS(NdisStatus))
             break;
     }
+
+    if (NT_SUCCESS(NdisStatus) && IFC->BytesLeft == 0)
+        TCPIP_STATS_INC(IPSnmpStats.ipsi_fragoks);
+    else
+        TCPIP_STATS_INC(IPSnmpStats.ipsi_fragfails);
 
     FreeNdisPacket(IFC->NdisPacket);
     ExFreePoolWithTag(IFC, IFC_TAG);
@@ -274,6 +280,8 @@ NTSTATUS IPSendDatagram(PIP_PACKET IPPacket, PNEIGHBOR_CACHE_ENTRY NCE)
     TI_DbgPrint(MAX_TRACE, ("Called. IPPacket (0x%X)  NCE (0x%X)\n", IPPacket, NCE));
 
     DISPLAY_IP_PACKET(IPPacket);
+
+    TCPIP_STATS_INC(IPSnmpStats.ipsi_outrequests);
 
     /* Fetch path MTU now, because it may change */
     TI_DbgPrint(MID_TRACE,("PathMTU: %d\n", NCE->Interface->MTU));

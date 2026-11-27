@@ -11,10 +11,22 @@
 #include "precomp.h"
 
 #include <tcpip_undoc.h>
+#include <lwip/stats.h>
+#include <lwip/priv/tcp_priv.h>
+#include <receive.h>
 
 #define IP_ROUTE_TYPE_ADD 3
 #define IP_ROUTE_TYPE_DEL 2
 #define IP_NOT_FORWARDING 2
+
+/* Stack packet counters. Written via STATS_INC from the IP/ICMP/UDP paths;
+ * read here without a lock — a slightly stale counter is valid MIB data. */
+IPSNMPInfo IPSnmpStats;
+MIBICMPINFO IcmpSnmpStats;
+ULONG UdpInDatagrams;
+ULONG UdpNoPorts;
+ULONG UdpInErrors;
+ULONG UdpOutDatagrams;
 
 /* Get IPRouteEntry s for each of the routes in the system */
 TDI_STATUS InfoTdiQueryGetRouteTable( PIP_INTERFACE IF, PNDIS_BUFFER Buffer, PUINT BufferSize ) {
@@ -202,10 +214,11 @@ TDI_STATUS InfoTdiQueryGetIPSnmpInfo( TDIEntityID ID,
 
     TI_DbgPrint(DEBUG_INFO, ("Called.\n"));
 
-    RtlZeroMemory(&SnmpInfo, sizeof(SnmpInfo));
+    RtlCopyMemory(&SnmpInfo, &IPSnmpStats, sizeof(SnmpInfo));
 
     SnmpInfo.ipsi_forwarding = IP_NOT_FORWARDING;
     SnmpInfo.ipsi_defaultttl = IP_DEFAULT_TTL;
+    SnmpInfo.ipsi_reasmtimeout = MAX_TIMEOUT_COUNT * IP_TIMEOUT / 1000;
 
     SnmpInfo.ipsi_numif = IfCount;
     SnmpInfo.ipsi_numaddr = max(CountInterfaceAddresses(IF), 1);
@@ -217,6 +230,92 @@ TDI_STATUS InfoTdiQueryGetIPSnmpInfo( TDIEntityID ID,
     TI_DbgPrint(DEBUG_INFO, ("Returning %08x\n", Status));
 
     return Status;
+}
+
+TDI_STATUS InfoTdiQueryGetTcpStats( PNDIS_BUFFER Buffer,
+                                    PUINT BufferSize )
+{
+    MIB_TCPSTATS Stats;
+    struct tcp_pcb *Pcb;
+
+    TI_DbgPrint(DEBUG_INFO, ("Called.\n"));
+
+    RtlZeroMemory(&Stats, sizeof(Stats));
+
+    /* lwIP uses Van Jacobson RTO estimation with Karn backoff. pcb->rto is
+     * s16 in TCP_SLOW_INTERVAL ticks capped at 0x7FFF (tcp.c). */
+    Stats.dwRtoAlgorithm = MIB_TCP_RTO_VANJ;
+    Stats.dwRtoMin = TCP_SLOW_INTERVAL;
+    Stats.dwRtoMax = 0x7FFF * TCP_SLOW_INTERVAL;
+    Stats.dwMaxConn = (DWORD)-1;
+
+    LOCK_TCPIP_CORE();
+    Stats.dwActiveOpens = lwip_stats.mib2.tcpactiveopens;
+    Stats.dwPassiveOpens = lwip_stats.mib2.tcppassiveopens;
+    Stats.dwAttemptFails = lwip_stats.mib2.tcpattemptfails;
+    Stats.dwEstabResets = lwip_stats.mib2.tcpestabresets;
+    Stats.dwInSegs = lwip_stats.mib2.tcpinsegs;
+    Stats.dwOutSegs = lwip_stats.mib2.tcpoutsegs;
+    Stats.dwRetransSegs = lwip_stats.mib2.tcpretranssegs;
+    Stats.dwInErrs = lwip_stats.mib2.tcpinerrs;
+    Stats.dwOutRsts = lwip_stats.mib2.tcpoutrsts;
+
+    for (Pcb = tcp_active_pcbs; Pcb; Pcb = Pcb->next)
+    {
+        Stats.dwNumConns++;
+        if (Pcb->state == ESTABLISHED || Pcb->state == CLOSE_WAIT)
+            Stats.dwCurrEstab++;
+    }
+    for (Pcb = tcp_listen_pcbs.pcbs; Pcb; Pcb = Pcb->next)
+        Stats.dwNumConns++;
+    for (Pcb = tcp_bound_pcbs; Pcb; Pcb = Pcb->next)
+        Stats.dwNumConns++;
+    for (Pcb = tcp_tw_pcbs; Pcb; Pcb = Pcb->next)
+        Stats.dwNumConns++;
+    UNLOCK_TCPIP_CORE();
+
+    return InfoCopyOut((PCHAR)&Stats, sizeof(Stats), Buffer, BufferSize);
+}
+
+TDI_STATUS InfoTdiQueryGetUdpStats( PNDIS_BUFFER Buffer,
+                                    PUINT BufferSize )
+{
+    MIB_UDPSTATS Stats;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    TI_DbgPrint(DEBUG_INFO, ("Called.\n"));
+
+    RtlZeroMemory(&Stats, sizeof(Stats));
+
+    Stats.dwInDatagrams = UdpInDatagrams;
+    Stats.dwNoPorts = UdpNoPorts;
+    Stats.dwInErrors = UdpInErrors;
+    Stats.dwOutDatagrams = UdpOutDatagrams;
+
+    TcpipAcquireSpinLock(&AddressFileListLock, &OldIrql);
+    for (Entry = AddressFileListHead.Flink; Entry != &AddressFileListHead; Entry = Entry->Flink)
+    {
+        PADDRESS_FILE AddrFile = CONTAINING_RECORD(Entry, ADDRESS_FILE, ListEntry);
+
+        if (AddrFile->Protocol == IPPROTO_UDP)
+            Stats.dwNumAddrs++;
+    }
+    TcpipReleaseSpinLock(&AddressFileListLock, OldIrql);
+
+    return InfoCopyOut((PCHAR)&Stats, sizeof(Stats), Buffer, BufferSize);
+}
+
+TDI_STATUS InfoTdiQueryGetIcmpStats( PNDIS_BUFFER Buffer,
+                                     PUINT BufferSize )
+{
+    MIB_ICMP Stats;
+
+    TI_DbgPrint(DEBUG_INFO, ("Called.\n"));
+
+    RtlCopyMemory(&Stats.stats, &IcmpSnmpStats, sizeof(Stats.stats));
+
+    return InfoCopyOut((PCHAR)&Stats, sizeof(Stats), Buffer, BufferSize);
 }
 
 TDI_STATUS InfoTdiQueryGetConnectionTcpTable(PADDRESS_FILE AddrFile,
