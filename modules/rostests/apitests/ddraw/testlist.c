@@ -8,6 +8,7 @@ extern void func_EnumDisplayModes(void);
 extern void func_GetDeviceIdentifier(void);
 extern void func_GetGDISurface(void);
 extern void func_PaletteEntries(void);
+extern void func_PaletteFlags(void);
 extern void func_PrimaryBltLatency(void);
 extern void func_QueryInterface(void);
 extern void func_VerticalBlank(void);
@@ -21,6 +22,7 @@ const struct test winetest_testlist[] =
     { "GetDeviceIdentifier", func_GetDeviceIdentifier },
     { "GetGDISurface", func_GetGDISurface },
     { "PaletteEntries", func_PaletteEntries },
+    { "PaletteFlags", func_PaletteFlags },
     { "PrimaryBltLatency", func_PrimaryBltLatency },
     { "QueryInterface", func_QueryInterface },
     { "VerticalBlank", func_VerticalBlank },

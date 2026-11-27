@@ -274,6 +274,15 @@ HRESULT ddraw_palette_init(struct ddraw_palette *palette,
         return DDERR_INVALIDPARAMS;
     }
 
+    if ((flags & (DDPCAPS_PRIMARYSURFACE | DDPCAPS_PRIMARYSURFACELEFT | DDPCAPS_VSYNC))
+            || ((flags & DDPCAPS_8BITENTRIES) && !(flags & (DDPCAPS_1BIT | DDPCAPS_2BIT | DDPCAPS_4BIT)))
+            || ((flags & DDPCAPS_ALLOW256) && !(flags & DDPCAPS_8BIT))
+            || ((flags & DDPCAPS_ALPHA) && (flags & DDPCAPS_8BITENTRIES)))
+    {
+        WARN("Invalid flags %#lx.\n", flags);
+        return DDERR_INVALIDPARAMS;
+    }
+
     if (flags & DDPCAPS_8BITENTRIES)
         wined3d_flags |= WINED3D_PALETTE_8BIT_ENTRIES;
     if (flags & DDPCAPS_ALLOW256)
