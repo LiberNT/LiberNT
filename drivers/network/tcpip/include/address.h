@@ -73,6 +73,9 @@ BOOLEAN AddrIsEqualIPv4(
 PIP_INTERFACE AddrLocateInterface(
     PIP_ADDRESS MatchAddress);
 
+BOOLEAN AddrFileReferenceByPointer(
+    PADDRESS_FILE AddrFile);
+
 PADDRESS_FILE AddrSearchFirst(
     PIP_ADDRESS Address,
     USHORT Port,
