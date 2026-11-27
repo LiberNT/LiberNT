@@ -105,6 +105,7 @@ extern PSID LsapWorldSid;
 extern PSID LsapNetworkSid;
 extern PSID LsapBatchSid;
 extern PSID LsapInteractiveSid;
+extern PSID LsapRemoteInteractiveSid;
 extern PSID LsapServiceSid;
 extern PSID LsapLocalSystemSid;
 extern PSID LsapAdministratorsSid;
