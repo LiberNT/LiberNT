@@ -1866,6 +1866,9 @@ static HRESULT WINAPI ddraw7_GetMonitorFrequency(IDirectDraw7 *iface, DWORD *fre
 
     TRACE("iface %p, frequency %p.\n", iface, frequency);
 
+    if (!frequency)
+        return DDERR_INVALIDPARAMS;
+
     wined3d_mutex_lock();
     hr = wined3d_output_get_display_mode(ddraw->wined3d_output, &mode, NULL);
     wined3d_mutex_unlock();
@@ -2221,6 +2224,9 @@ static HRESULT WINAPI ddraw7_WaitForVerticalBlank(IDirectDraw7 *iface, DWORD Fla
         FIXME("iface %p, flags %#lx, event %p stub!\n", iface, Flags, event);
         hide = TRUE;
     }
+
+    if (Flags & ~(DDWAITVB_BLOCKBEGIN | DDWAITVB_BLOCKBEGINEVENT | DDWAITVB_BLOCKEND))
+        return DDERR_INVALIDPARAMS;
 
     /* MSDN says DDWAITVB_BLOCKBEGINEVENT is not supported */
     if(Flags & DDWAITVB_BLOCKBEGINEVENT)

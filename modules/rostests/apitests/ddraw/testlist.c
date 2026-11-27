@@ -5,6 +5,7 @@ extern void func_DirectDrawCreate(void);
 extern void func_EnumDisplayModes(void);
 extern void func_PrimaryBltLatency(void);
 extern void func_QueryInterface(void);
+extern void func_VerticalBlank(void);
 
 const struct test winetest_testlist[] =
 {
@@ -12,6 +13,7 @@ const struct test winetest_testlist[] =
     { "EnumDisplayModes", func_EnumDisplayModes },
     { "PrimaryBltLatency", func_PrimaryBltLatency },
     { "QueryInterface", func_QueryInterface },
+    { "VerticalBlank", func_VerticalBlank },
 
     { 0, 0 }
 };
