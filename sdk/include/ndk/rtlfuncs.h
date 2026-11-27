@@ -3434,11 +3434,11 @@ NTSYSAPI
 NTSTATUS
 NTAPI
 RtlGetFullPathName_UEx(
-    _In_ PWSTR FileName,
+    _In_ PCWSTR FileName,
     _In_ ULONG BufferLength,
-    _Out_ PWSTR Buffer,
+    _Out_writes_bytes_(BufferLength) PWSTR Buffer,
     _Out_opt_ PWSTR *FilePart,
-    _Out_opt_ RTL_PATH_TYPE *InputPathType
+    _Out_opt_ PULONG BytesRequired
     );
 
 NTSTATUS

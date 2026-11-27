@@ -186,6 +186,7 @@ extern void func_RtlExitUserProcess(void);
 extern void func_RtlFirstFreeAce(void);
 extern void func_RtlGenerate8dot3Name(void);
 extern void func_RtlGetFullPathName_U(void);
+extern void func_RtlGetFullPathName_UEx(void);
 extern void func_RtlGetFullPathName_Ustr(void);
 extern void func_RtlGetFullPathName_UstrEx(void);
 extern void func_RtlGetLengthWithoutLastFullDosOrNtPathElement(void);
@@ -457,6 +458,7 @@ const struct test winetest_testlist[] =
     { "RtlFirstFreeAce",                func_RtlFirstFreeAce },
     { "RtlGenerate8dot3Name",           func_RtlGenerate8dot3Name },
     { "RtlGetFullPathName_U",           func_RtlGetFullPathName_U },
+    { "RtlGetFullPathName_UEx",         func_RtlGetFullPathName_UEx },
     { "RtlGetFullPathName_Ustr",        func_RtlGetFullPathName_Ustr },
     { "RtlGetFullPathName_UstrEx",      func_RtlGetFullPathName_UstrEx },
     { "RtlGetLengthWithoutLastFullDosOrNtPathElement", func_RtlGetLengthWithoutLastFullDosOrNtPathElement },
