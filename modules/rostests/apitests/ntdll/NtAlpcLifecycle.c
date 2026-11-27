@@ -270,6 +270,7 @@ AlpcTestCancellationCase(
     if (CancelFlags == ALPC_CANCELFLG_TRY_CANCEL)
         alpc_expect_status("Cancel.repeated", NtAlpcCancelMessage(ClientPort, CancelFlags, &CancelContext), STATUS_MESSAGE_RETRIEVED);
     alpc_expect_status("Cancel.late_reply", NtAlpcSendWaitReceivePort(ServerPort, ALPC_MSGFLG_REPLY_MESSAGE, &Request.Header, NULL, NULL, NULL, NULL, NULL), ExpectedLateReplyStatus);
+    alpc_expect_status("Cancel.second_late_reply", NtAlpcSendWaitReceivePort(ServerPort, ALPC_MSGFLG_REPLY_MESSAGE, &Request.Header, NULL, NULL, NULL, NULL, NULL), STATUS_INVALID_MESSAGE);
 
 WaitClient:
     CompletionStart = GetTickCount64();
@@ -1018,6 +1019,86 @@ AlpcTestTimedOutRequestReply(
     ok(Server.Replied == Answered, "%lu replies delivered, %lu requests answered\n", Server.Replied, Answered);
 }
 
+static
+DWORD
+WINAPI
+AlpcTimedOutLateReplyClientThread(
+    _In_ PVOID Parameter)
+{
+    PALPC_LIFECYCLE_CLIENT Client = Parameter;
+    ALPC_TEST_MESSAGE Request;
+    ALPC_TEST_MESSAGE Reply;
+    LARGE_INTEGER Timeout = AlpcTestRelativeTimeout(500);
+    SIZE_T Length = sizeof(Reply);
+
+    AlpcTestInitializeMessage(&Request, ALPC_LIFECYCLE_REQUEST_COOKIE, 20);
+    RtlZeroMemory(&Reply, sizeof(Reply));
+    SetEvent(Client->StartedEvent);
+    Client->FirstStatus = NtAlpcSendWaitReceivePort(Client->Port, ALPC_MSGFLG_SYNC_REQUEST, &Request.Header, NULL, &Reply.Header, &Length, NULL, &Timeout);
+    return 0;
+}
+
+static
+VOID
+AlpcTestTimedOutLateReply(VOID)
+{
+    static UNICODE_STRING PortName = RTL_CONSTANT_STRING(L"\\RPC Control\\NtdllApitestNtAlpcTimedOutLateReply");
+    PALPC_LIFECYCLE_CLIENT Client = NULL;
+    ALPC_TEST_MESSAGE Request;
+    LARGE_INTEGER Timeout = AlpcTestRelativeTimeout(ALPC_TEST_TIMEOUT_MS);
+    SIZE_T Length = sizeof(Request);
+    NTSTATUS Status;
+    HANDLE ConnectionPort = NULL;
+    HANDLE ServerPort = NULL;
+    HANDLE ClientPort = NULL;
+    HANDLE Thread = NULL;
+    DWORD WaitStatus;
+
+    Status = AlpcTestCreateConnectedPorts(&PortName, 0, &ConnectionPort, &ServerPort, &ClientPort);
+    ok_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Client = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*Client));
+    ok(Client != NULL, "timed out late reply context allocation failed\n");
+    if (!Client)
+        goto Cleanup;
+    Client->Port = ClientPort;
+    Client->StartedEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!Client->StartedEvent)
+        goto Cleanup;
+    Thread = CreateThread(NULL, 0, AlpcTimedOutLateReplyClientThread, Client, 0, NULL);
+    ok(Thread != NULL, "CreateThread failed: %lu\n", GetLastError());
+    if (!Thread)
+        goto Cleanup;
+
+    RtlZeroMemory(&Request, sizeof(Request));
+    Status = NtAlpcSendWaitReceivePort(ConnectionPort, 0, NULL, NULL, &Request.Header, &Length, NULL, &Timeout);
+    ok_hex(Status, STATUS_SUCCESS);
+    WaitStatus = WaitForSingleObject(Thread, ALPC_TEST_TIMEOUT_MS);
+    ok_eq_ulong(WaitStatus, WAIT_OBJECT_0);
+    ok_hex(Client->FirstStatus, STATUS_TIMEOUT);
+    if (NT_SUCCESS(Status) && WaitStatus == WAIT_OBJECT_0)
+    {
+        alpc_expect_status("TimedOut.late_reply", NtAlpcSendWaitReceivePort(ServerPort, ALPC_MSGFLG_REPLY_MESSAGE, &Request.Header, NULL, NULL, NULL, NULL, NULL), STATUS_REQUEST_CANCELED);
+        alpc_expect_status("TimedOut.second_late_reply", NtAlpcSendWaitReceivePort(ServerPort, ALPC_MSGFLG_REPLY_MESSAGE, &Request.Header, NULL, NULL, NULL, NULL, NULL), STATUS_INVALID_MESSAGE);
+    }
+
+Cleanup:
+    if (Thread)
+    {
+        WaitForSingleObject(Thread, ALPC_TEST_TIMEOUT_MS);
+        CloseHandle(Thread);
+    }
+    if (Client)
+    {
+        if (Client->StartedEvent)
+            CloseHandle(Client->StartedEvent);
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Client);
+    }
+    AlpcTestCloseConnectedPorts(ConnectionPort, ServerPort, ClientPort);
+}
+
 START_TEST(NtAlpcLifecycle)
 {
     if (AlpcTestIsChildMode("auto-release-timeout"))
@@ -1042,6 +1123,7 @@ START_TEST(NtAlpcLifecycle)
     AlpcTestCancellation();
     AlpcTestCallback();
     AlpcTestLostReply();
+    AlpcTestTimedOutLateReply();
     AlpcTestTimedOutRequestReply(FALSE);
     AlpcTestTimedOutRequestReply(TRUE);
     AlpcTestRunIsolatedCase(L"NtAlpcLifecycle", L"close-while-blocked", ALPC_TEST_CHILD_TIMEOUT_MS);
