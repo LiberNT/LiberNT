@@ -312,6 +312,8 @@ typedef struct _AFD_FCB {
     LIST_ENTRY PendingConnections;
     LIST_ENTRY AddressListChangeEntry;
     ULONG QosDscp;
+    PIRP SuperAcceptIrp;
+    PFILE_OBJECT SuperAcceptListener;
 } AFD_FCB, *PAFD_FCB;
 
 /* bind.c */
@@ -396,6 +398,7 @@ AfdGetPeerName( PDEVICE_OBJECT DeviceObject, PIRP Irp,
 NTSTATUS AfdSuperAccept( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                          PIO_STACK_LOCATION IrpSp );
 VOID AfdSuperAcceptRelease( PIRP Irp );
+VOID AfdCancelSuperAcceptFor( PFILE_OBJECT AcceptFileObject );
 VOID AfdCompleteAcceptData( PIRP Irp, NTSTATUS Status, ULONG_PTR Information );
 NTSTATUS AfdWaitForListen( PDEVICE_OBJECT DeviceObject, PIRP Irp,
 			   PIO_STACK_LOCATION IrpSp );

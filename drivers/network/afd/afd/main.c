@@ -688,6 +688,8 @@ AfdCleanupSocket(PDEVICE_OBJECT DeviceObject, PIRP Irp,
 
     SocketStateUnlock( FCB );
 
+    AfdCancelSuperAcceptFor( FileObject );
+
     if (!ConnectedStream)
         AfdRundownTdi(FCB, FileObject);
 

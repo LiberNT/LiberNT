@@ -12305,21 +12305,9 @@ START_TEST( sock )
     test_GetAddrInfoExW();
     test_getaddrinfo();
 
-#ifdef __REACTOS__
-    if (!winetest_interactive)
-    {
-        skip("WSPAcceptEx(), WSPConnectEx() and WSPDisconnectEx() are UNIMPLEMENTED on ReactOS\n");
-        skip("Skipping tests due to hang. See ROSTESTS-385\n");
-    }
-    else
-    {
-#endif
     test_AcceptEx();
     test_ConnectEx();
     test_DisconnectEx();
-#ifdef __REACTOS__
-    }
-#endif
 
     test_sioRoutingInterfaceQuery();
     test_sioAddressListChange();

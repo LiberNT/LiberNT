@@ -65,21 +65,32 @@ WSPAcceptEx(
     OUT LPDWORD lpdwBytesReceived,
     IN OUT LPOVERLAPPED lpOverlapped)
 {
-    PSOCKET_INFORMATION Socket;
     AFD_SUPER_ACCEPT_INFO AcceptInfo;
     PIO_STATUS_BLOCK IOSB;
+    PVOID ApcContext = NULL;
     NTSTATUS Status;
 
-    Socket = GetSocketStructure(sListenSocket);
-    if (!Socket)
+    if (!GetSocketStructure(sListenSocket))
     {
         SetLastError(WSAENOTSOCK);
         return FALSE;
     }
 
-    if (!lpOverlapped || !lpOutputBuffer || !GetSocketStructure(sAcceptSocket))
+    if (!lpOverlapped)
     {
-        SetLastError(WSAEINVAL);
+        SetLastError(WSA_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    if (!GetSocketStructure(sAcceptSocket))
+    {
+        SetLastError(WSAENOTSOCK);
+        return FALSE;
+    }
+
+    if (!lpOutputBuffer || !dwRemoteAddressLength)
+    {
+        SetLastError(WSAEFAULT);
         return FALSE;
     }
 
@@ -90,11 +101,14 @@ WSPAcceptEx(
 
     IOSB = (PIO_STATUS_BLOCK)lpOverlapped;
     IOSB->Status = STATUS_PENDING;
+    IOSB->Information = 0;
+    if (!((ULONG_PTR)lpOverlapped->hEvent & 1))
+        ApcContext = lpOverlapped;
 
     Status = NtDeviceIoControlFile((HANDLE)sListenSocket,
                                    lpOverlapped->hEvent,
                                    NULL,
-                                   lpOverlapped->hEvent ? NULL : lpOverlapped,
+                                   ApcContext,
                                    IOSB,
                                    IOCTL_AFD_SUPER_ACCEPT,
                                    lpOutputBuffer,
