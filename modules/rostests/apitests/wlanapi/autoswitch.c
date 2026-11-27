@@ -157,7 +157,7 @@ START_TEST(WlanAutoSwitch)
     InitializeCriticalSection(&Lock);
     if (InstallVwifi(&Devices, &Device))
     {
-        if (WaitInterface(Client, &Interface))
+        if (WaitInterface(Client, Devices, &Device, &Interface))
         {
             Error = WlanRegisterNotification(Client, WLAN_NOTIFICATION_SOURCE_ACM,
                                              FALSE, NotificationCallback, NULL, NULL, NULL);
