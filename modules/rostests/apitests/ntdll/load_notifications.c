@@ -270,42 +270,7 @@ static void execute_test(void)
 }
 
 
-BOOL extract_resource(const WCHAR* Filename, LPCWSTR ResourceName)
-{
-    BOOL Success;
-    DWORD dwWritten, Size;
-    HGLOBAL hGlobal;
-    LPVOID pData;
-    HANDLE Handle;
-    HRSRC hRsrc = FindResourceW(GetModuleHandleW(NULL), ResourceName, (LPCWSTR)10);
-    ok(!!hRsrc, "Unable to find %s\n", wine_dbgstr_w(ResourceName));
-    if (!hRsrc)
-        return FALSE;
-
-    hGlobal = LoadResource(GetModuleHandleW(NULL), hRsrc);
-    Size = SizeofResource(GetModuleHandleW(NULL), hRsrc);
-    pData = LockResource(hGlobal);
-
-    ok(Size && !!pData, "Unable to load %s\n", wine_dbgstr_w(ResourceName));
-    if (!Size || !pData)
-        return FALSE;
-
-    Handle = CreateFileW(Filename, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-
-    if (Handle == INVALID_HANDLE_VALUE)
-    {
-        skip("Failed to create temp file %ls, error %lu\n", Filename, GetLastError());
-        return FALSE;
-    }
-    Success = WriteFile(Handle, pData, Size, &dwWritten, NULL);
-    ok(Success == TRUE, "WriteFile failed with %lu\n", GetLastError());
-    ok(dwWritten == Size, "WriteFile wrote %lu bytes instead of %lu\n", dwWritten, Size);
-    CloseHandle(Handle);
-    Success = Success && (dwWritten == Size);
-
-    return Success;
-}
-
+BOOL extract_resource(const WCHAR *Filename, LPCWSTR ResourceName);
 
 START_TEST(load_notifications)
 {
