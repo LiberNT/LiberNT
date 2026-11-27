@@ -265,15 +265,15 @@
 @ stdcall DevGetObjects(long long long ptr long ptr ptr ptr)
 @ stdcall DevGetObjectsEx(long long long ptr long ptr long ptr ptr ptr)
 @ stub DevSetObjectProperties
-@ stub SwDeviceClose
-@ stub SwDeviceCreate
-@ stub SwDeviceGetLifetime
+@ stdcall SwDeviceClose(ptr)
+@ stdcall SwDeviceCreate(wstr wstr ptr long ptr ptr ptr ptr)
+@ stdcall SwDeviceGetLifetime(ptr ptr)
 @ stub SwDeviceInterfacePropertySet
 @ stub SwDeviceInterfaceRegister
 @ stub SwDeviceInterfaceSetState
 @ stub SwDevicePropertySet
-@ stub SwDeviceSetLifetime
-@ stub SwMemFree
+@ stdcall SwDeviceSetLifetime(ptr long)
+@ stdcall SwMemFree(ptr)
 
 # ReactOS retains legacy Configuration Manager exports that Wine no longer exposes.
 @ stdcall CMP_RegisterNotification(ptr ptr long ptr)
