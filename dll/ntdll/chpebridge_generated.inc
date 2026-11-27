@@ -5707,6 +5707,26 @@ BOOLEAN NTAPI ChpeAutoRtlIsNameInExpression(PVOID a0, PVOID a1, BOOLEAN a2, PVOI
     return RtlIsNameInExpression(a0, a1, a2, a3);
 }
 
+/* Native definition: dll/ntdll/rtl/sku.c */
+#ifdef RtlIsMultiSessionSku
+#undef RtlIsMultiSessionSku
+#endif
+BOOLEAN NTAPI RtlIsMultiSessionSku(VOID);
+BOOLEAN NTAPI ChpeAutoRtlIsMultiSessionSku(VOID)
+{
+    return RtlIsMultiSessionSku();
+}
+
+/* Native definition: dll/ntdll/rtl/sku.c */
+#ifdef RtlIsMultiUsersInSessionSku
+#undef RtlIsMultiUsersInSessionSku
+#endif
+BOOLEAN NTAPI RtlIsMultiUsersInSessionSku(VOID);
+BOOLEAN NTAPI ChpeAutoRtlIsMultiUsersInSessionSku(VOID)
+{
+    return RtlIsMultiUsersInSessionSku();
+}
+
 BOOLEAN NTAPI ChpeAutoRtlIsNameLegalDOS8Dot3(PCUNICODE_STRING a0, POEM_STRING a1, PBOOLEAN a2)
 {
     return RtlIsNameLegalDOS8Dot3(a0, a1, a2);
@@ -5718,6 +5738,16 @@ NTSTATUS NTAPI ChpeAutoRtlIsNormalizedString(ULONG a0, PCWSTR a1, LONG a2, PBOOL
     return RtlIsNormalizedString(a0, a1, a2, a3);
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlIsNormalizedString), __typeof__(&RtlIsNormalizedString)), "RtlIsNormalizedString bridge signature mismatch");
+
+/* Native definition: dll/ntdll/rtl/sku.c */
+#ifdef RtlIsStateSeparationEnabled
+#undef RtlIsStateSeparationEnabled
+#endif
+BOOLEAN NTAPI RtlIsStateSeparationEnabled(VOID);
+BOOLEAN NTAPI ChpeAutoRtlIsStateSeparationEnabled(VOID)
+{
+    return RtlIsStateSeparationEnabled();
+}
 
 BOOLEAN NTAPI ChpeAutoRtlIsTextUnicode(const void * a0, INT a1, INT * a2)
 {
