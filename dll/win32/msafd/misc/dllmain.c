@@ -3562,7 +3562,8 @@ WSPGetSockOpt(IN SOCKET Handle,
                     break;
 
                 case SO_CONNECT_TIME:
-                    DwordBuffer = GetCurrentTimeInSeconds() - Socket->SharedData->ConnectTime;
+                    DwordBuffer = Socket->SharedData->State == SocketConnected ?
+                                  GetCurrentTimeInSeconds() - Socket->SharedData->ConnectTime : MAXDWORD;
                     Buffer = &DwordBuffer;
                     BufferSize = sizeof(DWORD);
                     break;
