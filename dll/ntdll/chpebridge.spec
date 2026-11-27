@@ -11,8 +11,8 @@
 67 stdcall -version=0x600+ EtwEventUnregister(int64) ChpeEtwEventUnregister
 68 stdcall -version=0x600+ EtwEventWrite(int64 ptr long ptr) ChpeEtwEventWrite
 74 stdcall -version=0x600+ EtwEventWriteTransfer(int64 ptr ptr ptr long ptr) ChpeEtwEventWriteTransfer
-1873 cdecl __C_specific_handler(ptr long ptr ptr) ChpeCSpecificHandler
-2019 stdcall ChpeDispatchExceptionNative(ptr ptr)
+1875 cdecl __C_specific_handler(ptr long ptr ptr) ChpeCSpecificHandler
+2021 stdcall ChpeDispatchExceptionNative(ptr ptr)
 108 stdcall KiUserExceptionDispatcher(ptr ptr) ChpeKiUserExceptionDispatcher
 111 stdcall LdrAccessResource(ptr ptr ptr ptr) ChpeLdrAccessResource
 113 stdcall LdrAddRefDll(long ptr) ChpeLdrAddRefDll
@@ -151,72 +151,72 @@
 1148 stdcall -norelay RtlRaiseException(ptr) ChpeRtlRaiseException
 1149 stdcall RtlRaiseStatus(long) ChpeRtlRaiseStatus
 1150 stdcall RtlRandom(ptr) ChpeRtlRandom
-1152 stdcall RtlReAllocateHeap(long long ptr long) ChpeRtlReAllocateHeap
-1164 stdcall RtlReleasePrivilege(ptr) ChpeRtlReleasePrivilege
-1167 stdcall RtlReleaseSRWLockExclusive(ptr) ChpeRtlReleaseSRWLockExclusive
-1168 stdcall RtlReleaseSRWLockShared(ptr) ChpeRtlReleaseSRWLockShared
-1171 stdcall RtlRemoveVectoredContinueHandler(ptr) ChpeRtlRemoveVectoredContinueHandler
-1172 stdcall RtlRemoveVectoredExceptionHandler(ptr) ChpeRtlRemoveVectoredExceptionHandler
-1178 stdcall RtlRestoreContext(ptr ptr) ChpeRtlRestoreContext
-1179 stdcall RtlRestoreLastWin32Error(long) ChpeRtlRestoreLastWin32Error
-1186 stdcall -version=0x600+ RtlRunOnceExecuteOnce(ptr ptr ptr ptr) ChpeRtlRunOnceExecuteOnce
-1187 stdcall -version=0x600+ RtlRunOnceInitialize(ptr) ChpeRtlRunOnceInitialize
-1239 stdcall RtlSizeHeap(long long ptr) ChpeRtlSizeHeap
-1199 stdcall RtlSetCriticalSectionSpinCount(ptr long) ChpeRtlSetCriticalSectionSpinCount
-1213 stdcall RtlSetLastWin32Error(long) ChpeRtlSetLastWin32Error
-1266 stdcall RtlTryAcquireSRWLockExclusive(ptr) ChpeRtlTryAcquireSRWLockExclusive
-1267 stdcall RtlTryAcquireSRWLockShared(ptr) ChpeRtlTryAcquireSRWLockShared
-1268 stdcall RtlTryEnterCriticalSection(ptr) ChpeRtlTryEnterCriticalSection
-1274 stdcall -version=0x601+ RtlUTF8ToUnicodeN(ptr long ptr str long) ChpeRtlUTF8ToUnicodeN
-1292 stdcall RtlUnwind(ptr ptr ptr ptr) ChpeRtlUnwind
-1293 stdcall RtlUnwindEx(ptr ptr ptr ptr ptr ptr) ChpeRtlUnwindEx
-1317 stdcall RtlVirtualUnwind(long int64 int64 ptr ptr ptr ptr ptr) ChpeRtlVirtualUnwind
-1319 stdcall -version=0x602+ RtlWaitOnAddress(ptr ptr long ptr) ChpeRtlWaitOnAddress
-1321 stdcall -version=0x602+ RtlWakeAddressAll(ptr) ChpeRtlWakeAddressAll
-1322 stdcall -version=0x602+ RtlWakeAddressSingle(ptr) ChpeRtlWakeAddressSingle
-1320 stdcall RtlWakeAllConditionVariable(ptr) ChpeRtlWakeAllConditionVariable
-1323 stdcall RtlWakeConditionVariable(ptr) ChpeRtlWakeConditionVariable
-1348 stdcall RtlZeroMemory(ptr long) ChpeRtlZeroMemory
-1402 stdcall -version=0x600+ TpCallbackLeaveCriticalSectionOnCompletion(ptr ptr) ChpeTpCallbackLeaveCriticalSectionOnCompletion
-1404 stdcall -version=0x600+ TpCallbackReleaseMutexOnCompletion(ptr ptr) ChpeTpCallbackReleaseMutexOnCompletion
-1405 stdcall -version=0x600+ TpCallbackReleaseSemaphoreOnCompletion(ptr ptr long) ChpeTpCallbackReleaseSemaphoreOnCompletion
-1408 stdcall -version=0x600+ TpCallbackSetEventOnCompletion(ptr ptr) ChpeTpCallbackSetEventOnCompletion
-1409 stdcall -version=0x600+ TpCallbackUnloadDllOnCompletion(ptr ptr) ChpeTpCallbackUnloadDllOnCompletion
-1410 stdcall -version=0x600+ TpCancelAsyncIoOperation(ptr) ChpeTpCancelAsyncIoOperation
-1415 stdcall -version=0x600+ TpDisassociateCallback(ptr) ChpeTpDisassociateCallback
-1416 stdcall -version=0x600+ TpIsTimerSet(ptr) ChpeTpIsTimerSet
-1417 stdcall -version=0x600+ TpPostWork(ptr) ChpeTpPostWork
-1420 stdcall -version=0x600+ TpReleaseCleanupGroup(ptr) ChpeTpReleaseCleanupGroup
-1421 stdcall -version=0x600+ TpReleaseCleanupGroupMembers(ptr long ptr) ChpeTpReleaseCleanupGroupMembers
-1422 stdcall -version=0x600+ TpReleaseIoCompletion(ptr) ChpeTpReleaseIoCompletion
-1423 stdcall -version=0x600+ TpReleasePool(ptr) ChpeTpReleasePool
-1424 stdcall TpReleaseTimer(ptr) ChpeTpReleaseTimer
-1425 stdcall TpReleaseWait(ptr) ChpeTpReleaseWait
-1426 stdcall -version=0x600+ TpReleaseWork(ptr) ChpeTpReleaseWork
-1427 stdcall -version=0x600+ TpSetPoolMaxThreads(ptr long) ChpeTpSetPoolMaxThreads
-1428 stdcall -version=0x600+ TpSetPoolMinThreads(ptr long) ChpeTpSetPoolMinThreads
-1430 stdcall TpSetTimer(ptr ptr long long) ChpeTpSetTimer
-1431 stdcall -version=0x602+ TpSetTimerEx(ptr ptr long long) ChpeTpSetTimerEx
-1432 stdcall TpSetWait(ptr long ptr) ChpeTpSetWait
-1433 stdcall -version=0x602+ TpSetWaitEx(ptr long ptr ptr) ChpeTpSetWaitEx
-1435 stdcall -version=0x600+ TpStartAsyncIoOperation(ptr) ChpeTpStartAsyncIoOperation
-1437 stdcall -version=0x600+ TpWaitForIoCompletion(ptr long) ChpeTpWaitForIoCompletion
-1438 stdcall TpWaitForTimer(ptr long) ChpeTpWaitForTimer
-1439 stdcall -version=0x600+ TpWaitForWait(ptr long) ChpeTpWaitForWait
-1440 stdcall -version=0x600+ TpWaitForWork(ptr long) ChpeTpWaitForWork
-1441 stdcall -ret64 VerSetConditionMask(double long long) ChpeVerSetConditionMask
-1895 varargs _snprintf(ptr long str) ChpeSnprintf
-1897 varargs _snwprintf(ptr long wstr) ChpeSnwprintf
-1906 varargs _swprintf(ptr wstr) ChpeSwprintf
-1964 varargs sprintf(ptr str) ChpeSprintf
-1986 varargs swprintf(ptr wstr) ChpeSwprintf
-1896 varargs _snprintf_s(ptr long long str) ChpeSnprintf_s
-1898 varargs _snwprintf_s(ptr long long wstr) ChpeSnwprintf_s
-1874 cdecl __chkstk() ChpeChkStk
-1888 cdecl _local_unwind(ptr ptr) ChpeLocalUnwind
-1958 cdecl memcpy(ptr ptr long) ChpeMemcpy
-2020 stdcall ChpeEmulationDispatch(ptr)
-1337 stdcall RtlWow64GetThreadSelectorEntry(ptr ptr long ptr) ChpeRtlWow64GetThreadSelectorEntry
+1154 stdcall RtlReAllocateHeap(long long ptr long) ChpeRtlReAllocateHeap
+1166 stdcall RtlReleasePrivilege(ptr) ChpeRtlReleasePrivilege
+1169 stdcall RtlReleaseSRWLockExclusive(ptr) ChpeRtlReleaseSRWLockExclusive
+1170 stdcall RtlReleaseSRWLockShared(ptr) ChpeRtlReleaseSRWLockShared
+1173 stdcall RtlRemoveVectoredContinueHandler(ptr) ChpeRtlRemoveVectoredContinueHandler
+1174 stdcall RtlRemoveVectoredExceptionHandler(ptr) ChpeRtlRemoveVectoredExceptionHandler
+1180 stdcall RtlRestoreContext(ptr ptr) ChpeRtlRestoreContext
+1181 stdcall RtlRestoreLastWin32Error(long) ChpeRtlRestoreLastWin32Error
+1188 stdcall -version=0x600+ RtlRunOnceExecuteOnce(ptr ptr ptr ptr) ChpeRtlRunOnceExecuteOnce
+1189 stdcall -version=0x600+ RtlRunOnceInitialize(ptr) ChpeRtlRunOnceInitialize
+1241 stdcall RtlSizeHeap(long long ptr) ChpeRtlSizeHeap
+1201 stdcall RtlSetCriticalSectionSpinCount(ptr long) ChpeRtlSetCriticalSectionSpinCount
+1215 stdcall RtlSetLastWin32Error(long) ChpeRtlSetLastWin32Error
+1268 stdcall RtlTryAcquireSRWLockExclusive(ptr) ChpeRtlTryAcquireSRWLockExclusive
+1269 stdcall RtlTryAcquireSRWLockShared(ptr) ChpeRtlTryAcquireSRWLockShared
+1270 stdcall RtlTryEnterCriticalSection(ptr) ChpeRtlTryEnterCriticalSection
+1276 stdcall -version=0x601+ RtlUTF8ToUnicodeN(ptr long ptr str long) ChpeRtlUTF8ToUnicodeN
+1294 stdcall RtlUnwind(ptr ptr ptr ptr) ChpeRtlUnwind
+1295 stdcall RtlUnwindEx(ptr ptr ptr ptr ptr ptr) ChpeRtlUnwindEx
+1319 stdcall RtlVirtualUnwind(long int64 int64 ptr ptr ptr ptr ptr) ChpeRtlVirtualUnwind
+1321 stdcall -version=0x602+ RtlWaitOnAddress(ptr ptr long ptr) ChpeRtlWaitOnAddress
+1323 stdcall -version=0x602+ RtlWakeAddressAll(ptr) ChpeRtlWakeAddressAll
+1324 stdcall -version=0x602+ RtlWakeAddressSingle(ptr) ChpeRtlWakeAddressSingle
+1322 stdcall RtlWakeAllConditionVariable(ptr) ChpeRtlWakeAllConditionVariable
+1325 stdcall RtlWakeConditionVariable(ptr) ChpeRtlWakeConditionVariable
+1350 stdcall RtlZeroMemory(ptr long) ChpeRtlZeroMemory
+1404 stdcall -version=0x600+ TpCallbackLeaveCriticalSectionOnCompletion(ptr ptr) ChpeTpCallbackLeaveCriticalSectionOnCompletion
+1406 stdcall -version=0x600+ TpCallbackReleaseMutexOnCompletion(ptr ptr) ChpeTpCallbackReleaseMutexOnCompletion
+1407 stdcall -version=0x600+ TpCallbackReleaseSemaphoreOnCompletion(ptr ptr long) ChpeTpCallbackReleaseSemaphoreOnCompletion
+1410 stdcall -version=0x600+ TpCallbackSetEventOnCompletion(ptr ptr) ChpeTpCallbackSetEventOnCompletion
+1411 stdcall -version=0x600+ TpCallbackUnloadDllOnCompletion(ptr ptr) ChpeTpCallbackUnloadDllOnCompletion
+1412 stdcall -version=0x600+ TpCancelAsyncIoOperation(ptr) ChpeTpCancelAsyncIoOperation
+1417 stdcall -version=0x600+ TpDisassociateCallback(ptr) ChpeTpDisassociateCallback
+1418 stdcall -version=0x600+ TpIsTimerSet(ptr) ChpeTpIsTimerSet
+1419 stdcall -version=0x600+ TpPostWork(ptr) ChpeTpPostWork
+1422 stdcall -version=0x600+ TpReleaseCleanupGroup(ptr) ChpeTpReleaseCleanupGroup
+1423 stdcall -version=0x600+ TpReleaseCleanupGroupMembers(ptr long ptr) ChpeTpReleaseCleanupGroupMembers
+1424 stdcall -version=0x600+ TpReleaseIoCompletion(ptr) ChpeTpReleaseIoCompletion
+1425 stdcall -version=0x600+ TpReleasePool(ptr) ChpeTpReleasePool
+1426 stdcall TpReleaseTimer(ptr) ChpeTpReleaseTimer
+1427 stdcall TpReleaseWait(ptr) ChpeTpReleaseWait
+1428 stdcall -version=0x600+ TpReleaseWork(ptr) ChpeTpReleaseWork
+1429 stdcall -version=0x600+ TpSetPoolMaxThreads(ptr long) ChpeTpSetPoolMaxThreads
+1430 stdcall -version=0x600+ TpSetPoolMinThreads(ptr long) ChpeTpSetPoolMinThreads
+1432 stdcall TpSetTimer(ptr ptr long long) ChpeTpSetTimer
+1433 stdcall -version=0x602+ TpSetTimerEx(ptr ptr long long) ChpeTpSetTimerEx
+1434 stdcall TpSetWait(ptr long ptr) ChpeTpSetWait
+1435 stdcall -version=0x602+ TpSetWaitEx(ptr long ptr ptr) ChpeTpSetWaitEx
+1437 stdcall -version=0x600+ TpStartAsyncIoOperation(ptr) ChpeTpStartAsyncIoOperation
+1439 stdcall -version=0x600+ TpWaitForIoCompletion(ptr long) ChpeTpWaitForIoCompletion
+1440 stdcall TpWaitForTimer(ptr long) ChpeTpWaitForTimer
+1441 stdcall -version=0x600+ TpWaitForWait(ptr long) ChpeTpWaitForWait
+1442 stdcall -version=0x600+ TpWaitForWork(ptr long) ChpeTpWaitForWork
+1443 stdcall -ret64 VerSetConditionMask(double long long) ChpeVerSetConditionMask
+1897 varargs _snprintf(ptr long str) ChpeSnprintf
+1899 varargs _snwprintf(ptr long wstr) ChpeSnwprintf
+1908 varargs _swprintf(ptr wstr) ChpeSwprintf
+1966 varargs sprintf(ptr str) ChpeSprintf
+1988 varargs swprintf(ptr wstr) ChpeSwprintf
+1898 varargs _snprintf_s(ptr long long str) ChpeSnprintf_s
+1900 varargs _snwprintf_s(ptr long long wstr) ChpeSnwprintf_s
+1876 cdecl __chkstk() ChpeChkStk
+1890 cdecl _local_unwind(ptr ptr) ChpeLocalUnwind
+1960 cdecl memcpy(ptr ptr long) ChpeMemcpy
+2022 stdcall ChpeEmulationDispatch(ptr)
+1339 stdcall RtlWow64GetThreadSelectorEntry(ptr ptr long ptr) ChpeRtlWow64GetThreadSelectorEntry
 
 278 stdcall NtCreateThread(ptr long ptr long ptr ptr ptr long) ChpeNtCreateThread
 328 stdcall NtFsControlFile(long long ptr ptr ptr long ptr long ptr long) ChpeAutoNtFsControlFile
@@ -227,10 +227,10 @@
 937 stdcall RtlGetLengthWithoutLastFullDosOrNtPathElement(long ptr ptr) ChpeRtlGetLengthWithoutLastFullDosOrNtPathElement
 957 stdcall RtlGetUnloadEventTrace() ChpeRtlGetUnloadEventTrace
 1147 stdcall RtlQueueWorkItem(ptr ptr long) ChpeRtlQueueWorkItem
-1160 stdcall RtlRegisterWait(ptr ptr ptr ptr long long) ChpeRtlRegisterWait
-1350 stdcall RtlpApplyLengthFunction(long long ptr ptr) ChpeRtlpApplyLengthFunction
-1993 stdcall vDbgPrintEx(long long str ptr) ChpevDbgPrintEx
-1994 stdcall vDbgPrintExWithPrefix(str long long str ptr) ChpevDbgPrintExWithPrefix
+1162 stdcall RtlRegisterWait(ptr ptr ptr ptr long long) ChpeRtlRegisterWait
+1352 stdcall RtlpApplyLengthFunction(long long ptr ptr) ChpeRtlpApplyLengthFunction
+1995 stdcall vDbgPrintEx(long long str ptr) ChpevDbgPrintEx
+1996 stdcall vDbgPrintExWithPrefix(str long long str ptr) ChpevDbgPrintExWithPrefix
 840 stdcall LdrGetDllFullName(ptr ptr) ChpeLdrGetDllFullName
 877 stdcall RtlFindExportedRoutineByName(ptr str) ChpeRtlFindExportedRoutineByName
 843 stdcall RtlIsEcCode(ptr) ChpeRtlIsEcCode
@@ -244,26 +244,26 @@
 43 varargs DbgPrintReturnControlC(str) ChpeDbgPrintReturnControlC
 57 stdcall DbgUserBreakPoint() ChpeDbgUserBreakPoint
 90 varargs EtwTraceMessage(int64 long ptr long) ChpeEtwTraceMessage
-1308 stdcall RtlUserThreadStart(long long) ntdll.RtlUserThreadStart
-1966 varargs sscanf(str str) ChpeSscanf
-2013 cdecl ChpeVsscanf(str str ptr) ChpeAutoVsscanf
-1967 varargs sscanf_s(str str) ChpeSscanf_s
-1987 varargs swscanf_s(wstr wstr) ChpeSwscanf_s
-1899 varargs _snwscanf_s(wstr long wstr) ChpeSnwscanf_s
-2014 cdecl ChpeVsscanf_s(str str ptr) ChpeAutoVsscanf_s
-2015 cdecl ChpeVswscanf_s(wstr wstr ptr) ChpeAutoVswscanf_s
-2016 cdecl ChpeVsnwscanf_s(wstr long wstr ptr) ChpeAutoVsnwscanf_s
-2017 stdcall ChpeVDbgPrintReturnControlC(str ptr) ChpeAutoVDbgPrintReturnControlC
-1881 cdecl -private _errno() ChpeErrno
-1887 cdecl _lfind(ptr ptr ptr long ptr) ChpeLfind
-1930 cdecl bsearch(ptr ptr long long ptr) ChpeBsearch
-1962 cdecl qsort(ptr long long ptr) ChpeQsort
-1893 cdecl _setjmp(ptr ptr) ChpeSetJmpX64
-1894 cdecl _setjmpex(ptr ptr) ChpeSetJmpX64
-1954 cdecl longjmp(ptr long) ChpeLongJmp
+1310 stdcall RtlUserThreadStart(long long) ntdll.RtlUserThreadStart
+1968 varargs sscanf(str str) ChpeSscanf
+2015 cdecl ChpeVsscanf(str str ptr) ChpeAutoVsscanf
+1969 varargs sscanf_s(str str) ChpeSscanf_s
+1989 varargs swscanf_s(wstr wstr) ChpeSwscanf_s
+1901 varargs _snwscanf_s(wstr long wstr) ChpeSnwscanf_s
+2016 cdecl ChpeVsscanf_s(str str ptr) ChpeAutoVsscanf_s
+2017 cdecl ChpeVswscanf_s(wstr wstr ptr) ChpeAutoVswscanf_s
+2018 cdecl ChpeVsnwscanf_s(wstr long wstr ptr) ChpeAutoVsnwscanf_s
+2019 stdcall ChpeVDbgPrintReturnControlC(str ptr) ChpeAutoVDbgPrintReturnControlC
+1883 cdecl -private _errno() ChpeErrno
+1889 cdecl _lfind(ptr ptr ptr long ptr) ChpeLfind
+1932 cdecl bsearch(ptr ptr long long ptr) ChpeBsearch
+1964 cdecl qsort(ptr long long ptr) ChpeQsort
+1895 cdecl _setjmp(ptr ptr) ChpeSetJmpX64
+1896 cdecl _setjmpex(ptr ptr) ChpeSetJmpX64
+1956 cdecl longjmp(ptr long) ChpeLongJmp
 980 stdcall RtlInitMemoryStream(ptr) ChpeRtlInitMemoryStream
 982 stdcall RtlInitOutOfProcessMemoryStream(ptr) ChpeRtlInitOutOfProcessMemoryStream
-1162 stdcall RtlReleaseMemoryStream(ptr) ChpeRtlReleaseMemoryStream
+1164 stdcall RtlReleaseMemoryStream(ptr) ChpeRtlReleaseMemoryStream
 99 stdcall ExpInterlockedPopEntrySListEnd() ChpeUnsupportedKernelEntry
 101 stdcall ExpInterlockedPopEntrySListFault() ChpeUnsupportedKernelEntry
 103 stdcall ExpInterlockedPopEntrySListResume() ChpeUnsupportedKernelEntry
@@ -1242,782 +1242,784 @@
 1145 stdcall RtlQueryTimeZoneInformation(ptr) ChpeAutoRtlQueryTimeZoneInformation
 1146 stdcall RtlQueueApcWow64Thread(ptr ptr ptr ptr ptr) ChpeAutoRtlQueueApcWow64Thread
 1151 stdcall RtlRandomEx(ptr) ChpeAutoRtlRandomEx
-1153 stdcall RtlReadMemoryStream(ptr ptr long ptr) ChpeAutoRtlReadMemoryStream
-1154 stdcall RtlReadOutOfProcessMemoryStream(ptr ptr long ptr) ChpeAutoRtlReadOutOfProcessMemoryStream
-1155 stdcall RtlRealPredecessor(ptr) ChpeAutoRtlRealPredecessor
-1156 stdcall RtlRealSuccessor(ptr) ChpeAutoRtlRealSuccessor
-1157 stdcall RtlRegisterSecureMemoryCacheCallback(ptr) ChpeAutoRtlRegisterSecureMemoryCacheCallback
-1158 stdcall RtlRegisterCfgTargetRange(ptr long) ChpeAutoRtlRegisterCfgTargetRange
-1159 stdcall -version=0x600+ RtlRegisterThreadWithCsrss() ChpeStubRtlRegisterThreadWithCsrss
-1161 stdcall RtlReleaseActivationContext(ptr) ChpeAutoRtlReleaseActivationContext
-1163 stdcall RtlReleasePebLock() ChpeAutoRtlReleasePebLock
-1165 stdcall RtlReleaseRelativeName(ptr) ChpeAutoRtlReleaseRelativeName
-1166 stdcall RtlReleaseResource(ptr) ChpeAutoRtlReleaseResource
-1169 stdcall RtlRemoteCall(ptr ptr ptr long ptr long long) ChpeAutoRtlRemoteCall
-1170 stdcall -version=0x600+ RtlRemovePrivileges(ptr ptr long) ChpeAutoRtlRemovePrivileges
-1173 stdcall -version=0x600+ RtlReportException(long long long) ChpeStubRtlReportException
-1174 stdcall -version=0x600+ RtlResetMemoryBlockLookaside(long) ChpeStubRtlResetMemoryBlockLookaside
-1175 stdcall -version=0x600+ RtlResetMemoryZone(long) ChpeStubRtlResetMemoryZone
-1176 stdcall -version=0x600+ RtlResetNtUserPfn() ChpeAutoRtlResetNtUserPfn
-1177 stdcall RtlResetRtlTranslations(ptr) ChpeAutoRtlResetRtlTranslations
-1180 stdcall -version=0x600+ RtlRetrieveNtUserPfn(ptr ptr ptr) ChpeAutoRtlRetrieveNtUserPfn
-1181 stdcall RtlRevertMemoryStream(ptr) ChpeAutoRtlRevertMemoryStream
-1182 stdcall RtlRunDecodeUnicodeString(long ptr) ChpeAutoRtlRunDecodeUnicodeString
-1183 stdcall RtlRunEncodeUnicodeString(long ptr) ChpeAutoRtlRunEncodeUnicodeString
-1184 stdcall -version=0x600+ RtlRunOnceBeginInitialize(ptr long ptr) ChpeAutoRtlRunOnceBeginInitialize
-1185 stdcall -version=0x600+ RtlRunOnceComplete(ptr long ptr) ChpeAutoRtlRunOnceComplete
-1188 stdcall RtlSecondsSince1970ToTime(long ptr) ChpeAutoRtlSecondsSince1970ToTime
-1189 stdcall RtlSecondsSince1980ToTime(long ptr) ChpeAutoRtlSecondsSince1980ToTime
-1190 stdcall RtlSeekMemoryStream(ptr int64 long ptr) ChpeAutoRtlSeekMemoryStream
-1191 stdcall RtlSelfRelativeToAbsoluteSD2(ptr ptr) ChpeAutoRtlSelfRelativeToAbsoluteSD2
-1192 stdcall RtlSelfRelativeToAbsoluteSD(ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr) ChpeAutoRtlSelfRelativeToAbsoluteSD
-1193 stdcall -version=0x600+ RtlSendMsgToSm(ptr ptr) ChpeStubRtlSendMsgToSm
-1194 stdcall RtlSetAllBits(ptr) ChpeAutoRtlSetAllBits
-1195 stdcall RtlSetAttributesSecurityDescriptor(ptr long ptr) ChpeAutoRtlSetAttributesSecurityDescriptor
-1196 stdcall RtlSetBits(ptr long long) ChpeAutoRtlSetBits
-1197 stdcall RtlSetCfgTargetValidity(ptr long long ptr) ChpeAutoRtlSetCfgTargetValidity
-1198 stdcall RtlSetControlSecurityDescriptor(ptr long long) ChpeAutoRtlSetControlSecurityDescriptor
-1200 stdcall RtlSetCurrentDirectory_U(ptr) ChpeAutoRtlSetCurrentDirectory_U
-1201 stdcall RtlSetCurrentEnvironment(wstr ptr) ChpeAutoRtlSetCurrentEnvironment
-1202 stdcall -version=0x600+ RtlSetCurrentTransaction(ptr) ChpeAutoRtlSetCurrentTransaction
-1203 stdcall RtlSetDaclSecurityDescriptor(ptr long ptr long) ChpeAutoRtlSetDaclSecurityDescriptor
-1204 stdcall -version=0x600+ RtlSetDynamicTimeZoneInformation(long) ChpeStubRtlSetDynamicTimeZoneInformation
-1205 stdcall RtlSetEnvironmentStrings(wstr long) ChpeAutoRtlSetEnvironmentStrings
-1206 stdcall -version=0x600+ RtlSetEnvironmentVar(ptr ptr long ptr long) ChpeStubRtlSetEnvironmentVar
-1207 stdcall RtlSetEnvironmentVariable(ptr ptr ptr) ChpeAutoRtlSetEnvironmentVariable
-1208 stdcall -version=0x600+ RtlSetExtendedFeaturesMask(ptr int64) ChpeAutoRtlSetExtendedFeaturesMask
-1209 stdcall RtlSetGroupSecurityDescriptor(ptr ptr long) ChpeAutoRtlSetGroupSecurityDescriptor
-1210 stdcall RtlSetHeapInformation(ptr long ptr ptr) ChpeAutoRtlSetHeapInformation
-1211 stdcall RtlSetInformationAcl(ptr ptr long long) ChpeAutoRtlSetInformationAcl
-1212 stdcall RtlSetIoCompletionCallback(long ptr long) ChpeAutoRtlSetIoCompletionCallback
-1214 stdcall RtlSetLastWin32ErrorAndNtStatusFromNtStatus(long) ChpeAutoRtlSetLastWin32ErrorAndNtStatusFromNtStatus
-1215 stdcall RtlSetMemoryStreamSize(ptr int64) ChpeAutoRtlSetMemoryStreamSize
-1216 stdcall RtlSetOwnerSecurityDescriptor(ptr ptr long) ChpeAutoRtlSetOwnerSecurityDescriptor
-1217 stdcall -version=0x602+ RtlSetPortableOperatingSystem(long) ChpeAutoRtlSetPortableOperatingSystem
-1218 stdcall -version=0x600+ RtlSetProcessDebugInformation(ptr long ptr) ChpeStubRtlSetProcessDebugInformation
-1219 stdcall -version=0x600+ RtlSetProcessPreferredUILanguages(long ptr ptr) ChpeAutoRtlSetProcessPreferredUILanguages
-1220 cdecl RtlSetProcessIsCritical(long ptr long) ChpeAutoRtlSetProcessIsCritical
-1221 stdcall RtlSetSaclSecurityDescriptor(ptr long ptr long) ChpeAutoRtlSetSaclSecurityDescriptor
-1222 stdcall RtlSetSecurityDescriptorRMControl(ptr ptr) ChpeAutoRtlSetSecurityDescriptorRMControl
-1223 stdcall RtlSetSecurityObject(long ptr ptr ptr ptr) ChpeAutoRtlSetSecurityObject
-1224 stdcall RtlSetSecurityObjectEx(long ptr ptr long ptr ptr) ChpeAutoRtlSetSecurityObjectEx
-1225 stdcall RtlSetThreadErrorMode(long ptr) ChpeAutoRtlSetThreadErrorMode
-1226 cdecl RtlSetThreadIsCritical(long ptr long) ChpeAutoRtlSetThreadIsCritical
-1227 stdcall RtlSetThreadPoolStartFunc(ptr ptr) ChpeAutoRtlSetThreadPoolStartFunc
-1228 stdcall -version=0x600+ RtlSetThreadPreferredUILanguages(long ptr ptr) ChpeAutoRtlSetThreadPreferredUILanguages
-1229 stdcall RtlSetTimeZoneInformation(ptr) ChpeAutoRtlSetTimeZoneInformation
-1230 stdcall RtlSetTimer(ptr ptr ptr ptr long long long) ChpeAutoRtlSetTimer
-1231 stdcall RtlSetUnhandledExceptionFilter(ptr) ChpeAutoRtlSetUnhandledExceptionFilter
-1232 stdcall RtlSetUserFlagsHeap(ptr long ptr long long) ChpeAutoRtlSetUserFlagsHeap
-1233 stdcall RtlSetUserValueHeap(ptr long ptr ptr) ChpeAutoRtlSetUserValueHeap
-1234 stdcall -version=0x600+ RtlSidDominates(long long ptr) ChpeStubRtlSidDominates
-1235 stdcall -version=0x600+ RtlSidEqualLevel(long long ptr) ChpeStubRtlSidEqualLevel
-1236 stdcall -version=0x600+ RtlSidHashInitialize(ptr long ptr) ChpeStubRtlSidHashInitialize
-1237 stdcall -version=0x600+ RtlSidHashLookup(long ptr) ChpeStubRtlSidHashLookup
-1238 stdcall -version=0x600+ RtlSidIsHigherLevel(long long ptr) ChpeStubRtlSidIsHigherLevel
-1240 stdcall -version=0x600+ RtlSleepConditionVariableCS(ptr ptr ptr) ChpeAutoRtlSleepConditionVariableCS
-1241 stdcall -version=0x600+ RtlSleepConditionVariableSRW(ptr ptr ptr long) ChpeAutoRtlSleepConditionVariableSRW
-1242 stdcall RtlSplay(ptr) ChpeAutoRtlSplay
-1243 stdcall RtlStartRXact(ptr) ChpeAutoRtlStartRXact
-1244 stdcall RtlStatMemoryStream(ptr ptr long) ChpeAutoRtlStatMemoryStream
-1245 stdcall RtlStringFromGUID(ptr ptr) ChpeAutoRtlStringFromGUID
-1246 stdcall RtlSubAuthorityCountSid(ptr) ChpeAutoRtlSubAuthorityCountSid
-1247 stdcall RtlSubAuthoritySid(ptr long) ChpeAutoRtlSubAuthoritySid
-1248 stdcall RtlSubtreePredecessor(ptr) ChpeAutoRtlSubtreePredecessor
-1249 stdcall RtlSubtreeSuccessor(ptr) ChpeAutoRtlSubtreeSuccessor
-1250 stdcall RtlSystemTimeToLocalTime(ptr ptr) ChpeAutoRtlSystemTimeToLocalTime
-1251 stdcall -version=0x600+ RtlTestBit(ptr long) ChpeAutoRtlTestBit
-1252 stdcall RtlTimeFieldsToTime(ptr ptr) ChpeAutoRtlTimeFieldsToTime
-1253 stdcall RtlTimeToElapsedTimeFields(long long) ChpeAutoRtlTimeToElapsedTimeFields
-1254 stdcall RtlTimeToSecondsSince1970(ptr ptr) ChpeAutoRtlTimeToSecondsSince1970
-1255 stdcall RtlTimeToSecondsSince1980(ptr ptr) ChpeAutoRtlTimeToSecondsSince1980
-1256 stdcall RtlTimeToTimeFields(long long) ChpeAutoRtlTimeToTimeFields
-1257 stdcall RtlTraceDatabaseAdd(ptr long ptr ptr) ChpeAutoRtlTraceDatabaseAdd
-1258 stdcall RtlTraceDatabaseCreate(long ptr long long ptr) ChpeAutoRtlTraceDatabaseCreate
-1259 stdcall RtlTraceDatabaseDestroy(ptr) ChpeAutoRtlTraceDatabaseDestroy
-1260 stdcall RtlTraceDatabaseEnumerate(ptr ptr ptr) ChpeAutoRtlTraceDatabaseEnumerate
-1261 stdcall RtlTraceDatabaseFind(ptr long ptr ptr) ChpeAutoRtlTraceDatabaseFind
-1262 stdcall RtlTraceDatabaseLock(ptr) ChpeAutoRtlTraceDatabaseLock
-1263 stdcall RtlTraceDatabaseUnlock(ptr) ChpeAutoRtlTraceDatabaseUnlock
-1264 stdcall RtlTraceDatabaseValidate(ptr) ChpeAutoRtlTraceDatabaseValidate
-1265 stdcall RtlTryAcquirePebLock() ChpeAutoRtlTryAcquirePebLock
-1269 stdcall RtlUnhandledExceptionFilter2(ptr long) ChpeAutoRtlUnhandledExceptionFilter2
-1270 stdcall RtlUnhandledExceptionFilter(ptr) ChpeAutoRtlUnhandledExceptionFilter
-1271 stdcall RtlUnicodeStringToAnsiSize(ptr) ChpeAutoRtlUnicodeStringToAnsiSize
-1272 stdcall -version=0x601+ RtlUnicodeToUTF8N(ptr long ptr wstr long) ChpeAutoRtlUnicodeToUTF8N
-1273 stdcall -version=0xA00+ RtlUTF8StringToUnicodeString(ptr ptr long) ChpeAutoRtlUTF8StringToUnicodeString
-1275 stdcall RtlUnicodeStringToAnsiString(ptr ptr long) ChpeAutoRtlUnicodeStringToAnsiString
-1276 stdcall RtlUnicodeStringToCountedOemString(ptr ptr long) ChpeAutoRtlUnicodeStringToCountedOemString
-1277 stdcall RtlUnicodeStringToInteger(ptr long ptr) ChpeAutoRtlUnicodeStringToInteger
-1278 stdcall RtlUnicodeStringToOemSize(ptr) ChpeAutoRtlUnicodeStringToOemSize
-1279 stdcall RtlUnicodeStringToOemString(ptr ptr long) ChpeAutoRtlUnicodeStringToOemString
-1280 stdcall RtlUnicodeToCustomCPN(ptr ptr long ptr wstr long) ChpeAutoRtlUnicodeToCustomCPN
-1281 stdcall RtlUnicodeToMultiByteN(ptr long ptr ptr long) ChpeAutoRtlUnicodeToMultiByteN
-1282 stdcall RtlUnicodeToMultiByteSize(ptr ptr long) ChpeAutoRtlUnicodeToMultiByteSize
-1283 stdcall RtlUnicodeToOemN(ptr long ptr ptr long) ChpeAutoRtlUnicodeToOemN
-1284 stdcall RtlUniform(ptr) ChpeAutoRtlUniform
-1285 stdcall RtlUnlockBootStatusData(ptr) ChpeAutoRtlUnlockBootStatusData
-1286 stdcall -version=0x600+ RtlUnlockCurrentThread() ChpeStubRtlUnlockCurrentThread
-1287 stdcall RtlUnlockHeap(long) ChpeAutoRtlUnlockHeap
-1288 stdcall -version=0x600+ RtlUnlockMemoryBlockLookaside(long) ChpeStubRtlUnlockMemoryBlockLookaside
-1289 stdcall RtlUnlockMemoryStreamRegion(ptr int64 int64 long) ChpeAutoRtlUnlockMemoryStreamRegion
-1290 stdcall -version=0x600+ RtlUnlockMemoryZone(long) ChpeStubRtlUnlockMemoryZone
-1291 stdcall -version=0x600+ RtlUnlockModuleSection(long) ChpeStubRtlUnlockModuleSection
-1294 stdcall RtlUnregisterCfgTargetRange(ptr) ChpeAutoRtlUnregisterCfgTargetRange
-1295 stdcall RtlUpcaseUnicodeChar(long) ChpeAutoRtlUpcaseUnicodeChar
-1296 stdcall RtlUpcaseUnicodeString(ptr ptr long) ChpeAutoRtlUpcaseUnicodeString
-1297 stdcall RtlUpcaseUnicodeStringToAnsiString(ptr ptr long) ChpeAutoRtlUpcaseUnicodeStringToAnsiString
-1298 stdcall RtlUpcaseUnicodeStringToCountedOemString(ptr ptr long) ChpeAutoRtlUpcaseUnicodeStringToCountedOemString
-1299 stdcall RtlUpcaseUnicodeStringToOemString(ptr ptr long) ChpeAutoRtlUpcaseUnicodeStringToOemString
-1300 stdcall RtlUpcaseUnicodeToCustomCPN(ptr ptr long ptr wstr long) ChpeAutoRtlUpcaseUnicodeToCustomCPN
-1301 stdcall RtlUpcaseUnicodeToMultiByteN(ptr long ptr ptr long) ChpeAutoRtlUpcaseUnicodeToMultiByteN
-1302 stdcall RtlUpcaseUnicodeToOemN(ptr long ptr ptr long) ChpeAutoRtlUpcaseUnicodeToOemN
-1303 stdcall -version=0x600+ RtlUpdateClonedCriticalSection(long) ChpeStubRtlUpdateClonedCriticalSection
-1304 stdcall -version=0x600+ RtlUpdateClonedSRWLock(ptr long) ChpeStubRtlUpdateClonedSRWLock
-1305 stdcall RtlUpdateTimer(ptr ptr long long) ChpeAutoRtlUpdateTimer
-1306 stdcall RtlUpperChar(long) ChpeAutoRtlUpperChar
-1307 stdcall RtlUpperString(ptr ptr) ChpeAutoRtlUpperString
-1309 stdcall RtlValidAcl(ptr) ChpeAutoRtlValidAcl
-1310 stdcall RtlValidRelativeSecurityDescriptor(ptr long long) ChpeAutoRtlValidRelativeSecurityDescriptor
-1311 stdcall RtlValidSecurityDescriptor(ptr) ChpeAutoRtlValidSecurityDescriptor
-1312 stdcall RtlValidSid(ptr) ChpeAutoRtlValidSid
-1313 stdcall RtlValidateHeap(long long ptr) ChpeAutoRtlValidateHeap
-1314 stdcall RtlValidateProcessHeaps() ChpeAutoRtlValidateProcessHeaps
-1315 stdcall RtlValidateUnicodeString(long ptr) ChpeAutoRtlValidateUnicodeString
-1316 stdcall RtlVerifyVersionInfo(ptr long double) ChpeAutoRtlVerifyVersionInfo
-1318 stdcall RtlVirtualUnwind2(long int64 int64 ptr ptr ptr ptr ptr ptr ptr ptr ptr long) ChpeAutoRtlVirtualUnwind2
-1324 stdcall RtlWalkFrameChain(ptr long long) ChpeAutoRtlWalkFrameChain
-1325 stdcall RtlWeaklyEnumerateEntryHashTable(ptr ptr) ChpeAutoRtlWeaklyEnumerateEntryHashTable
-1326 stdcall RtlWalkHeap(long ptr) ChpeAutoRtlWalkHeap
-1327 stdcall -version=0x600+ RtlWerpReportException(long long ptr long long ptr) ChpeStubRtlWerpReportException
-1328 stdcall -version=0x600+ RtlWow64CallFunction64() ChpeStubRtlWow64CallFunction64
-1329 stdcall RtlWow64EnableFsRedirection(long) ChpeAutoRtlWow64EnableFsRedirection
-1330 stdcall RtlWow64EnableFsRedirectionEx(long ptr) ChpeAutoRtlWow64EnableFsRedirectionEx
-1331 stdcall -version=0x600+ RtlOpenCrossProcessEmulatorWorkConnection(ptr ptr ptr) ChpeAutoRtlOpenCrossProcessEmulatorWorkConnection
-1332 stdcall -version=0x600+ RtlWow64GetCpuAreaInfo(ptr long ptr) ChpeAutoRtlWow64GetCpuAreaInfo
-1333 stdcall -version=0x600+ RtlWow64GetCurrentMachine() ChpeAutoRtlWow64GetCurrentMachine
-1334 stdcall -version=0x600+ RtlWow64GetProcessMachines(ptr ptr ptr) ChpeAutoRtlWow64GetProcessMachines
-1335 stdcall -version=0x600+ RtlWow64GetSharedInfoProcess(ptr ptr ptr) ChpeAutoRtlWow64GetSharedInfoProcess
-1336 stdcall -version=0x600+ RtlWow64GetThreadContext(ptr ptr) ChpeAutoRtlWow64GetThreadContext
-1338 stdcall -version=0x600+ RtlWow64IsWowGuestMachineSupported(long ptr) ChpeAutoRtlWow64IsWowGuestMachineSupported
-1339 stdcall -version=0x600+ RtlWow64LogMessageInEventLogger(long long long) ChpeStubRtlWow64LogMessageInEventLogger
-1340 stdcall -version=0x600+ RtlWow64PopCrossProcessWorkFromFreeList(ptr) ChpeAutoRtlWow64PopCrossProcessWorkFromFreeList
-1341 stdcall -version=0x600+ RtlWow64PushCrossProcessWorkOntoWorkList(ptr ptr ptr) ChpeAutoRtlWow64PushCrossProcessWorkOntoWorkList
-1342 stdcall -version=0x600+ RtlWow64RequestCrossProcessHeavyFlush(ptr) ChpeAutoRtlWow64RequestCrossProcessHeavyFlush
-1343 stdcall -version=0x600+ RtlWow64SetThreadContext(ptr ptr) ChpeAutoRtlWow64SetThreadContext
-1344 stdcall -version=0x600+ RtlWow64SuspendThread(ptr ptr) ChpeAutoRtlWow64SuspendThread
-1345 stdcall RtlWriteMemoryStream(ptr ptr long ptr) ChpeAutoRtlWriteMemoryStream
-1346 stdcall RtlWriteRegistryValue(long ptr ptr long ptr long) ChpeAutoRtlWriteRegistryValue
-1347 stdcall RtlZeroHeap(ptr long) ChpeAutoRtlZeroHeap
-1349 stdcall RtlZombifyActivationContext(ptr) ChpeAutoRtlZombifyActivationContext
-1351 stdcall -version=0x600+ RtlpCheckDynamicTimeZoneInformation(ptr long) ChpeStubRtlpCheckDynamicTimeZoneInformation
-1352 stdcall -version=0x600+ RtlpCleanupRegistryKeys() ChpeStubRtlpCleanupRegistryKeys
-1353 stdcall -version=0x600+ RtlpConvertCultureNamesToLCIDs(wstr ptr) ChpeStubRtlpConvertCultureNamesToLCIDs
-1354 stdcall -version=0x600+ RtlpConvertLCIDsToCultureNames(wstr ptr) ChpeStubRtlpConvertLCIDsToCultureNames
-1355 stdcall -version=0x600+ RtlpCreateProcessRegistryInfo(ptr) ChpeStubRtlpCreateProcessRegistryInfo
-1356 stdcall RtlpEnsureBufferSize(long ptr long) ChpeAutoRtlpEnsureBufferSize
-1357 stdcall -version=0x600+ RtlpGetLCIDFromLangInfoNode(long long ptr) ChpeStubRtlpGetLCIDFromLangInfoNode
-1358 stdcall -version=0x600+ RtlpGetNameFromLangInfoNode(long long long) ChpeStubRtlpGetNameFromLangInfoNode
-1359 stdcall -version=0x600+ RtlpGetSystemDefaultUILanguage(ptr long) ChpeStubRtlpGetSystemDefaultUILanguage
-1360 stdcall -version=0x600+ RtlpGetUserOrMachineUILanguage4NLS(long long ptr) ChpeStubRtlpGetUserOrMachineUILanguage4NLS
-1361 stdcall -version=0x600+ RtlpInitializeLangRegistryInfo(ptr) ChpeStubRtlpInitializeLangRegistryInfo
-1362 stdcall -version=0x600+ RtlpIsQualifiedLanguage(long ptr long) ChpeStubRtlpIsQualifiedLanguage
-1363 stdcall -version=0x600+ RtlpLoadMachineUIByPolicy(ptr long ptr) ChpeStubRtlpLoadMachineUIByPolicy
-1364 stdcall -version=0x600+ RtlpLoadUserUIByPolicy(ptr long ptr) ChpeStubRtlpLoadUserUIByPolicy
-1365 stdcall -version=0x600+ RtlpMuiFreeLangRegistryInfo(long) ChpeStubRtlpMuiFreeLangRegistryInfo
-1366 stdcall -version=0x600+ RtlpMuiRegCreateRegistryInfo() ChpeStubRtlpMuiRegCreateRegistryInfo
-1367 stdcall -version=0x600+ RtlpMuiRegFreeRegistryInfo(long long) ChpeStubRtlpMuiRegFreeRegistryInfo
-1368 stdcall -version=0x600+ RtlpMuiRegLoadRegistryInfo(long long) ChpeStubRtlpMuiRegLoadRegistryInfo
-1369 stdcall RtlpNotOwnerCriticalSection(ptr) ChpeAutoRtlpNotOwnerCriticalSection
-1370 stdcall RtlpNtCreateKey(ptr long ptr long ptr ptr) ChpeAutoRtlpNtCreateKey
-1371 stdcall RtlpNtEnumerateSubKey(ptr ptr long long) ChpeAutoRtlpNtEnumerateSubKey
-1372 stdcall RtlpNtMakeTemporaryKey(ptr) ChpeAutoRtlpNtMakeTemporaryKey
-1373 stdcall RtlpNtOpenKey(ptr long ptr long) ChpeAutoRtlpNtOpenKey
-1374 stdcall RtlpNtQueryValueKey(ptr ptr ptr ptr long) ChpeAutoRtlpNtQueryValueKey
-1375 stdcall RtlpNtSetValueKey(ptr long ptr long) ChpeAutoRtlpNtSetValueKey
-1376 stdcall -version=0x600+ RtlpQueryDefaultUILanguage(ptr long) ChpeStubRtlpQueryDefaultUILanguage
-1377 stdcall -version=0x600+ RtlpQueryProcessDebugInformationFromWow64(long ptr) ChpeStubRtlpQueryProcessDebugInformationFromWow64
-1378 stdcall -version=0x600+ RtlpRefreshCachedUILanguage(wstr long) ChpeStubRtlpRefreshCachedUILanguage
-1379 stdcall -version=0x600+ RtlpSetInstallLanguage(long ptr) ChpeStubRtlpSetInstallLanguage
-1380 stdcall -version=0x600+ RtlpSetPreferredUILanguages(long ptr ptr) ChpeStubRtlpSetPreferredUILanguages
-1381 stdcall RtlpUnWaitCriticalSection(ptr) ChpeAutoRtlpUnWaitCriticalSection
-1382 stdcall -version=0x600+ RtlpVerifyAndCommitUILanguageSettings(long) ChpeStubRtlpVerifyAndCommitUILanguageSettings
-1383 stdcall RtlpWaitForCriticalSection(ptr) ChpeAutoRtlpWaitForCriticalSection
-1384 stdcall RtlxAnsiStringToUnicodeSize(ptr) ChpeAutoRtlxAnsiStringToUnicodeSize
-1385 stdcall RtlxOemStringToUnicodeSize(ptr) ChpeAutoRtlxOemStringToUnicodeSize
-1386 stdcall RtlxUnicodeStringToAnsiSize(ptr) ChpeAutoRtlxUnicodeStringToAnsiSize
-1387 stdcall RtlxUnicodeStringToOemSize(ptr) ChpeAutoRtlxUnicodeStringToOemSize
-1388 stdcall -version=0x600+ ShipAssert(long long) ChpeStubShipAssert
-1389 stdcall -version=0x600+ ShipAssertGetBufferInfo(ptr ptr) ChpeStubShipAssertGetBufferInfo
-1390 stdcall -version=0x600+ ShipAssertMsgA(long long) ChpeStubShipAssertMsgA
-1391 stdcall -version=0x600+ ShipAssertMsgW(long long) ChpeStubShipAssertMsgW
-1392 stdcall -version=0x600+ TpAllocAlpcCompletion(ptr ptr ptr ptr ptr) ChpeAutoTpAllocAlpcCompletion
-1393 stdcall -version=0x600+ TpAllocAlpcCompletionEx(ptr ptr ptr ptr ptr) ChpeAutoTpAllocAlpcCompletionEx
-1394 stdcall -version=0x600+ TpAllocCleanupGroup(ptr) ChpeAutoTpAllocCleanupGroup
-1395 stdcall -version=0x600+ TpAllocIoCompletion(ptr ptr ptr ptr ptr) ChpeAutoTpAllocIoCompletion
-1396 stdcall -version=0x600+ TpAllocPool(ptr ptr) ChpeAutoTpAllocPool
-1397 stdcall -version=0x600+ TpAllocTimer(ptr ptr ptr ptr) ChpeAutoTpAllocTimer
-1398 stdcall -version=0x600+ TpAllocWait(ptr ptr ptr ptr) ChpeAutoTpAllocWait
-1399 stdcall -version=0x600+ TpAllocWork(ptr ptr ptr ptr) ChpeAutoTpAllocWork
-1400 stdcall -version=0x600+ TpAlpcRegisterCompletionList(ptr) ChpeAutoTpAlpcRegisterCompletionList
-1401 stdcall -version=0x600+ TpAlpcUnregisterCompletionList(ptr) ChpeAutoTpAlpcUnregisterCompletionList
-1403 stdcall -version=0x600+ TpCallbackMayRunLong(ptr) ChpeAutoTpCallbackMayRunLong
-1406 stdcall -version=0x600+ TpCallbackSendAlpcMessageOnCompletion(ptr ptr long ptr) ChpeAutoTpCallbackSendAlpcMessageOnCompletion
-1407 stdcall -version=0x600+ TpCallbackSendPendingAlpcMessage(ptr) ChpeAutoTpCallbackSendPendingAlpcMessage
-1411 stdcall -version=0x600+ TpCaptureCaller(long) ChpeStubTpCaptureCaller
-1412 stdcall -version=0x600+ TpCheckTerminateWorker(ptr) ChpeStubTpCheckTerminateWorker
-1413 stdcall -version=0x600+ TpDbgDumpHeapUsage(long ptr long) ChpeStubTpDbgDumpHeapUsage
-1414 stdcall -version=0x600+ TpDbgSetLogRoutine() ChpeStubTpDbgSetLogRoutine
-1418 stdcall -version=0x601+ TpQueryPoolStackInformation(ptr ptr) ChpeAutoTpQueryPoolStackInformation
-1419 stdcall -version=0x600+ TpReleaseAlpcCompletion(ptr) ChpeAutoTpReleaseAlpcCompletion
-1429 stdcall -version=0x601+ TpSetPoolStackInformation(ptr ptr) ChpeAutoTpSetPoolStackInformation
-1434 stdcall -version=0x600+ TpSimpleTryPost(ptr ptr ptr) ChpeAutoTpSimpleTryPost
-1436 stdcall -version=0x600+ TpWaitForAlpcCompletion(ptr) ChpeAutoTpWaitForAlpcCompletion
-1442 stdcall -version=0x600+ WerCheckEventEscalation(long ptr) ChpeStubWerCheckEventEscalation
-1443 stdcall -version=0x600+ WerReportSQMEvent(long long long) ChpeStubWerReportSQMEvent
-1444 stdcall -version=0x600+ WerReportWatsonEvent(long long long long) ChpeStubWerReportWatsonEvent
-1445 stdcall -version=0x600+ WinSqmAddToStream(ptr long long long) ChpeStubWinSqmAddToStream
-1446 stdcall -version=0x600+ WinSqmAddToStreamEx(ptr long long ptr long) ChpeStubWinSqmAddToStreamEx
-1447 stdcall -version=0x600+ WinSqmEndSession(ptr) ChpeAutoWinSqmEndSession
-1448 stdcall -version=0x600+ WinSqmEventEnabled(long ptr) ChpeAutoWinSqmEventEnabled
-1449 stdcall -version=0x600+ WinSqmEventWrite(long long long) ChpeStubWinSqmEventWrite
-1450 stdcall -version=0x600+ WinSqmIncrementDWORD(long long long) ChpeAutoWinSqmIncrementDWORD
-1451 stdcall -version=0x600+ WinSqmIsOptedIn() ChpeAutoWinSqmIsOptedIn
-1452 stdcall -version=0x600+ WinSqmSetDWORD(ptr long long) ChpeAutoWinSqmSetDWORD
-1453 stdcall -version=0x600+ WinSqmSetDWORD64(ptr long int64) ChpeAutoWinSqmSetDWORD64
-1454 stdcall -version=0x600+ WinSqmSetString(ptr long ptr) ChpeStubWinSqmSetString
-1456 stdcall ZwAcceptConnectPort(ptr long ptr long long ptr) ChpeAutoZwAcceptConnectPort
-1457 stdcall ZwAccessCheck(ptr long long ptr ptr ptr ptr ptr) ChpeAutoZwAccessCheck
-1458 stdcall ZwAccessCheckAndAuditAlarm(ptr long ptr ptr ptr long ptr long ptr ptr ptr) ChpeAutoZwAccessCheckAndAuditAlarm
-1459 stdcall ZwAccessCheckByType(ptr ptr ptr long ptr long ptr ptr long ptr ptr) ChpeAutoZwAccessCheckByType
-1460 stdcall ZwAccessCheckByTypeAndAuditAlarm(ptr ptr ptr ptr ptr ptr long long long ptr long ptr long ptr ptr ptr) ChpeAutoZwAccessCheckByTypeAndAuditAlarm
-1461 stdcall ZwAccessCheckByTypeResultList(ptr ptr ptr long ptr long ptr ptr long ptr ptr) ChpeAutoZwAccessCheckByTypeResultList
-1462 stdcall ZwAccessCheckByTypeResultListAndAuditAlarm(ptr ptr ptr ptr ptr ptr long long long ptr long ptr long ptr ptr ptr) ChpeAutoZwAccessCheckByTypeResultListAndAuditAlarm
-1463 stdcall ZwAccessCheckByTypeResultListAndAuditAlarmByHandle(ptr ptr ptr ptr ptr ptr ptr long long long ptr long ptr long ptr ptr ptr) ChpeAutoZwAccessCheckByTypeResultListAndAuditAlarmByHandle
-1464 stub -version=0x600+ ZwAcquireCMFViewOwnership
-1465 stdcall ZwAddAtom(ptr long ptr) ChpeAutoZwAddAtom
-1466 stdcall ZwAddBootEntry(ptr long) ChpeAutoZwAddBootEntry
-1467 stdcall ZwAddDriverEntry(ptr long) ChpeAutoZwAddDriverEntry
-1468 stdcall ZwAdjustGroupsToken(long long long long long long) ChpeAutoZwAdjustGroupsToken
-1469 stdcall ZwAdjustPrivilegesToken(long long long long long long) ChpeAutoZwAdjustPrivilegesToken
-1470 stdcall ZwAlertResumeThread(long ptr) ChpeAutoZwAlertResumeThread
-1471 stdcall ZwAlertThread(long) ChpeAutoZwAlertThread
-1472 stdcall ZwAlertThreadByThreadId(long) ChpeAutoZwAlertThreadByThreadId
-1473 stdcall ZwAllocateLocallyUniqueId(ptr) ChpeAutoZwAllocateLocallyUniqueId
-1474 stdcall ZwAllocateUserPhysicalPages(ptr ptr ptr) ChpeAutoZwAllocateUserPhysicalPages
-1475 stdcall ZwAllocateUuids(ptr ptr ptr ptr) ChpeAutoZwAllocateUuids
-1476 stdcall ZwAllocateVirtualMemory(long ptr ptr ptr long long) ChpeAutoZwAllocateVirtualMemory
-1477 stdcall ZwAllocateVirtualMemoryEx(long ptr ptr long long ptr long) ChpeAutoZwAllocateVirtualMemoryEx
-1478 stdcall -version=0x600+ ZwAlpcAcceptConnectPort(ptr ptr long ptr ptr ptr ptr ptr long) ChpeAutoZwAlpcAcceptConnectPort
-1479 stdcall -version=0x600+ ZwAlpcCancelMessage(ptr long ptr) ChpeAutoZwAlpcCancelMessage
-1480 stdcall -version=0x600+ ZwAlpcConnectPort(ptr ptr ptr ptr long ptr ptr ptr ptr ptr ptr) ChpeAutoZwAlpcConnectPort
-1481 stdcall -version=0x602+ ZwAlpcConnectPortEx(ptr ptr ptr ptr long ptr ptr ptr ptr ptr ptr) ChpeAutoZwAlpcConnectPortEx
-1482 stdcall -version=0x600+ ZwAlpcCreatePort(ptr ptr ptr) ChpeAutoZwAlpcCreatePort
-1483 stdcall -version=0x600+ ZwAlpcCreatePortSection(ptr long ptr long ptr ptr) ChpeAutoZwAlpcCreatePortSection
-1484 stdcall -version=0x600+ ZwAlpcCreateResourceReserve(ptr long long ptr) ChpeAutoZwAlpcCreateResourceReserve
-1485 stdcall -version=0x600+ ZwAlpcCreateSectionView(ptr long ptr) ChpeAutoZwAlpcCreateSectionView
-1486 stdcall -version=0x600+ ZwAlpcCreateSecurityContext(ptr long ptr) ChpeAutoZwAlpcCreateSecurityContext
-1487 stdcall -version=0x600+ ZwAlpcDeletePortSection(ptr long ptr) ChpeAutoZwAlpcDeletePortSection
-1488 stdcall -version=0x600+ ZwAlpcDeleteResourceReserve(ptr long long) ChpeAutoZwAlpcDeleteResourceReserve
-1489 stdcall -version=0x600+ ZwAlpcDeleteSectionView(ptr long ptr) ChpeAutoZwAlpcDeleteSectionView
-1490 stdcall -version=0x600+ ZwAlpcDeleteSecurityContext(ptr long ptr) ChpeAutoZwAlpcDeleteSecurityContext
-1491 stdcall -version=0x600+ ZwAlpcDisconnectPort(ptr long) ChpeAutoZwAlpcDisconnectPort
-1492 stdcall -version=0x600+ ZwAlpcImpersonateClientOfPort(ptr ptr ptr) ChpeAutoZwAlpcImpersonateClientOfPort
-1493 stdcall -version=0xA00+ ZwAlpcImpersonateClientContainerOfPort(ptr ptr long) ChpeAutoZwAlpcImpersonateClientContainerOfPort
-1494 stdcall -version=0x600+ ZwAlpcOpenSenderProcess(ptr ptr ptr long long ptr) ChpeAutoZwAlpcOpenSenderProcess
-1495 stdcall -version=0x600+ ZwAlpcOpenSenderThread(ptr ptr ptr long long ptr) ChpeAutoZwAlpcOpenSenderThread
-1496 stdcall -version=0x600+ ZwAlpcQueryInformation(ptr long ptr long ptr) ChpeAutoZwAlpcQueryInformation
-1497 stdcall -version=0x600+ ZwAlpcQueryInformationMessage(ptr ptr long ptr long ptr) ChpeAutoZwAlpcQueryInformationMessage
-1498 stdcall -version=0x600+ ZwAlpcRevokeSecurityContext(ptr long ptr) ChpeAutoZwAlpcRevokeSecurityContext
-1499 stdcall -version=0x600+ ZwAlpcSendWaitReceivePort(ptr long ptr ptr ptr ptr ptr ptr) ChpeAutoZwAlpcSendWaitReceivePort
-1500 stdcall -version=0x600+ ZwAlpcSetInformation(ptr long ptr long) ChpeAutoZwAlpcSetInformation
-1501 stdcall ZwApphelpCacheControl(long ptr) ChpeAutoZwApphelpCacheControl
-1502 stdcall ZwAreMappedFilesTheSame(ptr ptr) ChpeAutoZwAreMappedFilesTheSame
-1503 stdcall ZwAssignProcessToJobObject(long long) ChpeAutoZwAssignProcessToJobObject
-1504 stdcall ZwCallbackReturn(ptr long long) ChpeAutoZwCallbackReturn
-1505 stdcall ZwCancelDeviceWakeupRequest(ptr) ChpeAutoZwCancelDeviceWakeupRequest
-1506 stdcall ZwCancelIoFile(long ptr) ChpeAutoZwCancelIoFile
-1507 stdcall -version=0x600+ ZwCancelIoFileEx(ptr ptr ptr) ChpeAutoZwCancelIoFileEx
-1508 stdcall -version=0x600+ ZwCancelSynchronousIoFile(ptr ptr ptr) ChpeAutoZwCancelSynchronousIoFile
-1509 stdcall ZwCancelTimer(long ptr) ChpeAutoZwCancelTimer
-1510 stdcall ZwClearEvent(long) ChpeAutoZwClearEvent
-1511 stdcall ZwClose(long) ChpeAutoZwClose
-1512 stdcall ZwCloseObjectAuditAlarm(ptr ptr long) ChpeAutoZwCloseObjectAuditAlarm
-1513 stdcall -version=0x600+ ZwCommitComplete(ptr ptr) ChpeAutoZwCommitComplete
-1514 stdcall -version=0x600+ ZwCommitEnlistment(ptr ptr) ChpeAutoZwCommitEnlistment
-1515 stdcall -version=0x600+ ZwCommitTransaction(ptr long) ChpeAutoZwCommitTransaction
-1516 stdcall ZwCompactKeys(long ptr) ChpeAutoZwCompactKeys
-1517 stdcall ZwCompareTokens(ptr ptr ptr) ChpeAutoZwCompareTokens
-1518 stdcall ZwCompleteConnectPort(ptr) ChpeAutoZwCompleteConnectPort
-1519 stdcall ZwCompressKey(ptr) ChpeAutoZwCompressKey
-1520 stdcall ZwConnectPort(ptr ptr ptr ptr ptr ptr ptr ptr) ChpeAutoZwConnectPort
-1521 stdcall ZwContinue(ptr long) ChpeAutoZwContinue
-1522 stdcall ZwCreateDebugObject(ptr long ptr long) ChpeAutoZwCreateDebugObject
-1523 stdcall ZwCreateDirectoryObject(long long long) ChpeAutoZwCreateDirectoryObject
-1524 stdcall -version=0x600+ ZwCreateEnlistment(ptr long ptr ptr ptr long long ptr) ChpeAutoZwCreateEnlistment
-1525 stdcall ZwCreateEvent(long long long long long) ChpeAutoZwCreateEvent
-1526 stdcall ZwCreateEventPair(ptr long ptr) ChpeAutoZwCreateEventPair
-1527 stdcall ZwCreateFile(ptr long ptr ptr long long long ptr long long ptr) ChpeAutoZwCreateFile
-1528 stdcall ZwCreateIoCompletion(ptr long ptr long) ChpeAutoZwCreateIoCompletion
-1529 stdcall -version=0x602+ ZwCreateWaitCompletionPacket(ptr long ptr) ChpeAutoZwCreateWaitCompletionPacket
-1530 stdcall -version=0x602+ ZwAssociateWaitCompletionPacket(ptr ptr ptr ptr ptr long ptr ptr) ChpeAutoZwAssociateWaitCompletionPacket
-1531 stdcall -version=0x602+ ZwCancelWaitCompletionPacket(ptr long) ChpeAutoZwCancelWaitCompletionPacket
-1532 stdcall ZwCreateJobObject(ptr long ptr) ChpeAutoZwCreateJobObject
-1533 stdcall ZwCreateJobSet(long ptr long) ChpeAutoZwCreateJobSet
-1534 stdcall ZwCreateKey(ptr long ptr long ptr long long) ChpeAutoZwCreateKey
-1535 stdcall -version=0x600+ ZwCreateKeyTransacted(ptr long ptr long ptr long ptr ptr) ChpeAutoZwCreateKeyTransacted
-1536 stdcall ZwCreateKeyedEvent(ptr long ptr long) ChpeAutoZwCreateKeyedEvent
-1537 stdcall ZwCreateMailslotFile(long long long long long long long long) ChpeAutoZwCreateMailslotFile
-1538 stdcall ZwCreateMutant(ptr long ptr long) ChpeAutoZwCreateMutant
-1539 stdcall ZwCreateNamedPipeFile(ptr long ptr ptr long long long long long long long long long ptr) ChpeAutoZwCreateNamedPipeFile
-1540 stdcall ZwCreatePagingFile(ptr ptr ptr long) ChpeAutoZwCreatePagingFile
-1541 stdcall ZwCreatePort(ptr ptr long long long) ChpeAutoZwCreatePort
-1542 stdcall ZwCreateProcess(ptr long ptr ptr long ptr ptr ptr) ChpeAutoZwCreateProcess
-1543 stdcall ZwCreateProcessEx(ptr long ptr ptr long ptr ptr ptr long) ChpeAutoZwCreateProcessEx
-1544 stdcall ZwCreateProfile(ptr ptr ptr long long ptr long long long) ChpeAutoZwCreateProfile
-1545 stdcall -version=0x600+ ZwCreateResourceManager(ptr long ptr ptr ptr long ptr) ChpeAutoZwCreateResourceManager
-1546 stdcall ZwCreateSection(ptr long ptr ptr long long long) ChpeAutoZwCreateSection
-1547 stdcall ZwCreateSemaphore(ptr long ptr long long) ChpeAutoZwCreateSemaphore
-1548 stdcall ZwCreateSymbolicLinkObject(ptr long ptr ptr) ChpeAutoZwCreateSymbolicLinkObject
-1549 stdcall ZwCreateThread(ptr long ptr ptr ptr ptr ptr long) ChpeAutoZwCreateThread
-1550 stdcall -version=0x600+ ZwCreateThreadEx(ptr long ptr ptr ptr ptr long long long long ptr) ChpeAutoZwCreateThreadEx
-1551 stdcall ZwCreateTimer(ptr long ptr long) ChpeAutoZwCreateTimer
-1552 stdcall ZwCreateTimer2(ptr ptr ptr long long) ChpeAutoZwCreateTimer2
-1553 stdcall ZwCreateToken(ptr long ptr long ptr ptr ptr ptr ptr ptr ptr ptr ptr) ChpeAutoZwCreateToken
-1554 stdcall -version=0x600+ ZwCreateTransaction(ptr long ptr ptr ptr long long long ptr ptr) ChpeAutoZwCreateTransaction
-1555 stdcall -version=0x600+ ZwCreateTransactionManager(ptr long ptr ptr long long) ChpeAutoZwCreateTransactionManager
-1556 stdcall -version=0x600+ ZwCreateUserProcess(ptr ptr long long ptr ptr long long ptr ptr ptr) ChpeAutoZwCreateUserProcess
-1557 stdcall ZwCreateWaitablePort(ptr ptr long long long) ChpeAutoZwCreateWaitablePort
-1558 stdcall -version=0x602+ ZwCreateWnfStateName(ptr long long long ptr long ptr) ChpeAutoZwCreateWnfStateName
-1559 stdcall -version=0x600+ ZwCreateWorkerFactory(ptr long ptr ptr ptr ptr ptr long long long) ChpeStubZwCreateWorkerFactory
-1560 stdcall ZwDebugActiveProcess(ptr ptr) ChpeAutoZwDebugActiveProcess
-1561 stdcall ZwDebugContinue(ptr ptr long) ChpeAutoZwDebugContinue
-1562 stdcall ZwDelayExecution(long ptr) ChpeAutoZwDelayExecution
-1563 stdcall ZwDeleteAtom(long) ChpeAutoZwDeleteAtom
-1564 stdcall ZwDeleteBootEntry(long) ChpeAutoZwDeleteBootEntry
-1565 stdcall ZwDeleteDriverEntry(long) ChpeAutoZwDeleteDriverEntry
-1566 stdcall ZwDeleteFile(ptr) ChpeAutoZwDeleteFile
-1567 stdcall ZwDeleteKey(long) ChpeAutoZwDeleteKey
-1568 stdcall ZwDeleteObjectAuditAlarm(ptr ptr long) ChpeAutoZwDeleteObjectAuditAlarm
-1569 stdcall -version=0x600+ ZwDeletePrivateNamespace(ptr) ChpeAutoZwDeletePrivateNamespace
-1570 stdcall ZwDeleteValueKey(long ptr) ChpeAutoZwDeleteValueKey
-1571 stdcall -version=0x602+ ZwDeleteWnfStateData(ptr ptr) ChpeAutoZwDeleteWnfStateData
-1572 stdcall -version=0x602+ ZwDeleteWnfStateName(ptr) ChpeAutoZwDeleteWnfStateName
-1573 stdcall ZwDeviceIoControlFile(long long long long long long long long long long) ChpeAutoZwDeviceIoControlFile
-1574 stdcall ZwDisplayString(ptr) ChpeAutoZwDisplayString
-1575 stdcall ZwDuplicateObject(long long long ptr long long long) ChpeAutoZwDuplicateObject
-1576 stdcall ZwDuplicateToken(long long long long long long) ChpeAutoZwDuplicateToken
-1577 stdcall ZwEnumerateBootEntries(ptr ptr) ChpeAutoZwEnumerateBootEntries
-1578 stdcall ZwEnumerateDriverEntries(ptr ptr) ChpeAutoZwEnumerateDriverEntries
-1579 stdcall ZwEnumerateKey(long long long ptr long ptr) ChpeAutoZwEnumerateKey
-1580 stdcall ZwEnumerateSystemEnvironmentValuesEx(long ptr long) ChpeAutoZwEnumerateSystemEnvironmentValuesEx
-1581 stdcall -version=0x600+ ZwEnumerateTransactionObject(ptr long ptr long ptr) ChpeAutoZwEnumerateTransactionObject
-1582 stdcall ZwEnumerateValueKey(long long long ptr long ptr) ChpeAutoZwEnumerateValueKey
-1583 stdcall ZwExtendSection(ptr ptr) ChpeAutoZwExtendSection
-1584 stdcall ZwFilterToken(ptr long ptr ptr ptr ptr) ChpeAutoZwFilterToken
-1585 stdcall -version=0x602+ ZwCreateLowBoxToken(ptr ptr long ptr ptr long ptr long ptr) ChpeAutoZwCreateLowBoxToken
-1586 stdcall -version=0x600+ ZwCreatePrivateNamespace(ptr long ptr ptr) ChpeAutoZwCreatePrivateNamespace
-1587 stdcall ZwFindAtom(ptr long ptr) ChpeAutoZwFindAtom
-1588 stdcall ZwFlushBuffersFile(long ptr) ChpeAutoZwFlushBuffersFile
-1589 stdcall ZwFlushBuffersFileEx(long long ptr long ptr) ChpeAutoZwFlushBuffersFileEx
-1590 stdcall -version=0x600+ ZwFlushInstallUILanguage(long long) ChpeStubZwFlushInstallUILanguage
-1591 stdcall ZwFlushInstructionCache(long ptr long) ChpeAutoZwFlushInstructionCache
-1592 stdcall ZwFlushKey(long) ChpeAutoZwFlushKey
-1593 stdcall -version=0x600+ ZwFlushProcessWriteBuffers() ChpeAutoZwFlushProcessWriteBuffers
-1594 stdcall ZwFlushVirtualMemory(ptr ptr ptr ptr) ChpeAutoZwFlushVirtualMemory
-1595 stdcall ZwFlushWriteBuffer() ChpeAutoZwFlushWriteBuffer
-1596 stdcall ZwFreeUserPhysicalPages(ptr ptr ptr) ChpeAutoZwFreeUserPhysicalPages
-1597 stdcall ZwFreeVirtualMemory(long ptr ptr long) ChpeAutoZwFreeVirtualMemory
-1598 stdcall -version=0x600+ ZwFreezeRegistry(long) ChpeStubZwFreezeRegistry
-1599 stdcall -version=0x600+ ZwFreezeTransactions(ptr ptr) ChpeStubZwFreezeTransactions
-1600 stdcall ZwFsControlFile(long long long long long long long long long long) ChpeAutoZwFsControlFile
-1601 stdcall ZwGetContextThread(long ptr) ChpeAutoZwGetContextThread
-1602 stdcall ZwGetCurrentProcessorNumber() ChpeAutoZwGetCurrentProcessorNumber
-1603 stdcall -version=0xA00+ ZwGetCurrentProcessorNumberEx(ptr) ChpeAutoZwGetCurrentProcessorNumberEx
-1604 stdcall ZwGetDevicePowerState(ptr ptr) ChpeAutoZwGetDevicePowerState
-1605 stdcall -version=0x600+ ZwGetMUIRegistryInfo(long ptr ptr) ChpeStubZwGetMUIRegistryInfo
-1606 stdcall -version=0x600+ ZwGetNextProcess(ptr long long long ptr) ChpeStubZwGetNextProcess
-1607 stdcall -version=0x600+ ZwGetNextThread(ptr ptr long long long ptr) ChpeAutoZwGetNextThread
-1608 stdcall -version=0x600+ ZwGetNlsSectionPtr(long long ptr ptr ptr) ChpeAutoZwGetNlsSectionPtr
-1609 stdcall -version=0x600+ ZwGetNotificationResourceManager(ptr ptr long ptr ptr long ptr) ChpeAutoZwGetNotificationResourceManager
-1610 stdcall ZwGetPlugPlayEvent(long long ptr long) ChpeAutoZwGetPlugPlayEvent
-1611 stdcall ZwGetWriteWatch(long long ptr long ptr ptr ptr) ChpeAutoZwGetWriteWatch
-1612 stdcall ZwImpersonateAnonymousToken(ptr) ChpeAutoZwImpersonateAnonymousToken
-1613 stdcall ZwImpersonateClientOfPort(ptr ptr) ChpeAutoZwImpersonateClientOfPort
-1614 stdcall ZwImpersonateThread(ptr ptr ptr) ChpeAutoZwImpersonateThread
-1615 stdcall -version=0x600+ ZwInitializeNlsFiles(ptr ptr ptr ptr) ChpeStubZwInitializeNlsFiles
-1616 stdcall ZwInitializeRegistry(long) ChpeAutoZwInitializeRegistry
-1617 stdcall ZwInitiatePowerAction(long long long long) ChpeAutoZwInitiatePowerAction
-1618 stdcall ZwIsProcessInJob(long long) ChpeAutoZwIsProcessInJob
-1619 stdcall ZwIsSystemResumeAutomatic() ChpeAutoZwIsSystemResumeAutomatic
-1620 stdcall -version=0x600+ ZwIsUILanguageComitted() ChpeStubZwIsUILanguageComitted
-1621 stdcall ZwListenPort(ptr ptr) ChpeAutoZwListenPort
-1622 stdcall ZwLoadDriver(ptr) ChpeAutoZwLoadDriver
-1623 stdcall ZwLoadKey2(ptr ptr long) ChpeAutoZwLoadKey2
-1624 stdcall ZwLoadKey(ptr ptr) ChpeAutoZwLoadKey
-1625 stdcall ZwLoadKeyEx(ptr ptr long ptr ptr long ptr ptr) ChpeAutoZwLoadKeyEx
-1626 stdcall ZwLockFile(long long ptr ptr ptr ptr ptr ptr long long) ChpeAutoZwLockFile
-1627 stdcall ZwLockProductActivationKeys(ptr ptr) ChpeAutoZwLockProductActivationKeys
-1628 stdcall ZwLockRegistryKey(ptr) ChpeAutoZwLockRegistryKey
-1629 stdcall ZwLockVirtualMemory(long ptr ptr long) ChpeAutoZwLockVirtualMemory
-1630 stdcall ZwMakePermanentObject(ptr) ChpeAutoZwMakePermanentObject
-1631 stdcall ZwMakeTemporaryObject(long) ChpeAutoZwMakeTemporaryObject
-1632 stdcall -version=0x600+ ZwMapCMFModule(long long ptr ptr ptr) ChpeStubZwMapCMFModule
-1633 stdcall ZwMapUserPhysicalPages(ptr ptr ptr) ChpeAutoZwMapUserPhysicalPages
-1634 stdcall ZwMapUserPhysicalPagesScatter(ptr ptr ptr) ChpeAutoZwMapUserPhysicalPagesScatter
-1635 stdcall ZwMapViewOfSection(long long ptr long long ptr ptr long long long) ChpeAutoZwMapViewOfSection
-1636 stdcall ZwModifyBootEntry(ptr) ChpeAutoZwModifyBootEntry
-1637 stdcall ZwModifyDriverEntry(ptr) ChpeAutoZwModifyDriverEntry
-1638 stdcall ZwNotifyChangeDirectoryFile(long long ptr ptr ptr ptr long long long) ChpeAutoZwNotifyChangeDirectoryFile
-1639 stdcall ZwNotifyChangeDirectoryFileEx(long long ptr ptr ptr ptr long long long long) ChpeAutoZwNotifyChangeDirectoryFileEx
-1640 stdcall ZwNotifyChangeKey(long long ptr ptr ptr long long ptr long long) ChpeAutoZwNotifyChangeKey
-1641 stdcall ZwNotifyChangeMultipleKeys(ptr long ptr ptr ptr ptr ptr long long ptr long long) ChpeAutoZwNotifyChangeMultipleKeys
-1642 stdcall ZwOpenDirectoryObject(long long long) ChpeAutoZwOpenDirectoryObject
-1643 stdcall -version=0x600+ ZwOpenEnlistment(ptr long ptr ptr ptr) ChpeAutoZwOpenEnlistment
-1644 stdcall ZwOpenEvent(long long long) ChpeAutoZwOpenEvent
-1645 stdcall ZwOpenEventPair(ptr long ptr) ChpeAutoZwOpenEventPair
-1646 stdcall ZwOpenFile(ptr long ptr ptr long long) ChpeAutoZwOpenFile
-1647 stdcall ZwOpenIoCompletion(ptr long ptr) ChpeAutoZwOpenIoCompletion
-1648 stdcall ZwOpenJobObject(ptr long ptr) ChpeAutoZwOpenJobObject
-1649 stdcall ZwOpenKey(ptr long ptr) ChpeAutoZwOpenKey
-1650 stdcall ZwOpenKeyEx(ptr long ptr long) ChpeAutoZwOpenKeyEx
-1651 stdcall -version=0x600+ ZwOpenKeyTransacted(ptr long ptr ptr) ChpeAutoZwOpenKeyTransacted
-1652 stdcall ZwOpenKeyedEvent(ptr long ptr) ChpeAutoZwOpenKeyedEvent
-1653 stdcall ZwOpenMutant(ptr long ptr) ChpeAutoZwOpenMutant
-1654 stdcall ZwOpenObjectAuditAlarm(ptr ptr ptr ptr ptr ptr long long ptr long long ptr) ChpeAutoZwOpenObjectAuditAlarm
-1655 stdcall -version=0x600+ ZwOpenPrivateNamespace(ptr long ptr ptr) ChpeAutoZwOpenPrivateNamespace
-1656 stdcall ZwOpenProcess(ptr long ptr ptr) ChpeAutoZwOpenProcess
-1657 stdcall ZwOpenProcessToken(long long ptr) ChpeAutoZwOpenProcessToken
-1658 stdcall ZwOpenProcessTokenEx(long long long ptr) ChpeAutoZwOpenProcessTokenEx
-1659 stdcall -version=0x600+ ZwOpenResourceManager(ptr long ptr ptr ptr) ChpeAutoZwOpenResourceManager
-1660 stdcall ZwOpenSection(ptr long ptr) ChpeAutoZwOpenSection
-1661 stdcall ZwOpenSemaphore(long long ptr) ChpeAutoZwOpenSemaphore
-1662 stdcall -version=0x600+ ZwOpenSession(ptr long ptr) ChpeStubZwOpenSession
-1663 stdcall ZwOpenSymbolicLinkObject(ptr long ptr) ChpeAutoZwOpenSymbolicLinkObject
-1664 stdcall ZwOpenThread(ptr long ptr ptr) ChpeAutoZwOpenThread
-1665 stdcall ZwOpenThreadToken(long long long ptr) ChpeAutoZwOpenThreadToken
-1666 stdcall ZwOpenThreadTokenEx(long long long long ptr) ChpeAutoZwOpenThreadTokenEx
-1667 stdcall ZwOpenTimer(ptr long ptr) ChpeAutoZwOpenTimer
-1668 stdcall -version=0x600+ ZwOpenTransaction(ptr long ptr ptr ptr) ChpeAutoZwOpenTransaction
-1669 stdcall -version=0x600+ ZwOpenTransactionManager(ptr long ptr ptr ptr long) ChpeAutoZwOpenTransactionManager
-1670 stdcall ZwPlugPlayControl(ptr ptr long) ChpeAutoZwPlugPlayControl
-1671 stdcall ZwPowerInformation(long ptr long ptr long) ChpeAutoZwPowerInformation
-1672 stdcall -version=0x600+ ZwPrePrepareComplete(ptr ptr) ChpeAutoZwPrePrepareComplete
-1673 stdcall -version=0x600+ ZwPrePrepareEnlistment(ptr ptr) ChpeAutoZwPrePrepareEnlistment
-1674 stdcall -version=0x600+ ZwPrepareComplete(ptr ptr) ChpeAutoZwPrepareComplete
-1675 stdcall -version=0x600+ ZwPrepareEnlistment(ptr ptr) ChpeAutoZwPrepareEnlistment
-1676 stdcall ZwPrivilegeCheck(ptr ptr ptr) ChpeAutoZwPrivilegeCheck
-1677 stdcall ZwPrivilegeObjectAuditAlarm(ptr ptr ptr long ptr long) ChpeAutoZwPrivilegeObjectAuditAlarm
-1678 stdcall ZwPrivilegedServiceAuditAlarm(ptr ptr ptr ptr long) ChpeAutoZwPrivilegedServiceAuditAlarm
-1679 stdcall -version=0x600+ ZwPropagationComplete(ptr long long ptr) ChpeAutoZwPropagationComplete
-1680 stdcall -version=0x600+ ZwPropagationFailed(ptr long long) ChpeAutoZwPropagationFailed
-1681 stdcall ZwProtectVirtualMemory(long ptr ptr long ptr) ChpeAutoZwProtectVirtualMemory
-1682 stdcall ZwPulseEvent(long ptr) ChpeAutoZwPulseEvent
-1683 stdcall ZwQueryAttributesFile(ptr ptr) ChpeAutoZwQueryAttributesFile
-1684 stdcall ZwQueryBootEntryOrder(ptr ptr) ChpeAutoZwQueryBootEntryOrder
-1685 stdcall ZwQueryBootOptions(ptr ptr) ChpeAutoZwQueryBootOptions
-1686 stdcall ZwQueryDebugFilterState(long long) ChpeAutoZwQueryDebugFilterState
-1687 stdcall ZwQueryDefaultLocale(long ptr) ChpeAutoZwQueryDefaultLocale
-1688 stdcall ZwQueryDefaultUILanguage(ptr) ChpeAutoZwQueryDefaultUILanguage
-1689 stdcall ZwQueryDirectoryFile(long long ptr ptr ptr ptr long long long ptr long) ChpeAutoZwQueryDirectoryFile
-1690 stdcall ZwQueryDirectoryFileEx(long long ptr ptr ptr ptr long long long ptr) ChpeAutoZwQueryDirectoryFileEx
-1691 stdcall ZwQueryDirectoryObject(long ptr long long long ptr ptr) ChpeAutoZwQueryDirectoryObject
-1692 stdcall ZwQueryDriverEntryOrder(ptr ptr) ChpeAutoZwQueryDriverEntryOrder
-1693 stdcall ZwQueryEaFile(long ptr ptr long long ptr long ptr long) ChpeAutoZwQueryEaFile
-1694 stdcall ZwQueryEvent(long long ptr long ptr) ChpeAutoZwQueryEvent
-1695 stdcall ZwQueryFullAttributesFile(ptr ptr) ChpeAutoZwQueryFullAttributesFile
-1696 stdcall ZwQueryInformationAtom(long long ptr long ptr) ChpeAutoZwQueryInformationAtom
-1697 stdcall ZwQueryInformationByName(ptr ptr ptr long long) ChpeAutoZwQueryInformationByName
-1698 stdcall -version=0x600+ ZwQueryInformationEnlistment(ptr long ptr long ptr) ChpeAutoZwQueryInformationEnlistment
-1699 stdcall ZwQueryInformationFile(long ptr ptr long long) ChpeAutoZwQueryInformationFile
-1700 stdcall ZwQueryInformationJobObject(long long ptr long ptr) ChpeAutoZwQueryInformationJobObject
-1701 stdcall ZwQueryInformationPort(ptr long ptr long ptr) ChpeAutoZwQueryInformationPort
-1702 stdcall ZwQueryInformationProcess(long long ptr long ptr) ChpeAutoZwQueryInformationProcess
-1703 stdcall -version=0x600+ ZwQueryInformationResourceManager(ptr long ptr long ptr) ChpeAutoZwQueryInformationResourceManager
-1704 stdcall ZwQueryInformationThread(long long ptr long ptr) ChpeAutoZwQueryInformationThread
-1705 stdcall ZwQueryInformationToken(long long ptr long ptr) ChpeAutoZwQueryInformationToken
-1706 stdcall -version=0x600+ ZwQueryInformationTransaction(ptr long ptr long ptr) ChpeAutoZwQueryInformationTransaction
-1707 stdcall -version=0x600+ ZwQueryInformationTransactionManager(ptr long ptr long ptr) ChpeAutoZwQueryInformationTransactionManager
-1708 stdcall -version=0x600+ ZwQueryInformationWorkerFactory(ptr long ptr long ptr) ChpeStubZwQueryInformationWorkerFactory
-1709 stdcall ZwQueryInstallUILanguage(ptr) ChpeAutoZwQueryInstallUILanguage
-1710 stdcall ZwQueryIntervalProfile(long ptr) ChpeAutoZwQueryIntervalProfile
-1711 stdcall ZwQueryIoCompletion(long long ptr long ptr) ChpeAutoZwQueryIoCompletion
-1712 stdcall ZwQueryKey(long long ptr long ptr) ChpeAutoZwQueryKey
-1713 stdcall -version=0x600+ ZwQueryLicenseValue(ptr ptr ptr long ptr) ChpeAutoZwQueryLicenseValue
-1714 stdcall ZwQueryMultipleValueKey(long ptr long ptr long ptr) ChpeAutoZwQueryMultipleValueKey
-1715 stdcall ZwQueryMutant(long long ptr long ptr) ChpeAutoZwQueryMutant
-1716 stdcall ZwQueryObject(long long long long long) ChpeAutoZwQueryObject
-1717 stdcall ZwQueryOpenSubKeys(ptr ptr) ChpeAutoZwQueryOpenSubKeys
-1718 stdcall ZwQueryOpenSubKeysEx(ptr long ptr ptr) ChpeAutoZwQueryOpenSubKeysEx
-1719 stdcall ZwQueryPerformanceCounter(long long) ChpeAutoZwQueryPerformanceCounter
-1720 stdcall ZwQueryPortInformationProcess() ChpeAutoZwQueryPortInformationProcess
-1721 stdcall ZwQueryQuotaInformationFile(ptr ptr ptr long long ptr long ptr long) ChpeAutoZwQueryQuotaInformationFile
-1722 stdcall ZwQuerySection(long long long long long) ChpeAutoZwQuerySection
-1723 stdcall ZwQuerySecurityObject(long long long long long) ChpeAutoZwQuerySecurityObject
-1724 stdcall ZwQuerySemaphore(long long long long long) ChpeAutoZwQuerySemaphore
-1725 stdcall ZwQuerySymbolicLinkObject(long ptr ptr) ChpeAutoZwQuerySymbolicLinkObject
-1726 stdcall ZwQuerySystemEnvironmentValue(ptr ptr long ptr) ChpeAutoZwQuerySystemEnvironmentValue
-1727 stdcall ZwQuerySystemEnvironmentValueEx(ptr ptr ptr ptr ptr) ChpeAutoZwQuerySystemEnvironmentValueEx
-1728 stdcall ZwQuerySystemInformation(long long long long) ChpeAutoZwQuerySystemInformation
-1729 stdcall -version=0x601+ ZwQuerySystemInformationEx(long ptr long ptr long ptr) ChpeAutoZwQuerySystemInformationEx
-1730 stdcall ZwQuerySystemTime(ptr) ChpeAutoZwQuerySystemTime
-1731 stdcall ZwQueryTimer(ptr long ptr long ptr) ChpeAutoZwQueryTimer
-1732 stdcall ZwQueryTimerResolution(long long long) ChpeAutoZwQueryTimerResolution
-1733 stdcall ZwQueryValueKey(long ptr long ptr long ptr) ChpeAutoZwQueryValueKey
-1734 stdcall ZwQueryVirtualMemory(long ptr long ptr long ptr) ChpeAutoZwQueryVirtualMemory
-1735 stdcall ZwQueryVolumeInformationFile(long ptr ptr long long) ChpeAutoZwQueryVolumeInformationFile
-1736 stdcall -version=0x602+ ZwQueryWnfStateData(ptr ptr ptr ptr ptr ptr) ChpeAutoZwQueryWnfStateData
-1737 stdcall -version=0x602+ ZwQueryWnfStateNameInformation(ptr long ptr ptr long) ChpeAutoZwQueryWnfStateNameInformation
-1738 stdcall ZwQueueApcThread(long ptr long long long) ChpeAutoZwQueueApcThread
-1739 stdcall ZwRaiseException(ptr ptr long) ChpeAutoZwRaiseException
-1740 stdcall ZwRaiseHardError(long long long ptr long ptr) ChpeAutoZwRaiseHardError
-1741 stdcall ZwReadFile(long long ptr ptr ptr ptr long ptr ptr) ChpeAutoZwReadFile
-1742 stdcall ZwReadFileScatter(long long ptr ptr ptr ptr long ptr ptr) ChpeAutoZwReadFileScatter
-1743 stdcall -version=0x600+ ZwReadOnlyEnlistment(ptr ptr) ChpeAutoZwReadOnlyEnlistment
-1744 stdcall ZwReadRequestData(ptr ptr long ptr long ptr) ChpeAutoZwReadRequestData
-1745 stdcall ZwReadVirtualMemory(long ptr ptr long ptr) ChpeAutoZwReadVirtualMemory
-1746 stdcall -version=0x600+ ZwRecoverEnlistment(ptr ptr) ChpeAutoZwRecoverEnlistment
-1747 stdcall -version=0x600+ ZwRecoverResourceManager(ptr) ChpeAutoZwRecoverResourceManager
-1748 stdcall -version=0x600+ ZwRecoverTransactionManager(ptr) ChpeAutoZwRecoverTransactionManager
-1749 stdcall -version=0x600+ ZwRegisterProtocolAddressInformation(ptr ptr long ptr long) ChpeAutoZwRegisterProtocolAddressInformation
-1750 stdcall ZwRegisterThreadTerminatePort(ptr) ChpeAutoZwRegisterThreadTerminatePort
-1751 stdcall -version=0x600+ ZwReleaseCMFViewOwnership() ChpeStubZwReleaseCMFViewOwnership
-1752 stdcall ZwReleaseKeyedEvent(ptr ptr long ptr) ChpeAutoZwReleaseKeyedEvent
-1753 stdcall ZwReleaseMutant(long ptr) ChpeAutoZwReleaseMutant
-1754 stdcall ZwReleaseSemaphore(long long ptr) ChpeAutoZwReleaseSemaphore
-1755 stdcall -version=0x600+ ZwReleaseWorkerFactoryWorker(ptr) ChpeStubZwReleaseWorkerFactoryWorker
-1756 stdcall ZwRemoveIoCompletion(ptr ptr ptr ptr ptr) ChpeAutoZwRemoveIoCompletion
-1757 stdcall -version=0x600+ ZwRemoveIoCompletionEx(ptr ptr long ptr ptr long) ChpeAutoZwRemoveIoCompletionEx
-1758 stdcall ZwRemoveProcessDebug(ptr ptr) ChpeAutoZwRemoveProcessDebug
-1759 stdcall ZwRenameKey(ptr ptr) ChpeAutoZwRenameKey
-1760 stdcall -version=0x600+ ZwRenameTransactionManager(ptr ptr) ChpeAutoZwRenameTransactionManager
-1761 stdcall ZwReplaceKey(ptr long ptr) ChpeAutoZwReplaceKey
-1762 stdcall -version=0x600+ ZwReplacePartitionUnit(wstr wstr long) ChpeStubZwReplacePartitionUnit
-1763 stdcall ZwReplyPort(ptr ptr) ChpeAutoZwReplyPort
-1764 stdcall ZwReplyWaitReceivePort(ptr ptr ptr ptr) ChpeAutoZwReplyWaitReceivePort
-1765 stdcall ZwReplyWaitReceivePortEx(ptr ptr ptr ptr ptr) ChpeAutoZwReplyWaitReceivePortEx
-1766 stdcall ZwReplyWaitReplyPort(ptr ptr) ChpeAutoZwReplyWaitReplyPort
-1767 stdcall ZwRequestDeviceWakeup(ptr) ChpeAutoZwRequestDeviceWakeup
-1768 stdcall ZwRequestPort(ptr ptr) ChpeAutoZwRequestPort
-1769 stdcall ZwRequestWaitReplyPort(ptr ptr ptr) ChpeAutoZwRequestWaitReplyPort
-1770 stdcall ZwRequestWakeupLatency(long) ChpeAutoZwRequestWakeupLatency
-1771 stdcall ZwResetEvent(long ptr) ChpeAutoZwResetEvent
-1772 stdcall ZwResetWriteWatch(long ptr long) ChpeAutoZwResetWriteWatch
-1773 stdcall ZwRestoreKey(long long long) ChpeAutoZwRestoreKey
-1774 stdcall ZwResumeProcess(ptr) ChpeAutoZwResumeProcess
-1775 stdcall ZwResumeThread(long long) ChpeAutoZwResumeThread
-1776 stdcall -version=0x600+ ZwRollbackComplete(ptr ptr) ChpeAutoZwRollbackComplete
-1777 stdcall -version=0x600+ ZwRollbackEnlistment(ptr ptr) ChpeAutoZwRollbackEnlistment
-1778 stdcall -version=0x600+ ZwRollbackTransaction(ptr long) ChpeAutoZwRollbackTransaction
-1779 stdcall -version=0x600+ ZwRollforwardTransactionManager(ptr ptr) ChpeAutoZwRollforwardTransactionManager
-1780 stdcall ZwSaveKey(long long) ChpeAutoZwSaveKey
-1781 stdcall ZwSaveKeyEx(ptr ptr long) ChpeAutoZwSaveKeyEx
-1782 stdcall ZwSaveMergedKeys(ptr ptr ptr) ChpeAutoZwSaveMergedKeys
-1783 stdcall ZwSecureConnectPort(ptr ptr ptr ptr ptr ptr ptr ptr ptr) ChpeAutoZwSecureConnectPort
-1784 stdcall ZwSetBootEntryOrder(ptr ptr) ChpeAutoZwSetBootEntryOrder
-1785 stdcall ZwSetBootOptions(ptr long) ChpeAutoZwSetBootOptions
-1786 stdcall ZwSetContextThread(long ptr) ChpeAutoZwSetContextThread
-1787 stdcall ZwSetDebugFilterState(long long long) ChpeAutoZwSetDebugFilterState
-1788 stdcall ZwSetDefaultHardErrorPort(ptr) ChpeAutoZwSetDefaultHardErrorPort
-1789 stdcall ZwSetDefaultLocale(long long) ChpeAutoZwSetDefaultLocale
-1790 stdcall ZwSetDefaultUILanguage(long) ChpeAutoZwSetDefaultUILanguage
-1791 stdcall ZwSetDriverEntryOrder(ptr ptr) ChpeAutoZwSetDriverEntryOrder
-1792 stdcall ZwSetEaFile(long ptr ptr long) ChpeAutoZwSetEaFile
-1793 stdcall ZwSetEvent(long long) ChpeAutoZwSetEvent
-1794 stdcall ZwSetEventBoostPriority(ptr) ChpeAutoZwSetEventBoostPriority
-1795 stdcall ZwSetHighEventPair(ptr) ChpeAutoZwSetHighEventPair
-1796 stdcall ZwSetHighWaitLowEventPair(ptr) ChpeAutoZwSetHighWaitLowEventPair
-1797 stdcall ZwSetInformationDebugObject(ptr long ptr long ptr) ChpeAutoZwSetInformationDebugObject
-1798 stdcall -version=0x600+ ZwSetInformationEnlistment(ptr long ptr long) ChpeAutoZwSetInformationEnlistment
-1799 stdcall ZwSetInformationFile(long long long long long) ChpeAutoZwSetInformationFile
-1800 stdcall ZwSetInformationJobObject(long long ptr long) ChpeAutoZwSetInformationJobObject
-1801 stdcall ZwSetInformationKey(long long ptr long) ChpeAutoZwSetInformationKey
-1802 stdcall ZwSetInformationObject(long long ptr long) ChpeAutoZwSetInformationObject
-1803 stdcall ZwSetInformationProcess(long long long long) ChpeAutoZwSetInformationProcess
-1804 stdcall -version=0x600+ ZwSetInformationResourceManager(ptr long ptr long) ChpeAutoZwSetInformationResourceManager
-1805 stdcall ZwSetInformationThread(long long ptr long) ChpeAutoZwSetInformationThread
-1806 stdcall ZwSetInformationToken(long long ptr long) ChpeAutoZwSetInformationToken
-1807 stdcall -version=0x600+ ZwSetInformationTransaction(ptr long ptr long) ChpeAutoZwSetInformationTransaction
-1808 stdcall -version=0x600+ ZwSetInformationTransactionManager(ptr long ptr long) ChpeAutoZwSetInformationTransactionManager
-1809 stdcall ZwSetInformationVirtualMemory(ptr long ptr ptr ptr long) ChpeAutoZwSetInformationVirtualMemory
-1810 stdcall -version=0x600+ ZwSetInformationWorkerFactory(ptr long ptr long) ChpeStubZwSetInformationWorkerFactory
-1811 stdcall ZwSetIntervalProfile(long long) ChpeAutoZwSetIntervalProfile
-1812 stdcall ZwSetIoCompletion(ptr long ptr long long) ChpeAutoZwSetIoCompletion
-1813 stdcall ZwSetLdtEntries(long int64 long int64) ChpeAutoZwSetLdtEntries
-1814 stdcall ZwSetLowEventPair(ptr) ChpeAutoZwSetLowEventPair
-1815 stdcall ZwSetLowWaitHighEventPair(ptr) ChpeAutoZwSetLowWaitHighEventPair
-1816 stdcall ZwSetQuotaInformationFile(ptr ptr ptr long) ChpeAutoZwSetQuotaInformationFile
-1817 stdcall ZwSetSecurityObject(long long ptr) ChpeAutoZwSetSecurityObject
-1818 stdcall ZwSetSystemEnvironmentValue(ptr ptr) ChpeAutoZwSetSystemEnvironmentValue
-1819 stdcall ZwSetSystemEnvironmentValueEx(ptr ptr ptr ptr ptr) ChpeAutoZwSetSystemEnvironmentValueEx
-1820 stdcall ZwSetSystemInformation(long ptr long) ChpeAutoZwSetSystemInformation
-1821 stdcall ZwSetSystemPowerState(long long long) ChpeAutoZwSetSystemPowerState
-1822 stdcall ZwSetSystemTime(ptr ptr) ChpeAutoZwSetSystemTime
-1823 stdcall ZwSetThreadExecutionState(long ptr) ChpeAutoZwSetThreadExecutionState
-1824 stdcall ZwSetTimer(long ptr ptr ptr long long ptr) ChpeAutoZwSetTimer
-1825 stdcall ZwSetTimerResolution(long long ptr) ChpeAutoZwSetTimerResolution
-1826 stdcall ZwSetUuidSeed(ptr) ChpeAutoZwSetUuidSeed
-1827 stdcall ZwSetValueKey(long long long long long long) ChpeAutoZwSetValueKey
-1828 stdcall ZwSetVolumeInformationFile(long ptr ptr long long) ChpeAutoZwSetVolumeInformationFile
-1829 stdcall ZwShutdownSystem(long) ChpeAutoZwShutdownSystem
-1830 stdcall -version=0x600+ ZwShutdownWorkerFactory(ptr ptr) ChpeStubZwShutdownWorkerFactory
-1831 stdcall ZwSignalAndWaitForSingleObject(long long long ptr) ChpeAutoZwSignalAndWaitForSingleObject
-1832 stdcall -version=0x600+ ZwSinglePhaseReject(ptr ptr) ChpeAutoZwSinglePhaseReject
-1833 stdcall ZwStartProfile(ptr) ChpeAutoZwStartProfile
-1834 stdcall ZwStopProfile(ptr) ChpeAutoZwStopProfile
-1835 stdcall -version=0x602+ ZwSubscribeWnfStateChange(ptr long long ptr) ChpeAutoZwSubscribeWnfStateChange
-1836 stdcall ZwSuspendProcess(ptr) ChpeAutoZwSuspendProcess
-1837 stdcall ZwSuspendThread(long ptr) ChpeAutoZwSuspendThread
-1838 stdcall ZwSystemDebugControl(long ptr long ptr long ptr) ChpeAutoZwSystemDebugControl
-1839 stdcall ZwTerminateJobObject(ptr long) ChpeAutoZwTerminateJobObject
-1840 stdcall ZwTerminateProcess(ptr long) ChpeAutoZwTerminateProcess
-1841 stdcall ZwTerminateThread(ptr long) ChpeAutoZwTerminateThread
-1842 stdcall ZwTestAlert() ChpeAutoZwTestAlert
-1843 stdcall -version=0x600+ ZwThawRegistry() ChpeStubZwThawRegistry
-1844 stdcall -version=0x600+ ZwThawTransactions() ChpeStubZwThawTransactions
-1845 stdcall -version=0x600+ ZwTraceControl(long ptr long ptr long ptr) ChpeAutoZwTraceControl
-1846 stdcall ZwTraceEvent(ptr long long ptr) ChpeAutoZwTraceEvent
-1847 stdcall ZwTranslateFilePath(ptr long ptr long) ChpeAutoZwTranslateFilePath
-1848 stdcall ZwUnloadDriver(ptr) ChpeAutoZwUnloadDriver
-1849 stdcall ZwUnloadKey2(ptr long) ChpeAutoZwUnloadKey2
-1850 stdcall ZwUnloadKey(long) ChpeAutoZwUnloadKey
-1851 stdcall ZwUnloadKeyEx(ptr ptr) ChpeAutoZwUnloadKeyEx
-1852 stdcall ZwUnlockFile(long ptr ptr ptr ptr) ChpeAutoZwUnlockFile
-1853 stdcall ZwUnlockVirtualMemory(long ptr ptr long) ChpeAutoZwUnlockVirtualMemory
-1854 stdcall ZwUnmapViewOfSection(long ptr) ChpeAutoZwUnmapViewOfSection
-1855 stdcall -version=0x602+ ZwUnsubscribeWnfStateChange(ptr) ChpeAutoZwUnsubscribeWnfStateChange
-1856 stdcall -version=0x602+ ZwUpdateWnfStateData(ptr ptr long ptr ptr long long) ChpeAutoZwUpdateWnfStateData
-1857 stdcall ZwVdmControl(long ptr) ChpeAutoZwVdmControl
-1858 stdcall ZwWaitForDebugEvent(ptr long ptr ptr) ChpeAutoZwWaitForDebugEvent
-1859 stdcall ZwWaitForKeyedEvent(ptr ptr long ptr) ChpeAutoZwWaitForKeyedEvent
-1860 stdcall ZwWaitForAlertByThreadId(ptr ptr) ChpeAutoZwWaitForAlertByThreadId
-1861 stdcall ZwWaitForMultipleObjects32(long ptr long long ptr) ChpeAutoZwWaitForMultipleObjects32
-1862 stdcall ZwWaitForMultipleObjects(long ptr long long ptr) ChpeAutoZwWaitForMultipleObjects
-1863 stdcall ZwWaitForSingleObject(long long long) ChpeAutoZwWaitForSingleObject
-1864 stdcall -version=0x600+ ZwWaitForWorkViaWorkerFactory(ptr ptr long ptr ptr) ChpeStubZwWaitForWorkViaWorkerFactory
-1865 stdcall ZwWaitHighEventPair(ptr) ChpeAutoZwWaitHighEventPair
-1866 stdcall ZwWaitLowEventPair(ptr) ChpeAutoZwWaitLowEventPair
-1867 stdcall -version=0x600+ ZwWorkerFactoryWorkerReady(ptr) ChpeStubZwWorkerFactoryWorkerReady
-1868 stdcall ZwWriteFile(long long ptr ptr ptr ptr long ptr ptr) ChpeAutoZwWriteFile
-1869 stdcall ZwWriteFileGather(long long ptr ptr ptr ptr long ptr ptr) ChpeAutoZwWriteFileGather
-1870 stdcall ZwWriteRequestData(ptr ptr long ptr long ptr) ChpeAutoZwWriteRequestData
-1871 stdcall ZwWriteVirtualMemory(long ptr ptr long ptr) ChpeAutoZwWriteVirtualMemory
-1872 stdcall ZwYieldExecution() ChpeAutoZwYieldExecution
-1875 cdecl __isascii(long) ChpeAuto__isascii
-1876 cdecl __iscsym(long) ChpeAuto__iscsym
-1877 cdecl __iscsymf(long) ChpeAuto__iscsymf
-1878 cdecl -version=0x600+ __misaligned_access() ChpeStub__misaligned_access
-1879 cdecl __toascii(long) ChpeAuto__toascii
-1880 cdecl -ret64 _atoi64(str) ChpeAuto_atoi64
-1882 extern _fltused ntdll._fltused
-1883 cdecl _i64toa(double ptr long) ChpeAuto_i64toa
-1884 cdecl _i64tow(double ptr long) ChpeAuto_i64tow
-1885 cdecl _itoa(long ptr long) ChpeAuto_itoa
-1886 cdecl _itow(long ptr long) ChpeAuto_itow
-1889 cdecl _ltoa(long ptr long) ChpeAuto_ltoa
-1890 cdecl _ltow(long ptr long) ChpeAuto_ltow
-1891 cdecl _memccpy(ptr ptr long long) ChpeAuto_memccpy
-1892 cdecl _memicmp(str str long) ChpeAuto_memicmp
-1900 cdecl _splitpath(str ptr ptr ptr ptr) ChpeAuto_splitpath
-1901 cdecl _strcmpi(str str) ChpeAuto_strcmpi
-1902 cdecl _stricmp(str str) ChpeAuto_stricmp
-1903 cdecl _strlwr(str) ChpeAuto_strlwr
-1904 cdecl _strnicmp(str str long) ChpeAuto_strnicmp
-1905 cdecl _strupr(str) ChpeAuto_strupr
-1907 cdecl _ui64toa(double ptr long) ChpeAuto_ui64toa
-1908 cdecl _ui64tow(double ptr long) ChpeAuto_ui64tow
-1909 cdecl _ultoa(long ptr long) ChpeAuto_ultoa
-1910 cdecl _ultow(long ptr long) ChpeAuto_ultow
-1911 cdecl _vscwprintf(wstr ptr) ChpeAuto_vscwprintf
-1912 cdecl _vsnprintf(ptr long str ptr) ChpeAuto_vsnprintf
-1913 cdecl _vsnprintf_s(ptr long long str ptr) ChpeAuto_vsnprintf_s
-1914 cdecl _vsnwprintf(ptr long wstr ptr) ChpeAuto_vsnwprintf
-1915 cdecl _vsnwprintf_s(ptr long long wstr ptr) ChpeAuto_vsnwprintf_s
-1916 cdecl -version=0x600+ _vswprintf(ptr wstr ptr) ChpeAuto_vswprintf
-1917 cdecl _wcsicmp(wstr wstr) ChpeAuto_wcsicmp
-1918 cdecl _wcslwr(wstr) ChpeAuto_wcslwr
-1919 cdecl _wcsnicmp(wstr wstr long) ChpeAuto_wcsnicmp
-1920 cdecl _wcstoui64(wstr ptr long) ChpeAuto_wcstoui64
-1921 cdecl _wcsupr(wstr) ChpeAuto_wcsupr
-1922 cdecl _wtoi(wstr) ChpeAuto_wtoi
-1923 cdecl _wtoi64(wstr) ChpeAuto_wtoi64
-1924 cdecl _wtol(wstr) ChpeAuto_wtol
-1925 cdecl abs(long) ChpeAutoabs
-1926 cdecl atan(double) ChpeAutoatan
-1927 cdecl atan2(double double) ChpeAutoatan2
-1928 cdecl atoi(str) ChpeAutoatoi
-1929 cdecl atol(str) ChpeAutoatol
-1931 cdecl ceil(double) ChpeAutoceil
-1932 cdecl cos(double) ChpeAutocos
-1933 cdecl fabs(double) ChpeAutofabs
-1934 cdecl floor(double) ChpeAutofloor
-1935 cdecl isalnum(long) ChpeAutoisalnum
-1936 cdecl isalpha(long) ChpeAutoisalpha
-1937 cdecl iscntrl(long) ChpeAutoiscntrl
-1938 cdecl isdigit(long) ChpeAutoisdigit
-1939 cdecl isgraph(long) ChpeAutoisgraph
-1940 cdecl islower(long) ChpeAutoislower
-1941 cdecl isprint(long) ChpeAutoisprint
-1942 cdecl ispunct(long) ChpeAutoispunct
-1943 cdecl isspace(long) ChpeAutoisspace
-1944 cdecl isupper(long) ChpeAutoisupper
-1945 cdecl iswalpha(long) ChpeAutoiswalpha
-1946 cdecl iswctype(long long) ChpeAutoiswctype
-1947 cdecl iswdigit(long) ChpeAutoiswdigit
-1948 cdecl iswlower(long) ChpeAutoiswlower
-1949 cdecl iswspace(long) ChpeAutoiswspace
-1950 cdecl iswxdigit(long) ChpeAutoiswxdigit
-1951 cdecl isxdigit(long) ChpeAutoisxdigit
-1952 cdecl labs(long) ChpeAutolabs
-1953 cdecl log(double) ChpeAutolog
-1955 cdecl mbstowcs(ptr str long) ChpeAutombstowcs
-1956 cdecl memchr(ptr long long) ChpeAutomemchr
-1957 cdecl memcmp(ptr ptr long) ChpeAutomemcmp
-1959 cdecl memmove(ptr ptr long) ChpeAutomemmove
-1960 cdecl memset(ptr long long) ChpeAutomemset
-1961 cdecl pow(double double) ChpeAutopow
-1963 cdecl sin(double) ChpeAutosin
-1965 cdecl sqrt(double) ChpeAutosqrt
-1968 cdecl strcat(str str) ChpeAutostrcat
-1969 cdecl strchr(str long) ChpeAutostrchr
-1970 cdecl strcmp(str str) ChpeAutostrcmp
-1971 cdecl strcpy(ptr str) ChpeAutostrcpy
-1972 cdecl -version=0x600+ strcpy_s(ptr long str) ChpeAutostrcpy_s
-1973 cdecl -version=0x600+ strcat_s(ptr long str) ChpeAutostrcat_s
-1974 cdecl -version=0x600+ strncpy_s(ptr long str long) ChpeAutostrncpy_s
-1975 cdecl strcspn(str str) ChpeAutostrcspn
-1976 cdecl strlen(str) ChpeAutostrlen
-1977 cdecl strncat(str str long) ChpeAutostrncat
-1978 cdecl strncmp(str str long) ChpeAutostrncmp
-1979 cdecl strncpy(ptr str long) ChpeAutostrncpy
-1980 cdecl strpbrk(str str) ChpeAutostrpbrk
-1981 cdecl strrchr(str long) ChpeAutostrrchr
-1982 cdecl strspn(str str) ChpeAutostrspn
-1983 cdecl strstr(str str) ChpeAutostrstr
-1984 cdecl strtol(str ptr long) ChpeAutostrtol
-1985 cdecl strtoul(str ptr long) ChpeAutostrtoul
-1988 cdecl tan(double) ChpeAutotan
-1989 cdecl tolower(long) ChpeAutotolower
-1990 cdecl toupper(long) ChpeAutotoupper
-1991 cdecl towlower(long) ChpeAutotowlower
-1992 cdecl towupper(long) ChpeAutotowupper
-1995 cdecl vsprintf(ptr str ptr) ChpeAutovsprintf
-1996 cdecl wcscat(wstr wstr) ChpeAutowcscat
-1997 cdecl wcschr(wstr long) ChpeAutowcschr
-1998 cdecl wcscmp(wstr wstr) ChpeAutowcscmp
-1999 cdecl wcscpy(ptr wstr) ChpeAutowcscpy
-2000 cdecl wcscspn(wstr wstr) ChpeAutowcscspn
-2001 cdecl wcslen(wstr) ChpeAutowcslen
-2002 cdecl wcsncat(wstr wstr long) ChpeAutowcsncat
-2003 cdecl wcsncmp(wstr wstr long) ChpeAutowcsncmp
-2004 cdecl wcsncpy(ptr wstr long) ChpeAutowcsncpy
-2005 cdecl wcsnlen(wstr long) ChpeAutowcsnlen
-2006 cdecl wcspbrk(wstr wstr) ChpeAutowcspbrk
-2007 cdecl wcsrchr(wstr long) ChpeAutowcsrchr
-2008 cdecl wcsspn(wstr wstr) ChpeAutowcsspn
-2009 cdecl wcsstr(wstr wstr) ChpeAutowcsstr
-2010 cdecl wcstol(wstr ptr long) ChpeAutowcstol
-2011 cdecl wcstombs(ptr ptr long) ChpeAutowcstombs
-2012 cdecl wcstoul(wstr ptr long) ChpeAutowcstoul
-2018 stdcall -version=0x602+ -ret64 RtlGetSystemTimePrecise() ChpeAutoRtlGetSystemTimePrecise
+1152 stdcall -version=0x602+ RtlRbInsertNodeEx(ptr ptr long ptr) ChpeAutoRtlRbInsertNodeEx
+1153 stdcall -version=0x602+ RtlRbRemoveNode(ptr ptr) ChpeAutoRtlRbRemoveNode
+1155 stdcall RtlReadMemoryStream(ptr ptr long ptr) ChpeAutoRtlReadMemoryStream
+1156 stdcall RtlReadOutOfProcessMemoryStream(ptr ptr long ptr) ChpeAutoRtlReadOutOfProcessMemoryStream
+1157 stdcall RtlRealPredecessor(ptr) ChpeAutoRtlRealPredecessor
+1158 stdcall RtlRealSuccessor(ptr) ChpeAutoRtlRealSuccessor
+1159 stdcall RtlRegisterSecureMemoryCacheCallback(ptr) ChpeAutoRtlRegisterSecureMemoryCacheCallback
+1160 stdcall RtlRegisterCfgTargetRange(ptr long) ChpeAutoRtlRegisterCfgTargetRange
+1161 stdcall -version=0x600+ RtlRegisterThreadWithCsrss() ChpeStubRtlRegisterThreadWithCsrss
+1163 stdcall RtlReleaseActivationContext(ptr) ChpeAutoRtlReleaseActivationContext
+1165 stdcall RtlReleasePebLock() ChpeAutoRtlReleasePebLock
+1167 stdcall RtlReleaseRelativeName(ptr) ChpeAutoRtlReleaseRelativeName
+1168 stdcall RtlReleaseResource(ptr) ChpeAutoRtlReleaseResource
+1171 stdcall RtlRemoteCall(ptr ptr ptr long ptr long long) ChpeAutoRtlRemoteCall
+1172 stdcall -version=0x600+ RtlRemovePrivileges(ptr ptr long) ChpeAutoRtlRemovePrivileges
+1175 stdcall -version=0x600+ RtlReportException(long long long) ChpeStubRtlReportException
+1176 stdcall -version=0x600+ RtlResetMemoryBlockLookaside(long) ChpeStubRtlResetMemoryBlockLookaside
+1177 stdcall -version=0x600+ RtlResetMemoryZone(long) ChpeStubRtlResetMemoryZone
+1178 stdcall -version=0x600+ RtlResetNtUserPfn() ChpeAutoRtlResetNtUserPfn
+1179 stdcall RtlResetRtlTranslations(ptr) ChpeAutoRtlResetRtlTranslations
+1182 stdcall -version=0x600+ RtlRetrieveNtUserPfn(ptr ptr ptr) ChpeAutoRtlRetrieveNtUserPfn
+1183 stdcall RtlRevertMemoryStream(ptr) ChpeAutoRtlRevertMemoryStream
+1184 stdcall RtlRunDecodeUnicodeString(long ptr) ChpeAutoRtlRunDecodeUnicodeString
+1185 stdcall RtlRunEncodeUnicodeString(long ptr) ChpeAutoRtlRunEncodeUnicodeString
+1186 stdcall -version=0x600+ RtlRunOnceBeginInitialize(ptr long ptr) ChpeAutoRtlRunOnceBeginInitialize
+1187 stdcall -version=0x600+ RtlRunOnceComplete(ptr long ptr) ChpeAutoRtlRunOnceComplete
+1190 stdcall RtlSecondsSince1970ToTime(long ptr) ChpeAutoRtlSecondsSince1970ToTime
+1191 stdcall RtlSecondsSince1980ToTime(long ptr) ChpeAutoRtlSecondsSince1980ToTime
+1192 stdcall RtlSeekMemoryStream(ptr int64 long ptr) ChpeAutoRtlSeekMemoryStream
+1193 stdcall RtlSelfRelativeToAbsoluteSD2(ptr ptr) ChpeAutoRtlSelfRelativeToAbsoluteSD2
+1194 stdcall RtlSelfRelativeToAbsoluteSD(ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr) ChpeAutoRtlSelfRelativeToAbsoluteSD
+1195 stdcall -version=0x600+ RtlSendMsgToSm(ptr ptr) ChpeStubRtlSendMsgToSm
+1196 stdcall RtlSetAllBits(ptr) ChpeAutoRtlSetAllBits
+1197 stdcall RtlSetAttributesSecurityDescriptor(ptr long ptr) ChpeAutoRtlSetAttributesSecurityDescriptor
+1198 stdcall RtlSetBits(ptr long long) ChpeAutoRtlSetBits
+1199 stdcall RtlSetCfgTargetValidity(ptr long long ptr) ChpeAutoRtlSetCfgTargetValidity
+1200 stdcall RtlSetControlSecurityDescriptor(ptr long long) ChpeAutoRtlSetControlSecurityDescriptor
+1202 stdcall RtlSetCurrentDirectory_U(ptr) ChpeAutoRtlSetCurrentDirectory_U
+1203 stdcall RtlSetCurrentEnvironment(wstr ptr) ChpeAutoRtlSetCurrentEnvironment
+1204 stdcall -version=0x600+ RtlSetCurrentTransaction(ptr) ChpeAutoRtlSetCurrentTransaction
+1205 stdcall RtlSetDaclSecurityDescriptor(ptr long ptr long) ChpeAutoRtlSetDaclSecurityDescriptor
+1206 stdcall -version=0x600+ RtlSetDynamicTimeZoneInformation(long) ChpeStubRtlSetDynamicTimeZoneInformation
+1207 stdcall RtlSetEnvironmentStrings(wstr long) ChpeAutoRtlSetEnvironmentStrings
+1208 stdcall -version=0x600+ RtlSetEnvironmentVar(ptr ptr long ptr long) ChpeStubRtlSetEnvironmentVar
+1209 stdcall RtlSetEnvironmentVariable(ptr ptr ptr) ChpeAutoRtlSetEnvironmentVariable
+1210 stdcall -version=0x600+ RtlSetExtendedFeaturesMask(ptr int64) ChpeAutoRtlSetExtendedFeaturesMask
+1211 stdcall RtlSetGroupSecurityDescriptor(ptr ptr long) ChpeAutoRtlSetGroupSecurityDescriptor
+1212 stdcall RtlSetHeapInformation(ptr long ptr ptr) ChpeAutoRtlSetHeapInformation
+1213 stdcall RtlSetInformationAcl(ptr ptr long long) ChpeAutoRtlSetInformationAcl
+1214 stdcall RtlSetIoCompletionCallback(long ptr long) ChpeAutoRtlSetIoCompletionCallback
+1216 stdcall RtlSetLastWin32ErrorAndNtStatusFromNtStatus(long) ChpeAutoRtlSetLastWin32ErrorAndNtStatusFromNtStatus
+1217 stdcall RtlSetMemoryStreamSize(ptr int64) ChpeAutoRtlSetMemoryStreamSize
+1218 stdcall RtlSetOwnerSecurityDescriptor(ptr ptr long) ChpeAutoRtlSetOwnerSecurityDescriptor
+1219 stdcall -version=0x602+ RtlSetPortableOperatingSystem(long) ChpeAutoRtlSetPortableOperatingSystem
+1220 stdcall -version=0x600+ RtlSetProcessDebugInformation(ptr long ptr) ChpeStubRtlSetProcessDebugInformation
+1221 stdcall -version=0x600+ RtlSetProcessPreferredUILanguages(long ptr ptr) ChpeAutoRtlSetProcessPreferredUILanguages
+1222 cdecl RtlSetProcessIsCritical(long ptr long) ChpeAutoRtlSetProcessIsCritical
+1223 stdcall RtlSetSaclSecurityDescriptor(ptr long ptr long) ChpeAutoRtlSetSaclSecurityDescriptor
+1224 stdcall RtlSetSecurityDescriptorRMControl(ptr ptr) ChpeAutoRtlSetSecurityDescriptorRMControl
+1225 stdcall RtlSetSecurityObject(long ptr ptr ptr ptr) ChpeAutoRtlSetSecurityObject
+1226 stdcall RtlSetSecurityObjectEx(long ptr ptr long ptr ptr) ChpeAutoRtlSetSecurityObjectEx
+1227 stdcall RtlSetThreadErrorMode(long ptr) ChpeAutoRtlSetThreadErrorMode
+1228 cdecl RtlSetThreadIsCritical(long ptr long) ChpeAutoRtlSetThreadIsCritical
+1229 stdcall RtlSetThreadPoolStartFunc(ptr ptr) ChpeAutoRtlSetThreadPoolStartFunc
+1230 stdcall -version=0x600+ RtlSetThreadPreferredUILanguages(long ptr ptr) ChpeAutoRtlSetThreadPreferredUILanguages
+1231 stdcall RtlSetTimeZoneInformation(ptr) ChpeAutoRtlSetTimeZoneInformation
+1232 stdcall RtlSetTimer(ptr ptr ptr ptr long long long) ChpeAutoRtlSetTimer
+1233 stdcall RtlSetUnhandledExceptionFilter(ptr) ChpeAutoRtlSetUnhandledExceptionFilter
+1234 stdcall RtlSetUserFlagsHeap(ptr long ptr long long) ChpeAutoRtlSetUserFlagsHeap
+1235 stdcall RtlSetUserValueHeap(ptr long ptr ptr) ChpeAutoRtlSetUserValueHeap
+1236 stdcall -version=0x600+ RtlSidDominates(long long ptr) ChpeStubRtlSidDominates
+1237 stdcall -version=0x600+ RtlSidEqualLevel(long long ptr) ChpeStubRtlSidEqualLevel
+1238 stdcall -version=0x600+ RtlSidHashInitialize(ptr long ptr) ChpeStubRtlSidHashInitialize
+1239 stdcall -version=0x600+ RtlSidHashLookup(long ptr) ChpeStubRtlSidHashLookup
+1240 stdcall -version=0x600+ RtlSidIsHigherLevel(long long ptr) ChpeStubRtlSidIsHigherLevel
+1242 stdcall -version=0x600+ RtlSleepConditionVariableCS(ptr ptr ptr) ChpeAutoRtlSleepConditionVariableCS
+1243 stdcall -version=0x600+ RtlSleepConditionVariableSRW(ptr ptr ptr long) ChpeAutoRtlSleepConditionVariableSRW
+1244 stdcall RtlSplay(ptr) ChpeAutoRtlSplay
+1245 stdcall RtlStartRXact(ptr) ChpeAutoRtlStartRXact
+1246 stdcall RtlStatMemoryStream(ptr ptr long) ChpeAutoRtlStatMemoryStream
+1247 stdcall RtlStringFromGUID(ptr ptr) ChpeAutoRtlStringFromGUID
+1248 stdcall RtlSubAuthorityCountSid(ptr) ChpeAutoRtlSubAuthorityCountSid
+1249 stdcall RtlSubAuthoritySid(ptr long) ChpeAutoRtlSubAuthoritySid
+1250 stdcall RtlSubtreePredecessor(ptr) ChpeAutoRtlSubtreePredecessor
+1251 stdcall RtlSubtreeSuccessor(ptr) ChpeAutoRtlSubtreeSuccessor
+1252 stdcall RtlSystemTimeToLocalTime(ptr ptr) ChpeAutoRtlSystemTimeToLocalTime
+1253 stdcall -version=0x600+ RtlTestBit(ptr long) ChpeAutoRtlTestBit
+1254 stdcall RtlTimeFieldsToTime(ptr ptr) ChpeAutoRtlTimeFieldsToTime
+1255 stdcall RtlTimeToElapsedTimeFields(long long) ChpeAutoRtlTimeToElapsedTimeFields
+1256 stdcall RtlTimeToSecondsSince1970(ptr ptr) ChpeAutoRtlTimeToSecondsSince1970
+1257 stdcall RtlTimeToSecondsSince1980(ptr ptr) ChpeAutoRtlTimeToSecondsSince1980
+1258 stdcall RtlTimeToTimeFields(long long) ChpeAutoRtlTimeToTimeFields
+1259 stdcall RtlTraceDatabaseAdd(ptr long ptr ptr) ChpeAutoRtlTraceDatabaseAdd
+1260 stdcall RtlTraceDatabaseCreate(long ptr long long ptr) ChpeAutoRtlTraceDatabaseCreate
+1261 stdcall RtlTraceDatabaseDestroy(ptr) ChpeAutoRtlTraceDatabaseDestroy
+1262 stdcall RtlTraceDatabaseEnumerate(ptr ptr ptr) ChpeAutoRtlTraceDatabaseEnumerate
+1263 stdcall RtlTraceDatabaseFind(ptr long ptr ptr) ChpeAutoRtlTraceDatabaseFind
+1264 stdcall RtlTraceDatabaseLock(ptr) ChpeAutoRtlTraceDatabaseLock
+1265 stdcall RtlTraceDatabaseUnlock(ptr) ChpeAutoRtlTraceDatabaseUnlock
+1266 stdcall RtlTraceDatabaseValidate(ptr) ChpeAutoRtlTraceDatabaseValidate
+1267 stdcall RtlTryAcquirePebLock() ChpeAutoRtlTryAcquirePebLock
+1271 stdcall RtlUnhandledExceptionFilter2(ptr long) ChpeAutoRtlUnhandledExceptionFilter2
+1272 stdcall RtlUnhandledExceptionFilter(ptr) ChpeAutoRtlUnhandledExceptionFilter
+1273 stdcall RtlUnicodeStringToAnsiSize(ptr) ChpeAutoRtlUnicodeStringToAnsiSize
+1274 stdcall -version=0x601+ RtlUnicodeToUTF8N(ptr long ptr wstr long) ChpeAutoRtlUnicodeToUTF8N
+1275 stdcall -version=0xA00+ RtlUTF8StringToUnicodeString(ptr ptr long) ChpeAutoRtlUTF8StringToUnicodeString
+1277 stdcall RtlUnicodeStringToAnsiString(ptr ptr long) ChpeAutoRtlUnicodeStringToAnsiString
+1278 stdcall RtlUnicodeStringToCountedOemString(ptr ptr long) ChpeAutoRtlUnicodeStringToCountedOemString
+1279 stdcall RtlUnicodeStringToInteger(ptr long ptr) ChpeAutoRtlUnicodeStringToInteger
+1280 stdcall RtlUnicodeStringToOemSize(ptr) ChpeAutoRtlUnicodeStringToOemSize
+1281 stdcall RtlUnicodeStringToOemString(ptr ptr long) ChpeAutoRtlUnicodeStringToOemString
+1282 stdcall RtlUnicodeToCustomCPN(ptr ptr long ptr wstr long) ChpeAutoRtlUnicodeToCustomCPN
+1283 stdcall RtlUnicodeToMultiByteN(ptr long ptr ptr long) ChpeAutoRtlUnicodeToMultiByteN
+1284 stdcall RtlUnicodeToMultiByteSize(ptr ptr long) ChpeAutoRtlUnicodeToMultiByteSize
+1285 stdcall RtlUnicodeToOemN(ptr long ptr ptr long) ChpeAutoRtlUnicodeToOemN
+1286 stdcall RtlUniform(ptr) ChpeAutoRtlUniform
+1287 stdcall RtlUnlockBootStatusData(ptr) ChpeAutoRtlUnlockBootStatusData
+1288 stdcall -version=0x600+ RtlUnlockCurrentThread() ChpeStubRtlUnlockCurrentThread
+1289 stdcall RtlUnlockHeap(long) ChpeAutoRtlUnlockHeap
+1290 stdcall -version=0x600+ RtlUnlockMemoryBlockLookaside(long) ChpeStubRtlUnlockMemoryBlockLookaside
+1291 stdcall RtlUnlockMemoryStreamRegion(ptr int64 int64 long) ChpeAutoRtlUnlockMemoryStreamRegion
+1292 stdcall -version=0x600+ RtlUnlockMemoryZone(long) ChpeStubRtlUnlockMemoryZone
+1293 stdcall -version=0x600+ RtlUnlockModuleSection(long) ChpeStubRtlUnlockModuleSection
+1296 stdcall RtlUnregisterCfgTargetRange(ptr) ChpeAutoRtlUnregisterCfgTargetRange
+1297 stdcall RtlUpcaseUnicodeChar(long) ChpeAutoRtlUpcaseUnicodeChar
+1298 stdcall RtlUpcaseUnicodeString(ptr ptr long) ChpeAutoRtlUpcaseUnicodeString
+1299 stdcall RtlUpcaseUnicodeStringToAnsiString(ptr ptr long) ChpeAutoRtlUpcaseUnicodeStringToAnsiString
+1300 stdcall RtlUpcaseUnicodeStringToCountedOemString(ptr ptr long) ChpeAutoRtlUpcaseUnicodeStringToCountedOemString
+1301 stdcall RtlUpcaseUnicodeStringToOemString(ptr ptr long) ChpeAutoRtlUpcaseUnicodeStringToOemString
+1302 stdcall RtlUpcaseUnicodeToCustomCPN(ptr ptr long ptr wstr long) ChpeAutoRtlUpcaseUnicodeToCustomCPN
+1303 stdcall RtlUpcaseUnicodeToMultiByteN(ptr long ptr ptr long) ChpeAutoRtlUpcaseUnicodeToMultiByteN
+1304 stdcall RtlUpcaseUnicodeToOemN(ptr long ptr ptr long) ChpeAutoRtlUpcaseUnicodeToOemN
+1305 stdcall -version=0x600+ RtlUpdateClonedCriticalSection(long) ChpeStubRtlUpdateClonedCriticalSection
+1306 stdcall -version=0x600+ RtlUpdateClonedSRWLock(ptr long) ChpeStubRtlUpdateClonedSRWLock
+1307 stdcall RtlUpdateTimer(ptr ptr long long) ChpeAutoRtlUpdateTimer
+1308 stdcall RtlUpperChar(long) ChpeAutoRtlUpperChar
+1309 stdcall RtlUpperString(ptr ptr) ChpeAutoRtlUpperString
+1311 stdcall RtlValidAcl(ptr) ChpeAutoRtlValidAcl
+1312 stdcall RtlValidRelativeSecurityDescriptor(ptr long long) ChpeAutoRtlValidRelativeSecurityDescriptor
+1313 stdcall RtlValidSecurityDescriptor(ptr) ChpeAutoRtlValidSecurityDescriptor
+1314 stdcall RtlValidSid(ptr) ChpeAutoRtlValidSid
+1315 stdcall RtlValidateHeap(long long ptr) ChpeAutoRtlValidateHeap
+1316 stdcall RtlValidateProcessHeaps() ChpeAutoRtlValidateProcessHeaps
+1317 stdcall RtlValidateUnicodeString(long ptr) ChpeAutoRtlValidateUnicodeString
+1318 stdcall RtlVerifyVersionInfo(ptr long double) ChpeAutoRtlVerifyVersionInfo
+1320 stdcall RtlVirtualUnwind2(long int64 int64 ptr ptr ptr ptr ptr ptr ptr ptr ptr long) ChpeAutoRtlVirtualUnwind2
+1326 stdcall RtlWalkFrameChain(ptr long long) ChpeAutoRtlWalkFrameChain
+1327 stdcall RtlWeaklyEnumerateEntryHashTable(ptr ptr) ChpeAutoRtlWeaklyEnumerateEntryHashTable
+1328 stdcall RtlWalkHeap(long ptr) ChpeAutoRtlWalkHeap
+1329 stdcall -version=0x600+ RtlWerpReportException(long long ptr long long ptr) ChpeStubRtlWerpReportException
+1330 stdcall -version=0x600+ RtlWow64CallFunction64() ChpeStubRtlWow64CallFunction64
+1331 stdcall RtlWow64EnableFsRedirection(long) ChpeAutoRtlWow64EnableFsRedirection
+1332 stdcall RtlWow64EnableFsRedirectionEx(long ptr) ChpeAutoRtlWow64EnableFsRedirectionEx
+1333 stdcall -version=0x600+ RtlOpenCrossProcessEmulatorWorkConnection(ptr ptr ptr) ChpeAutoRtlOpenCrossProcessEmulatorWorkConnection
+1334 stdcall -version=0x600+ RtlWow64GetCpuAreaInfo(ptr long ptr) ChpeAutoRtlWow64GetCpuAreaInfo
+1335 stdcall -version=0x600+ RtlWow64GetCurrentMachine() ChpeAutoRtlWow64GetCurrentMachine
+1336 stdcall -version=0x600+ RtlWow64GetProcessMachines(ptr ptr ptr) ChpeAutoRtlWow64GetProcessMachines
+1337 stdcall -version=0x600+ RtlWow64GetSharedInfoProcess(ptr ptr ptr) ChpeAutoRtlWow64GetSharedInfoProcess
+1338 stdcall -version=0x600+ RtlWow64GetThreadContext(ptr ptr) ChpeAutoRtlWow64GetThreadContext
+1340 stdcall -version=0x600+ RtlWow64IsWowGuestMachineSupported(long ptr) ChpeAutoRtlWow64IsWowGuestMachineSupported
+1341 stdcall -version=0x600+ RtlWow64LogMessageInEventLogger(long long long) ChpeStubRtlWow64LogMessageInEventLogger
+1342 stdcall -version=0x600+ RtlWow64PopCrossProcessWorkFromFreeList(ptr) ChpeAutoRtlWow64PopCrossProcessWorkFromFreeList
+1343 stdcall -version=0x600+ RtlWow64PushCrossProcessWorkOntoWorkList(ptr ptr ptr) ChpeAutoRtlWow64PushCrossProcessWorkOntoWorkList
+1344 stdcall -version=0x600+ RtlWow64RequestCrossProcessHeavyFlush(ptr) ChpeAutoRtlWow64RequestCrossProcessHeavyFlush
+1345 stdcall -version=0x600+ RtlWow64SetThreadContext(ptr ptr) ChpeAutoRtlWow64SetThreadContext
+1346 stdcall -version=0x600+ RtlWow64SuspendThread(ptr ptr) ChpeAutoRtlWow64SuspendThread
+1347 stdcall RtlWriteMemoryStream(ptr ptr long ptr) ChpeAutoRtlWriteMemoryStream
+1348 stdcall RtlWriteRegistryValue(long ptr ptr long ptr long) ChpeAutoRtlWriteRegistryValue
+1349 stdcall RtlZeroHeap(ptr long) ChpeAutoRtlZeroHeap
+1351 stdcall RtlZombifyActivationContext(ptr) ChpeAutoRtlZombifyActivationContext
+1353 stdcall -version=0x600+ RtlpCheckDynamicTimeZoneInformation(ptr long) ChpeStubRtlpCheckDynamicTimeZoneInformation
+1354 stdcall -version=0x600+ RtlpCleanupRegistryKeys() ChpeStubRtlpCleanupRegistryKeys
+1355 stdcall -version=0x600+ RtlpConvertCultureNamesToLCIDs(wstr ptr) ChpeStubRtlpConvertCultureNamesToLCIDs
+1356 stdcall -version=0x600+ RtlpConvertLCIDsToCultureNames(wstr ptr) ChpeStubRtlpConvertLCIDsToCultureNames
+1357 stdcall -version=0x600+ RtlpCreateProcessRegistryInfo(ptr) ChpeStubRtlpCreateProcessRegistryInfo
+1358 stdcall RtlpEnsureBufferSize(long ptr long) ChpeAutoRtlpEnsureBufferSize
+1359 stdcall -version=0x600+ RtlpGetLCIDFromLangInfoNode(long long ptr) ChpeStubRtlpGetLCIDFromLangInfoNode
+1360 stdcall -version=0x600+ RtlpGetNameFromLangInfoNode(long long long) ChpeStubRtlpGetNameFromLangInfoNode
+1361 stdcall -version=0x600+ RtlpGetSystemDefaultUILanguage(ptr long) ChpeStubRtlpGetSystemDefaultUILanguage
+1362 stdcall -version=0x600+ RtlpGetUserOrMachineUILanguage4NLS(long long ptr) ChpeStubRtlpGetUserOrMachineUILanguage4NLS
+1363 stdcall -version=0x600+ RtlpInitializeLangRegistryInfo(ptr) ChpeStubRtlpInitializeLangRegistryInfo
+1364 stdcall -version=0x600+ RtlpIsQualifiedLanguage(long ptr long) ChpeStubRtlpIsQualifiedLanguage
+1365 stdcall -version=0x600+ RtlpLoadMachineUIByPolicy(ptr long ptr) ChpeStubRtlpLoadMachineUIByPolicy
+1366 stdcall -version=0x600+ RtlpLoadUserUIByPolicy(ptr long ptr) ChpeStubRtlpLoadUserUIByPolicy
+1367 stdcall -version=0x600+ RtlpMuiFreeLangRegistryInfo(long) ChpeStubRtlpMuiFreeLangRegistryInfo
+1368 stdcall -version=0x600+ RtlpMuiRegCreateRegistryInfo() ChpeStubRtlpMuiRegCreateRegistryInfo
+1369 stdcall -version=0x600+ RtlpMuiRegFreeRegistryInfo(long long) ChpeStubRtlpMuiRegFreeRegistryInfo
+1370 stdcall -version=0x600+ RtlpMuiRegLoadRegistryInfo(long long) ChpeStubRtlpMuiRegLoadRegistryInfo
+1371 stdcall RtlpNotOwnerCriticalSection(ptr) ChpeAutoRtlpNotOwnerCriticalSection
+1372 stdcall RtlpNtCreateKey(ptr long ptr long ptr ptr) ChpeAutoRtlpNtCreateKey
+1373 stdcall RtlpNtEnumerateSubKey(ptr ptr long long) ChpeAutoRtlpNtEnumerateSubKey
+1374 stdcall RtlpNtMakeTemporaryKey(ptr) ChpeAutoRtlpNtMakeTemporaryKey
+1375 stdcall RtlpNtOpenKey(ptr long ptr long) ChpeAutoRtlpNtOpenKey
+1376 stdcall RtlpNtQueryValueKey(ptr ptr ptr ptr long) ChpeAutoRtlpNtQueryValueKey
+1377 stdcall RtlpNtSetValueKey(ptr long ptr long) ChpeAutoRtlpNtSetValueKey
+1378 stdcall -version=0x600+ RtlpQueryDefaultUILanguage(ptr long) ChpeStubRtlpQueryDefaultUILanguage
+1379 stdcall -version=0x600+ RtlpQueryProcessDebugInformationFromWow64(long ptr) ChpeStubRtlpQueryProcessDebugInformationFromWow64
+1380 stdcall -version=0x600+ RtlpRefreshCachedUILanguage(wstr long) ChpeStubRtlpRefreshCachedUILanguage
+1381 stdcall -version=0x600+ RtlpSetInstallLanguage(long ptr) ChpeStubRtlpSetInstallLanguage
+1382 stdcall -version=0x600+ RtlpSetPreferredUILanguages(long ptr ptr) ChpeStubRtlpSetPreferredUILanguages
+1383 stdcall RtlpUnWaitCriticalSection(ptr) ChpeAutoRtlpUnWaitCriticalSection
+1384 stdcall -version=0x600+ RtlpVerifyAndCommitUILanguageSettings(long) ChpeStubRtlpVerifyAndCommitUILanguageSettings
+1385 stdcall RtlpWaitForCriticalSection(ptr) ChpeAutoRtlpWaitForCriticalSection
+1386 stdcall RtlxAnsiStringToUnicodeSize(ptr) ChpeAutoRtlxAnsiStringToUnicodeSize
+1387 stdcall RtlxOemStringToUnicodeSize(ptr) ChpeAutoRtlxOemStringToUnicodeSize
+1388 stdcall RtlxUnicodeStringToAnsiSize(ptr) ChpeAutoRtlxUnicodeStringToAnsiSize
+1389 stdcall RtlxUnicodeStringToOemSize(ptr) ChpeAutoRtlxUnicodeStringToOemSize
+1390 stdcall -version=0x600+ ShipAssert(long long) ChpeStubShipAssert
+1391 stdcall -version=0x600+ ShipAssertGetBufferInfo(ptr ptr) ChpeStubShipAssertGetBufferInfo
+1392 stdcall -version=0x600+ ShipAssertMsgA(long long) ChpeStubShipAssertMsgA
+1393 stdcall -version=0x600+ ShipAssertMsgW(long long) ChpeStubShipAssertMsgW
+1394 stdcall -version=0x600+ TpAllocAlpcCompletion(ptr ptr ptr ptr ptr) ChpeAutoTpAllocAlpcCompletion
+1395 stdcall -version=0x600+ TpAllocAlpcCompletionEx(ptr ptr ptr ptr ptr) ChpeAutoTpAllocAlpcCompletionEx
+1396 stdcall -version=0x600+ TpAllocCleanupGroup(ptr) ChpeAutoTpAllocCleanupGroup
+1397 stdcall -version=0x600+ TpAllocIoCompletion(ptr ptr ptr ptr ptr) ChpeAutoTpAllocIoCompletion
+1398 stdcall -version=0x600+ TpAllocPool(ptr ptr) ChpeAutoTpAllocPool
+1399 stdcall -version=0x600+ TpAllocTimer(ptr ptr ptr ptr) ChpeAutoTpAllocTimer
+1400 stdcall -version=0x600+ TpAllocWait(ptr ptr ptr ptr) ChpeAutoTpAllocWait
+1401 stdcall -version=0x600+ TpAllocWork(ptr ptr ptr ptr) ChpeAutoTpAllocWork
+1402 stdcall -version=0x600+ TpAlpcRegisterCompletionList(ptr) ChpeAutoTpAlpcRegisterCompletionList
+1403 stdcall -version=0x600+ TpAlpcUnregisterCompletionList(ptr) ChpeAutoTpAlpcUnregisterCompletionList
+1405 stdcall -version=0x600+ TpCallbackMayRunLong(ptr) ChpeAutoTpCallbackMayRunLong
+1408 stdcall -version=0x600+ TpCallbackSendAlpcMessageOnCompletion(ptr ptr long ptr) ChpeAutoTpCallbackSendAlpcMessageOnCompletion
+1409 stdcall -version=0x600+ TpCallbackSendPendingAlpcMessage(ptr) ChpeAutoTpCallbackSendPendingAlpcMessage
+1413 stdcall -version=0x600+ TpCaptureCaller(long) ChpeStubTpCaptureCaller
+1414 stdcall -version=0x600+ TpCheckTerminateWorker(ptr) ChpeStubTpCheckTerminateWorker
+1415 stdcall -version=0x600+ TpDbgDumpHeapUsage(long ptr long) ChpeStubTpDbgDumpHeapUsage
+1416 stdcall -version=0x600+ TpDbgSetLogRoutine() ChpeStubTpDbgSetLogRoutine
+1420 stdcall -version=0x601+ TpQueryPoolStackInformation(ptr ptr) ChpeAutoTpQueryPoolStackInformation
+1421 stdcall -version=0x600+ TpReleaseAlpcCompletion(ptr) ChpeAutoTpReleaseAlpcCompletion
+1431 stdcall -version=0x601+ TpSetPoolStackInformation(ptr ptr) ChpeAutoTpSetPoolStackInformation
+1436 stdcall -version=0x600+ TpSimpleTryPost(ptr ptr ptr) ChpeAutoTpSimpleTryPost
+1438 stdcall -version=0x600+ TpWaitForAlpcCompletion(ptr) ChpeAutoTpWaitForAlpcCompletion
+1444 stdcall -version=0x600+ WerCheckEventEscalation(long ptr) ChpeStubWerCheckEventEscalation
+1445 stdcall -version=0x600+ WerReportSQMEvent(long long long) ChpeStubWerReportSQMEvent
+1446 stdcall -version=0x600+ WerReportWatsonEvent(long long long long) ChpeStubWerReportWatsonEvent
+1447 stdcall -version=0x600+ WinSqmAddToStream(ptr long long long) ChpeStubWinSqmAddToStream
+1448 stdcall -version=0x600+ WinSqmAddToStreamEx(ptr long long ptr long) ChpeStubWinSqmAddToStreamEx
+1449 stdcall -version=0x600+ WinSqmEndSession(ptr) ChpeAutoWinSqmEndSession
+1450 stdcall -version=0x600+ WinSqmEventEnabled(long ptr) ChpeAutoWinSqmEventEnabled
+1451 stdcall -version=0x600+ WinSqmEventWrite(long long long) ChpeStubWinSqmEventWrite
+1452 stdcall -version=0x600+ WinSqmIncrementDWORD(long long long) ChpeAutoWinSqmIncrementDWORD
+1453 stdcall -version=0x600+ WinSqmIsOptedIn() ChpeAutoWinSqmIsOptedIn
+1454 stdcall -version=0x600+ WinSqmSetDWORD(ptr long long) ChpeAutoWinSqmSetDWORD
+1455 stdcall -version=0x600+ WinSqmSetDWORD64(ptr long int64) ChpeAutoWinSqmSetDWORD64
+1456 stdcall -version=0x600+ WinSqmSetString(ptr long ptr) ChpeStubWinSqmSetString
+1458 stdcall ZwAcceptConnectPort(ptr long ptr long long ptr) ChpeAutoZwAcceptConnectPort
+1459 stdcall ZwAccessCheck(ptr long long ptr ptr ptr ptr ptr) ChpeAutoZwAccessCheck
+1460 stdcall ZwAccessCheckAndAuditAlarm(ptr long ptr ptr ptr long ptr long ptr ptr ptr) ChpeAutoZwAccessCheckAndAuditAlarm
+1461 stdcall ZwAccessCheckByType(ptr ptr ptr long ptr long ptr ptr long ptr ptr) ChpeAutoZwAccessCheckByType
+1462 stdcall ZwAccessCheckByTypeAndAuditAlarm(ptr ptr ptr ptr ptr ptr long long long ptr long ptr long ptr ptr ptr) ChpeAutoZwAccessCheckByTypeAndAuditAlarm
+1463 stdcall ZwAccessCheckByTypeResultList(ptr ptr ptr long ptr long ptr ptr long ptr ptr) ChpeAutoZwAccessCheckByTypeResultList
+1464 stdcall ZwAccessCheckByTypeResultListAndAuditAlarm(ptr ptr ptr ptr ptr ptr long long long ptr long ptr long ptr ptr ptr) ChpeAutoZwAccessCheckByTypeResultListAndAuditAlarm
+1465 stdcall ZwAccessCheckByTypeResultListAndAuditAlarmByHandle(ptr ptr ptr ptr ptr ptr ptr long long long ptr long ptr long ptr ptr ptr) ChpeAutoZwAccessCheckByTypeResultListAndAuditAlarmByHandle
+1466 stub -version=0x600+ ZwAcquireCMFViewOwnership
+1467 stdcall ZwAddAtom(ptr long ptr) ChpeAutoZwAddAtom
+1468 stdcall ZwAddBootEntry(ptr long) ChpeAutoZwAddBootEntry
+1469 stdcall ZwAddDriverEntry(ptr long) ChpeAutoZwAddDriverEntry
+1470 stdcall ZwAdjustGroupsToken(long long long long long long) ChpeAutoZwAdjustGroupsToken
+1471 stdcall ZwAdjustPrivilegesToken(long long long long long long) ChpeAutoZwAdjustPrivilegesToken
+1472 stdcall ZwAlertResumeThread(long ptr) ChpeAutoZwAlertResumeThread
+1473 stdcall ZwAlertThread(long) ChpeAutoZwAlertThread
+1474 stdcall ZwAlertThreadByThreadId(long) ChpeAutoZwAlertThreadByThreadId
+1475 stdcall ZwAllocateLocallyUniqueId(ptr) ChpeAutoZwAllocateLocallyUniqueId
+1476 stdcall ZwAllocateUserPhysicalPages(ptr ptr ptr) ChpeAutoZwAllocateUserPhysicalPages
+1477 stdcall ZwAllocateUuids(ptr ptr ptr ptr) ChpeAutoZwAllocateUuids
+1478 stdcall ZwAllocateVirtualMemory(long ptr ptr ptr long long) ChpeAutoZwAllocateVirtualMemory
+1479 stdcall ZwAllocateVirtualMemoryEx(long ptr ptr long long ptr long) ChpeAutoZwAllocateVirtualMemoryEx
+1480 stdcall -version=0x600+ ZwAlpcAcceptConnectPort(ptr ptr long ptr ptr ptr ptr ptr long) ChpeAutoZwAlpcAcceptConnectPort
+1481 stdcall -version=0x600+ ZwAlpcCancelMessage(ptr long ptr) ChpeAutoZwAlpcCancelMessage
+1482 stdcall -version=0x600+ ZwAlpcConnectPort(ptr ptr ptr ptr long ptr ptr ptr ptr ptr ptr) ChpeAutoZwAlpcConnectPort
+1483 stdcall -version=0x602+ ZwAlpcConnectPortEx(ptr ptr ptr ptr long ptr ptr ptr ptr ptr ptr) ChpeAutoZwAlpcConnectPortEx
+1484 stdcall -version=0x600+ ZwAlpcCreatePort(ptr ptr ptr) ChpeAutoZwAlpcCreatePort
+1485 stdcall -version=0x600+ ZwAlpcCreatePortSection(ptr long ptr long ptr ptr) ChpeAutoZwAlpcCreatePortSection
+1486 stdcall -version=0x600+ ZwAlpcCreateResourceReserve(ptr long long ptr) ChpeAutoZwAlpcCreateResourceReserve
+1487 stdcall -version=0x600+ ZwAlpcCreateSectionView(ptr long ptr) ChpeAutoZwAlpcCreateSectionView
+1488 stdcall -version=0x600+ ZwAlpcCreateSecurityContext(ptr long ptr) ChpeAutoZwAlpcCreateSecurityContext
+1489 stdcall -version=0x600+ ZwAlpcDeletePortSection(ptr long ptr) ChpeAutoZwAlpcDeletePortSection
+1490 stdcall -version=0x600+ ZwAlpcDeleteResourceReserve(ptr long long) ChpeAutoZwAlpcDeleteResourceReserve
+1491 stdcall -version=0x600+ ZwAlpcDeleteSectionView(ptr long ptr) ChpeAutoZwAlpcDeleteSectionView
+1492 stdcall -version=0x600+ ZwAlpcDeleteSecurityContext(ptr long ptr) ChpeAutoZwAlpcDeleteSecurityContext
+1493 stdcall -version=0x600+ ZwAlpcDisconnectPort(ptr long) ChpeAutoZwAlpcDisconnectPort
+1494 stdcall -version=0x600+ ZwAlpcImpersonateClientOfPort(ptr ptr ptr) ChpeAutoZwAlpcImpersonateClientOfPort
+1495 stdcall -version=0xA00+ ZwAlpcImpersonateClientContainerOfPort(ptr ptr long) ChpeAutoZwAlpcImpersonateClientContainerOfPort
+1496 stdcall -version=0x600+ ZwAlpcOpenSenderProcess(ptr ptr ptr long long ptr) ChpeAutoZwAlpcOpenSenderProcess
+1497 stdcall -version=0x600+ ZwAlpcOpenSenderThread(ptr ptr ptr long long ptr) ChpeAutoZwAlpcOpenSenderThread
+1498 stdcall -version=0x600+ ZwAlpcQueryInformation(ptr long ptr long ptr) ChpeAutoZwAlpcQueryInformation
+1499 stdcall -version=0x600+ ZwAlpcQueryInformationMessage(ptr ptr long ptr long ptr) ChpeAutoZwAlpcQueryInformationMessage
+1500 stdcall -version=0x600+ ZwAlpcRevokeSecurityContext(ptr long ptr) ChpeAutoZwAlpcRevokeSecurityContext
+1501 stdcall -version=0x600+ ZwAlpcSendWaitReceivePort(ptr long ptr ptr ptr ptr ptr ptr) ChpeAutoZwAlpcSendWaitReceivePort
+1502 stdcall -version=0x600+ ZwAlpcSetInformation(ptr long ptr long) ChpeAutoZwAlpcSetInformation
+1503 stdcall ZwApphelpCacheControl(long ptr) ChpeAutoZwApphelpCacheControl
+1504 stdcall ZwAreMappedFilesTheSame(ptr ptr) ChpeAutoZwAreMappedFilesTheSame
+1505 stdcall ZwAssignProcessToJobObject(long long) ChpeAutoZwAssignProcessToJobObject
+1506 stdcall ZwCallbackReturn(ptr long long) ChpeAutoZwCallbackReturn
+1507 stdcall ZwCancelDeviceWakeupRequest(ptr) ChpeAutoZwCancelDeviceWakeupRequest
+1508 stdcall ZwCancelIoFile(long ptr) ChpeAutoZwCancelIoFile
+1509 stdcall -version=0x600+ ZwCancelIoFileEx(ptr ptr ptr) ChpeAutoZwCancelIoFileEx
+1510 stdcall -version=0x600+ ZwCancelSynchronousIoFile(ptr ptr ptr) ChpeAutoZwCancelSynchronousIoFile
+1511 stdcall ZwCancelTimer(long ptr) ChpeAutoZwCancelTimer
+1512 stdcall ZwClearEvent(long) ChpeAutoZwClearEvent
+1513 stdcall ZwClose(long) ChpeAutoZwClose
+1514 stdcall ZwCloseObjectAuditAlarm(ptr ptr long) ChpeAutoZwCloseObjectAuditAlarm
+1515 stdcall -version=0x600+ ZwCommitComplete(ptr ptr) ChpeAutoZwCommitComplete
+1516 stdcall -version=0x600+ ZwCommitEnlistment(ptr ptr) ChpeAutoZwCommitEnlistment
+1517 stdcall -version=0x600+ ZwCommitTransaction(ptr long) ChpeAutoZwCommitTransaction
+1518 stdcall ZwCompactKeys(long ptr) ChpeAutoZwCompactKeys
+1519 stdcall ZwCompareTokens(ptr ptr ptr) ChpeAutoZwCompareTokens
+1520 stdcall ZwCompleteConnectPort(ptr) ChpeAutoZwCompleteConnectPort
+1521 stdcall ZwCompressKey(ptr) ChpeAutoZwCompressKey
+1522 stdcall ZwConnectPort(ptr ptr ptr ptr ptr ptr ptr ptr) ChpeAutoZwConnectPort
+1523 stdcall ZwContinue(ptr long) ChpeAutoZwContinue
+1524 stdcall ZwCreateDebugObject(ptr long ptr long) ChpeAutoZwCreateDebugObject
+1525 stdcall ZwCreateDirectoryObject(long long long) ChpeAutoZwCreateDirectoryObject
+1526 stdcall -version=0x600+ ZwCreateEnlistment(ptr long ptr ptr ptr long long ptr) ChpeAutoZwCreateEnlistment
+1527 stdcall ZwCreateEvent(long long long long long) ChpeAutoZwCreateEvent
+1528 stdcall ZwCreateEventPair(ptr long ptr) ChpeAutoZwCreateEventPair
+1529 stdcall ZwCreateFile(ptr long ptr ptr long long long ptr long long ptr) ChpeAutoZwCreateFile
+1530 stdcall ZwCreateIoCompletion(ptr long ptr long) ChpeAutoZwCreateIoCompletion
+1531 stdcall -version=0x602+ ZwCreateWaitCompletionPacket(ptr long ptr) ChpeAutoZwCreateWaitCompletionPacket
+1532 stdcall -version=0x602+ ZwAssociateWaitCompletionPacket(ptr ptr ptr ptr ptr long ptr ptr) ChpeAutoZwAssociateWaitCompletionPacket
+1533 stdcall -version=0x602+ ZwCancelWaitCompletionPacket(ptr long) ChpeAutoZwCancelWaitCompletionPacket
+1534 stdcall ZwCreateJobObject(ptr long ptr) ChpeAutoZwCreateJobObject
+1535 stdcall ZwCreateJobSet(long ptr long) ChpeAutoZwCreateJobSet
+1536 stdcall ZwCreateKey(ptr long ptr long ptr long long) ChpeAutoZwCreateKey
+1537 stdcall -version=0x600+ ZwCreateKeyTransacted(ptr long ptr long ptr long ptr ptr) ChpeAutoZwCreateKeyTransacted
+1538 stdcall ZwCreateKeyedEvent(ptr long ptr long) ChpeAutoZwCreateKeyedEvent
+1539 stdcall ZwCreateMailslotFile(long long long long long long long long) ChpeAutoZwCreateMailslotFile
+1540 stdcall ZwCreateMutant(ptr long ptr long) ChpeAutoZwCreateMutant
+1541 stdcall ZwCreateNamedPipeFile(ptr long ptr ptr long long long long long long long long long ptr) ChpeAutoZwCreateNamedPipeFile
+1542 stdcall ZwCreatePagingFile(ptr ptr ptr long) ChpeAutoZwCreatePagingFile
+1543 stdcall ZwCreatePort(ptr ptr long long long) ChpeAutoZwCreatePort
+1544 stdcall ZwCreateProcess(ptr long ptr ptr long ptr ptr ptr) ChpeAutoZwCreateProcess
+1545 stdcall ZwCreateProcessEx(ptr long ptr ptr long ptr ptr ptr long) ChpeAutoZwCreateProcessEx
+1546 stdcall ZwCreateProfile(ptr ptr ptr long long ptr long long long) ChpeAutoZwCreateProfile
+1547 stdcall -version=0x600+ ZwCreateResourceManager(ptr long ptr ptr ptr long ptr) ChpeAutoZwCreateResourceManager
+1548 stdcall ZwCreateSection(ptr long ptr ptr long long long) ChpeAutoZwCreateSection
+1549 stdcall ZwCreateSemaphore(ptr long ptr long long) ChpeAutoZwCreateSemaphore
+1550 stdcall ZwCreateSymbolicLinkObject(ptr long ptr ptr) ChpeAutoZwCreateSymbolicLinkObject
+1551 stdcall ZwCreateThread(ptr long ptr ptr ptr ptr ptr long) ChpeAutoZwCreateThread
+1552 stdcall -version=0x600+ ZwCreateThreadEx(ptr long ptr ptr ptr ptr long long long long ptr) ChpeAutoZwCreateThreadEx
+1553 stdcall ZwCreateTimer(ptr long ptr long) ChpeAutoZwCreateTimer
+1554 stdcall ZwCreateTimer2(ptr ptr ptr long long) ChpeAutoZwCreateTimer2
+1555 stdcall ZwCreateToken(ptr long ptr long ptr ptr ptr ptr ptr ptr ptr ptr ptr) ChpeAutoZwCreateToken
+1556 stdcall -version=0x600+ ZwCreateTransaction(ptr long ptr ptr ptr long long long ptr ptr) ChpeAutoZwCreateTransaction
+1557 stdcall -version=0x600+ ZwCreateTransactionManager(ptr long ptr ptr long long) ChpeAutoZwCreateTransactionManager
+1558 stdcall -version=0x600+ ZwCreateUserProcess(ptr ptr long long ptr ptr long long ptr ptr ptr) ChpeAutoZwCreateUserProcess
+1559 stdcall ZwCreateWaitablePort(ptr ptr long long long) ChpeAutoZwCreateWaitablePort
+1560 stdcall -version=0x602+ ZwCreateWnfStateName(ptr long long long ptr long ptr) ChpeAutoZwCreateWnfStateName
+1561 stdcall -version=0x600+ ZwCreateWorkerFactory(ptr long ptr ptr ptr ptr ptr long long long) ChpeStubZwCreateWorkerFactory
+1562 stdcall ZwDebugActiveProcess(ptr ptr) ChpeAutoZwDebugActiveProcess
+1563 stdcall ZwDebugContinue(ptr ptr long) ChpeAutoZwDebugContinue
+1564 stdcall ZwDelayExecution(long ptr) ChpeAutoZwDelayExecution
+1565 stdcall ZwDeleteAtom(long) ChpeAutoZwDeleteAtom
+1566 stdcall ZwDeleteBootEntry(long) ChpeAutoZwDeleteBootEntry
+1567 stdcall ZwDeleteDriverEntry(long) ChpeAutoZwDeleteDriverEntry
+1568 stdcall ZwDeleteFile(ptr) ChpeAutoZwDeleteFile
+1569 stdcall ZwDeleteKey(long) ChpeAutoZwDeleteKey
+1570 stdcall ZwDeleteObjectAuditAlarm(ptr ptr long) ChpeAutoZwDeleteObjectAuditAlarm
+1571 stdcall -version=0x600+ ZwDeletePrivateNamespace(ptr) ChpeAutoZwDeletePrivateNamespace
+1572 stdcall ZwDeleteValueKey(long ptr) ChpeAutoZwDeleteValueKey
+1573 stdcall -version=0x602+ ZwDeleteWnfStateData(ptr ptr) ChpeAutoZwDeleteWnfStateData
+1574 stdcall -version=0x602+ ZwDeleteWnfStateName(ptr) ChpeAutoZwDeleteWnfStateName
+1575 stdcall ZwDeviceIoControlFile(long long long long long long long long long long) ChpeAutoZwDeviceIoControlFile
+1576 stdcall ZwDisplayString(ptr) ChpeAutoZwDisplayString
+1577 stdcall ZwDuplicateObject(long long long ptr long long long) ChpeAutoZwDuplicateObject
+1578 stdcall ZwDuplicateToken(long long long long long long) ChpeAutoZwDuplicateToken
+1579 stdcall ZwEnumerateBootEntries(ptr ptr) ChpeAutoZwEnumerateBootEntries
+1580 stdcall ZwEnumerateDriverEntries(ptr ptr) ChpeAutoZwEnumerateDriverEntries
+1581 stdcall ZwEnumerateKey(long long long ptr long ptr) ChpeAutoZwEnumerateKey
+1582 stdcall ZwEnumerateSystemEnvironmentValuesEx(long ptr long) ChpeAutoZwEnumerateSystemEnvironmentValuesEx
+1583 stdcall -version=0x600+ ZwEnumerateTransactionObject(ptr long ptr long ptr) ChpeAutoZwEnumerateTransactionObject
+1584 stdcall ZwEnumerateValueKey(long long long ptr long ptr) ChpeAutoZwEnumerateValueKey
+1585 stdcall ZwExtendSection(ptr ptr) ChpeAutoZwExtendSection
+1586 stdcall ZwFilterToken(ptr long ptr ptr ptr ptr) ChpeAutoZwFilterToken
+1587 stdcall -version=0x602+ ZwCreateLowBoxToken(ptr ptr long ptr ptr long ptr long ptr) ChpeAutoZwCreateLowBoxToken
+1588 stdcall -version=0x600+ ZwCreatePrivateNamespace(ptr long ptr ptr) ChpeAutoZwCreatePrivateNamespace
+1589 stdcall ZwFindAtom(ptr long ptr) ChpeAutoZwFindAtom
+1590 stdcall ZwFlushBuffersFile(long ptr) ChpeAutoZwFlushBuffersFile
+1591 stdcall ZwFlushBuffersFileEx(long long ptr long ptr) ChpeAutoZwFlushBuffersFileEx
+1592 stdcall -version=0x600+ ZwFlushInstallUILanguage(long long) ChpeStubZwFlushInstallUILanguage
+1593 stdcall ZwFlushInstructionCache(long ptr long) ChpeAutoZwFlushInstructionCache
+1594 stdcall ZwFlushKey(long) ChpeAutoZwFlushKey
+1595 stdcall -version=0x600+ ZwFlushProcessWriteBuffers() ChpeAutoZwFlushProcessWriteBuffers
+1596 stdcall ZwFlushVirtualMemory(ptr ptr ptr ptr) ChpeAutoZwFlushVirtualMemory
+1597 stdcall ZwFlushWriteBuffer() ChpeAutoZwFlushWriteBuffer
+1598 stdcall ZwFreeUserPhysicalPages(ptr ptr ptr) ChpeAutoZwFreeUserPhysicalPages
+1599 stdcall ZwFreeVirtualMemory(long ptr ptr long) ChpeAutoZwFreeVirtualMemory
+1600 stdcall -version=0x600+ ZwFreezeRegistry(long) ChpeStubZwFreezeRegistry
+1601 stdcall -version=0x600+ ZwFreezeTransactions(ptr ptr) ChpeStubZwFreezeTransactions
+1602 stdcall ZwFsControlFile(long long long long long long long long long long) ChpeAutoZwFsControlFile
+1603 stdcall ZwGetContextThread(long ptr) ChpeAutoZwGetContextThread
+1604 stdcall ZwGetCurrentProcessorNumber() ChpeAutoZwGetCurrentProcessorNumber
+1605 stdcall -version=0xA00+ ZwGetCurrentProcessorNumberEx(ptr) ChpeAutoZwGetCurrentProcessorNumberEx
+1606 stdcall ZwGetDevicePowerState(ptr ptr) ChpeAutoZwGetDevicePowerState
+1607 stdcall -version=0x600+ ZwGetMUIRegistryInfo(long ptr ptr) ChpeStubZwGetMUIRegistryInfo
+1608 stdcall -version=0x600+ ZwGetNextProcess(ptr long long long ptr) ChpeStubZwGetNextProcess
+1609 stdcall -version=0x600+ ZwGetNextThread(ptr ptr long long long ptr) ChpeAutoZwGetNextThread
+1610 stdcall -version=0x600+ ZwGetNlsSectionPtr(long long ptr ptr ptr) ChpeAutoZwGetNlsSectionPtr
+1611 stdcall -version=0x600+ ZwGetNotificationResourceManager(ptr ptr long ptr ptr long ptr) ChpeAutoZwGetNotificationResourceManager
+1612 stdcall ZwGetPlugPlayEvent(long long ptr long) ChpeAutoZwGetPlugPlayEvent
+1613 stdcall ZwGetWriteWatch(long long ptr long ptr ptr ptr) ChpeAutoZwGetWriteWatch
+1614 stdcall ZwImpersonateAnonymousToken(ptr) ChpeAutoZwImpersonateAnonymousToken
+1615 stdcall ZwImpersonateClientOfPort(ptr ptr) ChpeAutoZwImpersonateClientOfPort
+1616 stdcall ZwImpersonateThread(ptr ptr ptr) ChpeAutoZwImpersonateThread
+1617 stdcall -version=0x600+ ZwInitializeNlsFiles(ptr ptr ptr ptr) ChpeStubZwInitializeNlsFiles
+1618 stdcall ZwInitializeRegistry(long) ChpeAutoZwInitializeRegistry
+1619 stdcall ZwInitiatePowerAction(long long long long) ChpeAutoZwInitiatePowerAction
+1620 stdcall ZwIsProcessInJob(long long) ChpeAutoZwIsProcessInJob
+1621 stdcall ZwIsSystemResumeAutomatic() ChpeAutoZwIsSystemResumeAutomatic
+1622 stdcall -version=0x600+ ZwIsUILanguageComitted() ChpeStubZwIsUILanguageComitted
+1623 stdcall ZwListenPort(ptr ptr) ChpeAutoZwListenPort
+1624 stdcall ZwLoadDriver(ptr) ChpeAutoZwLoadDriver
+1625 stdcall ZwLoadKey2(ptr ptr long) ChpeAutoZwLoadKey2
+1626 stdcall ZwLoadKey(ptr ptr) ChpeAutoZwLoadKey
+1627 stdcall ZwLoadKeyEx(ptr ptr long ptr ptr long ptr ptr) ChpeAutoZwLoadKeyEx
+1628 stdcall ZwLockFile(long long ptr ptr ptr ptr ptr ptr long long) ChpeAutoZwLockFile
+1629 stdcall ZwLockProductActivationKeys(ptr ptr) ChpeAutoZwLockProductActivationKeys
+1630 stdcall ZwLockRegistryKey(ptr) ChpeAutoZwLockRegistryKey
+1631 stdcall ZwLockVirtualMemory(long ptr ptr long) ChpeAutoZwLockVirtualMemory
+1632 stdcall ZwMakePermanentObject(ptr) ChpeAutoZwMakePermanentObject
+1633 stdcall ZwMakeTemporaryObject(long) ChpeAutoZwMakeTemporaryObject
+1634 stdcall -version=0x600+ ZwMapCMFModule(long long ptr ptr ptr) ChpeStubZwMapCMFModule
+1635 stdcall ZwMapUserPhysicalPages(ptr ptr ptr) ChpeAutoZwMapUserPhysicalPages
+1636 stdcall ZwMapUserPhysicalPagesScatter(ptr ptr ptr) ChpeAutoZwMapUserPhysicalPagesScatter
+1637 stdcall ZwMapViewOfSection(long long ptr long long ptr ptr long long long) ChpeAutoZwMapViewOfSection
+1638 stdcall ZwModifyBootEntry(ptr) ChpeAutoZwModifyBootEntry
+1639 stdcall ZwModifyDriverEntry(ptr) ChpeAutoZwModifyDriverEntry
+1640 stdcall ZwNotifyChangeDirectoryFile(long long ptr ptr ptr ptr long long long) ChpeAutoZwNotifyChangeDirectoryFile
+1641 stdcall ZwNotifyChangeDirectoryFileEx(long long ptr ptr ptr ptr long long long long) ChpeAutoZwNotifyChangeDirectoryFileEx
+1642 stdcall ZwNotifyChangeKey(long long ptr ptr ptr long long ptr long long) ChpeAutoZwNotifyChangeKey
+1643 stdcall ZwNotifyChangeMultipleKeys(ptr long ptr ptr ptr ptr ptr long long ptr long long) ChpeAutoZwNotifyChangeMultipleKeys
+1644 stdcall ZwOpenDirectoryObject(long long long) ChpeAutoZwOpenDirectoryObject
+1645 stdcall -version=0x600+ ZwOpenEnlistment(ptr long ptr ptr ptr) ChpeAutoZwOpenEnlistment
+1646 stdcall ZwOpenEvent(long long long) ChpeAutoZwOpenEvent
+1647 stdcall ZwOpenEventPair(ptr long ptr) ChpeAutoZwOpenEventPair
+1648 stdcall ZwOpenFile(ptr long ptr ptr long long) ChpeAutoZwOpenFile
+1649 stdcall ZwOpenIoCompletion(ptr long ptr) ChpeAutoZwOpenIoCompletion
+1650 stdcall ZwOpenJobObject(ptr long ptr) ChpeAutoZwOpenJobObject
+1651 stdcall ZwOpenKey(ptr long ptr) ChpeAutoZwOpenKey
+1652 stdcall ZwOpenKeyEx(ptr long ptr long) ChpeAutoZwOpenKeyEx
+1653 stdcall -version=0x600+ ZwOpenKeyTransacted(ptr long ptr ptr) ChpeAutoZwOpenKeyTransacted
+1654 stdcall ZwOpenKeyedEvent(ptr long ptr) ChpeAutoZwOpenKeyedEvent
+1655 stdcall ZwOpenMutant(ptr long ptr) ChpeAutoZwOpenMutant
+1656 stdcall ZwOpenObjectAuditAlarm(ptr ptr ptr ptr ptr ptr long long ptr long long ptr) ChpeAutoZwOpenObjectAuditAlarm
+1657 stdcall -version=0x600+ ZwOpenPrivateNamespace(ptr long ptr ptr) ChpeAutoZwOpenPrivateNamespace
+1658 stdcall ZwOpenProcess(ptr long ptr ptr) ChpeAutoZwOpenProcess
+1659 stdcall ZwOpenProcessToken(long long ptr) ChpeAutoZwOpenProcessToken
+1660 stdcall ZwOpenProcessTokenEx(long long long ptr) ChpeAutoZwOpenProcessTokenEx
+1661 stdcall -version=0x600+ ZwOpenResourceManager(ptr long ptr ptr ptr) ChpeAutoZwOpenResourceManager
+1662 stdcall ZwOpenSection(ptr long ptr) ChpeAutoZwOpenSection
+1663 stdcall ZwOpenSemaphore(long long ptr) ChpeAutoZwOpenSemaphore
+1664 stdcall -version=0x600+ ZwOpenSession(ptr long ptr) ChpeStubZwOpenSession
+1665 stdcall ZwOpenSymbolicLinkObject(ptr long ptr) ChpeAutoZwOpenSymbolicLinkObject
+1666 stdcall ZwOpenThread(ptr long ptr ptr) ChpeAutoZwOpenThread
+1667 stdcall ZwOpenThreadToken(long long long ptr) ChpeAutoZwOpenThreadToken
+1668 stdcall ZwOpenThreadTokenEx(long long long long ptr) ChpeAutoZwOpenThreadTokenEx
+1669 stdcall ZwOpenTimer(ptr long ptr) ChpeAutoZwOpenTimer
+1670 stdcall -version=0x600+ ZwOpenTransaction(ptr long ptr ptr ptr) ChpeAutoZwOpenTransaction
+1671 stdcall -version=0x600+ ZwOpenTransactionManager(ptr long ptr ptr ptr long) ChpeAutoZwOpenTransactionManager
+1672 stdcall ZwPlugPlayControl(ptr ptr long) ChpeAutoZwPlugPlayControl
+1673 stdcall ZwPowerInformation(long ptr long ptr long) ChpeAutoZwPowerInformation
+1674 stdcall -version=0x600+ ZwPrePrepareComplete(ptr ptr) ChpeAutoZwPrePrepareComplete
+1675 stdcall -version=0x600+ ZwPrePrepareEnlistment(ptr ptr) ChpeAutoZwPrePrepareEnlistment
+1676 stdcall -version=0x600+ ZwPrepareComplete(ptr ptr) ChpeAutoZwPrepareComplete
+1677 stdcall -version=0x600+ ZwPrepareEnlistment(ptr ptr) ChpeAutoZwPrepareEnlistment
+1678 stdcall ZwPrivilegeCheck(ptr ptr ptr) ChpeAutoZwPrivilegeCheck
+1679 stdcall ZwPrivilegeObjectAuditAlarm(ptr ptr ptr long ptr long) ChpeAutoZwPrivilegeObjectAuditAlarm
+1680 stdcall ZwPrivilegedServiceAuditAlarm(ptr ptr ptr ptr long) ChpeAutoZwPrivilegedServiceAuditAlarm
+1681 stdcall -version=0x600+ ZwPropagationComplete(ptr long long ptr) ChpeAutoZwPropagationComplete
+1682 stdcall -version=0x600+ ZwPropagationFailed(ptr long long) ChpeAutoZwPropagationFailed
+1683 stdcall ZwProtectVirtualMemory(long ptr ptr long ptr) ChpeAutoZwProtectVirtualMemory
+1684 stdcall ZwPulseEvent(long ptr) ChpeAutoZwPulseEvent
+1685 stdcall ZwQueryAttributesFile(ptr ptr) ChpeAutoZwQueryAttributesFile
+1686 stdcall ZwQueryBootEntryOrder(ptr ptr) ChpeAutoZwQueryBootEntryOrder
+1687 stdcall ZwQueryBootOptions(ptr ptr) ChpeAutoZwQueryBootOptions
+1688 stdcall ZwQueryDebugFilterState(long long) ChpeAutoZwQueryDebugFilterState
+1689 stdcall ZwQueryDefaultLocale(long ptr) ChpeAutoZwQueryDefaultLocale
+1690 stdcall ZwQueryDefaultUILanguage(ptr) ChpeAutoZwQueryDefaultUILanguage
+1691 stdcall ZwQueryDirectoryFile(long long ptr ptr ptr ptr long long long ptr long) ChpeAutoZwQueryDirectoryFile
+1692 stdcall ZwQueryDirectoryFileEx(long long ptr ptr ptr ptr long long long ptr) ChpeAutoZwQueryDirectoryFileEx
+1693 stdcall ZwQueryDirectoryObject(long ptr long long long ptr ptr) ChpeAutoZwQueryDirectoryObject
+1694 stdcall ZwQueryDriverEntryOrder(ptr ptr) ChpeAutoZwQueryDriverEntryOrder
+1695 stdcall ZwQueryEaFile(long ptr ptr long long ptr long ptr long) ChpeAutoZwQueryEaFile
+1696 stdcall ZwQueryEvent(long long ptr long ptr) ChpeAutoZwQueryEvent
+1697 stdcall ZwQueryFullAttributesFile(ptr ptr) ChpeAutoZwQueryFullAttributesFile
+1698 stdcall ZwQueryInformationAtom(long long ptr long ptr) ChpeAutoZwQueryInformationAtom
+1699 stdcall ZwQueryInformationByName(ptr ptr ptr long long) ChpeAutoZwQueryInformationByName
+1700 stdcall -version=0x600+ ZwQueryInformationEnlistment(ptr long ptr long ptr) ChpeAutoZwQueryInformationEnlistment
+1701 stdcall ZwQueryInformationFile(long ptr ptr long long) ChpeAutoZwQueryInformationFile
+1702 stdcall ZwQueryInformationJobObject(long long ptr long ptr) ChpeAutoZwQueryInformationJobObject
+1703 stdcall ZwQueryInformationPort(ptr long ptr long ptr) ChpeAutoZwQueryInformationPort
+1704 stdcall ZwQueryInformationProcess(long long ptr long ptr) ChpeAutoZwQueryInformationProcess
+1705 stdcall -version=0x600+ ZwQueryInformationResourceManager(ptr long ptr long ptr) ChpeAutoZwQueryInformationResourceManager
+1706 stdcall ZwQueryInformationThread(long long ptr long ptr) ChpeAutoZwQueryInformationThread
+1707 stdcall ZwQueryInformationToken(long long ptr long ptr) ChpeAutoZwQueryInformationToken
+1708 stdcall -version=0x600+ ZwQueryInformationTransaction(ptr long ptr long ptr) ChpeAutoZwQueryInformationTransaction
+1709 stdcall -version=0x600+ ZwQueryInformationTransactionManager(ptr long ptr long ptr) ChpeAutoZwQueryInformationTransactionManager
+1710 stdcall -version=0x600+ ZwQueryInformationWorkerFactory(ptr long ptr long ptr) ChpeStubZwQueryInformationWorkerFactory
+1711 stdcall ZwQueryInstallUILanguage(ptr) ChpeAutoZwQueryInstallUILanguage
+1712 stdcall ZwQueryIntervalProfile(long ptr) ChpeAutoZwQueryIntervalProfile
+1713 stdcall ZwQueryIoCompletion(long long ptr long ptr) ChpeAutoZwQueryIoCompletion
+1714 stdcall ZwQueryKey(long long ptr long ptr) ChpeAutoZwQueryKey
+1715 stdcall -version=0x600+ ZwQueryLicenseValue(ptr ptr ptr long ptr) ChpeAutoZwQueryLicenseValue
+1716 stdcall ZwQueryMultipleValueKey(long ptr long ptr long ptr) ChpeAutoZwQueryMultipleValueKey
+1717 stdcall ZwQueryMutant(long long ptr long ptr) ChpeAutoZwQueryMutant
+1718 stdcall ZwQueryObject(long long long long long) ChpeAutoZwQueryObject
+1719 stdcall ZwQueryOpenSubKeys(ptr ptr) ChpeAutoZwQueryOpenSubKeys
+1720 stdcall ZwQueryOpenSubKeysEx(ptr long ptr ptr) ChpeAutoZwQueryOpenSubKeysEx
+1721 stdcall ZwQueryPerformanceCounter(long long) ChpeAutoZwQueryPerformanceCounter
+1722 stdcall ZwQueryPortInformationProcess() ChpeAutoZwQueryPortInformationProcess
+1723 stdcall ZwQueryQuotaInformationFile(ptr ptr ptr long long ptr long ptr long) ChpeAutoZwQueryQuotaInformationFile
+1724 stdcall ZwQuerySection(long long long long long) ChpeAutoZwQuerySection
+1725 stdcall ZwQuerySecurityObject(long long long long long) ChpeAutoZwQuerySecurityObject
+1726 stdcall ZwQuerySemaphore(long long long long long) ChpeAutoZwQuerySemaphore
+1727 stdcall ZwQuerySymbolicLinkObject(long ptr ptr) ChpeAutoZwQuerySymbolicLinkObject
+1728 stdcall ZwQuerySystemEnvironmentValue(ptr ptr long ptr) ChpeAutoZwQuerySystemEnvironmentValue
+1729 stdcall ZwQuerySystemEnvironmentValueEx(ptr ptr ptr ptr ptr) ChpeAutoZwQuerySystemEnvironmentValueEx
+1730 stdcall ZwQuerySystemInformation(long long long long) ChpeAutoZwQuerySystemInformation
+1731 stdcall -version=0x601+ ZwQuerySystemInformationEx(long ptr long ptr long ptr) ChpeAutoZwQuerySystemInformationEx
+1732 stdcall ZwQuerySystemTime(ptr) ChpeAutoZwQuerySystemTime
+1733 stdcall ZwQueryTimer(ptr long ptr long ptr) ChpeAutoZwQueryTimer
+1734 stdcall ZwQueryTimerResolution(long long long) ChpeAutoZwQueryTimerResolution
+1735 stdcall ZwQueryValueKey(long ptr long ptr long ptr) ChpeAutoZwQueryValueKey
+1736 stdcall ZwQueryVirtualMemory(long ptr long ptr long ptr) ChpeAutoZwQueryVirtualMemory
+1737 stdcall ZwQueryVolumeInformationFile(long ptr ptr long long) ChpeAutoZwQueryVolumeInformationFile
+1738 stdcall -version=0x602+ ZwQueryWnfStateData(ptr ptr ptr ptr ptr ptr) ChpeAutoZwQueryWnfStateData
+1739 stdcall -version=0x602+ ZwQueryWnfStateNameInformation(ptr long ptr ptr long) ChpeAutoZwQueryWnfStateNameInformation
+1740 stdcall ZwQueueApcThread(long ptr long long long) ChpeAutoZwQueueApcThread
+1741 stdcall ZwRaiseException(ptr ptr long) ChpeAutoZwRaiseException
+1742 stdcall ZwRaiseHardError(long long long ptr long ptr) ChpeAutoZwRaiseHardError
+1743 stdcall ZwReadFile(long long ptr ptr ptr ptr long ptr ptr) ChpeAutoZwReadFile
+1744 stdcall ZwReadFileScatter(long long ptr ptr ptr ptr long ptr ptr) ChpeAutoZwReadFileScatter
+1745 stdcall -version=0x600+ ZwReadOnlyEnlistment(ptr ptr) ChpeAutoZwReadOnlyEnlistment
+1746 stdcall ZwReadRequestData(ptr ptr long ptr long ptr) ChpeAutoZwReadRequestData
+1747 stdcall ZwReadVirtualMemory(long ptr ptr long ptr) ChpeAutoZwReadVirtualMemory
+1748 stdcall -version=0x600+ ZwRecoverEnlistment(ptr ptr) ChpeAutoZwRecoverEnlistment
+1749 stdcall -version=0x600+ ZwRecoverResourceManager(ptr) ChpeAutoZwRecoverResourceManager
+1750 stdcall -version=0x600+ ZwRecoverTransactionManager(ptr) ChpeAutoZwRecoverTransactionManager
+1751 stdcall -version=0x600+ ZwRegisterProtocolAddressInformation(ptr ptr long ptr long) ChpeAutoZwRegisterProtocolAddressInformation
+1752 stdcall ZwRegisterThreadTerminatePort(ptr) ChpeAutoZwRegisterThreadTerminatePort
+1753 stdcall -version=0x600+ ZwReleaseCMFViewOwnership() ChpeStubZwReleaseCMFViewOwnership
+1754 stdcall ZwReleaseKeyedEvent(ptr ptr long ptr) ChpeAutoZwReleaseKeyedEvent
+1755 stdcall ZwReleaseMutant(long ptr) ChpeAutoZwReleaseMutant
+1756 stdcall ZwReleaseSemaphore(long long ptr) ChpeAutoZwReleaseSemaphore
+1757 stdcall -version=0x600+ ZwReleaseWorkerFactoryWorker(ptr) ChpeStubZwReleaseWorkerFactoryWorker
+1758 stdcall ZwRemoveIoCompletion(ptr ptr ptr ptr ptr) ChpeAutoZwRemoveIoCompletion
+1759 stdcall -version=0x600+ ZwRemoveIoCompletionEx(ptr ptr long ptr ptr long) ChpeAutoZwRemoveIoCompletionEx
+1760 stdcall ZwRemoveProcessDebug(ptr ptr) ChpeAutoZwRemoveProcessDebug
+1761 stdcall ZwRenameKey(ptr ptr) ChpeAutoZwRenameKey
+1762 stdcall -version=0x600+ ZwRenameTransactionManager(ptr ptr) ChpeAutoZwRenameTransactionManager
+1763 stdcall ZwReplaceKey(ptr long ptr) ChpeAutoZwReplaceKey
+1764 stdcall -version=0x600+ ZwReplacePartitionUnit(wstr wstr long) ChpeStubZwReplacePartitionUnit
+1765 stdcall ZwReplyPort(ptr ptr) ChpeAutoZwReplyPort
+1766 stdcall ZwReplyWaitReceivePort(ptr ptr ptr ptr) ChpeAutoZwReplyWaitReceivePort
+1767 stdcall ZwReplyWaitReceivePortEx(ptr ptr ptr ptr ptr) ChpeAutoZwReplyWaitReceivePortEx
+1768 stdcall ZwReplyWaitReplyPort(ptr ptr) ChpeAutoZwReplyWaitReplyPort
+1769 stdcall ZwRequestDeviceWakeup(ptr) ChpeAutoZwRequestDeviceWakeup
+1770 stdcall ZwRequestPort(ptr ptr) ChpeAutoZwRequestPort
+1771 stdcall ZwRequestWaitReplyPort(ptr ptr ptr) ChpeAutoZwRequestWaitReplyPort
+1772 stdcall ZwRequestWakeupLatency(long) ChpeAutoZwRequestWakeupLatency
+1773 stdcall ZwResetEvent(long ptr) ChpeAutoZwResetEvent
+1774 stdcall ZwResetWriteWatch(long ptr long) ChpeAutoZwResetWriteWatch
+1775 stdcall ZwRestoreKey(long long long) ChpeAutoZwRestoreKey
+1776 stdcall ZwResumeProcess(ptr) ChpeAutoZwResumeProcess
+1777 stdcall ZwResumeThread(long long) ChpeAutoZwResumeThread
+1778 stdcall -version=0x600+ ZwRollbackComplete(ptr ptr) ChpeAutoZwRollbackComplete
+1779 stdcall -version=0x600+ ZwRollbackEnlistment(ptr ptr) ChpeAutoZwRollbackEnlistment
+1780 stdcall -version=0x600+ ZwRollbackTransaction(ptr long) ChpeAutoZwRollbackTransaction
+1781 stdcall -version=0x600+ ZwRollforwardTransactionManager(ptr ptr) ChpeAutoZwRollforwardTransactionManager
+1782 stdcall ZwSaveKey(long long) ChpeAutoZwSaveKey
+1783 stdcall ZwSaveKeyEx(ptr ptr long) ChpeAutoZwSaveKeyEx
+1784 stdcall ZwSaveMergedKeys(ptr ptr ptr) ChpeAutoZwSaveMergedKeys
+1785 stdcall ZwSecureConnectPort(ptr ptr ptr ptr ptr ptr ptr ptr ptr) ChpeAutoZwSecureConnectPort
+1786 stdcall ZwSetBootEntryOrder(ptr ptr) ChpeAutoZwSetBootEntryOrder
+1787 stdcall ZwSetBootOptions(ptr long) ChpeAutoZwSetBootOptions
+1788 stdcall ZwSetContextThread(long ptr) ChpeAutoZwSetContextThread
+1789 stdcall ZwSetDebugFilterState(long long long) ChpeAutoZwSetDebugFilterState
+1790 stdcall ZwSetDefaultHardErrorPort(ptr) ChpeAutoZwSetDefaultHardErrorPort
+1791 stdcall ZwSetDefaultLocale(long long) ChpeAutoZwSetDefaultLocale
+1792 stdcall ZwSetDefaultUILanguage(long) ChpeAutoZwSetDefaultUILanguage
+1793 stdcall ZwSetDriverEntryOrder(ptr ptr) ChpeAutoZwSetDriverEntryOrder
+1794 stdcall ZwSetEaFile(long ptr ptr long) ChpeAutoZwSetEaFile
+1795 stdcall ZwSetEvent(long long) ChpeAutoZwSetEvent
+1796 stdcall ZwSetEventBoostPriority(ptr) ChpeAutoZwSetEventBoostPriority
+1797 stdcall ZwSetHighEventPair(ptr) ChpeAutoZwSetHighEventPair
+1798 stdcall ZwSetHighWaitLowEventPair(ptr) ChpeAutoZwSetHighWaitLowEventPair
+1799 stdcall ZwSetInformationDebugObject(ptr long ptr long ptr) ChpeAutoZwSetInformationDebugObject
+1800 stdcall -version=0x600+ ZwSetInformationEnlistment(ptr long ptr long) ChpeAutoZwSetInformationEnlistment
+1801 stdcall ZwSetInformationFile(long long long long long) ChpeAutoZwSetInformationFile
+1802 stdcall ZwSetInformationJobObject(long long ptr long) ChpeAutoZwSetInformationJobObject
+1803 stdcall ZwSetInformationKey(long long ptr long) ChpeAutoZwSetInformationKey
+1804 stdcall ZwSetInformationObject(long long ptr long) ChpeAutoZwSetInformationObject
+1805 stdcall ZwSetInformationProcess(long long long long) ChpeAutoZwSetInformationProcess
+1806 stdcall -version=0x600+ ZwSetInformationResourceManager(ptr long ptr long) ChpeAutoZwSetInformationResourceManager
+1807 stdcall ZwSetInformationThread(long long ptr long) ChpeAutoZwSetInformationThread
+1808 stdcall ZwSetInformationToken(long long ptr long) ChpeAutoZwSetInformationToken
+1809 stdcall -version=0x600+ ZwSetInformationTransaction(ptr long ptr long) ChpeAutoZwSetInformationTransaction
+1810 stdcall -version=0x600+ ZwSetInformationTransactionManager(ptr long ptr long) ChpeAutoZwSetInformationTransactionManager
+1811 stdcall ZwSetInformationVirtualMemory(ptr long ptr ptr ptr long) ChpeAutoZwSetInformationVirtualMemory
+1812 stdcall -version=0x600+ ZwSetInformationWorkerFactory(ptr long ptr long) ChpeStubZwSetInformationWorkerFactory
+1813 stdcall ZwSetIntervalProfile(long long) ChpeAutoZwSetIntervalProfile
+1814 stdcall ZwSetIoCompletion(ptr long ptr long long) ChpeAutoZwSetIoCompletion
+1815 stdcall ZwSetLdtEntries(long int64 long int64) ChpeAutoZwSetLdtEntries
+1816 stdcall ZwSetLowEventPair(ptr) ChpeAutoZwSetLowEventPair
+1817 stdcall ZwSetLowWaitHighEventPair(ptr) ChpeAutoZwSetLowWaitHighEventPair
+1818 stdcall ZwSetQuotaInformationFile(ptr ptr ptr long) ChpeAutoZwSetQuotaInformationFile
+1819 stdcall ZwSetSecurityObject(long long ptr) ChpeAutoZwSetSecurityObject
+1820 stdcall ZwSetSystemEnvironmentValue(ptr ptr) ChpeAutoZwSetSystemEnvironmentValue
+1821 stdcall ZwSetSystemEnvironmentValueEx(ptr ptr ptr ptr ptr) ChpeAutoZwSetSystemEnvironmentValueEx
+1822 stdcall ZwSetSystemInformation(long ptr long) ChpeAutoZwSetSystemInformation
+1823 stdcall ZwSetSystemPowerState(long long long) ChpeAutoZwSetSystemPowerState
+1824 stdcall ZwSetSystemTime(ptr ptr) ChpeAutoZwSetSystemTime
+1825 stdcall ZwSetThreadExecutionState(long ptr) ChpeAutoZwSetThreadExecutionState
+1826 stdcall ZwSetTimer(long ptr ptr ptr long long ptr) ChpeAutoZwSetTimer
+1827 stdcall ZwSetTimerResolution(long long ptr) ChpeAutoZwSetTimerResolution
+1828 stdcall ZwSetUuidSeed(ptr) ChpeAutoZwSetUuidSeed
+1829 stdcall ZwSetValueKey(long long long long long long) ChpeAutoZwSetValueKey
+1830 stdcall ZwSetVolumeInformationFile(long ptr ptr long long) ChpeAutoZwSetVolumeInformationFile
+1831 stdcall ZwShutdownSystem(long) ChpeAutoZwShutdownSystem
+1832 stdcall -version=0x600+ ZwShutdownWorkerFactory(ptr ptr) ChpeStubZwShutdownWorkerFactory
+1833 stdcall ZwSignalAndWaitForSingleObject(long long long ptr) ChpeAutoZwSignalAndWaitForSingleObject
+1834 stdcall -version=0x600+ ZwSinglePhaseReject(ptr ptr) ChpeAutoZwSinglePhaseReject
+1835 stdcall ZwStartProfile(ptr) ChpeAutoZwStartProfile
+1836 stdcall ZwStopProfile(ptr) ChpeAutoZwStopProfile
+1837 stdcall -version=0x602+ ZwSubscribeWnfStateChange(ptr long long ptr) ChpeAutoZwSubscribeWnfStateChange
+1838 stdcall ZwSuspendProcess(ptr) ChpeAutoZwSuspendProcess
+1839 stdcall ZwSuspendThread(long ptr) ChpeAutoZwSuspendThread
+1840 stdcall ZwSystemDebugControl(long ptr long ptr long ptr) ChpeAutoZwSystemDebugControl
+1841 stdcall ZwTerminateJobObject(ptr long) ChpeAutoZwTerminateJobObject
+1842 stdcall ZwTerminateProcess(ptr long) ChpeAutoZwTerminateProcess
+1843 stdcall ZwTerminateThread(ptr long) ChpeAutoZwTerminateThread
+1844 stdcall ZwTestAlert() ChpeAutoZwTestAlert
+1845 stdcall -version=0x600+ ZwThawRegistry() ChpeStubZwThawRegistry
+1846 stdcall -version=0x600+ ZwThawTransactions() ChpeStubZwThawTransactions
+1847 stdcall -version=0x600+ ZwTraceControl(long ptr long ptr long ptr) ChpeAutoZwTraceControl
+1848 stdcall ZwTraceEvent(ptr long long ptr) ChpeAutoZwTraceEvent
+1849 stdcall ZwTranslateFilePath(ptr long ptr long) ChpeAutoZwTranslateFilePath
+1850 stdcall ZwUnloadDriver(ptr) ChpeAutoZwUnloadDriver
+1851 stdcall ZwUnloadKey2(ptr long) ChpeAutoZwUnloadKey2
+1852 stdcall ZwUnloadKey(long) ChpeAutoZwUnloadKey
+1853 stdcall ZwUnloadKeyEx(ptr ptr) ChpeAutoZwUnloadKeyEx
+1854 stdcall ZwUnlockFile(long ptr ptr ptr ptr) ChpeAutoZwUnlockFile
+1855 stdcall ZwUnlockVirtualMemory(long ptr ptr long) ChpeAutoZwUnlockVirtualMemory
+1856 stdcall ZwUnmapViewOfSection(long ptr) ChpeAutoZwUnmapViewOfSection
+1857 stdcall -version=0x602+ ZwUnsubscribeWnfStateChange(ptr) ChpeAutoZwUnsubscribeWnfStateChange
+1858 stdcall -version=0x602+ ZwUpdateWnfStateData(ptr ptr long ptr ptr long long) ChpeAutoZwUpdateWnfStateData
+1859 stdcall ZwVdmControl(long ptr) ChpeAutoZwVdmControl
+1860 stdcall ZwWaitForDebugEvent(ptr long ptr ptr) ChpeAutoZwWaitForDebugEvent
+1861 stdcall ZwWaitForKeyedEvent(ptr ptr long ptr) ChpeAutoZwWaitForKeyedEvent
+1862 stdcall ZwWaitForAlertByThreadId(ptr ptr) ChpeAutoZwWaitForAlertByThreadId
+1863 stdcall ZwWaitForMultipleObjects32(long ptr long long ptr) ChpeAutoZwWaitForMultipleObjects32
+1864 stdcall ZwWaitForMultipleObjects(long ptr long long ptr) ChpeAutoZwWaitForMultipleObjects
+1865 stdcall ZwWaitForSingleObject(long long long) ChpeAutoZwWaitForSingleObject
+1866 stdcall -version=0x600+ ZwWaitForWorkViaWorkerFactory(ptr ptr long ptr ptr) ChpeStubZwWaitForWorkViaWorkerFactory
+1867 stdcall ZwWaitHighEventPair(ptr) ChpeAutoZwWaitHighEventPair
+1868 stdcall ZwWaitLowEventPair(ptr) ChpeAutoZwWaitLowEventPair
+1869 stdcall -version=0x600+ ZwWorkerFactoryWorkerReady(ptr) ChpeStubZwWorkerFactoryWorkerReady
+1870 stdcall ZwWriteFile(long long ptr ptr ptr ptr long ptr ptr) ChpeAutoZwWriteFile
+1871 stdcall ZwWriteFileGather(long long ptr ptr ptr ptr long ptr ptr) ChpeAutoZwWriteFileGather
+1872 stdcall ZwWriteRequestData(ptr ptr long ptr long ptr) ChpeAutoZwWriteRequestData
+1873 stdcall ZwWriteVirtualMemory(long ptr ptr long ptr) ChpeAutoZwWriteVirtualMemory
+1874 stdcall ZwYieldExecution() ChpeAutoZwYieldExecution
+1877 cdecl __isascii(long) ChpeAuto__isascii
+1878 cdecl __iscsym(long) ChpeAuto__iscsym
+1879 cdecl __iscsymf(long) ChpeAuto__iscsymf
+1880 cdecl -version=0x600+ __misaligned_access() ChpeStub__misaligned_access
+1881 cdecl __toascii(long) ChpeAuto__toascii
+1882 cdecl -ret64 _atoi64(str) ChpeAuto_atoi64
+1884 extern _fltused ntdll._fltused
+1885 cdecl _i64toa(double ptr long) ChpeAuto_i64toa
+1886 cdecl _i64tow(double ptr long) ChpeAuto_i64tow
+1887 cdecl _itoa(long ptr long) ChpeAuto_itoa
+1888 cdecl _itow(long ptr long) ChpeAuto_itow
+1891 cdecl _ltoa(long ptr long) ChpeAuto_ltoa
+1892 cdecl _ltow(long ptr long) ChpeAuto_ltow
+1893 cdecl _memccpy(ptr ptr long long) ChpeAuto_memccpy
+1894 cdecl _memicmp(str str long) ChpeAuto_memicmp
+1902 cdecl _splitpath(str ptr ptr ptr ptr) ChpeAuto_splitpath
+1903 cdecl _strcmpi(str str) ChpeAuto_strcmpi
+1904 cdecl _stricmp(str str) ChpeAuto_stricmp
+1905 cdecl _strlwr(str) ChpeAuto_strlwr
+1906 cdecl _strnicmp(str str long) ChpeAuto_strnicmp
+1907 cdecl _strupr(str) ChpeAuto_strupr
+1909 cdecl _ui64toa(double ptr long) ChpeAuto_ui64toa
+1910 cdecl _ui64tow(double ptr long) ChpeAuto_ui64tow
+1911 cdecl _ultoa(long ptr long) ChpeAuto_ultoa
+1912 cdecl _ultow(long ptr long) ChpeAuto_ultow
+1913 cdecl _vscwprintf(wstr ptr) ChpeAuto_vscwprintf
+1914 cdecl _vsnprintf(ptr long str ptr) ChpeAuto_vsnprintf
+1915 cdecl _vsnprintf_s(ptr long long str ptr) ChpeAuto_vsnprintf_s
+1916 cdecl _vsnwprintf(ptr long wstr ptr) ChpeAuto_vsnwprintf
+1917 cdecl _vsnwprintf_s(ptr long long wstr ptr) ChpeAuto_vsnwprintf_s
+1918 cdecl -version=0x600+ _vswprintf(ptr wstr ptr) ChpeAuto_vswprintf
+1919 cdecl _wcsicmp(wstr wstr) ChpeAuto_wcsicmp
+1920 cdecl _wcslwr(wstr) ChpeAuto_wcslwr
+1921 cdecl _wcsnicmp(wstr wstr long) ChpeAuto_wcsnicmp
+1922 cdecl _wcstoui64(wstr ptr long) ChpeAuto_wcstoui64
+1923 cdecl _wcsupr(wstr) ChpeAuto_wcsupr
+1924 cdecl _wtoi(wstr) ChpeAuto_wtoi
+1925 cdecl _wtoi64(wstr) ChpeAuto_wtoi64
+1926 cdecl _wtol(wstr) ChpeAuto_wtol
+1927 cdecl abs(long) ChpeAutoabs
+1928 cdecl atan(double) ChpeAutoatan
+1929 cdecl atan2(double double) ChpeAutoatan2
+1930 cdecl atoi(str) ChpeAutoatoi
+1931 cdecl atol(str) ChpeAutoatol
+1933 cdecl ceil(double) ChpeAutoceil
+1934 cdecl cos(double) ChpeAutocos
+1935 cdecl fabs(double) ChpeAutofabs
+1936 cdecl floor(double) ChpeAutofloor
+1937 cdecl isalnum(long) ChpeAutoisalnum
+1938 cdecl isalpha(long) ChpeAutoisalpha
+1939 cdecl iscntrl(long) ChpeAutoiscntrl
+1940 cdecl isdigit(long) ChpeAutoisdigit
+1941 cdecl isgraph(long) ChpeAutoisgraph
+1942 cdecl islower(long) ChpeAutoislower
+1943 cdecl isprint(long) ChpeAutoisprint
+1944 cdecl ispunct(long) ChpeAutoispunct
+1945 cdecl isspace(long) ChpeAutoisspace
+1946 cdecl isupper(long) ChpeAutoisupper
+1947 cdecl iswalpha(long) ChpeAutoiswalpha
+1948 cdecl iswctype(long long) ChpeAutoiswctype
+1949 cdecl iswdigit(long) ChpeAutoiswdigit
+1950 cdecl iswlower(long) ChpeAutoiswlower
+1951 cdecl iswspace(long) ChpeAutoiswspace
+1952 cdecl iswxdigit(long) ChpeAutoiswxdigit
+1953 cdecl isxdigit(long) ChpeAutoisxdigit
+1954 cdecl labs(long) ChpeAutolabs
+1955 cdecl log(double) ChpeAutolog
+1957 cdecl mbstowcs(ptr str long) ChpeAutombstowcs
+1958 cdecl memchr(ptr long long) ChpeAutomemchr
+1959 cdecl memcmp(ptr ptr long) ChpeAutomemcmp
+1961 cdecl memmove(ptr ptr long) ChpeAutomemmove
+1962 cdecl memset(ptr long long) ChpeAutomemset
+1963 cdecl pow(double double) ChpeAutopow
+1965 cdecl sin(double) ChpeAutosin
+1967 cdecl sqrt(double) ChpeAutosqrt
+1970 cdecl strcat(str str) ChpeAutostrcat
+1971 cdecl strchr(str long) ChpeAutostrchr
+1972 cdecl strcmp(str str) ChpeAutostrcmp
+1973 cdecl strcpy(ptr str) ChpeAutostrcpy
+1974 cdecl -version=0x600+ strcpy_s(ptr long str) ChpeAutostrcpy_s
+1975 cdecl -version=0x600+ strcat_s(ptr long str) ChpeAutostrcat_s
+1976 cdecl -version=0x600+ strncpy_s(ptr long str long) ChpeAutostrncpy_s
+1977 cdecl strcspn(str str) ChpeAutostrcspn
+1978 cdecl strlen(str) ChpeAutostrlen
+1979 cdecl strncat(str str long) ChpeAutostrncat
+1980 cdecl strncmp(str str long) ChpeAutostrncmp
+1981 cdecl strncpy(ptr str long) ChpeAutostrncpy
+1982 cdecl strpbrk(str str) ChpeAutostrpbrk
+1983 cdecl strrchr(str long) ChpeAutostrrchr
+1984 cdecl strspn(str str) ChpeAutostrspn
+1985 cdecl strstr(str str) ChpeAutostrstr
+1986 cdecl strtol(str ptr long) ChpeAutostrtol
+1987 cdecl strtoul(str ptr long) ChpeAutostrtoul
+1990 cdecl tan(double) ChpeAutotan
+1991 cdecl tolower(long) ChpeAutotolower
+1992 cdecl toupper(long) ChpeAutotoupper
+1993 cdecl towlower(long) ChpeAutotowlower
+1994 cdecl towupper(long) ChpeAutotowupper
+1997 cdecl vsprintf(ptr str ptr) ChpeAutovsprintf
+1998 cdecl wcscat(wstr wstr) ChpeAutowcscat
+1999 cdecl wcschr(wstr long) ChpeAutowcschr
+2000 cdecl wcscmp(wstr wstr) ChpeAutowcscmp
+2001 cdecl wcscpy(ptr wstr) ChpeAutowcscpy
+2002 cdecl wcscspn(wstr wstr) ChpeAutowcscspn
+2003 cdecl wcslen(wstr) ChpeAutowcslen
+2004 cdecl wcsncat(wstr wstr long) ChpeAutowcsncat
+2005 cdecl wcsncmp(wstr wstr long) ChpeAutowcsncmp
+2006 cdecl wcsncpy(ptr wstr long) ChpeAutowcsncpy
+2007 cdecl wcsnlen(wstr long) ChpeAutowcsnlen
+2008 cdecl wcspbrk(wstr wstr) ChpeAutowcspbrk
+2009 cdecl wcsrchr(wstr long) ChpeAutowcsrchr
+2010 cdecl wcsspn(wstr wstr) ChpeAutowcsspn
+2011 cdecl wcsstr(wstr wstr) ChpeAutowcsstr
+2012 cdecl wcstol(wstr ptr long) ChpeAutowcstol
+2013 cdecl wcstombs(ptr ptr long) ChpeAutowcstombs
+2014 cdecl wcstoul(wstr ptr long) ChpeAutowcstoul
+2020 stdcall -version=0x602+ -ret64 RtlGetSystemTimePrecise() ChpeAutoRtlGetSystemTimePrecise
 # END typed bridge wrappers
