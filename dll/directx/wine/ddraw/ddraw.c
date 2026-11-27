@@ -136,6 +136,9 @@ static HRESULT WINAPI ddraw7_QueryInterface(IDirectDraw7 *iface, REFIID riid, vo
 
     TRACE("iface %p, riid %s, out %p.\n", iface, debugstr_guid(riid), out);
 
+    if (!out)
+        return DDERR_INVALIDPARAMS;
+
     if (!riid)
     {
         *out = NULL;
