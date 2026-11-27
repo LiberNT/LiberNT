@@ -6,6 +6,7 @@
 
 #include <kmt_test.h>
 #include "context_sync_core.h"
+#include "context_create_core.h"
 
 typedef struct _DXGK_CONTEXT_SYNC_TEST_OBJECT
 {
@@ -395,8 +396,18 @@ DxgkContextSyncTestDestroyAndRelease(VOID)
     ok_eq_hex(Status, STATUS_DELETE_PENDING);
 }
 
+static VOID
+DxgkContextSyncTestCreateRollback(VOID)
+{
+    ok(!DxgkContextCreateCoreRollbackDestroysMiniport(STATUS_NO_MEMORY), "a failed create must not reach DxgkDdiDestroyContext\n");
+    ok(!DxgkContextCreateCoreRollbackDestroysMiniport(STATUS_INVALID_PARAMETER), "a refused create must not reach DxgkDdiDestroyContext\n");
+    ok(!DxgkContextCreateCoreRollbackDestroysMiniport(STATUS_GRAPHICS_NO_VIDEO_MEMORY), "an out-of-memory create must not reach DxgkDdiDestroyContext\n");
+    ok(DxgkContextCreateCoreRollbackDestroysMiniport(STATUS_SUCCESS), "a created context is destroyed through the miniport\n");
+}
+
 START_TEST(DxgkContextSync)
 {
+    DxgkContextSyncTestCreateRollback();
     DxgkContextSyncTestSemaphoreAdmissionOrder();
     DxgkContextSyncTestValidation();
     DxgkContextSyncTestWaitAtomicity();
