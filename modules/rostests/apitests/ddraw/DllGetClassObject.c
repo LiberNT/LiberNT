@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     ddraw DllGetClassObject rejects a missing output and clears it before refusing an interface
+ * PURPOSE:     ddraw DllGetClassObject and its factory refuse bad outputs and interfaces cleanly
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -35,5 +35,11 @@ START_TEST(DllGetClassObject)
     ok(hr == S_OK, "IClassFactory: %#lx\n", hr);
     ok(factory != NULL, "IClassFactory: no factory\n");
     if (factory)
+    {
+        object = (void *)(ULONG_PTR)1;
+        hr = IClassFactory_CreateInstance(factory, NULL, &IID_IDirectDrawClipper, &object);
+        ok(hr == E_NOINTERFACE, "CreateInstance(IDirectDrawClipper): %#lx\n", hr);
+        ok(object == NULL, "CreateInstance(IDirectDrawClipper): output %p\n", object);
         IClassFactory_Release(factory);
+    }
 }

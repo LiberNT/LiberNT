@@ -328,6 +328,7 @@ static HRESULT DDRAW_Create(const GUID *guid, void **out, IUnknown *outer_unknow
         ERR("Out of memory when creating DirectDraw.\n");
         return E_OUTOFMEMORY;
     }
+    list_init(&ddraw->ddraw_list_entry);
 
     if (FAILED(hr = ddraw_init(ddraw, flags, device_type)))
     {
