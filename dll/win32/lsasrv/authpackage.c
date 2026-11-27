@@ -8,6 +8,8 @@
 
 #include "lsasrv.h"
 
+#include <ntsecapi.h>
+
 #include <ndk/sefuncs.h>
 #include <ndk/umfuncs.h>
 
@@ -1758,6 +1760,28 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
     }
 
     LsapSetClientContext(LogonContext);
+
+    /*
+     * S4U logons create a logon session without presenting any credentials,
+     * so they must be restricted to trusted callers: according to the
+     * LsaLogonUser documentation SeTcbPrivilege is required when an S4U
+     * logon is used. The MSV1_0 authentication data starts with the
+     * message type, so it can be inspected here without depending on
+     * package internals.
+     */
+    if (!LogonContext->TrustedCaller &&
+        LocalAuthInfo != NULL &&
+        RequestMsg->LogonUser.Request.AuthenticationInformationLength >= sizeof(ULONG) &&
+        Package->Name != NULL &&
+        Package->Name->Buffer != NULL &&
+        Package->Name->Length == sizeof(MSV1_0_PACKAGE_NAME) - 1 &&
+        _strnicmp(Package->Name->Buffer, MSV1_0_PACKAGE_NAME, Package->Name->Length) == 0 &&
+        *(PULONG)LocalAuthInfo == MsV1_0S4ULogon)
+    {
+        ERR("S4U logon attempt by an untrusted caller, access denied\n");
+        Status = STATUS_PRIVILEGE_NOT_HELD;
+        goto done;
+    }
 
     if (Package->LsaApLogonUserEx2 != NULL)
     {
