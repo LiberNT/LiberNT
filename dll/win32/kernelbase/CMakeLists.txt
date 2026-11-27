@@ -25,6 +25,7 @@ add_library(kernelbase MODULE
     MemoryApi.c
     NlsScripts.c
     PackageFamily.c
+    PackageInfo.c
     PssSnapshot.c
     Security.c
     SyncObjects.c
@@ -35,11 +36,13 @@ add_library(kernelbase MODULE
     Wow64Directory.c
     XState.c
     ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/wcsnlen.c
+    ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/rsna_supplicant/rsna_sha256.c
     ${REACTOS_SOURCE_DIR}/dll/win32/dwrite/scripts.c
     kernelbase.rc
     ${CMAKE_CURRENT_BINARY_DIR}/kernelbase_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/kernelbase.def)
 
+target_include_directories(kernelbase PRIVATE ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/rsna_supplicant)
 set_module_type(kernelbase win32dll ENTRYPOINT DllMain 12)
 target_link_libraries(kernelbase psapi_static kernelbase_static kernel32_shared win32_registry_hkcr wine chkstk uuid)
 add_importlibs(kernelbase kernel32 ntdll)
