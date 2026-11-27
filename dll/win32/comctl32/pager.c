@@ -307,7 +307,7 @@ PAGER_GetScrollRange(PAGER_INFO* infoPtr, BOOL calc_size)
     return scrollRange;
 }
 
-static void
+static BOOL
 PAGER_UpdateBtns(PAGER_INFO *infoPtr, INT scrollRange, BOOL hideGrayBtns)
 {
     BOOL resizeClient;
@@ -364,27 +364,37 @@ PAGER_UpdateBtns(PAGER_INFO *infoPtr, INT scrollRange, BOOL hideGrayBtns)
                   (oldBRbtnState != infoPtr->BRbtnState);
     if (repaintBtns)
         SendMessageW(infoPtr->hwndSelf, WM_NCPAINT, 0, 0);
+    return resizeClient;
 }
 
 static LRESULT
 PAGER_SetPos(PAGER_INFO* infoPtr, INT newPos, BOOL fromBtnPress, BOOL calc_size)
 {
-    INT scrollRange = PAGER_GetScrollRange(infoPtr, calc_size);
+    INT scrollRange = PAGER_GetScrollRange(infoPtr, FALSE);
     INT oldPos = infoPtr->nPos;
 
-    if ((scrollRange <= 0) || (newPos < 0))
-        infoPtr->nPos = 0;
-    else if (newPos > scrollRange)
-        infoPtr->nPos = scrollRange;
+    if (fromBtnPress)
+    {
+        if ((scrollRange <= 0) || (newPos < 0))
+            infoPtr->nPos = 0;
+        else if (newPos > scrollRange)
+            infoPtr->nPos = scrollRange;
+        else
+            infoPtr->nPos = newPos;
+    }
     else
-        infoPtr->nPos = newPos;
+        infoPtr->nPos = (newPos < 0) ? 0 : newPos;
 
     TRACE("[%p] pos=%d, oldpos=%d\n", infoPtr->hwndSelf, infoPtr->nPos, oldPos);
 
     if (infoPtr->nPos != oldPos)
     {
         /* gray and restore btns, and if from WM_SETPOS, hide the gray btns */
-        PAGER_UpdateBtns(infoPtr, scrollRange, !fromBtnPress);
+        BOOL resized = PAGER_UpdateBtns(infoPtr, scrollRange, !fromBtnPress);
+        if (calc_size && !resized)
+            SetWindowPos(infoPtr->hwndSelf, 0, 0, 0, 0, 0,
+                         SWP_FRAMECHANGED | SWP_NOSIZE | SWP_NOMOVE |
+                         SWP_NOZORDER | SWP_NOACTIVATE);
         PAGER_PositionChildWnd(infoPtr);
     }
 
@@ -415,7 +425,7 @@ PAGER_RecalcSize(PAGER_INFO *infoPtr)
         if (scrollRange <= 0)
         {
             infoPtr->nPos = -1;
-            PAGER_SetPos(infoPtr, 0, FALSE, TRUE);
+            PAGER_SetPos(infoPtr, 0, FALSE, FALSE);
         }
         else
             PAGER_PositionChildWnd(infoPtr);
