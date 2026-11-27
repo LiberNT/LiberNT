@@ -5043,6 +5043,7 @@ HRESULT device_init(struct d3d9_device *device, struct d3d9 *parent, struct wine
     struct wined3d_caps wined3d_caps;
     unsigned int output_idx;
     unsigned i, count = 1;
+    DWORD vertex_processing;
     D3DCAPS9 caps;
     HRESULT hr;
 
@@ -5059,6 +5060,19 @@ HRESULT device_init(struct d3d9_device *device, struct d3d9 *parent, struct wine
 
     output_idx = adapter;
     if (output_idx >= parent->wined3d_output_count)
+        return D3DERR_INVALIDCALL;
+
+    if (device_type != D3DDEVTYPE_HAL && device_type != D3DDEVTYPE_REF && device_type != D3DDEVTYPE_NULLREF)
+        return D3DERR_INVALIDCALL;
+
+    vertex_processing = flags & (D3DCREATE_SOFTWARE_VERTEXPROCESSING | D3DCREATE_HARDWARE_VERTEXPROCESSING
+            | D3DCREATE_MIXED_VERTEXPROCESSING);
+    if (vertex_processing != D3DCREATE_SOFTWARE_VERTEXPROCESSING
+            && vertex_processing != D3DCREATE_HARDWARE_VERTEXPROCESSING
+            && vertex_processing != D3DCREATE_MIXED_VERTEXPROCESSING)
+        return D3DERR_INVALIDCALL;
+
+    if ((flags & D3DCREATE_PUREDEVICE) && vertex_processing != D3DCREATE_HARDWARE_VERTEXPROCESSING)
         return D3DERR_INVALIDCALL;
 
     if (mode)
