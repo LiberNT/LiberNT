@@ -8,6 +8,7 @@ extern void func_EditImeContext(void);
 extern void func_ImageListApi(void);
 extern void func_ListViewActivate(void);
 extern void func_ListViewGroups(void);
+extern void func_ListViewRedrawHeader(void);
 extern void func_ListViewSnapToGrid(void);
 extern void func_ListViewWorkAreas(void);
 extern void func_LoadIconWithScaleDown(void);
@@ -33,6 +34,7 @@ const struct test winetest_testlist[] =
     { "ImageListApi", func_ImageListApi },
     { "ListViewActivate", func_ListViewActivate },
     { "ListViewGroups", func_ListViewGroups },
+    { "ListViewRedrawHeader", func_ListViewRedrawHeader },
     { "ListViewSnapToGrid", func_ListViewSnapToGrid },
     { "ListViewWorkAreas", func_ListViewWorkAreas },
     { "LoadIconWithScaleDown", func_LoadIconWithScaleDown },
