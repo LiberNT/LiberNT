@@ -1542,7 +1542,7 @@ NtUserCallHwndParam(
 
             if (Index >= 0)
             {
-                if (FNID_HAS_PRIVATE_EXTRA(Window->fnid) ||
+                if ((ULONG)Index < FNID_PRIVATE_EXTRA_SIZE(Window->fnid) ||
                     (ULONG)Index > Window->cbwndExtra || Window->cbwndExtra - (ULONG)Index < Size)
                 {
                     EngSetLastError(ERROR_INVALID_INDEX);
