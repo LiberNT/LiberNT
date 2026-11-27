@@ -759,6 +759,20 @@ static HRESULT set_format(MMDevice *dev)
 
     IAudioClient_Release(client);
 
+    if (fmt->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
+        fmt->cbSize >= sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX))
+    {
+        WAVEFORMATEXTENSIBLE *fmtex = (WAVEFORMATEXTENSIBLE *)fmt;
+        if (IsEqualGUID(&fmtex->SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT))
+        {
+            fmtex->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
+            fmtex->Format.wBitsPerSample = 16;
+            fmtex->Samples.wValidBitsPerSample = 16;
+            fmtex->Format.nBlockAlign = fmtex->Format.nChannels * (fmtex->Format.wBitsPerSample / 8);
+            fmtex->Format.nAvgBytesPerSec = fmtex->Format.nSamplesPerSec * fmtex->Format.nBlockAlign;
+        }
+    }
+
     pv.vt = VT_BLOB;
     pv.blob.cbSize = sizeof(WAVEFORMATEX) + fmt->cbSize;
     pv.blob.pBlobData = (BYTE*)fmt;
