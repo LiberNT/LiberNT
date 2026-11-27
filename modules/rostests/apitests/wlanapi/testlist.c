@@ -9,6 +9,7 @@ extern void func_WlanIfTableChurn(void);
 extern void func_WlanAutoSwitch(void);
 extern void func_WlanIhvControl(void);
 extern void func_WlanProfileKeyMaterial(void);
+extern void func_WlanScanDetachRace(void);
 
 const struct test winetest_testlist[] =
 {
@@ -19,5 +20,6 @@ const struct test winetest_testlist[] =
     { "WlanAutoSwitch", func_WlanAutoSwitch },
     { "WlanIhvControl", func_WlanIhvControl },
     { "WlanProfileKeyMaterial", func_WlanProfileKeyMaterial },
+    { "WlanScanDetachRace", func_WlanScanDetachRace },
     { 0, 0 }
 };
