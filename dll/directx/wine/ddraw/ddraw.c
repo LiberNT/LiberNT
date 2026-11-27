@@ -2356,6 +2356,9 @@ static HRESULT WINAPI ddraw7_GetGDISurface(IDirectDraw7 *iface, IDirectDrawSurfa
 
     TRACE("iface %p, surface %p.\n", iface, surface);
 
+    if (!surface)
+        return DDERR_INVALIDPARAMS;
+
     wined3d_mutex_lock();
 
     if (!ddraw->gdi_surface || !(ddraw_surface = wined3d_texture_get_sub_resource_parent(ddraw->gdi_surface, 0)))
@@ -2382,6 +2385,9 @@ static HRESULT WINAPI ddraw4_GetGDISurface(IDirectDraw4 *iface, IDirectDrawSurfa
 
     TRACE("iface %p, surface %p.\n", iface, surface);
 
+    if (!surface)
+        return DDERR_INVALIDPARAMS;
+
     hr = ddraw7_GetGDISurface(&ddraw->IDirectDraw7_iface, &surface7);
     if (FAILED(hr))
     {
@@ -2405,6 +2411,9 @@ static HRESULT WINAPI ddraw2_GetGDISurface(IDirectDraw2 *iface, IDirectDrawSurfa
 
     TRACE("iface %p, surface %p.\n", iface, surface);
 
+    if (!surface)
+        return DDERR_INVALIDPARAMS;
+
     hr = ddraw7_GetGDISurface(&ddraw->IDirectDraw7_iface, &surface7);
     if (FAILED(hr))
     {
@@ -2427,6 +2436,9 @@ static HRESULT WINAPI ddraw1_GetGDISurface(IDirectDraw *iface, IDirectDrawSurfac
     HRESULT hr;
 
     TRACE("iface %p, surface %p.\n", iface, surface);
+
+    if (!surface)
+        return DDERR_INVALIDPARAMS;
 
     hr = ddraw7_GetGDISurface(&ddraw->IDirectDraw7_iface, &surface7);
     if (FAILED(hr))
