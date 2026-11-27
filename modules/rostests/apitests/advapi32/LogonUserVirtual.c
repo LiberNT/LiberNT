@@ -151,8 +151,12 @@ TestMappingRoundtrip(VOID)
     Input.RemoveInput.DomainName = DomainName;
     Input.RemoveInput.AccountName = AccountName;
     Status = pLsaManageSidNameMapping(LsaSidNameMappingOperation_Remove, &Input, &Output);
-    if (Status == STATUS_ACCESS_DENIED)
+    if (Status == STATUS_ACCESS_DENIED || Status == STATUS_PRIVILEGE_NOT_HELD)
     {
+        if (Status == STATUS_PRIVILEGE_NOT_HELD)
+            ok(Output != NULL && Output->RemoveOutput.ErrorCode == LsaSidNameMappingOperation_NonMappingError,
+               "Without the privilege the error is %d, expected NonMappingError\n",
+               Output ? Output->RemoveOutput.ErrorCode : -1);
         skip("Mapping operations need administrator rights\n");
         FreeOutput(Output);
         FreeSid(Sid);
@@ -174,8 +178,12 @@ TestMappingRoundtrip(VOID)
     Input.AddInput.Sid = Sid;
     Input.AddInput.Flags = 0;
     Status = pLsaManageSidNameMapping(LsaSidNameMappingOperation_Add, &Input, &Output);
-    if (Status == STATUS_ACCESS_DENIED)
+    if (Status == STATUS_ACCESS_DENIED || Status == STATUS_PRIVILEGE_NOT_HELD)
     {
+        if (Status == STATUS_PRIVILEGE_NOT_HELD)
+            ok(Output != NULL && Output->AddOutput.ErrorCode == LsaSidNameMappingOperation_NonMappingError,
+               "Without the privilege the error is %d, expected NonMappingError\n",
+               Output ? Output->AddOutput.ErrorCode : -1);
         skip("Mapping operations need administrator rights\n");
         FreeOutput(Output);
         FreeSid(Sid);
