@@ -879,7 +879,7 @@ NpCommonFileSystemControl(IN PDEVICE_OBJECT DeviceObject,
 
         case FSCTL_PIPE_LISTEN:
 
-            NpAcquireSharedVcb();
+            NpAcquireExclusiveVcb();
             Status = NpListen(DeviceObject, Irp, &DeferredList);
             break;
 
