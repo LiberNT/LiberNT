@@ -6,6 +6,7 @@ extern void func_DirectDrawCreate(void);
 extern void func_DllGetClassObject(void);
 extern void func_EnumAttachedSurfaces(void);
 extern void func_EnumDisplayModes(void);
+extern void func_EnumSurfaces(void);
 extern void func_GetDeviceIdentifier(void);
 extern void func_GetGDISurface(void);
 extern void func_PaletteEntries(void);
@@ -21,6 +22,7 @@ const struct test winetest_testlist[] =
     { "DllGetClassObject", func_DllGetClassObject },
     { "EnumAttachedSurfaces", func_EnumAttachedSurfaces },
     { "EnumDisplayModes", func_EnumDisplayModes },
+    { "EnumSurfaces", func_EnumSurfaces },
     { "GetDeviceIdentifier", func_GetDeviceIdentifier },
     { "GetGDISurface", func_GetGDISurface },
     { "PaletteEntries", func_PaletteEntries },

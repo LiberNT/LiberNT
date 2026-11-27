@@ -3386,6 +3386,10 @@ static HRESULT WINAPI ddraw7_EnumSurfaces(IDirectDraw7 *iface, DWORD flags,
         if ((flags & (DDENUMSURFACES_ALL | DDENUMSURFACES_MATCH | DDENUMSURFACES_NOMATCH)) != DDENUMSURFACES_MATCH)
             return DDERR_INVALIDPARAMS;
 
+        if (!surface_desc || (surface_desc->dwFlags & (DDSD_CKDESTOVERLAY | DDSD_CKDESTBLT | DDSD_CKSRCOVERLAY
+                | DDSD_CKSRCBLT | DDSD_LPSURFACE)))
+            return DDERR_INVALIDPARAMS;
+
         wined3d_mutex_lock();
 
         if (surface_desc->dwFlags & (DDSD_WIDTH | DDSD_HEIGHT))
