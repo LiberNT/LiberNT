@@ -11,6 +11,7 @@ list(APPEND SOURCE
     pseh_cpp.cpp
     psehtest2.c
     seh_context.c
+    setjmp_align.c
     testlist.c)
 
 add_executable(compiler_apitest ${SOURCE})
