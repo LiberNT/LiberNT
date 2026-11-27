@@ -6,9 +6,11 @@
  */
 
 #include <blefi.h>
+#include <UsbIo.h>
 
 #define FW_FILE_NAME_CHARS 260
 #define FW_MAX_USB_DEVICES 64
+#define FW_USB_CLASS_MASS_STORAGE 0x08
 #define FW_USABLE_MEMORY_STEP 0x200000
 
 EFI_HANDLE GlobalImageHandle;
@@ -20,6 +22,7 @@ static EFI_GUID FwFileSystemGuid = EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
 static EFI_GUID FwFileInfoGuid = EFI_FILE_INFO_ID;
 static EFI_GUID FwBlockIoGuid = EFI_BLOCK_IO_PROTOCOL_GUID;
 static EFI_GUID FwDevicePathGuid = EFI_DEVICE_PATH_PROTOCOL_GUID;
+static EFI_GUID FwUsbIoGuid = EFI_USB_IO_PROTOCOL_GUID;
 static EFI_GUID FwVolumeLabelGuid = EFI_FILE_SYSTEM_VOLUME_LABEL_ID;
 static ULONGLONG FwUsableMemoryEnd = MAXULONGLONG;
 
@@ -670,35 +673,62 @@ FwIsUsbVolume(
 }
 
 static
-VOID
-FwConnectUsbDevices(VOID)
+BOOLEAN
+FwConnectNextUsbStorage(VOID)
 {
     EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
     EFI_HANDLE Present[FW_MAX_USB_DEVICES];
+    EFI_USB_INTERFACE_DESCRIPTOR Interface;
+    EFI_USB_IO_PROTOCOL* UsbIo;
     EFI_HANDLE* Handles;
+    EFI_HANDLE Next = NULL;
     UINTN HandleCount, i;
     ULONG Count = 0, j;
     BOOLEAN Known;
 
-    if (EFI_ERROR(BootServices->LocateHandleBuffer(ByProtocol, &FwDevicePathGuid, NULL, &HandleCount, &Handles)))
-        return;
-
-    for (i = 0; i < HandleCount && Count < RTL_NUMBER_OF(Present); i++)
+    if (EFI_ERROR(BootServices->LocateHandleBuffer(ByProtocol, &FwUsbIoGuid, NULL, &HandleCount, &Handles)))
     {
-        if (!FwIsUsbVolume(Handles[i]))
+        FwUsbDeviceCount = 0;
+        return FALSE;
+    }
+
+    for (i = 0; i < HandleCount; i++)
+    {
+        if (EFI_ERROR(BootServices->HandleProtocol(Handles[i], &FwUsbIoGuid, (VOID**)&UsbIo)) ||
+            EFI_ERROR(UsbIo->UsbGetInterfaceDescriptor(UsbIo, &Interface)) ||
+            Interface.InterfaceClass != FW_USB_CLASS_MASS_STORAGE)
+        {
             continue;
+        }
 
         Known = FALSE;
         for (j = 0; j < FwUsbDeviceCount && !Known; j++)
             Known = (FwUsbDevices[j] == Handles[i]);
-        if (!Known)
-            BootServices->ConnectController(Handles[i], NULL, NULL, TRUE);
-        Present[Count++] = Handles[i];
+
+        if (Known)
+        {
+            if (Count < RTL_NUMBER_OF(Present))
+                Present[Count++] = Handles[i];
+        }
+        else if (!Next)
+        {
+            Next = Handles[i];
+        }
     }
 
+    if (Next && Count < RTL_NUMBER_OF(Present))
+        Present[Count++] = Next;
+    else
+        Next = NULL;
+
     BootServices->FreePool(Handles);
+    ASSERT(Count <= RTL_NUMBER_OF(FwUsbDevices));
     RtlCopyMemory(FwUsbDevices, Present, Count * sizeof(Present[0]));
     FwUsbDeviceCount = Count;
+
+    if (Next)
+        BootServices->ConnectController(Next, NULL, NULL, TRUE);
+    return Next != NULL;
 }
 
 static
@@ -896,8 +926,8 @@ FwScanFileVolumes(
 
     if (!Scan->Handles)
     {
-        if (Scan->State == FwVolumeScanVolumes)
-            FwConnectUsbDevices();
+        if (Scan->State == FwVolumeScanVolumes && FwConnectNextUsbStorage())
+            return TRUE;
 
         if (EFI_ERROR(BootServices->LocateHandleBuffer(ByProtocol,
                                                        Scan->State == FwVolumeScanConnect ? &FwBlockIoGuid : &FwFileSystemGuid,
