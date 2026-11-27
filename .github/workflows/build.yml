@@ -60,6 +60,8 @@ jobs:
 
     - name: Install host build tools
       run: |
+        # The runner image lists Microsoft's package repository, which can refuse access; the build needs nothing from it.
+        sudo grep -rlE 'packages\.microsoft\.com' /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null | xargs -r sudo rm -f
         # Every Ubuntu mirror can answer 503 for a minute or more; the whole install is retried after a pause.
         for attempt in 1 2 3 4; do
           if sudo apt-get update && sudo apt-get install -y cmake ninja-build flex bison ccache wget xz-utils tar python3-mako python3-yaml python3-packaging glslang-tools msitools; then
