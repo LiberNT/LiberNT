@@ -118,9 +118,85 @@ WSPDisconnectEx(
   IN DWORD dwFlags,
   IN DWORD reserved)
 {
-    UNIMPLEMENTED;
+    IO_STATUS_BLOCK DummyIOSB;
+    PIO_STATUS_BLOCK IOSB = &DummyIOSB;
+    AFD_DISCONNECT_INFO DisconnectInfo;
+    PSOCKET_INFORMATION Socket;
+    HANDLE Event = NULL;
+    PVOID ApcContext = NULL;
+    NTSTATUS Status;
 
-    return FALSE;
+    Socket = GetSocketStructure(hSocket);
+    if (!Socket)
+    {
+        SetLastError(WSAENOTSOCK);
+        return FALSE;
+    }
+
+    if (reserved || (dwFlags & ~TF_REUSE_SOCKET))
+    {
+        SetLastError(WSAEINVAL);
+        return FALSE;
+    }
+
+    if (Socket->SharedData->State != SocketConnected)
+    {
+        SetLastError(WSAENOTCONN);
+        return FALSE;
+    }
+
+    /* TODO: TF_REUSE_SOCKET does not yet return the socket to a state AcceptEx and ConnectEx accept */
+    DisconnectInfo.DisconnectType = AFD_DISCONNECT_SEND;
+    DisconnectInfo.Timeout.QuadPart = -1000000LL;
+
+    if (lpOverlapped)
+    {
+        IOSB = (PIO_STATUS_BLOCK)lpOverlapped;
+        Event = lpOverlapped->hEvent;
+        if (!((ULONG_PTR)Event & 1))
+            ApcContext = lpOverlapped;
+    }
+    else
+    {
+        Status = NtCreateEvent(&Event, EVENT_ALL_ACCESS, NULL, SynchronizationEvent, FALSE);
+        if (!NT_SUCCESS(Status))
+        {
+            SetLastError(TranslateNtStatusError(Status));
+            return FALSE;
+        }
+    }
+
+    IOSB->Status = STATUS_PENDING;
+    IOSB->Information = 0;
+    Socket->SharedData->SendShutdown = TRUE;
+
+    Status = NtDeviceIoControlFile((HANDLE)hSocket,
+                                   Event,
+                                   NULL,
+                                   ApcContext,
+                                   IOSB,
+                                   IOCTL_AFD_DISCONNECT,
+                                   &DisconnectInfo,
+                                   sizeof(DisconnectInfo),
+                                   NULL,
+                                   0);
+
+    if (!lpOverlapped)
+    {
+        if (Status == STATUS_PENDING)
+        {
+            MsafdWaitForAlert(Event);
+            Status = IOSB->Status;
+        }
+        NtClose(Event);
+    }
+    else if (Status == STATUS_SUCCESS)
+    {
+        Status = STATUS_PENDING;
+    }
+
+    SetLastError(TranslateNtStatusError(Status));
+    return Status == STATUS_SUCCESS;
 }
 
 VOID
