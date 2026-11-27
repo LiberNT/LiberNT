@@ -348,7 +348,7 @@ AlpcTestKernelModeClaim(
     _In_ HANDLE ClientPort,
     _In_ BOOLEAN Datagram)
 {
-    UCHAR Received[sizeof(PORT_MESSAGE) + 64];
+    DECLSPEC_ALIGN(16) UCHAR Received[sizeof(PORT_MESSAGE) + 64];
     PPORT_MESSAGE Message;
     SIZE_T Length = sizeof(Received);
     USHORT Type;
