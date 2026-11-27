@@ -2,6 +2,7 @@
 add_subdirectory(dxdiag)
 add_subdirectory(interop)
 add_subdirectory(newdev)
+add_subdirectory(nwifi)
 if(ISAPNP_ENABLE)
     add_subdirectory(isapnp)
 endif()
