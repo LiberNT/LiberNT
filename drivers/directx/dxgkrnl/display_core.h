@@ -113,6 +113,8 @@ ULONG DxgkFlipCoreQueuedCount(_In_ const DXGK_FLIP_QUEUE *Queue);
 NTSTATUS DxgkFlipCoreScanoutStatus(_In_ NTSTATUS LeaseStatus);
 
 D3DDDIFORMAT DxgkVidPnCoreDesktopSurfaceFormat(_In_ D3DDDIFORMAT PinnedFormat);
+/* An unpinned path rotation takes the first one the miniport supports; one that names none keeps identity, the rotation a display configuration path always carries. */
+D3DKMDT_VIDPN_PRESENT_PATH_ROTATION DxgkVidPnCoreSelectRotation(_In_ D3DKMDT_VIDPN_PRESENT_PATH_ROTATION_SUPPORT Support);
 
 /* A color pointer reaches DxgkDdiSetPointerShape as a Width x Height 32 bpp DIB whose pitch is its width in bytes. */
 FORCEINLINE

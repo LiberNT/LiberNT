@@ -1099,18 +1099,8 @@ DxgkpPinSupportedPathTransformations(
         }
 
         if (!DxgkpVidPnPathRotationIsPinned(Path))
-        {
-            if (Path->ContentTransformation.RotationSupport.Identity)
-                Path->ContentTransformation.Rotation = D3DKMDT_VPPR_IDENTITY;
-            else if (Path->ContentTransformation.RotationSupport.Rotate90)
-                Path->ContentTransformation.Rotation = D3DKMDT_VPPR_ROTATE90;
-            else if (Path->ContentTransformation.RotationSupport.Rotate180)
-                Path->ContentTransformation.Rotation = D3DKMDT_VPPR_ROTATE180;
-            else if (Path->ContentTransformation.RotationSupport.Rotate270)
-                Path->ContentTransformation.Rotation = D3DKMDT_VPPR_ROTATE270;
-            else
-                return STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
-        }
+            Path->ContentTransformation.Rotation = DxgkVidPnCoreSelectRotation(Path->ContentTransformation.RotationSupport);
+        ASSERT(DxgkpVidPnPathRotationIsPinned(Path));
 
     }
 
