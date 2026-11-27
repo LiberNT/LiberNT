@@ -77,6 +77,9 @@ IDR_FILESECURITY RCDATA "../../../image/data/filesecurity.txt"
 #ifdef LANGUAGE_JA_JP
     #include "lang/ja-JP.rc"
 #endif
+#ifdef LANGUAGE_KO_KR
+    #include "lang/ko-KR.rc"
+#endif
 #ifdef LANGUAGE_MS_MY
     #include "lang/ms-MY.rc"
 #endif

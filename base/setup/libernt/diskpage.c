@@ -777,6 +777,7 @@ NewPartitionDlgProc(
         case WM_INITDIALOG:
             Ctx = (PNEWPART_CTX)lParam;
             SetWindowLongPtrW(hwndDlg, DWLP_USER, (LONG_PTR)Ctx);
+            SetupApplyDialogFont(hwndDlg);
             LoadPrintfW(Text, ARRAYSIZE(Text), IDS_NEWPART_RANGE, Ctx->MaxMb);
             SetDlgItemTextW(hwndDlg, IDC_NEWSIZE_RANGE, Text);
             SendDlgItemMessageW(hwndDlg, IDC_NEWSIZE_SPIN, UDM_SETRANGE32, 1,
@@ -986,6 +987,7 @@ ResizeDlgProc(
 
             Ctx = (PRESIZE_CTX)lParam;
             SetWindowLongPtrW(hwndDlg, DWLP_USER, (LONG_PTR)Ctx);
+            SetupApplyDialogFont(hwndDlg);
             SetWindowTextW(hwndDlg, Ctx->Caption);
             for (Index = 0; Index < ARRAYSIZE(Controls); Index++)
             {

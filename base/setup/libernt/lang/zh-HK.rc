@@ -1,9 +1,9 @@
 /*
- * PROJECT:     ReactOS GUI first stage setup application
+ * PROJECT:     LiberNT Setup
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
  * PURPOSE:     Chinese (Hong Kong) resource file
  * TRANSLATORS: Copyright 2020-2021 Chan Chilung <eason066@gmail.com>
- * REFERENCES:  Chinese (Traditional) resource file
+ *              Copyright 2026 Earzu Chan (Chan Chun Ho) <contact@earzuchan.me>
  */
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_HONGKONG
@@ -12,16 +12,16 @@ LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_HONGKONG
 
 IDD_SETUPFRAME DIALOGEX 0, 0, 420, 240
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "LiberNT Setup"
+CAPTION "LiberNT 安裝程式"
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_FRAME_TITLE, 120, 10, 290, 14, SS_NOPREFIX
     LTEXT "", IDC_FRAME_SUBTITLE, 120, 26, 290, 18, SS_NOPREFIX
     LTEXT "", IDC_FRAME_PAGE, 120, 48, 290, 160, NOT WS_VISIBLE
     CONTROL "", IDC_STATIC, "Static", SS_ETCHEDHORZ, 120, 212, 300, 1
-    PUSHBUTTON "&Back", IDC_FRAME_BACK, 250, 219, 50, 14
-    DEFPUSHBUTTON "&Next", IDC_FRAME_NEXT, 305, 219, 50, 14
-    PUSHBUTTON "Cancel", IDCANCEL, 360, 219, 50, 14
+    PUSHBUTTON "上一步(&B)", IDC_FRAME_BACK, 250, 219, 50, 14
+    DEFPUSHBUTTON "下一步(&N)", IDC_FRAME_NEXT, 305, 219, 50, 14
+    PUSHBUTTON "取消", IDCANCEL, 360, 219, 50, 14
 END
 
 IDD_DISKPAGE DIALOGEX 0, 0, 290, 160
@@ -30,37 +30,37 @@ FONT 8, "MS Shell Dlg"
 BEGIN
     CONTROL "", IDC_DISKLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 106
     LTEXT "", IDC_DISKINFO, 0, 110, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
-    PUSHBUTTON "Ne&w", IDC_DISKNEW, 0, 123, 36, 14
-    PUSHBUTTON "&Delete", IDC_DISKDELETE, 39, 123, 36, 14
-    PUSHBUTTON "&Format", IDC_DISKFORMAT, 78, 123, 36, 14
-    PUSHBUTTON "E&xtend", IDC_DISKEXTEND, 117, 123, 36, 14
-    PUSHBUTTON "S&hrink", IDC_DISKSHRINK, 156, 123, 36, 14
-    PUSHBUTTON "&Erase drive", IDC_DISKERASE, 195, 123, 50, 14
-    PUSHBUTTON "&Refresh", IDC_DISKREFRESH, 250, 123, 40, 14
+    PUSHBUTTON "新增(&W)", IDC_DISKNEW, 0, 123, 35, 14
+    PUSHBUTTON "刪除(&D)", IDC_DISKDELETE, 37, 123, 35, 14
+    PUSHBUTTON "格式化(&F)", IDC_DISKFORMAT, 74, 123, 42, 14
+    PUSHBUTTON "延伸(&X)", IDC_DISKEXTEND, 118, 123, 35, 14
+    PUSHBUTTON "縮細(&H)", IDC_DISKSHRINK, 155, 123, 35, 14
+    PUSHBUTTON "清空磁碟(&E)", IDC_DISKERASE, 192, 123, 49, 14
+    PUSHBUTTON "重新整理(&R)", IDC_DISKREFRESH, 243, 123, 47, 14
     LTEXT "", IDC_DISKNOTE, 0, 142, 290, 18, SS_NOPREFIX
 END
 
 IDD_NEWPARTITION DIALOGEX 0, 0, 210, 62
 STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "New partition"
+CAPTION "新增分割區"
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_NEWSIZE_RANGE, 7, 10, 130, 9
     EDITTEXT IDC_NEWSIZE, 140, 8, 52, 13, ES_NUMBER | ES_AUTOHSCROLL | WS_TABSTOP
     CONTROL "", IDC_NEWSIZE_SPIN, UPDOWN_CLASS, UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS, 192, 8, 10, 13
-    DEFPUSHBUTTON "OK", IDOK, 97, 41, 50, 14
-    PUSHBUTTON "Cancel", IDCANCEL, 153, 41, 50, 14
+    DEFPUSHBUTTON "確定", IDOK, 97, 41, 50, 14
+    PUSHBUTTON "取消", IDCANCEL, 153, 41, 50, 14
 END
 
 IDD_LANGUAGEPAGE DIALOGEX 0, 0, 290, 160
 STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
-    LTEXT "&Language and region:", IDC_STATIC, 0, 4, 95, 9
+    LTEXT "語言同地區(&L):", IDC_STATIC, 0, 4, 95, 9
     COMBOBOX IDC_LANGUAGELIST, 100, 2, 190, 140, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
-    LTEXT "&Keyboard or input method:", IDC_STATIC, 0, 24, 95, 9
+    LTEXT "鍵盤或者輸入法(&K):", IDC_STATIC, 0, 24, 95, 9
     COMBOBOX IDC_LAYOUTLIST, 100, 22, 190, 140, CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
-    LTEXT "The keyboard works in Setup as soon as you choose it, so you can type your account name and password with it.", IDC_STATIC, 0, 128, 290, 26
+    LTEXT "一揀好鍵盤就會即刻喺安裝程式入面生效，方便你用嚟打帳戶名同密碼。", IDC_STATIC, 0, 128, 290, 26
 END
 
 IDD_APPSPAGE DIALOGEX 0, 0, 290, 160
@@ -69,7 +69,7 @@ FONT 8, "MS Shell Dlg"
 BEGIN
     CONTROL "", IDC_APPLIST, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 0, 290, 88
     LTEXT "", IDC_APPSPACE, 0, 92, 290, 10, SS_NOPREFIX
-    LTEXT "Clear a box to skip a component. The downloads use your internet connection, and each package is checked against its publisher's signature or checksum before it is installed.", IDC_STATIC, 0, 106, 290, 34
+    LTEXT "唔想裝某個組件，取消剔選就得。下載會用到你嘅互聯網連線，每個套件喺安裝之前都會核對發佈者嘅數碼簽署或者校驗碼。", IDC_STATIC, 0, 106, 290, 34
 END
 
 IDD_STORAGEPAGE DIALOGEX 0, 0, 290, 160
@@ -77,29 +77,29 @@ STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_STORAGEINFO, 0, 2, 290, 18, SS_NOPREFIX
-    AUTORADIOBUTTON "&Expand drive C: now", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
-    AUTORADIOBUTTON "&Not now", IDC_EXPANDLATER, 0, 42, 290, 10
-    LTEXT "You can also do it later: run lntexpandstorage in Command Prompt as an administrator. The components this setup offers next need more than 1 GB of free space.", IDC_STATIC, 0, 124, 290, 34
+    AUTORADIOBUTTON "即刻延伸 C: 磁碟機(&E)", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "遲啲先(&N)", IDC_EXPANDLATER, 0, 42, 290, 10
+    LTEXT "你亦可以遲啲先搞：用管理員身分開「命令提示字元」行 lntexpandstorage 就得。跟住落嚟提供嘅組件需要超過 1 GB 空位。", IDC_STATIC, 0, 124, 290, 34
 END
 
 IDD_ACCOUNTPAGE DIALOGEX 0, 0, 290, 160
 STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
-    LTEXT "Co&mputer name:", IDC_STATIC, 0, 4, 95, 9
+    LTEXT "電腦名稱(&M):", IDC_STATIC, 0, 4, 95, 9
     EDITTEXT IDC_COMPUTERNAME, 100, 2, 190, 13, ES_UPPERCASE | ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT "&User name:", IDC_STATIC, 0, 22, 95, 9
+    LTEXT "用戶名(&U):", IDC_STATIC, 0, 22, 95, 9
     EDITTEXT IDC_USERNAME, 100, 20, 190, 13, ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT "&Password:", IDC_STATIC, 0, 40, 95, 9
+    LTEXT "密碼(&P):", IDC_STATIC, 0, 40, 95, 9
     EDITTEXT IDC_PASSWORD1, 100, 38, 190, 13, ES_PASSWORD | ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT "C&onfirm password:", IDC_STATIC, 0, 58, 95, 9
+    LTEXT "確認密碼(&O):", IDC_STATIC, 0, 58, 95, 9
     EDITTEXT IDC_PASSWORD2, 100, 56, 190, 13, ES_PASSWORD | ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT "Password &hint:", IDC_STATIC, 0, 76, 95, 9
+    LTEXT "密碼提示(&H):", IDC_STATIC, 0, 76, 95, 9
     EDITTEXT IDC_PASSWORDHINT, 100, 74, 190, 13, ES_AUTOHSCROLL | WS_TABSTOP
-    LTEXT "&Time zone:", IDC_STATIC, 0, 96, 95, 9
+    LTEXT "時區(&T):", IDC_STATIC, 0, 96, 95, 9
     COMBOBOX IDC_TIMEZONELIST, 100, 94, 190, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    AUTOCHECKBOX "Adjust for &daylight saving time automatically", IDC_AUTODAYLIGHT, 100, 111, 190, 10, WS_TABSTOP
-    LTEXT "This account is a member of the Administrators group. If you leave the password empty, LiberNT signs in to it automatically.", IDC_STATIC, 0, 130, 290, 26
+    AUTOCHECKBOX "自動跟夏令時間調校(&D)", IDC_AUTODAYLIGHT, 100, 111, 190, 10, WS_TABSTOP
+    LTEXT "呢個帳戶屬於 Administrators 群組。如果密碼留空唔填，LiberNT 開機嗰陣就會自動登入呢個帳戶。", IDC_STATIC, 0, 130, 290, 26
 END
 
 IDD_READYPAGE DIALOGEX 0, 0, 290, 160
@@ -107,8 +107,8 @@ STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
     EDITTEXT IDC_READY_SUMMARY, 0, 0, 290, 90, ES_MULTILINE | ES_READONLY | WS_VSCROLL | NOT WS_TABSTOP
-    LTEXT "LiberNT is under active development. Use it for evaluation and testing, not as your main operating system. It may corrupt your data or damage your hardware.", IDC_READY_WARNING, 0, 97, 290, 28
-    AUTOCHECKBOX "I &understand, and I have backed up the data I want to keep.", IDC_CONFIRM_INSTALL, 0, 132, 290, 20, BS_MULTILINE | BS_TOP | WS_TABSTOP
+    LTEXT "LiberNT 仲喺度積極開發緊，只適合用嚟評估同測試，千祈唔好當做主力操作系統咁用，如果唔係有機會整壞你啲資料或者硬件。", IDC_READY_WARNING, 0, 97, 290, 28
+    AUTOCHECKBOX "我明白，亦都已經備份好要留低嘅資料(&U)。", IDC_CONFIRM_INSTALL, 0, 132, 290, 20, BS_MULTILINE | BS_TOP | WS_TABSTOP
 END
 
 IDD_PROCESSPAGE DIALOGEX 0, 0, 290, 160
@@ -131,7 +131,7 @@ END
 
 IDD_RESIZE DIALOGEX 0, 0, 300, 170
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Shrink"
+CAPTION "縮細"
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_RESIZE_LABEL_TOTAL, 7, 13, 190, 8
@@ -144,214 +144,214 @@ BEGIN
     LTEXT "", IDC_RESIZE_LABEL_AFTER, 7, 70, 190, 8
     EDITTEXT IDC_RESIZE_AFTER, 203, 67, 90, 13, ES_READONLY | ES_AUTOHSCROLL | NOT WS_TABSTOP
     ICON "", IDC_RESIZE_ICON, 8, 85, 10, 10, SS_ICON | SS_REALSIZEIMAGE
-    LTEXT "You cannot shrink a volume beyond the point where any unmovable files are located.", IDC_RESIZE_NOTE, 25, 86, 268, 26
+    LTEXT "如果磁碟區入面有唔搬得嘅檔案，就唔能夠縮到細過嗰個位置。", IDC_RESIZE_NOTE, 25, 86, 268, 26
     DEFPUSHBUTTON "", IDOK, 180, 149, 54, 14
-    PUSHBUTTON "Cancel", IDCANCEL, 239, 149, 54, 14
+    PUSHBUTTON "取消", IDCANCEL, 239, 149, 54, 14
 END
 
 /* Strings */
 
 STRINGTABLE
 BEGIN
-    IDS_SHRINK_CAPTION "Shrink %s"
-    IDS_EXTEND_CAPTION "Extend %s"
-    IDS_SHRINK_TOTAL "Total size before shrink in MB:"
-    IDS_SHRINK_AVAILABLE "Size of available shrink space in MB:"
-    IDS_SHRINK_AMOUNT "&Enter the amount of space to shrink in MB:"
-    IDS_SHRINK_AFTER "Total size after shrink in MB:"
-    IDS_SHRINK_BUTTON "&Shrink"
-    IDS_EXTEND_TOTAL "Total size before extend in MB:"
-    IDS_EXTEND_AVAILABLE "Size of available space in MB:"
-    IDS_EXTEND_AMOUNT "&Enter the amount of space to add in MB:"
-    IDS_EXTEND_AFTER "Total size after extend in MB:"
-    IDS_EXTEND_BUTTON "E&xtend"
-    IDS_RESIZE_PENDING "Partition changes are waiting to be applied. Shrink and extend take effect immediately, so do them before creating, deleting or formatting partitions."
-    IDS_RESIZE_FAILED "The partition could not be resized."
+    IDS_SHRINK_CAPTION "縮細 %s"
+    IDS_EXTEND_CAPTION "延伸 %s"
+    IDS_SHRINK_TOTAL "縮細前嘅總容量 (MB):"
+    IDS_SHRINK_AVAILABLE "可以騰出嘅空間 (MB):"
+    IDS_SHRINK_AMOUNT "輸入要縮細幾多空間 (MB)(&E):"
+    IDS_SHRINK_AFTER "縮細後嘅總容量 (MB):"
+    IDS_SHRINK_BUTTON "縮細(&S)"
+    IDS_EXTEND_TOTAL "延伸前嘅總容量 (MB):"
+    IDS_EXTEND_AVAILABLE "可以用嘅空間 (MB):"
+    IDS_EXTEND_AMOUNT "輸入要加幾多空間 (MB)(&E):"
+    IDS_EXTEND_AFTER "延伸後嘅總容量 (MB):"
+    IDS_EXTEND_BUTTON "延伸(&X)"
+    IDS_RESIZE_PENDING "仲有未套用嘅分割區改動。「縮細」同「延伸」會即刻生效，所以請喺新增、刪除或者格式化分割區之前做咗先。"
+    IDS_RESIZE_FAILED "改唔到呢個分割區嘅大細。"
     IDS_CAPTION "LiberNT 安裝程式"
-    IDS_DRIVETITLE "設定安裝磁碟區和系統資料夾"
-    IDS_PROCESSTITLE "設定磁碟區，複製檔案並安裝系統"
-    IDS_PROCESSSUBTITLE "建立並格式化磁碟區，複製檔案，安裝並設定載入程式。"
-    IDS_ABORTSETUP "LiberNT 尚未完全安裝到您的電腦上。如果您現在結束安裝程式，您需要重新執行安裝程式來安裝 LiberNT。您確定要結束嗎？"
-    IDS_ABORTSETUP2 "終止安裝？"
-    IDS_NO_TXTSETUP_SIF "找不到「txtsetup.sif」。\n安裝程式無法繼續。"
-    IDS_FINISH_NO_REBOOT "Setup needs to restart your computer to continue with the second installation step.\n\nClick on Restart to immediately restart your computer.\nClick on Postpone to quit the installer and restart your computer at a later time."
-    IDS_ABORT_NO_REBOOT "Click on Restart to immediately restart your computer.\nClick on Close to quit the installer."
-    IDS_INSTALLBTN "&Install"
-    IDS_RESTARTBTN "&Restart"
-    IDS_POSTPONEBTN "&Postpone"
+    IDS_DRIVETITLE "你想將 LiberNT 裝落邊度？"
+    IDS_PROCESSTITLE "安裝緊 LiberNT"
+    IDS_PROCESSSUBTITLE "安裝程式準備緊隻磁碟、複製緊檔案、設定緊 LiberNT 同埋安裝開機載入程式，可能要等幾分鐘。"
+    IDS_ABORTSETUP "LiberNT 仲未喺你部電腦度裝完。如果而家退出安裝程式，下次就要重新行過安裝程式先裝到 LiberNT。真係要退出？"
+    IDS_ABORTSETUP2 "中止安裝？"
+    IDS_NO_TXTSETUP_SIF "搵唔到「txtsetup.sif」。\n安裝程式繼續唔到。"
+    IDS_FINISH_NO_REBOOT "請重新啟動部電腦嚟啟動 LiberNT，唔好再用安裝媒體開機。\n\n撳「重新啟動」即刻重啟部電腦。\n撳「遲啲先」退出安裝程式，遲啲自己再重啟。"
+    IDS_ABORT_NO_REBOOT "撳「重新啟動」即刻重啟部電腦。\n撳「關閉」退出安裝程式。"
+    IDS_INSTALLBTN "安裝(&I)"
+    IDS_RESTARTBTN "重新啟動(&R)"
+    IDS_POSTPONEBTN "遲啲先(&P)"
 END
 
 /* Setup window */
 
 STRINGTABLE
 BEGIN
-    IDS_DISKSUBTITLE "Select a partition or unallocated space. Except for Shrink and Extend, Setup changes your disks only after you click Install."
-    IDS_ACCOUNTZONESUBTITLE "You sign in to LiberNT with this account. LiberNT shows the time of the zone you select."
-    IDS_READYTITLE "Ready to install"
-    IDS_READYSUBTITLE "Review your choices. Setup starts changing your disks when you click Install."
-    IDS_DONETITLE "LiberNT is installed"
-    IDS_ABORTTITLE "LiberNT was not installed"
-    IDS_DONE_REBOOT "Your computer restarts in a few seconds to start LiberNT. Do not start from the installation media again.\n\nClick Restart to restart now."
-    IDS_ABORT_REBOOT "Setup did not finish. Your computer restarts in a few seconds.\n\nClick Restart to restart now."
-    IDS_BACKBTN "&Back"
-    IDS_NEXTBTN "&Next"
-    IDS_CANCELBTN "Cancel"
-    IDS_CLOSEBTN "&Close"
-    IDS_SKIPBTN "&Skip"
+    IDS_DISKSUBTITLE "揀個分割區或者未分配空間。除咗「縮細」同「延伸」之外，安裝程式要等你撳「安裝」之後先會改動你隻磁碟。"
+    IDS_ACCOUNTZONESUBTITLE "你會用呢個帳戶登入 LiberNT，系統亦會跟呢個時區顯示時間。"
+    IDS_READYTITLE "準備好安裝"
+    IDS_READYSUBTITLE "請核對清楚你揀嘅設定。一撳「安裝」，安裝程式就會開始改動你隻磁碟。"
+    IDS_DONETITLE "LiberNT 已經裝好"
+    IDS_ABORTTITLE "LiberNT 未裝好"
+    IDS_DONE_REBOOT "部電腦會喺幾秒後重新啟動並進入 LiberNT，唔好再用安裝媒體開機。\n\n想即刻重啟就撳「重新啟動」。"
+    IDS_ABORT_REBOOT "安裝未完成，部電腦會喺幾秒後重新啟動。\n\n想即刻重啟就撳「重新啟動」。"
+    IDS_BACKBTN "上一步(&B)"
+    IDS_NEXTBTN "下一步(&N)"
+    IDS_CANCELBTN "取消"
+    IDS_CLOSEBTN "關閉(&C)"
+    IDS_SKIPBTN "跳過(&S)"
 END
 
 STRINGTABLE
 BEGIN
-    IDS_DISK_COL_NAME "Name"
-    IDS_DISK_COL_TOTAL "Total size"
-    IDS_DISK_COL_FREE "Free space"
-    IDS_DISK_COL_TYPE "Type"
-    IDS_DISK_UNALLOCATED "Drive %lu Unallocated Space"
-    IDS_DISK_PARTITION "Drive %lu Partition %lu"
-    IDS_DISK_PARTITION_LABEL "Drive %lu Partition %lu: %s"
-    IDS_DISK_SUFFIX_NEW " (new)"
-    IDS_DISK_SUFFIX_FORMAT " (to be formatted)"
-    IDS_DISKINFO "Drive %lu:"
-    IDS_TYPE_SYSTEM "System"
-    IDS_TYPE_MSR "MSR (Reserved)"
-    IDS_TYPE_PRIMARY "Primary"
-    IDS_TYPE_RECOVERY "Recovery"
-    IDS_TYPE_OEM "OEM (Reserved)"
-    IDS_TYPE_LOGICAL "Logical"
-    IDS_TYPE_EXTENDED "Extended"
+    IDS_DISK_COL_NAME "名稱"
+    IDS_DISK_COL_TOTAL "總容量"
+    IDS_DISK_COL_FREE "可用空間"
+    IDS_DISK_COL_TYPE "類型"
+    IDS_DISK_UNALLOCATED "磁碟機 %lu 未分配空間"
+    IDS_DISK_PARTITION "磁碟機 %lu 分割區 %lu"
+    IDS_DISK_PARTITION_LABEL "磁碟機 %lu 分割區 %lu: %s"
+    IDS_DISK_SUFFIX_NEW " (新)"
+    IDS_DISK_SUFFIX_FORMAT " (將會格式化)"
+    IDS_DISKINFO "磁碟機 %lu:"
+    IDS_TYPE_SYSTEM "系統"
+    IDS_TYPE_MSR "MSR (保留)"
+    IDS_TYPE_PRIMARY "主要"
+    IDS_TYPE_RECOVERY "還原"
+    IDS_TYPE_OEM "OEM (保留)"
+    IDS_TYPE_LOGICAL "邏輯"
+    IDS_TYPE_EXTENDED "延伸"
 END
 
 STRINGTABLE
 BEGIN
-    IDS_DISK_SELECT "Select where to install LiberNT."
-    IDS_DISK_NO_REGION "This space is too small to hold a new partition."
-    IDS_DISK_NOT_BASIC "LiberNT cannot be installed on this partition. Select a primary partition or unallocated space."
-    IDS_DISK_TOO_SMALL "This partition is too small to install LiberNT."
-    IDS_DISK_MBR_ON_UEFI "LiberNT cannot be installed to this disk. The selected disk has an MBR partition table. On EFI systems, LiberNT can only be installed to GPT disks."
-    IDS_DISK_GPT_ON_BIOS "LiberNT cannot be installed to this disk. The selected disk is of the GPT partition style."
-    IDS_DISK_NOT_FIRMWARE "The firmware of this computer does not see the selected drive, so LiberNT may not start from it.\n\nClick OK to use it anyway."
-    IDS_DISK_NEW_SYSTEM "To make sure that all LiberNT features work correctly, Setup also creates partitions for system files."
-    IDS_DISK_FORMAT_WARN "If you format this partition, all data stored on it will be lost. Back up any files you want to keep first."
-    IDS_DISK_FORMAT_NTFS "LiberNT is installed on NTFS. Setup formats this partition, and all data stored on it will be lost."
-    IDS_DISK_FORMAT_EXISTING "This partition already contains a Windows or LiberNT installation. Setup formats it, and all data stored on it will be lost. Select another partition to keep it."
-    IDS_DISK_ERASE_WARN "All partitions on Drive %lu, and all data stored on them, are deleted when the installation starts."
-    IDS_NEWPART_RANGE "&Size in MB (up to %I64u):"
+    IDS_DISK_SELECT "請揀將 LiberNT 裝落邊度。"
+    IDS_DISK_NO_REGION "呢塊空間太細，開唔到新分割區。"
+    IDS_DISK_NOT_BASIC "LiberNT 裝唔到落呢個分割區。請揀主要分割區或者未分配空間。"
+    IDS_DISK_TOO_SMALL "呢個分割區太細，裝唔到 LiberNT。"
+    IDS_DISK_MBR_ON_UEFI "LiberNT 裝唔到落呢隻磁碟。你揀嗰隻磁碟用緊 MBR 分割表；喺 EFI 電腦上面，LiberNT 只可以裝落 GPT 磁碟。"
+    IDS_DISK_GPT_ON_BIOS "LiberNT 裝唔到落呢隻磁碟。你揀嗰隻磁碟用緊 GPT 分割形式。"
+    IDS_DISK_NOT_FIRMWARE "部電腦嘅韌體認唔到你揀嗰隻磁碟機，所以 LiberNT 未必可以由嗰度開機。\n\n如果照用，請撳「確定」。"
+    IDS_DISK_NEW_SYSTEM "為咗確保 LiberNT 所有功能正常運作，安裝程式亦會幫系統檔案開埋所需嘅分割區。"
+    IDS_DISK_FORMAT_WARN "一旦格式化呢個分割區，入面儲低嘅資料就會全部清晒。有要留低嘅檔案請先備份好。"
+    IDS_DISK_FORMAT_NTFS "LiberNT 會裝喺 NTFS 上面。安裝程式會格式化呢個分割區，入面嘅資料會全部清晒。"
+    IDS_DISK_FORMAT_EXISTING "呢個分割區入面已經裝咗 Windows 或者 LiberNT。安裝程式會將佢格式化，入面嘅資料會全部清晒。想保留佢嘅話，請揀另一個分割區。"
+    IDS_DISK_ERASE_WARN "一開始安裝，磁碟機 %lu 上面所有分割區同入面儲低嘅資料都會全部剷走。"
+    IDS_NEWPART_RANGE "容量 (MB，最多 %I64u)(&S):"
 END
 
 STRINGTABLE
 BEGIN
-    IDS_READY_TARGET "LiberNT is installed on %s (%s)."
-    IDS_READY_ERASE "Drive %lu is erased."
-    IDS_READY_DELETE "%s is deleted."
-    IDS_READY_CREATE "%s (%s) is created and formatted as %s."
-    IDS_READY_FORMAT "%s (%s) is formatted as %s."
-    IDS_READY_NOCHANGES "No partition is created, deleted or formatted."
-    IDS_READY_COMPUTER "Computer name: %s"
-    IDS_READY_ACCOUNT "Account: %s"
-    IDS_READY_TIMEZONE "Time zone: %s"
-    IDS_READY_LANGUAGE "Language and region: %s"
-    IDS_READY_KEYBOARD "Keyboard: %s"
-    IDS_LANGUAGETITLE "Choose your language and keyboard"
-    IDS_LANGUAGESUBTITLE "Setup and LiberNT use this language, and its format for dates, times, numbers and currency."
+    IDS_READY_TARGET "LiberNT 會裝落 %s (%s)。"
+    IDS_READY_ERASE "磁碟機 %lu 會被清空。"
+    IDS_READY_DELETE "%s 會被刪除。"
+    IDS_READY_CREATE "會開一個 %s (%s) 並格式化做 %s。"
+    IDS_READY_FORMAT "%s (%s) 會格式化做 %s。"
+    IDS_READY_NOCHANGES "唔會新增、刪除或者格式化任何分割區。"
+    IDS_READY_COMPUTER "電腦名稱: %s"
+    IDS_READY_ACCOUNT "帳戶: %s"
+    IDS_READY_TIMEZONE "時區: %s"
+    IDS_READY_LANGUAGE "語言同地區: %s"
+    IDS_READY_KEYBOARD "鍵盤: %s"
+    IDS_LANGUAGETITLE "揀你用嘅語言同鍵盤"
+    IDS_LANGUAGESUBTITLE "安裝程式同 LiberNT 都會用呢種語言，同埋佢嘅日期、時間、數字、貨幣格式。"
 END
 
 STRINGTABLE
 BEGIN
-    IDS_INSTALL_FAILED "LiberNT could not be installed"
-    IDS_INSTALL_STEP_FAILED "%s\nThe step failed with status 0x%08lx."
-    IDS_FORMAT_FAILED "Setup could not format %s as %s.\n%s"
-    IDS_CHECK_FAILED "Setup found errors on %s that it could not repair (status 0x%08lx). Setup continues."
-    IDS_SETUPLIB_MISSING "Setup cannot load %s. Run libernt.exe from the folder that holds its system32 folder and txtsetup.sif."
+    IDS_INSTALL_FAILED "裝唔到 LiberNT"
+    IDS_INSTALL_STEP_FAILED "%s\n呢步失敗咗，狀態碼係 0x%08lx。"
+    IDS_FORMAT_FAILED "安裝程式無法將 %s 格式化做 %s。\n%s"
+    IDS_CHECK_FAILED "安裝程式喺 %s 搵到修唔返嘅錯誤 (狀態碼 0x%08lx)，但會繼續安裝。"
+    IDS_SETUPLIB_MISSING "安裝程式載入唔到 %s。請喺裝住 system32 資料夾同 txtsetup.sif 嗰個資料夾入面行 libernt.exe。"
 END
 
 STRINGTABLE
 BEGIN
-    IDS_OOBE_REGIONTITLE "Choose your language and keyboard"
-    IDS_OOBE_REGIONSUBTITLE "LiberNT uses this language, its format for dates, times, numbers and currency, and this keyboard for typing."
-    IDS_APPSTITLE "Get the components most programs need"
-    IDS_APPSSUBTITLE "LiberNT downloads them from their publishers and installs them for every account."
-    IDS_APPS_COL_NAME "Component"
-    IDS_APPS_COL_SOURCE "Downloaded from"
+    IDS_OOBE_REGIONTITLE "揀你用嘅語言同鍵盤"
+    IDS_OOBE_REGIONSUBTITLE "LiberNT 會用呢種語言同佢嘅日期、時間、數字、貨幣格式，亦會用呢個鍵盤嚟打字。"
+    IDS_APPSTITLE "下載大部份程式都會用到嘅組件"
+    IDS_APPSSUBTITLE "LiberNT 會直接由發佈者度下載呢啲組件，再幫所有帳戶裝好。"
+    IDS_APPS_COL_NAME "組件"
+    IDS_APPS_COL_SOURCE "下載來源"
     IDS_APPS_INSTALLED "%s (已安裝)"
-    IDS_OOBE_FINISHTITLE "Getting LiberNT ready"
-    IDS_OOBE_FINISHSUBTITLE "This can take a few minutes. Keep your computer on."
-    IDS_OOBE_APPLY_REGION "Applying your language and keyboard..."
-    IDS_OOBE_APPLY_TIMEZONE "Setting the time zone..."
-    IDS_OOBE_APPLY_NAME "Naming your computer..."
-    IDS_OOBE_APPLY_ACCOUNT "Creating your account..."
-    IDS_OOBE_DOWNLOADING "Downloading %s..."
-    IDS_OOBE_INSTALLING "Installing %s..."
+    IDS_OOBE_FINISHTITLE "準備緊 LiberNT"
+    IDS_OOBE_FINISHSUBTITLE "呢步可能要幾分鐘，請唔好熄機。"
+    IDS_OOBE_APPLY_REGION "套用緊你揀嘅語言同鍵盤..."
+    IDS_OOBE_APPLY_TIMEZONE "設定緊時區..."
+    IDS_OOBE_APPLY_NAME "設定緊電腦名稱..."
+    IDS_OOBE_APPLY_ACCOUNT "建立緊你嘅帳戶..."
+    IDS_OOBE_DOWNLOADING "下載緊 %s..."
+    IDS_OOBE_INSTALLING "安裝緊 %s..."
     IDS_OOBE_APP_FAILED "%s: %s (%s)"
-    IDS_OOBE_APPS_FAILED "Some components were not installed"
-    IDS_OOBE_ACCOUNT_FAILED "LiberNT could not create your account (error %lu). LiberNT signs in to the built-in User account instead."
-    IDS_OOBE_UNKNOWN_ERROR "Unknown error"
-    IDS_OOBE_STORAGETITLE "Use all of your storage"
-    IDS_OOBE_STORAGESUBTITLE "LiberNT can grow drive C: to fill the storage device it runs from."
-    IDS_OOBE_STORAGE_INFO "Drive C: is %I64u MB with %I64u MB free. The rest of the storage device is not used yet."
-    IDS_OOBE_EXPAND_FAILED "LiberNT could not expand drive C: (lntexpandstorage exit code %lu). Setup continues; you can try again later with lntexpandstorage in Command Prompt."
-    IDS_OOBE_APPS_SPACE "The selected components need about %lu MB. Drive C: has %I64u MB free."
-    IDS_OOBE_APPS_NOSPACE "Not enough free space for the selected components"
-    IDS_OOBE_APPS_NOSPACE_TEXT "They need about %lu MB, and drive C: has %I64u MB free. Clear some boxes to continue. To install them later, expand drive C: with lntexpandstorage in Command Prompt, then run %%SystemRoot%%\\system32\\oobe\\oobe.exe /components."
+    IDS_OOBE_APPS_FAILED "有啲組件未裝到"
+    IDS_OOBE_ACCOUNT_FAILED "LiberNT 建立唔到你嘅帳戶 (錯誤 %lu)，會改為登入內置嘅 User 帳戶。"
+    IDS_OOBE_UNKNOWN_ERROR "未知錯誤"
+    IDS_OOBE_STORAGETITLE "用盡成隻儲存裝置嘅空間"
+    IDS_OOBE_STORAGESUBTITLE "LiberNT 可以將 C: 磁碟機加大，用盡成隻儲存裝置未用嘅空間。"
+    IDS_OOBE_STORAGE_INFO "C: 磁碟機而家係 %I64u MB，仲有 %I64u MB 空位；隻儲存裝置淨低嘅空間仲未用。"
+    IDS_OOBE_EXPAND_FAILED "LiberNT 延伸唔到 C: 磁碟機 (lntexpandstorage 結束代碼 %lu)。設定會照常繼續；你可以遲啲喺「命令提示字元」行 lntexpandstorage 再試。"
+    IDS_OOBE_APPS_SPACE "揀咗嘅組件大約要 %lu MB，而 C: 磁碟機有 %I64u MB 空位。"
+    IDS_OOBE_APPS_NOSPACE "唔夠空位裝你揀嘅組件"
+    IDS_OOBE_APPS_NOSPACE_TEXT "呢啲組件大約要 %lu MB，但 C: 磁碟機得 %I64u MB 空位。請取消剔選部份組件先再繼續。想遲啲補裝嘅話，可以喺「命令提示字元」行 lntexpandstorage 加大 C: 磁碟機，再行 %%SystemRoot%%\\system32\\oobe\\oobe.exe /components。"
 END
 
 /* Progress Strings */
 
 STRINGTABLE
 BEGIN
-    IDS_FORMATTING_PROGRESS1 "Formatting volume %c: (%s) in %s..."
-    IDS_FORMATTING_PROGRESS2 "Formatting volume %s in %s..."
+    IDS_FORMATTING_PROGRESS1 "正將磁碟區 %c: (%s) 格式化做 %s..."
+    IDS_FORMATTING_PROGRESS2 "正將磁碟區 %s 格式化做 %s..."
 
-    IDS_CHECKING_PROGRESS1 "Checking volume %c: (%s)..."
-    IDS_CHECKING_PROGRESS2 "Checking volume %s..."
+    IDS_CHECKING_PROGRESS1 "檢查緊磁碟區 %c: (%s)..."
+    IDS_CHECKING_PROGRESS2 "檢查緊磁碟區 %s..."
 
-    IDS_COPYING  "Copying %s"
-    IDS_MOVING   "Moving %s to %s"
-    IDS_RENAMING "Renaming %s to %s"
-    IDS_DELETING "Deleting %s"
+    IDS_COPYING  "複製緊 %s"
+    IDS_MOVING   "搬緊 %s 去 %s"
+    IDS_RENAMING "將 %s 改名做 %s"
+    IDS_DELETING "刪除緊 %s"
 
-    IDS_CONFIG_SYSTEM_PARTITION "Configuring the system partition..."
-    IDS_PREPARE_PARTITIONS "Preparing partitions..."
-    IDS_PREPARE_FILES "Preparing the list of files to be copied, please wait..."
-    IDS_COPYING_FILES "Copying the files..."
+    IDS_CONFIG_SYSTEM_PARTITION "設定緊系統分割區..."
+    IDS_PREPARE_PARTITIONS "準備緊分割區..."
+    IDS_PREPARE_FILES "準備緊要複製嘅檔案清單，請等等..."
+    IDS_COPYING_FILES "複製緊檔案..."
 
-    IDS_CREATE_REGISTRY "Creating the registry..."
+    IDS_CREATE_REGISTRY "建立緊登錄檔..."
 
     // IDS_INSTALL_FINALIZE "Finalizing the installation..."
-    IDS_INSTALL_BOOTLOADER "Installing the bootloader..."
+    IDS_INSTALL_BOOTLOADER "安裝緊開機載入程式..."
 END
 
 // Note to translators: please refer to the corresponding usetup/lang/*.h translations.
 STRINGTABLE
 BEGIN
-    IDS_REG_DONE "Done"
-    IDS_REG_REGHIVEUPDATE "Updating registry hives"
-    IDS_REG_IMPORTFILE "Importing %s"
-    IDS_REG_DISPLAYSETTINGSUPDATE "Updating display registry settings"
-    IDS_REG_LOCALESETTINGSUPDATE "Updating locale settings"
-    IDS_REG_ADDKBLAYOUTS "Adding keyboard layouts"
-    IDS_REG_KEYBOARDSETTINGSUPDATE "Updating keyboard layout settings"
-    IDS_REG_CODEPAGEINFOUPDATE "Adding codepage information"
+    IDS_REG_DONE "搞掂"
+    IDS_REG_REGHIVEUPDATE "更新緊登錄檔 Hive"
+    IDS_REG_IMPORTFILE "匯入緊 %s"
+    IDS_REG_DISPLAYSETTINGSUPDATE "更新緊顯示登錄設定"
+    IDS_REG_LOCALESETTINGSUPDATE "更新緊地區設定"
+    IDS_REG_ADDKBLAYOUTS "加入緊鍵盤配置"
+    IDS_REG_KEYBOARDSETTINGSUPDATE "更新緊鍵盤配置設定"
+    IDS_REG_CODEPAGEINFOUPDATE "加入緊字碼頁資訊"
 END
 
 STRINGTABLE
 BEGIN
-    IDS_ACCOUNTTITLE "Name your computer and create your account"
-    IDS_CONFIGURE_SYSTEM "Configuring LiberNT..."
-    IDS_CONFIG_FOLDERS "Creating the system and profile folders"
-    IDS_CONFIG_DEVICES "Installing the device classes"
-    IDS_CONFIG_NETWORK "Installing the network protocols"
-    IDS_CONFIG_SETTINGS "Applying the computer settings"
-    IDS_CONFIG_COMPONENTS "Registering the components"
-    IDS_CONFIG_SHORTCUTS "Creating the Start menu shortcuts"
-    IDS_CONFIG_SECURITY "Applying the security settings"
-    IDS_CONFIG_ACCOUNT "Creating your account"
-    IDS_CONFIG_FINISH "Saving the configuration"
-    IDS_ERROR_COMPUTERNAME "The computer name must have 1 to 15 letters, digits or hyphens, and cannot contain only digits."
-    IDS_ERROR_USERNAME "The user name must have 1 to 20 characters and cannot contain any of these characters:\n"" / \\ [ ] : ; | = , + * ? < > @\nIt cannot contain only periods and spaces."
-    IDS_ERROR_USEREXISTS "This name is already used by a built-in account or group, or by the computer. Choose another user name."
-    IDS_ERROR_PASSWORDMATCH "The passwords do not match. Type the same password in both boxes."
-    IDS_ERROR_PASSWORDHINT "Type a password hint."
-    IDS_ERROR_HINTPASSWORD "The password hint can't contain the password."
+    IDS_ACCOUNTTITLE "幫部電腦改名同建立你嘅帳戶"
+    IDS_CONFIGURE_SYSTEM "設定緊 LiberNT..."
+    IDS_CONFIG_FOLDERS "建立緊系統同個人資料夾"
+    IDS_CONFIG_DEVICES "安裝緊裝置類別"
+    IDS_CONFIG_NETWORK "安裝緊網絡通訊協定"
+    IDS_CONFIG_SETTINGS "套用緊電腦設定"
+    IDS_CONFIG_COMPONENTS "註冊緊系統組件"
+    IDS_CONFIG_SHORTCUTS "建立緊「開始」選單捷徑"
+    IDS_CONFIG_SECURITY "套用緊安全設定"
+    IDS_CONFIG_ACCOUNT "建立緊你嘅帳戶"
+    IDS_CONFIG_FINISH "儲存緊設定"
+    IDS_ERROR_COMPUTERNAME "電腦名稱要有 1 至 15 個英文字母、數字或者連字號，而且唔可以淨係得數字。"
+    IDS_ERROR_USERNAME "用戶名要有 1 至 20 個字元，而且唔可以有下面任何一個符號:\n"" / \\ [ ] : ; | = , + * ? < > @\n亦唔可以淨係得句號同空格。"
+    IDS_ERROR_USEREXISTS "呢個名已經俾內置帳戶、群組或者部電腦用咗，請揀過另一個用戶名。"
+    IDS_ERROR_PASSWORDMATCH "兩次輸入嘅密碼唔一樣，請喺兩個格入面打同一個密碼。"
+    IDS_ERROR_PASSWORDHINT "請輸入密碼提示。"
+    IDS_ERROR_HINTPASSWORD "密碼提示唔可以包含密碼本身。"
 END
 
 /* Error Strings */
@@ -359,11 +359,11 @@ END
 STRINGTABLE
 BEGIN
 
-    IDS_ERROR_CREATE_PARTITION "Failed to create a new partition."
+    IDS_ERROR_CREATE_PARTITION "開唔到新分割區。"
 
-    IDS_WARN_DELETE_PARTITION_TITLE "Delete partition?"
-    IDS_WARN_DELETE_PARTITION "Are you sure you want to delete the selected partition?"
-    IDS_WARN_DELETE_MBR_EXTENDED_PARTITION "Are you sure you want to delete the selected extended partition and ALL the logical partitions it contains?"
+    IDS_WARN_DELETE_PARTITION_TITLE "刪除分割區？"
+    IDS_WARN_DELETE_PARTITION "你確定要刪除揀咗嗰個分割區？"
+    IDS_WARN_DELETE_MBR_EXTENDED_PARTITION "你確定要刪除揀咗嗰個延伸分割區，連埋入面所有邏輯分割區一齊剷走？"
 END
 
 IDD_INSTALLTYPEPAGE DIALOGEX 0, 0, 290, 160
@@ -372,12 +372,12 @@ FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_TYPE_FOUND, 0, 0, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
     AUTORADIOBUTTON "", IDC_TYPE_ALONGSIDE, 0, 13, 290, 10, WS_GROUP | WS_TABSTOP
-    AUTORADIOBUTTON "&Something else: create, resize or choose partitions yourself", IDC_TYPE_MANUAL, 0, 25, 290, 10
+    AUTORADIOBUTTON "其他方法：自己開、改大細或者揀分割區(&S)", IDC_TYPE_MANUAL, 0, 25, 290, 10
     CONTROL "", IDC_TYPE_SPLIT, TRACKBAR_CLASS, TBS_HORZ | TBS_NOTICKS | TBS_BOTH | WS_GROUP | WS_TABSTOP, 6, 40, 284, 16
     LTEXT "", IDC_TYPE_WINSIZE, 12, 57, 136, 9, SS_NOPREFIX
     RTEXT "", IDC_TYPE_LNTSIZE, 148, 57, 136, 9, SS_NOPREFIX
-    LTEXT "Start by default:", IDC_TYPE_DEFAULT_LABEL, 12, 73, 62, 9
-    AUTORADIOBUTTON "&LiberNT", IDC_TYPE_DEFAULT_LIBERNT, 76, 72, 70, 10, WS_GROUP | WS_TABSTOP
+    LTEXT "預設開機:", IDC_TYPE_DEFAULT_LABEL, 12, 73, 62, 9
+    AUTORADIOBUTTON "LiberNT(&L)", IDC_TYPE_DEFAULT_LIBERNT, 76, 72, 70, 10, WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "", IDC_TYPE_DEFAULT_WINDOWS, 150, 72, 120, 10
     ICON "", IDC_TYPE_WARNICON, 12, 87, 10, 10, SS_ICON | SS_REALSIZEIMAGE
     LTEXT "", IDC_TYPE_WARNING, 28, 87, 262, 36, SS_NOPREFIX
@@ -386,23 +386,23 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_TYPETITLE "Installation type"
-    IDS_TYPESUBTITLE "Choose how LiberNT shares this computer."
-    IDS_TYPE_FOUND "This computer has %s on %s."
-    IDS_TYPE_ALONGSIDE "Install LiberNT &alongside %s"
+    IDS_TYPETITLE "安裝方式"
+    IDS_TYPESUBTITLE "揀 LiberNT 點樣同呢部電腦共用空間。"
+    IDS_TYPE_FOUND "呢部電腦嘅 %s 上面裝咗 %s。"
+    IDS_TYPE_ALONGSIDE "同 %s 並存安裝 LiberNT(&A)"
     IDS_TYPE_SPLITSIZE "%s: %s"
-    IDS_TYPE_SHRINKNOTE "Drag the slider to share the space. %s keeps its programs and files. Its partition shrinks as soon as you select Next."
-    IDS_TYPE_HIBERNATED "%s is hibernated or was shut down with Fast startup, so its partition cannot be resized safely. Start %s, choose Restart from the Start menu, then start Setup again. You can also turn off Fast startup in Control Panel > Power Options."
-    IDS_TYPE_NOSPACE "%s does not have enough free space to make room for LiberNT, which needs at least %I64u GB. Free some space in it, or choose Something else."
-    IDS_TYPE_NORESIZE "The %s partition cannot be resized. Choose Something else to pick another place for LiberNT."
-    IDS_TYPE_PLANNED "%s was resized to %s. LiberNT will be installed in the new %s partition."
-    IDS_TYPE_WARNING "%s starts by default. To start LiberNT, you must open the computer's boot menu while it starts, usually with F12, F11, F9 or Esc, and choose LiberNT Boot Manager. In Windows you can also use Settings > System > Recovery > Advanced startup > Use a device."
-    IDS_TYPE_CONFIRM_TITLE "Resize %s now?"
-    IDS_TYPE_CONFIRM "%s shrinks from %s to %s right away, before the rest of the installation, and LiberNT gets %s. Make sure the files you want to keep are backed up."
+    IDS_TYPE_SHRINKNOTE "拉動滑桿去分空間。%s 原有嘅程式同檔案會留低；你一撳「下一步」，佢個分割區就會即刻縮細。"
+    IDS_TYPE_HIBERNATED "%s 而家處於休眠狀態或者用咗「快速啟動」關機，所以唔能夠安全咁改佢個分割區大細。請先開入 %s，喺「開始」選單揀「重新啟動」，再返嚟行安裝程式；你亦可以喺「控制台 > 電源選項」熄咗快速啟動。"
+    IDS_TYPE_NOSPACE "%s 唔夠空位分俾 LiberNT（最少要 %I64u GB）。請清返啲空間出嚟，或者揀「其他方法」。"
+    IDS_TYPE_NORESIZE "改唔到 %s 分割區嘅大細。請揀「其他方法」幫 LiberNT 揀過另一個位置。"
+    IDS_TYPE_PLANNED "%s 已經改做 %s，LiberNT 會裝落新開嘅 %s 分割區。"
+    IDS_TYPE_WARNING "預設會啟動 %s。想開入 LiberNT，請喺電腦開機嗰陣打開開機選單（通常撳 F12、F11、F9 或者 Esc），然後揀 LiberNT Boot Manager。喺 Windows 入面亦可以用「設定 > 系統 > 復原 > 進階啟動 > 使用裝置」。"
+    IDS_TYPE_CONFIRM_TITLE "而家即刻改 %s 嘅大細？"
+    IDS_TYPE_CONFIRM "喺繼續後面嘅安裝之前，%s 會即刻由 %s 縮細做 %s，騰出 %s 俾 LiberNT。請確認要留低嘅檔案已經備份好。"
     IDS_TYPE_WINDOWS11 "Windows 11"
     IDS_TYPE_WINDOWS10 "Windows 10"
     IDS_TYPE_WINDOWS "Windows"
-    IDS_READY_DEFAULTOS "Starts by default: %s"
+    IDS_READY_DEFAULTOS "預設開機: %s"
     IDS_TYPE_LIBERNT "LiberNT"
 END
 
@@ -410,34 +410,34 @@ IDD_UPGRADEPAGE DIALOGEX 0, 0, 290, 160
 STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
-    AUTORADIOBUTTON "&Upgrade: install this version and keep files, settings and apps", IDC_UPGRADE_KEEP, 0, 0, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "升級：裝呢個版本，留返原有嘅檔案、設定同程式(&U)", IDC_UPGRADE_KEEP, 0, 0, 290, 10, WS_GROUP | WS_TABSTOP
     COMBOBOX IDC_UPGRADE_LIST, 12, 14, 278, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "", IDC_UPGRADE_NEW, 0, 36, 290, 10, WS_GROUP | WS_TABSTOP
     LTEXT "", IDC_UPGRADE_NOTE, 0, 56, 290, 44, SS_NOPREFIX
-    LTEXT "Start by default:", IDC_UPGRADE_DEFAULT_LABEL, 0, 105, 74, 9
-    AUTORADIOBUTTON "&LiberNT", IDC_UPGRADE_DEFAULT_LIBERNT, 76, 104, 70, 10, WS_GROUP | WS_TABSTOP
+    LTEXT "預設開機:", IDC_UPGRADE_DEFAULT_LABEL, 0, 105, 74, 9
+    AUTORADIOBUTTON "LiberNT(&L)", IDC_UPGRADE_DEFAULT_LIBERNT, 76, 104, 70, 10, WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "", IDC_UPGRADE_DEFAULT_WINDOWS, 150, 104, 140, 10
     LTEXT "", IDC_UPGRADE_WARNING, 0, 118, 290, 40, SS_NOPREFIX
 END
 
 STRINGTABLE
 BEGIN
-    IDS_UPGRADETITLE "Upgrade LiberNT"
-    IDS_UPGRADESUBTITLE "LiberNT is already installed on this computer."
-    IDS_UPGRADE_NEW_INSTALL "&Custom: install a new copy of LiberNT (advanced)"
-    IDS_UPGRADE_NEW_COPY "&Don't upgrade: set up this copy of LiberNT instead"
+    IDS_UPGRADETITLE "升級 LiberNT"
+    IDS_UPGRADESUBTITLE "呢部電腦已經裝咗 LiberNT。"
+    IDS_UPGRADE_NEW_INSTALL "自訂：全新安裝另一份 LiberNT (進階)(&C)"
+    IDS_UPGRADE_NEW_COPY "唔升級：改為設定呢份 LiberNT(&D)"
     IDS_UPGRADE_ENTRY "%s - %s"
-    IDS_UPGRADE_EARLIER "an earlier LiberNT build"
-    IDS_UPGRADE_NOTE "Upgrade replaces the LiberNT system files with this version and keeps your files, the apps you installed, the user accounts and the settings.\n\nThis version: %s"
-    IDS_UPGRADE_HIBERNATED "LiberNT on %s is hibernated, so it cannot be upgraded safely. Start it, shut it down fully, then start Setup again."
-    IDS_UPGRADE_READYTITLE "Ready to upgrade"
-    IDS_UPGRADE_READYSUBTITLE "Review your choice. Setup starts upgrading LiberNT when you click Upgrade."
-    IDS_UPGRADEBTN "&Upgrade"
-    IDS_READY_UPGRADE "LiberNT on %s is upgraded from %s to %s."
-    IDS_READY_UPGRADE_KEEP "Your files, apps, user accounts and settings are kept. The LiberNT system files, the registry entries of the system and the bootloader are replaced. No partition is created, deleted or formatted."
-    IDS_UPGRADE_PROCESSTITLE "Upgrading LiberNT"
-    IDS_UPGRADE_PROCESSSUBTITLE "Setup replaces the system files, updates the registry and installs the bootloader. Your files, apps and settings are kept. This can take a few minutes."
-    IDS_UPGRADE_DONETITLE "LiberNT is upgraded"
+    IDS_UPGRADE_EARLIER "較舊嘅 LiberNT 版本"
+    IDS_UPGRADE_NOTE "升級會將 LiberNT 嘅系統檔案換成呢個版本，同時留返你啲檔案、裝過嘅程式、用戶帳戶同設定。\n\n呢個版本: %s"
+    IDS_UPGRADE_HIBERNATED "%s 上面嘅 LiberNT 休眠緊，唔能夠安全升級。請先開入去徹底關機，再重新行安裝程式。"
+    IDS_UPGRADE_READYTITLE "準備好升級"
+    IDS_UPGRADE_READYSUBTITLE "請核對清楚你嘅選擇。一撳「升級」，安裝程式就會開始升級 LiberNT。"
+    IDS_UPGRADEBTN "升級(&U)"
+    IDS_READY_UPGRADE "將 %s 上面嘅 LiberNT 由 %s 升級做 %s。"
+    IDS_READY_UPGRADE_KEEP "你啲檔案、程式、用戶帳戶同設定都會留低；只會換走 LiberNT 系統檔案、系統登錄項目同開機載入程式，唔會新增、刪除或者格式化任何分割區。"
+    IDS_UPGRADE_PROCESSTITLE "升級緊 LiberNT"
+    IDS_UPGRADE_PROCESSSUBTITLE "安裝程式換緊系統檔案、更新緊登錄檔同安裝開機載入程式，你啲檔案、程式同設定都會留低，可能要等幾分鐘。"
+    IDS_UPGRADE_DONETITLE "LiberNT 已經升級好"
 END
 
 IDD_UPDATECHECKPAGE DIALOGEX 0, 0, 290, 160
@@ -452,10 +452,10 @@ IDD_UPDATEPAGE DIALOGEX 0, 0, 290, 160
 STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
-    LTEXT "What's new:", IDC_STATIC, 0, 0, 290, 9
+    LTEXT "更新內容:", IDC_STATIC, 0, 0, 290, 9
     EDITTEXT IDC_UPDATE_NOTES, 0, 11, 290, 110, ES_MULTILINE | ES_READONLY | WS_VSCROLL | NOT WS_TABSTOP
     LTEXT "", IDC_UPDATE_SIZE, 0, 129, 190, 9, SS_NOPREFIX
-    PUSHBUTTON "&Remind me later", IDC_UPDATE_LATER, 200, 126, 90, 14
+    PUSHBUTTON "遲啲先提醒我(&R)", IDC_UPDATE_LATER, 200, 126, 90, 14
 END
 
 IDD_UPDATEREADYPAGE DIALOGEX 0, 0, 290, 160
@@ -467,100 +467,100 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_UPDATE_CHECKTITLE "LiberNT Update"
-    IDS_UPDATE_CHECKSUBTITLE "LiberNT looks for a newer version."
-    IDS_UPDATE_CHECKING "Checking for updates..."
-    IDS_UPDATE_UPTODATE "LiberNT is up to date (build %lu)."
-    IDS_UPDATE_CHECKFAILED "LiberNT could not check for updates (error 0x%08lx). Check the network connection and try again later."
-    IDS_UPDATE_TITLE "A LiberNT update is available"
-    IDS_UPDATE_SUBTITLE "%s (update %lu)"
-    IDS_UPDATE_SIZE "Download size: %s"
-    IDS_UPDATE_DOWNLOADBTN "&Download"
-    IDS_UPDATE_LATERBTN "Restart &later"
-    IDS_UPDATE_DOWNLOADTITLE "Getting the update ready"
-    IDS_UPDATE_DOWNLOADSUBTITLE "You can keep using your computer while LiberNT downloads and prepares the update."
-    IDS_UPDATE_DOWNLOADING "Downloading %s"
-    IDS_UPDATE_DOWNLOADED "%s of %s"
-    IDS_UPDATE_VERIFYING "Checking the download of %s"
-    IDS_UPDATE_EXTRACTING "Unpacking %s"
-    IDS_UPDATE_PREPARING "Preparing the restart into Setup for %s"
-    IDS_UPDATE_STAGEFAILED "The update could not be prepared (error 0x%08lx)."
-    IDS_UPDATE_READYTITLE "Restart to install the update"
-    IDS_UPDATE_READYSUBTITLE "LiberNT installs the update while it restarts."
-    IDS_UPDATE_READYTEXT "%s is ready. When your computer restarts, LiberNT installs it before it starts, keeps your files, apps and settings, and restarts once more to finish. This takes a few minutes.\n\nSave your work before you restart."
-    IDS_UPDATE_NOTIFYTITLE "LiberNT update available"
-    IDS_UPDATE_NOTIFYTEXT "%s is available. Select this notification to see what is new and download it."
-    IDS_UPDATE_NOTIFYSTAGED "%s is ready to install. Restart your computer to install it."
-    IDS_UPDATE_COMPLETETITLE "Finishing the LiberNT update"
-    IDS_UPDATE_COMPLETESUBTITLE "Your files, apps and settings are kept. Your computer restarts when this is done."
-    IDS_UPDATE_COMPLETE_REGISTRY "Updating system settings"
-    IDS_UPDATE_COMPLETE_COMPONENTS "Configuring system components"
-    IDS_UPDATE_COMPLETE_CLEANUP "Cleaning up"
-    IDS_UPDATE_COMPLETE_FAILED "%s could not be installed. LiberNT keeps the version you had."
-    IDS_UPDATE_COMPLETE_RETRYBOOT "LiberNT could not finish installing %s. It tries again when you restart your computer."
-    IDS_UPDATE_COMPLETE_RETRYLOGON "LiberNT could not finish setting up %s. It tries again the next time an administrator signs in."
-    IDS_UPDATE_COMPLETE_NOSPACE "%s could not be installed because the system drive does not have enough free space. LiberNT keeps the version you had and offers the update again."
-    IDS_UPDATE_COMPLETE_DAMAGED "%s could not be installed because the downloaded copy is damaged. LiberNT keeps the version you had and downloads the update again."
+    IDS_UPDATE_CHECKTITLE "LiberNT 更新"
+    IDS_UPDATE_CHECKSUBTITLE "LiberNT 搵緊有冇新版本。"
+    IDS_UPDATE_CHECKING "檢查緊更新..."
+    IDS_UPDATE_UPTODATE "LiberNT 已經係最新版本 (組建 %lu)。"
+    IDS_UPDATE_CHECKFAILED "LiberNT 檢查唔到更新 (錯誤 0x%08lx)。請檢查網絡連線，遲啲再試。"
+    IDS_UPDATE_TITLE "有新嘅 LiberNT 更新"
+    IDS_UPDATE_SUBTITLE "%s (更新 %lu)"
+    IDS_UPDATE_SIZE "下載大細: %s"
+    IDS_UPDATE_DOWNLOADBTN "下載(&D)"
+    IDS_UPDATE_LATERBTN "遲啲先重新啟動(&L)"
+    IDS_UPDATE_DOWNLOADTITLE "準備緊更新"
+    IDS_UPDATE_DOWNLOADSUBTITLE "LiberNT 下載同準備更新嗰陣，你可以照常使用電腦。"
+    IDS_UPDATE_DOWNLOADING "下載緊 %s"
+    IDS_UPDATE_DOWNLOADED "%s / %s"
+    IDS_UPDATE_VERIFYING "核對緊下載返嚟嘅 %s"
+    IDS_UPDATE_EXTRACTING "解壓緊 %s"
+    IDS_UPDATE_PREPARING "準備緊重啟進入 %s 嘅安裝程式"
+    IDS_UPDATE_STAGEFAILED "準備唔到呢個更新 (錯誤 0x%08lx)。"
+    IDS_UPDATE_READYTITLE "重新啟動嚟裝更新"
+    IDS_UPDATE_READYSUBTITLE "LiberNT 會喺重新啟動嗰陣裝好更新。"
+    IDS_UPDATE_READYTEXT "%s 已經準備好。部電腦一重新啟動，LiberNT 就會喺開機前裝好佢，留返你啲檔案、程式同設定，再重啟多一次就搞掂，大約要幾分鐘。\n\n重啟之前請先儲好手頭上嘅嘢。"
+    IDS_UPDATE_NOTIFYTITLE "有 LiberNT 更新可用"
+    IDS_UPDATE_NOTIFYTEXT "%s 已經有得裝。撳呢個通知可以睇下有咩新嘢同埋下載。"
+    IDS_UPDATE_NOTIFYSTAGED "%s 已經準備好，重新啟動部電腦就會安裝。"
+    IDS_UPDATE_COMPLETETITLE "完成緊 LiberNT 更新"
+    IDS_UPDATE_COMPLETESUBTITLE "你啲檔案、程式同設定都會留低，搞掂之後部電腦會重新啟動。"
+    IDS_UPDATE_COMPLETE_REGISTRY "更新緊系統設定"
+    IDS_UPDATE_COMPLETE_COMPONENTS "設定緊系統組件"
+    IDS_UPDATE_COMPLETE_CLEANUP "清理緊暫存檔"
+    IDS_UPDATE_COMPLETE_FAILED "裝唔到 %s，LiberNT 已經幫你留返原本嘅版本。"
+    IDS_UPDATE_COMPLETE_RETRYBOOT "LiberNT 未裝完 %s，下次重啟電腦嗰陣會再試。"
+    IDS_UPDATE_COMPLETE_RETRYLOGON "LiberNT 未設定完 %s，下次管理員登入嗰陣會再試。"
+    IDS_UPDATE_COMPLETE_NOSPACE "系統磁碟機唔夠空位，裝唔到 %s。LiberNT 已經留返原本嘅版本，遲啲會再提供呢個更新。"
+    IDS_UPDATE_COMPLETE_DAMAGED "下載返嚟嘅檔案壞咗，裝唔到 %s。LiberNT 已經留返原本嘅版本，並會重新下載呢個更新。"
 END
 
 STRINGTABLE
 BEGIN
-    IDS_HOST_STARTTITLE "Install or upgrade LiberNT"
-    IDS_HOST_STARTSUBTITLE "LiberNT is already installed on this computer."
-    IDS_HOST_INSTALLNEW "&Install a new copy of LiberNT alongside %s"
-    IDS_HOST_UPGRADENOTE "Upgrade replaces the LiberNT system files with this version and keeps your files, the apps you installed, the user accounts and the settings. The computer restarts, and LiberNT installs the upgrade while it starts.\n\nThis version: %s"
-    IDS_HOST_INSTALLNOTE "%s gives part of its space to a new partition, and the computer restarts into LiberNT Setup, which installs LiberNT there.\n\nThis version: %s"
-    IDS_HOST_SHRINKNOTE "Drag the slider to share the space. %s keeps its programs and files. Windows shrinks its partition when you start the installation."
-    IDS_HOST_NOSPACE "%s does not have enough free space to make room for LiberNT, which needs at least %I64u GB. Free some space in %s, then start Setup again."
-    IDS_HOST_NORESIZE "Windows cannot tell how far the %s partition can shrink (error 0x%08lx), so Setup cannot make room for LiberNT."
-    IDS_HOST_READYSUBTITLE "Review your choices. Setup starts changing your disk when you click Install."
-    IDS_HOST_READY_SHRINK "%s (%s) shrinks from %s to %s."
-    IDS_HOST_READY_CREATE "A new %s partition is created for LiberNT after it."
-    IDS_HOST_READY_PREPARED "LiberNT is installed in the %s partition that Setup prepared earlier."
-    IDS_HOST_READY_RESTART "Setup copies the LiberNT image (%s) to that partition, then restarts the computer into LiberNT Setup, which installs LiberNT there. Until then, nothing else changes."
-    IDS_HOST_READY_UPGRADE "Setup copies the LiberNT image (%s) to the LiberNT partition and restarts the computer. LiberNT installs the upgrade while it starts, and finishes it when an administrator signs in."
-    IDS_HOST_PROCESSTITLE "Preparing LiberNT Setup"
-    IDS_HOST_PROCESSSUBTITLE "Setup prepares the disk and the boot menu. The computer restarts when this is done."
-    IDS_HOST_STEP_SHRINK "Shrinking %s..."
-    IDS_HOST_STEP_CREATE "Creating the LiberNT partition..."
-    IDS_HOST_STEP_FORMAT "Formatting the LiberNT partition..."
-    IDS_HOST_STEP_COPY "Copying the LiberNT image..."
-    IDS_HOST_STEP_CHECK "Checking the copied image..."
-    IDS_HOST_STEP_BOOT "Adding LiberNT Setup to the boot menu..."
-    IDS_HOST_STEP_STAGE "Preparing the upgrade..."
-    IDS_HOST_PROGRESS "%I64u MB of %I64u MB"
-    IDS_HOST_DONETITLE "LiberNT Setup is ready"
-    IDS_HOST_DONE "Setup prepared the installation. The computer restarts into LiberNT Setup in a few seconds. Save your work in other apps first, or select Postpone: LiberNT Setup then starts the next time the computer restarts."
-    IDS_HOST_UPGRADEDONETITLE "The upgrade is ready"
-    IDS_HOST_UPGRADEDONE "Setup prepared the upgrade. The computer restarts in a few seconds, and LiberNT installs the upgrade while it starts. Save your work in other apps first, or select Postpone: the upgrade then starts the next time the computer restarts."
-    IDS_HOST_FAILEDTITLE "Setup could not prepare LiberNT"
-    IDS_HOST_FAILED "Setup stopped at this step: %s\n\nError %lu (0x%08lx)."
-    IDS_HOST_CANNOTTITLE "LiberNT cannot be installed from Windows"
-    IDS_HOST_NOTMEDIA "Start Setup from the LiberNT image: open the LiberNT .iso file in File Explorer, then run setup.exe from the drive that opens."
-    IDS_HOST_WRONGARCH "This LiberNT image is made for another processor architecture than this computer. Download the LiberNT image made for this computer."
-    IDS_HOST_NOUEFI "Windows started this computer in legacy BIOS mode. Setup can install LiberNT from Windows only on computers that start in UEFI mode. Start the computer from the LiberNT image instead."
-    IDS_HOST_NOGPT "Windows is on a disk that does not use the GPT partition style. Setup can install LiberNT from Windows only on GPT disks. Start the computer from the LiberNT image instead."
-    IDS_HOST_NOESP "Setup cannot find the EFI system partition that starts Windows (error %lu)."
-    IDS_HOST_ESPFULL "The EFI system partition needs %s of free space for the LiberNT Setup boot files."
-    IDS_HOST_SECUREBOOT_TITLE "Turn off Secure Boot first"
-    IDS_HOST_SECUREBOOT "Secure Boot is on. The LiberNT boot loader is not signed for Secure Boot, so this computer would refuse to start it. Turn off Secure Boot in the firmware settings, start Windows, then start Setup again."
-    IDS_HOST_FIRMWAREBTN "Restart to the firmware settings"
-    IDS_HOST_PENDING_TITLE "LiberNT Setup is ready to continue"
-    IDS_HOST_PENDING "Setup already prepared a %s partition for LiberNT on this computer. Continue to copy the image again and restart into LiberNT Setup, or undo the preparation to give the space back to %s."
-    IDS_HOST_CONTINUEBTN "Continue the installation"
-    IDS_HOST_UNDOBTN "Undo the preparation"
-    IDS_HOST_UNDONE "The preparation was undone, and %s has its space back."
-    IDS_HOST_UNDOFAILED "The preparation could not be undone completely (error %lu, 0x%08lx). Use Disk Management to delete the LiberNT partition and to extend %s."
-    IDS_HOST_INUSE "An upgrade of LiberNT on %s is not finished. Start LiberNT to finish it or to roll it back, then start Setup again."
-    IDS_HOST_NOSTORE "Setup cannot find the boot configuration of the LiberNT installation on %s, so it cannot upgrade it from Windows. Start LiberNT and upgrade it with LiberNT Update, or start the computer from the LiberNT image."
-    IDS_HOST_NOTADMIN "Setup needs administrator rights. Start it again and accept the administrator prompt."
-    IDS_HOST_LOWSPACE "The LiberNT partition on %s needs %s of free space for the upgrade image."
-    IDS_HOST_VOLUMEERRORS "%s has file system errors, so Windows cannot shrink it. Run ""chkdsk %s /f"" as an administrator, restart the computer so that Windows repairs the drive, then start Setup again."
-    IDS_HOST_CHECKINGSIZE "Windows is checking how much space %s can give to LiberNT..."
-    IDS_HOST_IMAGENOTE "%s gives part of its space to a new partition, and Setup installs LiberNT there from this image. The computer then restarts into LiberNT.\n\nThis version: %s"
-    IDS_HOST_READY_IMAGE "Setup installs LiberNT from the image (%s) into that partition and adds it to the boot menu, then restarts the computer into LiberNT."
-    IDS_HOST_IMAGEPROCESSTITLE "Installing LiberNT"
-    IDS_HOST_STEP_INSTALLBOOT "Adding LiberNT to the boot menu..."
-    IDS_HOST_INSTALLEDTITLE "LiberNT is installed"
-    IDS_HOST_INSTALLED "Setup installed LiberNT. The computer restarts into LiberNT in a few seconds. Save your work in other apps first, or select Postpone: LiberNT then starts the next time the computer restarts."
+    IDS_HOST_STARTTITLE "安裝或者升級 LiberNT"
+    IDS_HOST_STARTSUBTITLE "呢部電腦已經裝咗 LiberNT。"
+    IDS_HOST_INSTALLNEW "同 %s 並存全新安裝一份 LiberNT(&I)"
+    IDS_HOST_UPGRADENOTE "升級會將 LiberNT 嘅系統檔案換成呢個版本，同時留返你啲檔案、裝過嘅程式、用戶帳戶同設定。部電腦會重新啟動，LiberNT 會喺開機嗰陣裝好升級。\n\n呢個版本: %s"
+    IDS_HOST_INSTALLNOTE "%s 會分一部份空間出嚟開新分割區，跟住部電腦會重啟進入 LiberNT 安裝程式，將 LiberNT 裝落嗰度。\n\n呢個版本: %s"
+    IDS_HOST_SHRINKNOTE "拉動滑桿去分空間。%s 原有嘅程式同檔案會留低；開始安裝嗰陣，Windows 會縮細佢個分割區。"
+    IDS_HOST_NOSPACE "%s 唔夠空位分俾 LiberNT（最少要 %I64u GB）。請喺 %s 清返啲空間出嚟，再重新行安裝程式。"
+    IDS_HOST_NORESIZE "Windows 計唔到 %s 分割區可以縮細幾多 (錯誤 0x%08lx)，所以安裝程式騰唔到空位俾 LiberNT。"
+    IDS_HOST_READYSUBTITLE "請核對清楚你揀嘅設定。一撳「安裝」，安裝程式就會開始改動你隻磁碟。"
+    IDS_HOST_READY_SHRINK "%s (%s) 會由 %s 縮細做 %s。"
+    IDS_HOST_READY_CREATE "跟住會喺後面開一個新嘅 %s 分割區俾 LiberNT。"
+    IDS_HOST_READY_PREPARED "LiberNT 會裝落安裝程式之前準備好嘅 %s 分割區。"
+    IDS_HOST_READY_RESTART "安裝程式會將 LiberNT 映像 (%s) 複製過去嗰個分割區，再重啟電腦進入 LiberNT 安裝程式完成安裝；喺呢步之前唔會郁其他嘢。"
+    IDS_HOST_READY_UPGRADE "安裝程式會將 LiberNT 映像 (%s) 複製去 LiberNT 分割區並重啟電腦；LiberNT 會喺開機嗰陣裝好升級，等管理員登入時收尾。"
+    IDS_HOST_PROCESSTITLE "準備緊 LiberNT 安裝程式"
+    IDS_HOST_PROCESSSUBTITLE "安裝程式準備緊隻磁碟同開機選單，搞掂之後部電腦會重新啟動。"
+    IDS_HOST_STEP_SHRINK "縮細緊 %s..."
+    IDS_HOST_STEP_CREATE "開緊 LiberNT 分割區..."
+    IDS_HOST_STEP_FORMAT "格式化緊 LiberNT 分割區..."
+    IDS_HOST_STEP_COPY "複製緊 LiberNT 映像..."
+    IDS_HOST_STEP_CHECK "核對緊複製好嘅映像..."
+    IDS_HOST_STEP_BOOT "將 LiberNT 安裝程式加入緊開機選單..."
+    IDS_HOST_STEP_STAGE "準備緊升級..."
+    IDS_HOST_PROGRESS "%I64u MB / %I64u MB"
+    IDS_HOST_DONETITLE "LiberNT 安裝程式已經準備好"
+    IDS_HOST_DONE "安裝準備已經搞掂，部電腦會喺幾秒後重啟進入 LiberNT 安裝程式。請先儲好其他程式入面嘅嘢，或者揀「遲啲先」，留返下次重啟電腦時先進入 LiberNT 安裝程式。"
+    IDS_HOST_UPGRADEDONETITLE "升級已經準備好"
+    IDS_HOST_UPGRADEDONE "升級準備已經搞掂，部電腦會喺幾秒後重新啟動，並喺開機嗰陣裝好升級。請先儲好其他程式入面嘅嘢，或者揀「遲啲先」，留返下次重啟電腦時先開始升級。"
+    IDS_HOST_FAILEDTITLE "安裝程式準備唔到 LiberNT"
+    IDS_HOST_FAILED "安裝程式喺呢一步停咗: %s\n\n錯誤 %lu (0x%08lx)。"
+    IDS_HOST_CANNOTTITLE "喺 Windows 入面裝唔到 LiberNT"
+    IDS_HOST_NOTMEDIA "請由 LiberNT 映像啟動安裝程式：喺「檔案總管」打開 LiberNT 嘅 .iso 檔，再喺掛載出嚟嘅磁碟機入面行 setup.exe。"
+    IDS_HOST_WRONGARCH "呢個 LiberNT 映像係俾另一種處理器架構用嘅，同呢部電腦唔夾。請下載啱呢部電腦用嘅 LiberNT 映像。"
+    IDS_HOST_NOUEFI "Windows 用緊舊式 BIOS 模式啟動呢部電腦；由 Windows 直接裝 LiberNT 只支援用 UEFI 模式開機嘅電腦。請改用 LiberNT 映像直接開機安裝。"
+    IDS_HOST_NOGPT "Windows 所在嗰隻磁碟唔係用 GPT 分割形式；由 Windows 直接裝 LiberNT 只支援 GPT 磁碟。請改用 LiberNT 映像直接開機安裝。"
+    IDS_HOST_NOESP "安裝程式搵唔到用嚟啟動 Windows 嘅 EFI 系統分割區 (錯誤 %lu)。"
+    IDS_HOST_ESPFULL "EFI 系統分割區需要有 %s 空位先放得落 LiberNT 安裝程式嘅開機檔案。"
+    IDS_HOST_SECUREBOOT_TITLE "請先熄咗安全啟動 (Secure Boot)"
+    IDS_HOST_SECUREBOOT "安全啟動 (Secure Boot) 開咗。LiberNT 開機載入程式未有 Secure Boot 簽署，部電腦會拒絕啟動佢。請入韌體設定熄咗 Secure Boot，開返入 Windows 之後再行安裝程式。"
+    IDS_HOST_FIRMWAREBTN "重啟進入韌體設定"
+    IDS_HOST_PENDING_TITLE "可以繼續執行 LiberNT 安裝程式"
+    IDS_HOST_PENDING "安裝程式之前已經喺呢部電腦幫 LiberNT 準備好個 %s 分割區。你可以繼續重新複製映像並重啟進入 LiberNT 安裝程式，或者還原之前嘅準備，將空間俾返 %s。"
+    IDS_HOST_CONTINUEBTN "繼續安裝"
+    IDS_HOST_UNDOBTN "還原準備"
+    IDS_HOST_UNDONE "已經還原好，空間已經俾返 %s。"
+    IDS_HOST_UNDOFAILED "未能徹底還原之前嘅準備 (錯誤 %lu，0x%08lx)。請用「磁碟管理」剷走 LiberNT 分割區並延伸 %s。"
+    IDS_HOST_INUSE "%s 上面嘅 LiberNT 仲有未行完嘅升級。請先開入 LiberNT 完成或者還原嗰次升級，再返嚟行安裝程式。"
+    IDS_HOST_NOSTORE "安裝程式搵唔到 %s 上面 LiberNT 嘅開機設定，所以喺 Windows 入面升級唔到佢。請開入 LiberNT 用「LiberNT 更新」升級，或者用 LiberNT 映像開機。"
+    IDS_HOST_NOTADMIN "安裝程式需要管理員權限。請重新開過安裝程式，並喺彈出提示時揀允許。"
+    IDS_HOST_LOWSPACE "%s 上面嘅 LiberNT 分割區需要有 %s 空位先放得落升級映像。"
+    IDS_HOST_VOLUMEERRORS "%s 有檔案系統錯誤，Windows 縮唔細佢。請用管理員身分行 ""chkdsk %s /f""，重啟電腦俾 Windows 修好隻碟之後再行安裝程式。"
+    IDS_HOST_CHECKINGSIZE "Windows 檢查緊 %s 可以騰出幾多空間俾 LiberNT..."
+    IDS_HOST_IMAGENOTE "%s 會分一部份空間出嚟開新分割區，安裝程式會直接由呢個映像將 LiberNT 裝落去，然後重啟進入 LiberNT。\n\n呢個版本: %s"
+    IDS_HOST_READY_IMAGE "安裝程式會由映像 (%s) 將 LiberNT 裝落嗰個分割區同加入開機選單，跟住重啟電腦進入 LiberNT。"
+    IDS_HOST_IMAGEPROCESSTITLE "安裝緊 LiberNT"
+    IDS_HOST_STEP_INSTALLBOOT "將 LiberNT 加入緊開機選單..."
+    IDS_HOST_INSTALLEDTITLE "LiberNT 已經裝好"
+    IDS_HOST_INSTALLED "安裝程式已經裝好 LiberNT，部電腦會喺幾秒後重啟進入 LiberNT。請先儲好其他程式入面嘅嘢，或者揀「遲啲先」，留返下次重啟電腦時先進入 LiberNT。"
 END
