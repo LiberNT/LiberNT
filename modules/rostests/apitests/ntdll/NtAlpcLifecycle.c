@@ -896,7 +896,9 @@ typedef struct _ALPC_TIMED_OUT_SERVER
 {
     HANDLE ConnectionPort;
     HANDLE ServerPort;
+    BOOLEAN SmallFirstReceive;
     volatile LONG Stop;
+    ULONG TooSmall;
     ULONG Received;
     ULONG Replied;
     ULONG Canceled;
@@ -919,8 +921,17 @@ AlpcTimedOutRequestServerThread(
     while (!Server->Stop)
     {
         Timeout = AlpcTestRelativeTimeout(100);
-        Length = sizeof(Request);
         RtlZeroMemory(&Request, sizeof(Request));
+        if (Server->SmallFirstReceive)
+        {
+            Length = sizeof(Request.Header);
+            Status = NtAlpcSendWaitReceivePort(Server->ConnectionPort, 0, NULL, NULL, &Request.Header, &Length, NULL, &Timeout);
+            if (Status != STATUS_BUFFER_TOO_SMALL)
+                continue;
+            Server->TooSmall++;
+            Timeout.QuadPart = 0;
+        }
+        Length = sizeof(Request);
         Status = NtAlpcSendWaitReceivePort(Server->ConnectionPort, 0, NULL, NULL, &Request.Header, &Length, NULL, &Timeout);
         if (Status != STATUS_SUCCESS || (Request.Header.u2.s2.Type & 0xFF) != LPC_REQUEST)
             continue;
@@ -943,7 +954,8 @@ AlpcTimedOutRequestServerThread(
 
 static
 VOID
-AlpcTestTimedOutRequestReply(VOID)
+AlpcTestTimedOutRequestReply(
+    _In_ BOOLEAN SmallFirstReceive)
 {
     static UNICODE_STRING PortName = RTL_CONSTANT_STRING(L"\\RPC Control\\NtdllApitestNtAlpcTimedOutReply");
     ALPC_TIMED_OUT_SERVER Server;
@@ -959,6 +971,7 @@ AlpcTestTimedOutRequestReply(VOID)
     DWORD WaitStatus;
 
     RtlZeroMemory(&Server, sizeof(Server));
+    Server.SmallFirstReceive = SmallFirstReceive;
     Status = AlpcTestCreateConnectedPorts(&PortName, 0, &Server.ConnectionPort, &Server.ServerPort, &ClientPort);
     ok_hex(Status, STATUS_SUCCESS);
     if (!NT_SUCCESS(Status))
@@ -997,8 +1010,8 @@ AlpcTestTimedOutRequestReply(VOID)
     CloseHandle(Thread);
     AlpcTestCloseConnectedPorts(Server.ConnectionPort, Server.ServerPort, ClientPort);
 
-    trace("ALPC_OBSERVE value TimedOutReply.sent=%lu timed_out=%lu answered=%lu received=%lu replied=%lu canceled=%lu other=%lu\n",
-          Sent, TimedOut, Answered, Server.Received, Server.Replied, Server.Canceled, Server.Other);
+    trace("ALPC_OBSERVE value TimedOutReply.small=%u sent=%lu timed_out=%lu answered=%lu too_small=%lu received=%lu replied=%lu canceled=%lu other=%lu\n",
+          SmallFirstReceive, Sent, TimedOut, Answered, Server.TooSmall, Server.Received, Server.Replied, Server.Canceled, Server.Other);
     ok(Unexpected == 0, "%lu requests failed, last with %08lx\n", Unexpected, UnexpectedStatus);
     ok(TimedOut != 0, "no request timed out\n");
     ok(Server.Other == 0, "%lu replies to timed out requests failed, last with %08lx\n", Server.Other, Server.OtherStatus);
@@ -1029,6 +1042,7 @@ START_TEST(NtAlpcLifecycle)
     AlpcTestCancellation();
     AlpcTestCallback();
     AlpcTestLostReply();
-    AlpcTestTimedOutRequestReply();
+    AlpcTestTimedOutRequestReply(FALSE);
+    AlpcTestTimedOutRequestReply(TRUE);
     AlpcTestRunIsolatedCase(L"NtAlpcLifecycle", L"close-while-blocked", ALPC_TEST_CHILD_TIMEOUT_MS);
 }
