@@ -27,7 +27,7 @@
 @ stdcall AddResourceAttributeAce(ptr long long long ptr ptr ptr)
 @ stdcall -thunk AddSIDToBoundaryDescriptor(ptr ptr) kernel32.AddSIDToBoundaryDescriptor
 # TODO: Windows 11 kernelbase does not export this
-@ stdcall AddIntegrityLabelToBoundaryDescriptor(ptr ptr) kernel32.AddIntegrityLabelToBoundaryDescriptor
+@ stdcall -thunk AddIntegrityLabelToBoundaryDescriptor(ptr ptr) kernel32.AddIntegrityLabelToBoundaryDescriptor
 @ stdcall AddScopedPolicyIDAce(ptr long long long ptr)
 @ stdcall AddVectoredContinueHandler(long ptr) ntdll.RtlAddVectoredContinueHandler
 @ stdcall AddVectoredExceptionHandler(long ptr) ntdll.RtlAddVectoredExceptionHandler
@@ -267,8 +267,8 @@
 @ stdcall EventWriteString(int64 long int64 wstr) ntdll.EtwEventWriteString
 @ stdcall EventWriteTransfer(int64 ptr ptr ptr long ptr) ntdll.EtwEventWriteTransfer
 # TODO: Windows 11 kernelbase forwards this to NTDLL
-@ stdcall ExitProcess(long) kernel32.ExitProcess
-@ stdcall ExitThread(long) kernel32.ExitThread
+@ stdcall -thunk ExitProcess(long) kernel32.ExitProcess
+@ stdcall -thunk ExitThread(long) kernel32.ExitThread
 @ stdcall -thunk ExpandEnvironmentStringsA(str ptr long) kernel32.ExpandEnvironmentStringsA
 @ stdcall -thunk ExpandEnvironmentStringsW(wstr ptr long) kernel32.ExpandEnvironmentStringsW
 @ stdcall ExpungeConsoleCommandHistoryA(long)
@@ -315,7 +315,7 @@
 @ stdcall -thunk FlushFileBuffers(long) kernel32.FlushFileBuffers
 @ stdcall -thunk FlushInstructionCache(long long long) kernel32.FlushInstructionCache
 # TODO: Windows 11 kernelbase forwards this to NTDLL
-@ stdcall -version=0x600+ FlushProcessWriteBuffers() kernel32.FlushProcessWriteBuffers
+@ stdcall -thunk -version=0x600+ FlushProcessWriteBuffers() kernel32.FlushProcessWriteBuffers
 @ stdcall -thunk FlushViewOfFile(ptr long) kernel32.FlushViewOfFile
 @ stdcall -thunk FoldStringW(long wstr long ptr long) kernel32.FoldStringW
 @ stdcall FormatMessageA(long ptr long long ptr long ptr)
@@ -495,7 +495,7 @@
 @ stdcall GetNLSVersion(long long ptr)
 @ stdcall GetNLSVersionEx(long wstr ptr)
 @ stub GetNamedLocaleHashNode
-@ stub -version=0x600+ GetNamedPipeAttribute() kernel32.GetNamedPipeAttribute
+@ stub -version=0x600+ GetNamedPipeAttribute
 @ stdcall -thunk -version=0x600+ GetNamedPipeClientComputerNameW(ptr ptr long) kernel32.GetNamedPipeClientComputerNameW
 @ stdcall -thunk GetNamedPipeHandleStateW(long ptr ptr ptr ptr wstr long) kernel32.GetNamedPipeHandleStateW
 @ stdcall -thunk GetNamedPipeInfo(long ptr ptr ptr ptr) kernel32.GetNamedPipeInfo
@@ -682,7 +682,7 @@
 @ stdcall InitializeContext(ptr long ptr ptr)
 @ stdcall InitializeContext2(ptr long ptr ptr int64)
 # TODO: Windows 11 kernelbase forwards this to NTDLL
-@ stdcall InitializeCriticalSection(ptr) kernel32.InitializeCriticalSection
+@ stdcall -thunk InitializeCriticalSection(ptr) kernel32.InitializeCriticalSection
 @ stdcall -thunk InitializeCriticalSectionAndSpinCount(ptr long) kernel32.InitializeCriticalSectionAndSpinCount
 @ stdcall -thunk -version=0x600+ InitializeCriticalSectionEx(ptr long long) kernel32.InitializeCriticalSectionEx
 @ stdcall -thunk -version=0x600+ InitializeProcThreadAttributeList(ptr long long ptr) kernel32.InitializeProcThreadAttributeList
@@ -693,13 +693,13 @@
 @ stdcall InitializeSecurityDescriptor(ptr long)
 @ stdcall InitializeSid(ptr ptr long)
 # TODO: Windows 11 kernelbase does not export this
-@ stdcall -arch=i386,ppc InterlockedCompareExchange(ptr long long) kernel32.InterlockedCompareExchange
+@ stdcall -thunk -arch=i386,ppc InterlockedCompareExchange(ptr long long) kernel32.InterlockedCompareExchange
 @ stdcall -arch=i386 InterlockedCompareExchange64(ptr double double) ntdll.RtlInterlockedCompareExchange64
-@ stdcall -arch=i386,ppc InterlockedDecrement(ptr) kernel32.InterlockedDecrement
-@ stdcall -arch=i386,ppc InterlockedExchange(ptr long) kernel32.InterlockedExchange
-@ stdcall -arch=i386,ppc InterlockedExchangeAdd(ptr long) kernel32.InterlockedExchangeAdd
+@ stdcall -thunk -arch=i386,ppc InterlockedDecrement(ptr) kernel32.InterlockedDecrement
+@ stdcall -thunk -arch=i386,ppc InterlockedExchange(ptr long) kernel32.InterlockedExchange
+@ stdcall -thunk -arch=i386,ppc InterlockedExchangeAdd(ptr long) kernel32.InterlockedExchangeAdd
 @ stdcall InterlockedFlushSList(ptr) ntdll.RtlInterlockedFlushSList
-@ stdcall -arch=i386,ppc InterlockedIncrement(ptr) kernel32.InterlockedIncrement
+@ stdcall -thunk -arch=i386,ppc InterlockedIncrement(ptr) kernel32.InterlockedIncrement
 @ stdcall InterlockedPopEntrySList(ptr) ntdll.RtlInterlockedPopEntrySList
 @ stdcall InterlockedPushEntrySList(ptr ptr) ntdll.RtlInterlockedPushEntrySList
 @ fastcall -version=0x600+ InterlockedPushListSList(ptr ptr ptr long) ntdll.RtlInterlockedPushListSList
@@ -795,7 +795,7 @@
 @ stdcall LoadPackagedLibrary(wstr long)
 @ stdcall -thunk LoadResource(long long) kernel32.LoadResource
 @ stdcall LoadStringA(long long ptr long)
-@ stub -version=0x600+ LoadStringBaseExW() kernel32.LoadStringBaseExW
+@ stub -version=0x600+ LoadStringBaseExW
 @ stub LoadStringByReference
 @ stdcall LoadStringW(long long ptr long)
 @ stdcall -thunk LocalAlloc(long long) kernel32.LocalAlloc
@@ -825,13 +825,13 @@
 @ stdcall MultiByteToWideChar(long long str long ptr long)
 @ stdcall -thunk NeedCurrentDirectoryForExePathA(str) kernel32.NeedCurrentDirectoryForExePathA
 @ stdcall -thunk NeedCurrentDirectoryForExePathW(wstr) kernel32.NeedCurrentDirectoryForExePathW
-@ stub -version=0x600+ NlsCheckPolicy() kernel32.NlsCheckPolicy
+@ stub -version=0x600+ NlsCheckPolicy
 @ stub NlsDispatchAnsiEnumProc
 @ stub NlsGetACPFromLocale
 @ stdcall -thunk NlsGetCacheUpdateCount() kernel32.NlsGetCacheUpdateCount
 @ stub NlsIsUserDefaultLocale
-@ stub -version=0x600+ NlsUpdateLocale() kernel32.NlsUpdateLocale
-@ stub -version=0x600+ NlsUpdateSystemLocale() kernel32.NlsUpdateSystemLocale
+@ stub -version=0x600+ NlsUpdateLocale
+@ stub -version=0x600+ NlsUpdateSystemLocale
 @ stdcall NlsValidateLocale(ptr long)
 @ stdcall NormalizeString(long wstr long ptr long)
 @ stub NotifyMountMgr
@@ -1012,8 +1012,8 @@
 @ stub QueryIoRingCapabilities
 @ stdcall -thunk QueryMemoryResourceNotification(ptr ptr) kernel32.QueryMemoryResourceNotification
 # TODO: Windows 11 kernelbase forwards this to NTDLL
-@ stdcall QueryPerformanceCounter(ptr) kernel32.QueryPerformanceCounter
-@ stdcall QueryPerformanceFrequency(ptr) kernel32.QueryPerformanceFrequency
+@ stdcall -thunk QueryPerformanceCounter(ptr) kernel32.QueryPerformanceCounter
+@ stdcall -thunk QueryPerformanceFrequency(ptr) kernel32.QueryPerformanceFrequency
 @ stdcall -thunk QueryProcessAffinityUpdateMode(ptr ptr) kernel32.QueryProcessAffinityUpdateMode
 @ stdcall -thunk -version=0x600+ QueryProcessCycleTime(ptr ptr) kernel32.QueryProcessCycleTime
 @ stdcall QuerySecurityAccessMask(long ptr)
@@ -1182,7 +1182,7 @@
 @ stdcall -thunk -version=0x602+ SetDefaultDllDirectories(long) kernel32.SetDefaultDllDirectories
 @ stdcall -thunk SetEndOfFile(long) kernel32.SetEndOfFile
 # TODO: Windows 11 kernelbase does not export this
-@ stdcall SetEnvironmentStringsA(ptr) kernel32.SetEnvironmentStringsA
+@ stdcall -thunk SetEnvironmentStringsA(ptr) kernel32.SetEnvironmentStringsA
 @ stdcall -thunk SetEnvironmentStringsW(ptr) kernel32.SetEnvironmentStringsW
 @ stdcall -thunk SetEnvironmentVariableA(str str) kernel32.SetEnvironmentVariableA
 @ stdcall -thunk SetEnvironmentVariableW(wstr wstr) kernel32.SetEnvironmentVariableW
@@ -1474,7 +1474,7 @@
 @ stdcall -thunk lstrlenA(str) kernel32.lstrlenA
 @ stdcall -thunk lstrlenW(wstr) kernel32.lstrlenW
 # TODO: Windows 11 kernelbase does not export this
-@ stdcall GetNumaProcessorNodeEx(ptr ptr) kernel32.GetNumaProcessorNodeEx
+@ stdcall -thunk GetNumaProcessorNodeEx(ptr ptr) kernel32.GetNumaProcessorNodeEx
 @ stdcall CloseConsoleHandle(long)
 @ stdcall -version=0x502-0x600 -arch=win64 ConsoleIMERoutine(ptr)
 @ stdcall ConsoleMenuControl(long long long)
@@ -1524,5 +1524,5 @@
 @ stdcall -thunk QueryInterruptTime(ptr) kernel32.QueryInterruptTime
 @ stdcall -thunk QueryInterruptTimePrecise(ptr) kernel32.QueryInterruptTimePrecise
 # TODO: Windows 11 kernelbase forwards this to NTDLL
-@ stdcall QueryUnbiasedInterruptTime(ptr) kernel32.QueryUnbiasedInterruptTime
+@ stdcall QueryUnbiasedInterruptTime(ptr) ntdll.RtlQueryUnbiasedInterruptTime
 @ stdcall -thunk QueryUnbiasedInterruptTimePrecise(ptr) kernel32.QueryUnbiasedInterruptTimePrecise
