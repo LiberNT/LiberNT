@@ -14,6 +14,7 @@
 #include "vwifi.h"
 
 #define CHURN_CYCLES 12
+#define QUERY_THREADS 4
 
 static volatile LONG StopQueries;
 static LONG Queries;
@@ -64,15 +65,18 @@ START_TEST(WlanIfTableChurn)
 {
     HDEVINFO Devices;
     SP_DEVINFO_DATA Device;
-    HANDLE Thread;
-    ULONG Cycle;
+    HANDLE Threads[QUERY_THREADS];
+    ULONG Cycle, Started;
 
-    Thread = CreateThread(NULL, 0, QueryThread, NULL, 0, NULL);
-    ok(Thread != NULL, "CreateThread failed: %lu\n", GetLastError());
-    if (!Thread)
-        return;
+    for (Started = 0; Started < QUERY_THREADS; Started++)
+    {
+        Threads[Started] = CreateThread(NULL, 0, QueryThread, NULL, 0, NULL);
+        ok(Threads[Started] != NULL, "CreateThread failed: %lu\n", GetLastError());
+        if (!Threads[Started])
+            break;
+    }
 
-    for (Cycle = 0; Cycle < CHURN_CYCLES; Cycle++)
+    for (Cycle = 0; Started == QUERY_THREADS && Cycle < CHURN_CYCLES; Cycle++)
     {
         if (!InstallVwifi(&Devices, &Device))
             break;
@@ -82,8 +86,12 @@ START_TEST(WlanIfTableChurn)
     }
 
     InterlockedExchange(&StopQueries, 1);
-    ok(WaitForSingleObject(Thread, 30000) == WAIT_OBJECT_0, "The query thread did not stop\n");
-    CloseHandle(Thread);
+    if (Started)
+    {
+        ok(WaitForMultipleObjects(Started, Threads, TRUE, 30000) == WAIT_OBJECT_0, "The query threads did not stop\n");
+        while (Started)
+            CloseHandle(Threads[--Started]);
+    }
 
     ok(Cycle == CHURN_CYCLES, "Only %lu of %u install/remove cycles ran\n", Cycle, CHURN_CYCLES);
     ok(Queries > 0, "No interface was queried\n");
