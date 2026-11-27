@@ -356,7 +356,8 @@ SamValidateNormalUser(
     _Out_ PRPC_SID* AccountDomainSidPtr,
     _Out_ SAMPR_HANDLE* UserHandlePtr,
     _Out_ PSAMPR_USER_INFO_BUFFER* UserInfoPtr,
-    _Out_ PNTSTATUS SubStatus)
+    _Out_ PNTSTATUS SubStatus,
+    _In_ BOOLEAN PasswordlessLogon)
 {
     NTSTATUS Status;
     SAMPR_HANDLE ServerHandle = NULL;
@@ -446,7 +447,9 @@ SamValidateNormalUser(
         goto done;
     }
 
-    Status = MsvpCheckPassword(PwdData, UserInfo);
+    /* Verify the password, unless this is a passwordless (S4U) logon */
+    if (!PasswordlessLogon)
+        Status = MsvpCheckPassword(PwdData, UserInfo);
     if (!NT_SUCCESS(Status))
     {
         ERR("MsvpCheckPassword failed (Status %08lx)\n", Status);
@@ -576,7 +579,8 @@ SamValidateUser(
     _Out_ PRPC_SID* AccountDomainSidPtr,
     _Out_ SAMPR_HANDLE* UserHandlePtr,
     _Out_ PSAMPR_USER_INFO_BUFFER* UserInfoPtr,
-    _Out_ PNTSTATUS SubStatus)
+    _Out_ PNTSTATUS SubStatus,
+    _In_ BOOLEAN PasswordlessLogon)
 {
     static const UNICODE_STRING NtAuthorityU = RTL_CONSTANT_STRING(L"NT AUTHORITY");
     static const UNICODE_STRING LocalServiceU = RTL_CONSTANT_STRING(L"LocalService");
@@ -648,7 +652,8 @@ SamValidateUser(
                                        AccountDomainSidPtr,
                                        UserHandlePtr,
                                        UserInfoPtr,
-                                       SubStatus);
+                                       SubStatus,
+                                       PasswordlessLogon);
         if (!NT_SUCCESS(Status))
         {
             ERR("SamValidateNormalUser() failed (Status 0x%08lx)\n", Status);

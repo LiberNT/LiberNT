@@ -217,7 +217,11 @@ typedef enum _MSV1_0_LOGON_SUBMIT_TYPE {
   MsV1_0Lm20Logon,
   MsV1_0NetworkLogon,
   MsV1_0SubAuthLogon,
-  MsV1_0WorkstationUnlockLogon = 7
+  MsV1_0WorkstationUnlockLogon = 7,
+  MsV1_0S4ULogon = 12,
+  MsV1_0VirtualLogon = 82,
+  MsV1_0NoElevationLogon = 83,
+  MsV1_0LuidLogon = 84
 } MSV1_0_LOGON_SUBMIT_TYPE, *PMSV1_0_LOGON_SUBMIT_TYPE;
 typedef enum _MSV1_0_PROFILE_BUFFER_TYPE {
   MsV1_0InteractiveProfile = 2,
@@ -496,6 +500,19 @@ typedef struct _MSV1_0_SUBAUTH_LOGON{ /* W2K only */
   ULONG ParameterControl;
   ULONG SubAuthPackageId;
 } MSV1_0_SUBAUTH_LOGON, * PMSV1_0_SUBAUTH_LOGON;
+
+#if (_WIN32_WINNT >= 0x0600)
+
+#define MSV1_0_S4U_LOGON_FLAG_CHECK_LOGONHOURS 0x2
+
+typedef struct _MSV1_0_S4U_LOGON {
+  MSV1_0_LOGON_SUBMIT_TYPE MessageType;
+  ULONG Flags;
+  UNICODE_STRING UserPrincipalName;
+  UNICODE_STRING DomainName;
+} MSV1_0_S4U_LOGON, *PMSV1_0_S4U_LOGON;
+
+#endif
 typedef struct _MSV1_0_LM20_LOGON_PROFILE {
   MSV1_0_PROFILE_BUFFER_TYPE MessageType;
   LARGE_INTEGER KickOffTime;
