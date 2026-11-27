@@ -1680,6 +1680,11 @@ UserRedrawDesktop(VOID)
     IntCompositionDamageWindow(Window);
 }
 
+VOID
+NTAPI
+InbvNotifyDisplayOwnershipChange(
+    _In_ BOOLEAN DisplayOwned);
+
 VOID FASTCALL
 UserReleaseBootDisplay(VOID)
 {
@@ -1691,7 +1696,7 @@ UserReleaseBootDisplay(VOID)
     Released = TRUE;
 
     if (InbvCheckDisplayOwnership())
-        InbvNotifyDisplayOwnershipLost(NULL);
+        InbvNotifyDisplayOwnershipChange(FALSE);
     SpiSetBootScreenWallpaper();
     UserRedrawDesktop();
 
