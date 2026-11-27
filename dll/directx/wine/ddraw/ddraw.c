@@ -2490,6 +2490,12 @@ static HRESULT WINAPI ddraw7_EnumDisplayModes(IDirectDraw7 *iface, DWORD Flags,
     if (!cb)
         return DDERR_INVALIDPARAMS;
 
+    if (Flags & ~(DDEDM_REFRESHRATES | DDEDM_STANDARDVGAMODES))
+        return DDERR_INVALIDPARAMS;
+
+    if (DDSD && DDSD->dwSize != sizeof(*DDSD))
+        return DDERR_INVALIDPARAMS;
+
     if (!(enum_modes = malloc(enum_mode_array_size * sizeof(*enum_modes))))
         return DDERR_OUTOFMEMORY;
 
@@ -2606,6 +2612,12 @@ static HRESULT WINAPI ddraw2_EnumDisplayModes(IDirectDraw2 *iface, DWORD flags,
     TRACE("iface %p, flags %#lx, surface_desc %p, context %p, callback %p.\n",
             iface, flags, surface_desc, context, callback);
 
+    if (!callback)
+        return DDERR_INVALIDPARAMS;
+
+    if (surface_desc && surface_desc->dwSize != sizeof(*surface_desc))
+        return DDERR_INVALIDPARAMS;
+
     cbcontext.func = callback;
     cbcontext.context = context;
 
@@ -2623,6 +2635,12 @@ static HRESULT WINAPI ddraw1_EnumDisplayModes(IDirectDraw *iface, DWORD flags,
 
     TRACE("iface %p, flags %#lx, surface_desc %p, context %p, callback %p.\n",
             iface, flags, surface_desc, context, callback);
+
+    if (!callback)
+        return DDERR_INVALIDPARAMS;
+
+    if (surface_desc && surface_desc->dwSize != sizeof(*surface_desc))
+        return DDERR_INVALIDPARAMS;
 
     cbcontext.func = callback;
     cbcontext.context = context;
