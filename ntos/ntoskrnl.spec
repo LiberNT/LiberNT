@@ -3387,7 +3387,7 @@
 @ stdcall ZwSetInformationResourceManager(ptr long ptr long)
 @ stdcall ZwSetInformationTransaction(ptr long ptr long)
 @ stdcall -arch=win64 ZwSetInformationVirtualMemory()
-@ stub -arch=win64 ZwSetTimerEx
+@ stdcall ZwSetTimerEx(ptr long ptr long)
 @ stdcall ZwTraceControl(long ptr long ptr long ptr)
 @ stdcall -version=0x602+ -arch=win64 ZwUpdateWnfStateData(ptr ptr long ptr ptr long long)
 @ stdcall -arch=arm64 ZwWaitForAlertByThreadId(ptr ptr)

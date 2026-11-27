@@ -599,21 +599,20 @@ NtOpenTimer(
     return Status;
 }
 
+static
 NTSTATUS
-NTAPI
-NtSetTimer(
+ExpSetTimer(
     _In_ HANDLE TimerHandle,
-    _In_ PLARGE_INTEGER DueTime,
+    _In_ LARGE_INTEGER SafeDueTime,
     _In_opt_ PTIMER_APC_ROUTINE TimerApcRoutine,
     _In_opt_ PVOID TimerContext,
     _In_ BOOLEAN WakeTimer,
-    _In_opt_ LONG Period,
-    _Out_opt_ PBOOLEAN PreviousState)
+    _In_ LONG Period,
+    _Out_ PBOOLEAN PreviousState,
+    _In_ KPROCESSOR_MODE PreviousMode)
 {
-    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     PETHREAD Thread = PsGetCurrentThread();
     PETIMER Timer;
-    LARGE_INTEGER SafeDueTime;
     ULONGLONG Now;
     BOOLEAN State;
     LONG References;
@@ -621,30 +620,7 @@ NtSetTimer(
     NTSTATUS Status;
 
     PAGED_CODE();
-
-    if (Period < 0)
-    {
-        return STATUS_INVALID_PARAMETER_6;
-    }
-
-    if (PreviousMode != KernelMode)
-    {
-        _SEH2_TRY
-        {
-            ProbeForReadLargeInteger(DueTime);
-            SafeDueTime = *DueTime;
-            if (PreviousState != NULL) ProbeForWriteBoolean(PreviousState);
-        }
-        _SEH2_EXCEPT(ExSystemExceptionFilter())
-        {
-            _SEH2_YIELD(return _SEH2_GetExceptionCode());
-        }
-        _SEH2_END;
-    }
-    else
-    {
-        SafeDueTime = *DueTime;
-    }
+    ASSERT(Period >= 0);
 
     Status = ObReferenceObjectByHandle(TimerHandle,
                                        TIMER_MODIFY_STATE,
@@ -711,9 +687,63 @@ NtSetTimer(
 
     ObDereferenceObjectEx(Timer, References + 1);
 
-    if (PreviousState == NULL)
+    *PreviousState = State;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+NtSetTimer(
+    _In_ HANDLE TimerHandle,
+    _In_ PLARGE_INTEGER DueTime,
+    _In_opt_ PTIMER_APC_ROUTINE TimerApcRoutine,
+    _In_opt_ PVOID TimerContext,
+    _In_ BOOLEAN WakeTimer,
+    _In_opt_ LONG Period,
+    _Out_opt_ PBOOLEAN PreviousState)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    LARGE_INTEGER SafeDueTime;
+    BOOLEAN State;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Period < 0)
     {
-        return STATUS_SUCCESS;
+        return STATUS_INVALID_PARAMETER_6;
+    }
+
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            ProbeForReadLargeInteger(DueTime);
+            SafeDueTime = *DueTime;
+            if (PreviousState != NULL) ProbeForWriteBoolean(PreviousState);
+        }
+        _SEH2_EXCEPT(ExSystemExceptionFilter())
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+    else
+    {
+        SafeDueTime = *DueTime;
+    }
+
+    Status = ExpSetTimer(TimerHandle,
+                         SafeDueTime,
+                         TimerApcRoutine,
+                         TimerContext,
+                         WakeTimer,
+                         Period,
+                         &State,
+                         PreviousMode);
+    if (!NT_SUCCESS(Status) || PreviousState == NULL)
+    {
+        return Status;
     }
 
     if (PreviousMode != KernelMode)
@@ -732,7 +762,90 @@ NtSetTimer(
     }
 
     *PreviousState = State;
-    return STATUS_SUCCESS;
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+NtSetTimerEx(
+    _In_ HANDLE TimerHandle,
+    _In_ TIMER_SET_INFORMATION_CLASS TimerSetInformationClass,
+    _Inout_updates_bytes_opt_(TimerSetInformationLength) PVOID TimerSetInformation,
+    _In_ ULONG TimerSetInformationLength)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    TIMER_SET_COALESCABLE_TIMER_INFO Info;
+    BOOLEAN State;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (TimerSetInformationClass != TimerSetCoalescableTimer)
+    {
+        return STATUS_INVALID_INFO_CLASS;
+    }
+
+    if (TimerSetInformationLength != sizeof(Info))
+    {
+        return STATUS_INFO_LENGTH_MISMATCH;
+    }
+
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            ProbeForRead(TimerSetInformation, sizeof(Info), sizeof(ULONG));
+            Info = *(PTIMER_SET_COALESCABLE_TIMER_INFO)TimerSetInformation;
+        }
+        _SEH2_EXCEPT(ExSystemExceptionFilter())
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+    else
+    {
+        ASSERT(TimerSetInformation != NULL);
+        Info = *(PTIMER_SET_COALESCABLE_TIMER_INFO)TimerSetInformation;
+    }
+
+    if (Info.Period > MAXLONG)
+    {
+        return STATUS_INVALID_PARAMETER_3;
+    }
+
+    /* TODO: TolerableDelay does not let the timer be coalesced, and the wake reason is not recorded */
+    Status = ExpSetTimer(TimerHandle,
+                         Info.DueTime,
+                         Info.TimerApcRoutine,
+                         Info.TimerContext,
+                         Info.WakeContext != NULL,
+                         (LONG)Info.Period,
+                         &State,
+                         PreviousMode);
+    if (!NT_SUCCESS(Status) || Info.PreviousState == NULL)
+    {
+        return Status;
+    }
+
+    /* A previous state the caller cannot receive does not undo the timer it set */
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            ProbeForWriteBoolean(Info.PreviousState);
+            *Info.PreviousState = State;
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            NOTHING;
+        }
+        _SEH2_END;
+        return Status;
+    }
+
+    *Info.PreviousState = State;
+    return Status;
 }
 
 NTSTATUS
