@@ -176,7 +176,11 @@ pbuf_pool_is_empty(void)
 
 /* Initialize members of struct pbuf after allocation */
 static void
+#ifdef __REACTOS__
 pbuf_init_alloced_pbuf(struct pbuf *p, void *payload, u16_t tot_len, u16_t len, pbuf_type type, u16_t flags)
+#else
+pbuf_init_alloced_pbuf(struct pbuf *p, void *payload, u16_t tot_len, u16_t len, pbuf_type type, u8_t flags)
+#endif
 {
   p->next = NULL;
   p->payload = payload;

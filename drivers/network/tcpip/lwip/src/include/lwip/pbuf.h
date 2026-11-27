@@ -181,10 +181,12 @@ typedef enum {
 #define PBUF_FLAG_LLMCAST   0x10U
 /** indicates this pbuf includes a TCP FIN flag */
 #define PBUF_FLAG_TCP_FIN   0x20U
+#ifdef __REACTOS__
 /** the NIC already verified this frame's IPv4 header checksum */
 #define PBUF_FLAG_RX_CSUM_IP 0x0100U
 /** the NIC already verified this frame's L4 (TCP or UDP) checksum */
 #define PBUF_FLAG_RX_CSUM_L4 0x0200U
+#endif
 
 /** Main packet buffer struct */
 struct pbuf {
@@ -212,7 +214,11 @@ struct pbuf {
   u8_t type_internal;
 
   /** misc flags */
+#ifdef __REACTOS__
   u16_t flags;
+#else
+  u8_t flags;
+#endif
 
   /**
    * the reference count always equals the number of pointers
