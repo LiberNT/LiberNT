@@ -184,6 +184,7 @@ list(APPEND SOURCE
     RtlComputePrivatizedDllName_U.c
     RtlConditionVariable.c
     RtlCopyMappedMemory.c
+    RtlCreateProcessReflection.c
     RtlCreateServiceSid.c
     RtlCriticalSection.c
     RtlCurrentTransaction.c

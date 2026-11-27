@@ -791,6 +791,7 @@
 @ stdcall -stub -version=0x600+ RtlCreateMemoryZone(ptr long long)
 @ stdcall RtlCreateProcessParameters(ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr)
 @ stdcall -version=0x600+ RtlCreateProcessParametersEx(ptr wstr ptr wstr wstr ptr wstr wstr ptr ptr long)
+@ stdcall RtlCreateProcessReflection(ptr long ptr ptr ptr ptr)
 @ stdcall RtlCreateQueryDebugBuffer(long long)
 @ stdcall RtlCreateRegistryKey(long wstr)
 @ stdcall RtlCreateSecurityDescriptor(ptr long)
