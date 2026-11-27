@@ -373,7 +373,7 @@ InitializeSystemPage(HWND hwndDlg)
         }
     }
     /* set directx version string */
-    wcscpy(szTime, L"ReactX ");
+    wcscpy(szTime, L"LiberX ");
     if (GetDirectXVersion(szTime + 7))
     {
         SendDlgItemMessage(hwndDlg, IDC_STATIC_VERSION, WM_SETTEXT, 0, (LPARAM)szTime);

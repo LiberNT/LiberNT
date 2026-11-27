@@ -215,7 +215,7 @@ add_livecd_shortcut("Clipboard Viewer"
 add_livecd_shortcut("Keyboard Layout Switcher"
     "shell:system\\kbswitch.exe" ICON_INDEX 0
     DESTINATION "${dir_startmenu_systemtools}")
-add_livecd_shortcut("ReactX Diagnostic"
+add_livecd_shortcut("LiberX Diagnostic"
     "shell:system\\dxdiag.exe" ICON_INDEX 0
     DESTINATION "${dir_startmenu_systemtools}")
 add_livecd_shortcut("Registry Editor"
