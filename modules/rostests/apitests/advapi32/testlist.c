@@ -65,6 +65,7 @@ extern void func_SetSecurityInfoAcl(void);
 extern void func_ServiceArgs(void);
 extern void func_ServiceControlPipe(void);
 extern void func_ServiceCrash(void);
+extern void func_ServiceDisplay(void);
 extern void func_ServiceEnv(void);
 extern void func_ServiceRegistryState(void);
 extern void func_TriggerInfo(void);
@@ -142,6 +143,7 @@ const struct test winetest_testlist[] =
     { "ServiceArgs", func_ServiceArgs },
     { "ServiceControlPipe", func_ServiceControlPipe },
     { "ServiceCrash", func_ServiceCrash },
+    { "ServiceDisplay", func_ServiceDisplay },
     { "ServiceEnv", func_ServiceEnv },
     { "ServiceRegistryState", func_ServiceRegistryState },
     { "TriggerInfo", func_TriggerInfo },
