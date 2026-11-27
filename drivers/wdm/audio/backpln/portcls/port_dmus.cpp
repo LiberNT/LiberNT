@@ -11,13 +11,21 @@
 #define NDEBUG
 #include <debug.h>
 
-class CPortDMus : public CUnknownImpl<IPortDMus, ISubdevice>
+class CPortDMus : public CUnknownImpl<IPortDMus, ISubdevice, IPortClsPower>
 {
 public:
     STDMETHODIMP QueryInterface( REFIID InterfaceId, PVOID* Interface);
 
     IMP_IPortDMus;
     IMP_ISubdevice;
+    STDMETHODIMP_(NTSTATUS) RegisterAdapterPowerManagement(
+        IN PUNKNOWN Unknown,
+        IN PDEVICE_OBJECT DeviceObject);
+    STDMETHODIMP_(NTSTATUS) UnregisterAdapterPowerManagement(
+        IN PDEVICE_OBJECT DeviceObject);
+    STDMETHODIMP_(NTSTATUS) SetIdlePowerManagement(
+        IN PDEVICE_OBJECT DeviceObject,
+        IN BOOLEAN Enabled);
     CPortDMus(IUnknown *OuterUnknown){}
     virtual ~CPortDMus(){}
 
@@ -120,6 +128,12 @@ CPortDMus::QueryInterface(
     {
         return NewIUnregisterPhysicalConnection((PUNREGISTERPHYSICALCONNECTION*)Output);
     }
+    else if (IsEqualGUIDAligned(refiid, IID_IPortClsPower))
+    {
+        *Output = PVOID(PPORTCLSPOWER(this));
+        PUNKNOWN(*Output)->AddRef();
+        return STATUS_SUCCESS;
+    }
 
     if (RtlStringFromGUID(refiid, &GuidString) == STATUS_SUCCESS)
     {
@@ -127,6 +141,38 @@ CPortDMus::QueryInterface(
         RtlFreeUnicodeString(&GuidString);
     }
     return STATUS_UNSUCCESSFUL;
+}
+
+NTSTATUS
+NTAPI
+CPortDMus::RegisterAdapterPowerManagement(
+    IN PUNKNOWN Unknown,
+    IN PDEVICE_OBJECT DeviceObject)
+{
+    return PcRegisterAdapterPowerManagement(Unknown, DeviceObject);
+}
+
+NTSTATUS
+NTAPI
+CPortDMus::UnregisterAdapterPowerManagement(
+    IN PDEVICE_OBJECT DeviceObject)
+{
+    return PcUnregisterAdapterPowerManagement(DeviceObject);
+}
+
+NTSTATUS
+NTAPI
+CPortDMus::SetIdlePowerManagement(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN BOOLEAN Enabled)
+{
+    UNREFERENCED_PARAMETER(Enabled);
+
+    if (!DeviceObject || DeviceObject != m_pDeviceObject)
+        return STATUS_INVALID_PARAMETER;
+
+    /* PortCls does not initiate runtime-idle power transitions yet. */
+    return STATUS_SUCCESS;
 }
 
 //---------------------------------------------------------------

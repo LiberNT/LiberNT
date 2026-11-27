@@ -21,7 +21,7 @@ PortTopologyEventDpc(
     IN PVOID SystemArgument1,
     IN PVOID SystemArgument2);
 
-class CPortTopology : public CUnknownImpl<IPortTopology, ISubdevice, IPortEvents>
+class CPortTopology : public CUnknownImpl<IPortTopology, ISubdevice, IPortEvents, IPortClsPower>
 {
 public:
     STDMETHODIMP QueryInterface( REFIID InterfaceId, PVOID* Interface);
@@ -29,6 +29,14 @@ public:
     IMP_IPortTopology;
     IMP_ISubdevice;
     IMP_IPortEvents;
+    STDMETHODIMP_(NTSTATUS) RegisterAdapterPowerManagement(
+        IN PUNKNOWN Unknown,
+        IN PDEVICE_OBJECT DeviceObject);
+    STDMETHODIMP_(NTSTATUS) UnregisterAdapterPowerManagement(
+        IN PDEVICE_OBJECT DeviceObject);
+    STDMETHODIMP_(NTSTATUS) SetIdlePowerManagement(
+        IN PDEVICE_OBJECT DeviceObject,
+        IN BOOLEAN Enabled);
     CPortTopology(IUnknown *OuterUnknown){}
     virtual ~CPortTopology(){}
 
@@ -228,6 +236,12 @@ CPortTopology::QueryInterface(
     {
         return NewIUnregisterPhysicalConnection((PUNREGISTERPHYSICALCONNECTION*)Output);
     }
+    else if (IsEqualGUIDAligned(refiid, IID_IPortClsPower))
+    {
+        *Output = PVOID(PPORTCLSPOWER(this));
+        PUNKNOWN(*Output)->AddRef();
+        return STATUS_SUCCESS;
+    }
 
     if (RtlStringFromGUID(refiid, &GuidString) == STATUS_SUCCESS)
     {
@@ -235,6 +249,38 @@ CPortTopology::QueryInterface(
         RtlFreeUnicodeString(&GuidString);
     }
     return STATUS_UNSUCCESSFUL;
+}
+
+NTSTATUS
+NTAPI
+CPortTopology::RegisterAdapterPowerManagement(
+    IN PUNKNOWN Unknown,
+    IN PDEVICE_OBJECT DeviceObject)
+{
+    return PcRegisterAdapterPowerManagement(Unknown, DeviceObject);
+}
+
+NTSTATUS
+NTAPI
+CPortTopology::UnregisterAdapterPowerManagement(
+    IN PDEVICE_OBJECT DeviceObject)
+{
+    return PcUnregisterAdapterPowerManagement(DeviceObject);
+}
+
+NTSTATUS
+NTAPI
+CPortTopology::SetIdlePowerManagement(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN BOOLEAN Enabled)
+{
+    UNREFERENCED_PARAMETER(Enabled);
+
+    if (!DeviceObject || DeviceObject != m_pDeviceObject)
+        return STATUS_INVALID_PARAMETER;
+
+    /* PortCls does not initiate runtime-idle power transitions yet. */
+    return STATUS_SUCCESS;
 }
 
 //---------------------------------------------------------------

@@ -11,7 +11,7 @@
 #define NDEBUG
 #include <debug.h>
 
-class CPortWavePci : public CUnknownImpl<IPortWavePci, IPortEvents, ISubdevice, IServiceSink>
+class CPortWavePci : public CUnknownImpl<IPortWavePci, IPortEvents, ISubdevice, IServiceSink, IPortClsPower>
 {
 public:
     STDMETHODIMP QueryInterface( REFIID InterfaceId, PVOID* Interface);
@@ -20,6 +20,14 @@ public:
     IMP_ISubdevice;
     IMP_IPortEvents;
     IMP_IServiceSink;
+    STDMETHODIMP_(NTSTATUS) RegisterAdapterPowerManagement(
+        IN PUNKNOWN Unknown,
+        IN PDEVICE_OBJECT DeviceObject);
+    STDMETHODIMP_(NTSTATUS) UnregisterAdapterPowerManagement(
+        IN PDEVICE_OBJECT DeviceObject);
+    STDMETHODIMP_(NTSTATUS) SetIdlePowerManagement(
+        IN PDEVICE_OBJECT DeviceObject,
+        IN BOOLEAN Enabled);
     CPortWavePci(IUnknown *OuterUnknown){}
     virtual ~CPortWavePci() {}
 
@@ -181,6 +189,12 @@ CPortWavePci::QueryInterface(
     {
         return NewIUnregisterPhysicalConnection((PUNREGISTERPHYSICALCONNECTION*)Output);
     }
+    else if (IsEqualGUIDAligned(refiid, IID_IPortClsPower))
+    {
+        *Output = PVOID(PPORTCLSPOWER(this));
+        PUNKNOWN(*Output)->AddRef();
+        return STATUS_SUCCESS;
+    }
 
     if (RtlStringFromGUID(refiid, &GuidString) == STATUS_SUCCESS)
     {
@@ -189,6 +203,38 @@ CPortWavePci::QueryInterface(
     }
 
     return STATUS_UNSUCCESSFUL;
+}
+
+NTSTATUS
+NTAPI
+CPortWavePci::RegisterAdapterPowerManagement(
+    IN PUNKNOWN Unknown,
+    IN PDEVICE_OBJECT DeviceObject)
+{
+    return PcRegisterAdapterPowerManagement(Unknown, DeviceObject);
+}
+
+NTSTATUS
+NTAPI
+CPortWavePci::UnregisterAdapterPowerManagement(
+    IN PDEVICE_OBJECT DeviceObject)
+{
+    return PcUnregisterAdapterPowerManagement(DeviceObject);
+}
+
+NTSTATUS
+NTAPI
+CPortWavePci::SetIdlePowerManagement(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN BOOLEAN Enabled)
+{
+    UNREFERENCED_PARAMETER(Enabled);
+
+    if (!DeviceObject || DeviceObject != m_pDeviceObject)
+        return STATUS_INVALID_PARAMETER;
+
+    /* PortCls does not initiate runtime-idle power transitions yet. */
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS

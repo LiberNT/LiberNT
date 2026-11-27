@@ -13,7 +13,7 @@
 
 GUID IID_IDmaChannelSlave;
 
-class CPortWaveCyclic : public CUnknownImpl<IPortWaveCyclic, IPortEvents, ISubdevice>
+class CPortWaveCyclic : public CUnknownImpl<IPortWaveCyclic, IPortEvents, ISubdevice, IPortClsPower>
 {
 public:
     STDMETHODIMP QueryInterface( REFIID InterfaceId, PVOID* Interface);
@@ -21,6 +21,14 @@ public:
     IMP_IPortWaveCyclic;
     IMP_ISubdevice;
     IMP_IPortEvents;
+    STDMETHODIMP_(NTSTATUS) RegisterAdapterPowerManagement(
+        IN PUNKNOWN Unknown,
+        IN PDEVICE_OBJECT DeviceObject);
+    STDMETHODIMP_(NTSTATUS) UnregisterAdapterPowerManagement(
+        IN PDEVICE_OBJECT DeviceObject);
+    STDMETHODIMP_(NTSTATUS) SetIdlePowerManagement(
+        IN PDEVICE_OBJECT DeviceObject,
+        IN BOOLEAN Enabled);
     CPortWaveCyclic(IUnknown *OuterUnknown) {}
     virtual ~CPortWaveCyclic(){}
 
@@ -158,6 +166,12 @@ CPortWaveCyclic::QueryInterface(
     {
         return NewIUnregisterPhysicalConnection((PUNREGISTERPHYSICALCONNECTION*)Output);
     }
+    else if (IsEqualGUIDAligned(refiid, IID_IPortClsPower))
+    {
+        *Output = PVOID(PPORTCLSPOWER(this));
+        PUNKNOWN(*Output)->AddRef();
+        return STATUS_SUCCESS;
+    }
 
     if (RtlStringFromGUID(refiid, &GuidString) == STATUS_SUCCESS)
     {
@@ -166,6 +180,38 @@ CPortWaveCyclic::QueryInterface(
     }
 
     return STATUS_UNSUCCESSFUL;
+}
+
+NTSTATUS
+NTAPI
+CPortWaveCyclic::RegisterAdapterPowerManagement(
+    IN PUNKNOWN Unknown,
+    IN PDEVICE_OBJECT DeviceObject)
+{
+    return PcRegisterAdapterPowerManagement(Unknown, DeviceObject);
+}
+
+NTSTATUS
+NTAPI
+CPortWaveCyclic::UnregisterAdapterPowerManagement(
+    IN PDEVICE_OBJECT DeviceObject)
+{
+    return PcUnregisterAdapterPowerManagement(DeviceObject);
+}
+
+NTSTATUS
+NTAPI
+CPortWaveCyclic::SetIdlePowerManagement(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN BOOLEAN Enabled)
+{
+    UNREFERENCED_PARAMETER(Enabled);
+
+    if (!DeviceObject || DeviceObject != m_pDeviceObject)
+        return STATUS_INVALID_PARAMETER;
+
+    /* PortCls does not initiate runtime-idle power transitions yet. */
+    return STATUS_SUCCESS;
 }
 
 //---------------------------------------------------------------
