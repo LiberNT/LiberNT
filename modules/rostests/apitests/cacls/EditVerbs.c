@@ -211,14 +211,13 @@ START_TEST(EditVerbs)
     /* /E /P Users:C replaces the earlier entry with (A;;0x1301bf;;;BU).
        Done before the deny sequence would matter: on a file whose DACL the
        caller can still write, replacement semantics are what is pinned. */
-    hFile = CreateFileW(szFile, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+    SetLastError(0xdeadbeef);
+    hFile = CreateFileW(szFile, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
                         FILE_ATTRIBUTE_NORMAL, NULL);
-    ok(hFile != INVALID_HANDLE_VALUE, "recreate temp file failed %lu\n", GetLastError());
+    ok(hFile == INVALID_HANDLE_VALUE, "write open allowed under the Users deny entry\n");
+    ok(GetLastError() == ERROR_ACCESS_DENIED, "write open under the deny entry failed %lu\n", GetLastError());
     if (hFile != INVALID_HANDLE_VALUE)
-    {
-        WriteFile(hFile, "x", 1, &written, NULL);
         CloseHandle(hFile);
-    }
     ok(RunCacls(L"/E /G Users:R", 15000), "spawn pre-/P grant failed\n");
     ok(RunCacls(L"/E /P Users:C", 15000), "spawn /P failed\n");
     ReadBackAndReport("after /E /P Users:C", szSddl, _countof(szSddl));
