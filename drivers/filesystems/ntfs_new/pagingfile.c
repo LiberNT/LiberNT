@@ -173,7 +173,7 @@ NtfsPagingChunk(
 
     KeInitializeEvent(&Finished, NotificationEvent, FALSE);
     MmInitializeMdl(Partial, NULL, NTFS_PAGING_MAX_PAGES * PAGE_SIZE);
-    IoBuildPartialMdl(Source, Partial, (PUCHAR)MmGetMdlVirtualAddress(Source) + Done, Chunk);
+    IoBuildPartialMdl(Source, Partial, (PUCHAR)((ULONG_PTR)MmGetMdlVirtualAddress(Source) + Done), Chunk);
 
     IoReuseIrp(Irp, STATUS_NOT_SUPPORTED);
     Irp->MdlAddress = Partial;
