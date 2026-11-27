@@ -761,6 +761,10 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void **out)
     TRACE("rclsid %s, riid %s, out %p.\n",
             debugstr_guid(rclsid), debugstr_guid(riid), out);
 
+    if (!out)
+        return E_INVALIDARG;
+    *out = NULL;
+
     if (!IsEqualGUID(&IID_IClassFactory, riid)
             && !IsEqualGUID(&IID_IUnknown, riid))
         return E_NOINTERFACE;
