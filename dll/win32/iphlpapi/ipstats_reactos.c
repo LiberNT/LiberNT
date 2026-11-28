@@ -992,7 +992,7 @@ PVOID getTcpTable(CLASS_TABLE Class)
     HANDLE tcpFile;
     int i, totalNumber, TmpIdx, CurrIdx = 0;
     NTSTATUS status;
-    PMIB_TCPTABLE IpTcpTable = NULL;
+    PMIB_TCPTABLE IpTcpTable = NULL, GrownTable;
     PVOID AdapterTcpTable = NULL;
 
     TRACE("called.\n");
@@ -1014,6 +1014,12 @@ PVOID getTcpTable(CLASS_TABLE Class)
     }
 
     status = tdiGetEntityIDSet(tcpFile, &entitySet, &numEntities);
+    if (!NT_SUCCESS(status))
+    {
+        closeTcpFile(tcpFile);
+        HeapFree(GetProcessHeap(), 0, IpTcpTable);
+        return NULL;
+    }
 
     for (i = 0; i < numEntities; i++) {
         if (entitySet[i].tei_entity == CO_TL_ENTITY)
@@ -1030,6 +1036,21 @@ PVOID getTcpTable(CLASS_TABLE Class)
                 &returnSize);
 
             if (status == STATUS_SUCCESS) {
+                if ((DWORD)CurrIdx + returnSize > (DWORD)totalNumber)
+                {
+                    GrownTable = HeapReAlloc(GetProcessHeap(), 0, IpTcpTable,
+                        UdpTcpTableCall[Class].TcpOffset + UdpTcpTableCall[Class].TcpSize * ((DWORD)CurrIdx + returnSize));
+                    if (!GrownTable)
+                    {
+                        tdiFreeThingSet(AdapterTcpTable);
+                        tdiFreeThingSet(entitySet);
+                        closeTcpFile(tcpFile);
+                        HeapFree(GetProcessHeap(), 0, IpTcpTable);
+                        return NULL;
+                    }
+                    IpTcpTable = GrownTable;
+                    totalNumber = CurrIdx + returnSize;
+                }
                 for (TmpIdx = 0; TmpIdx < returnSize; TmpIdx++, CurrIdx++)
                     CopyMemory(Add2Ptr(IpTcpTable, UdpTcpTableCall[Class].TcpOffset + UdpTcpTableCall[Class].TcpSize * CurrIdx),
                                Add2Ptr(AdapterTcpTable, UdpTcpTableCall[Class].TcpSize * TmpIdx),
