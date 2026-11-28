@@ -1359,6 +1359,7 @@ LsaApLogonUserEx2_Network(
 {
     NTSTATUS Status;
     PMSV1_0_LM20_LOGON LogonInfo;
+    SECPKG_CLIENT_INFO ClientInfo;
 
     *LogonProfile = NULL;
     *LogonProfileSize = 0;
@@ -1405,6 +1406,13 @@ LsaApLogonUserEx2_Network(
                               LogonInfo->CaseInsensitiveChallengeResponse.Length))
     {
         return STATUS_INVALID_PARAMETER;
+    }
+
+    if ((LsaGetClientInfo == NULL) ||
+        !NT_SUCCESS(LsaGetClientInfo(&ClientInfo)) ||
+        !ClientInfo.HasTcbPrivilege)
+    {
+        return STATUS_ACCESS_DENIED;
     }
 
     LogonPwdData->IsNetwork = TRUE;

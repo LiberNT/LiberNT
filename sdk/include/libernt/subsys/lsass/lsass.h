@@ -24,6 +24,7 @@ typedef enum _LSA_API_NUMBER
     LSASS_REQUEST_ENUM_LOGON_SESSIONS,
     LSASS_REQUEST_GET_LOGON_SESSION_DATA,
     LSASS_REQUEST_POLICY_CHANGE_NOTIFY,
+    LSASS_REQUEST_SSPI_NETWORK_LOGON,
     LSASS_REQUEST_MAXIMUM
 } LSA_API_NUMBER, *PLSA_API_NUMBER;
 
@@ -218,5 +219,21 @@ NTAPI
 LsapClientCall(
     _In_ HANDLE PortHandle,
     _Inout_ PLSA_API_MSG ApiMessage);
+
+NTSTATUS
+NTAPI
+LsapClientSspiNetworkLogon(
+    _In_ HANDLE LsaHandle,
+    _In_ PLSA_STRING OriginName,
+    _In_ ULONG AuthenticationPackage,
+    _In_reads_bytes_(AuthenticationInformationLength) PVOID AuthenticationInformation,
+    _In_ ULONG AuthenticationInformationLength,
+    _In_ PTOKEN_SOURCE SourceContext,
+    _Out_ PVOID *ProfileBuffer,
+    _Out_ PULONG ProfileBufferLength,
+    _Out_ PLUID LogonId,
+    _Out_ PHANDLE Token,
+    _Out_ PQUOTA_LIMITS Quotas,
+    _Out_ PNTSTATUS SubStatus);
 
 #endif /* __INCLUDE_LSASS_LSASS_H */

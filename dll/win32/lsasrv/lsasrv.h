@@ -80,6 +80,7 @@ typedef struct _LSAP_LOGON_CONTEXT
     HANDLE ClientProcessHandle;
     HANDLE ConnectionHandle;
     BOOL TrustedCaller;
+    BOOL SspiNetworkLogon;
 } LSAP_LOGON_CONTEXT, *PLSAP_LOGON_CONTEXT;
 
 typedef struct _SAMPR_ULONG_ARRAY
@@ -126,6 +127,10 @@ LsapCallAuthenticationPackage(PLSA_API_MSG RequestMsg,
 NTSTATUS
 LsapLogonUser(PLSA_API_MSG RequestMsg,
               PLSAP_LOGON_CONTEXT LogonContext);
+
+NTSTATUS
+LsapSspiNetworkLogon(PLSA_API_MSG RequestMsg,
+                     PLSAP_LOGON_CONTEXT LogonContext);
 
 VOID
 LsapTerminateLogon(

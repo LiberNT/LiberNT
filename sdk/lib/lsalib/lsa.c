@@ -238,30 +238,28 @@ LsaLookupAuthenticationPackage(IN HANDLE LsaHandle,
 }
 
 
-/*
- * @implemented
- */
+static
 NTSTATUS
-NTAPI
-LsaLogonUser(IN HANDLE LsaHandle,
-             IN PLSA_STRING OriginName,
-             IN SECURITY_LOGON_TYPE LogonType,
-             IN ULONG AuthenticationPackage,
-             IN PVOID AuthenticationInformation,
-             IN ULONG AuthenticationInformationLength,
-             IN PTOKEN_GROUPS LocalGroups OPTIONAL,
-             IN PTOKEN_SOURCE SourceContext,
-             OUT PVOID *ProfileBuffer,
-             OUT PULONG ProfileBufferLength,
-             OUT PLUID LogonId,
-             OUT PHANDLE Token,
-             OUT PQUOTA_LIMITS Quotas,
-             OUT PNTSTATUS SubStatus)
+LsapClientLogonUser(IN LSA_API_NUMBER ApiNumber,
+                    IN HANDLE LsaHandle,
+                    IN PLSA_STRING OriginName,
+                    IN SECURITY_LOGON_TYPE LogonType,
+                    IN ULONG AuthenticationPackage,
+                    IN PVOID AuthenticationInformation,
+                    IN ULONG AuthenticationInformationLength,
+                    IN PTOKEN_GROUPS LocalGroups OPTIONAL,
+                    IN PTOKEN_SOURCE SourceContext,
+                    OUT PVOID *ProfileBuffer,
+                    OUT PULONG ProfileBufferLength,
+                    OUT PLUID LogonId,
+                    OUT PHANDLE Token,
+                    OUT PQUOTA_LIMITS Quotas,
+                    OUT PNTSTATUS SubStatus)
 {
     LSA_API_MSG ApiMessage;
     NTSTATUS Status;
 
-    ApiMessage.ApiNumber = LSASS_REQUEST_LOGON_USER;
+    ApiMessage.ApiNumber = ApiNumber;
     ApiMessage.h.u1.s1.DataLength = LSA_PORT_DATA_SIZE(ApiMessage.LogonUser);
     ApiMessage.h.u1.s1.TotalLength = LSA_PORT_MESSAGE_SIZE;
     ApiMessage.h.u2.ZeroInit = 0;
@@ -298,6 +296,58 @@ LsaLogonUser(IN HANDLE LsaHandle,
     *Quotas = ApiMessage.LogonUser.Reply.Quotas;
 
     return Status;
+}
+
+
+/*
+ * @implemented
+ */
+NTSTATUS
+NTAPI
+LsaLogonUser(IN HANDLE LsaHandle,
+             IN PLSA_STRING OriginName,
+             IN SECURITY_LOGON_TYPE LogonType,
+             IN ULONG AuthenticationPackage,
+             IN PVOID AuthenticationInformation,
+             IN ULONG AuthenticationInformationLength,
+             IN PTOKEN_GROUPS LocalGroups OPTIONAL,
+             IN PTOKEN_SOURCE SourceContext,
+             OUT PVOID *ProfileBuffer,
+             OUT PULONG ProfileBufferLength,
+             OUT PLUID LogonId,
+             OUT PHANDLE Token,
+             OUT PQUOTA_LIMITS Quotas,
+             OUT PNTSTATUS SubStatus)
+{
+    return LsapClientLogonUser(LSASS_REQUEST_LOGON_USER, LsaHandle, OriginName, LogonType,
+                               AuthenticationPackage, AuthenticationInformation,
+                               AuthenticationInformationLength, LocalGroups, SourceContext,
+                               ProfileBuffer, ProfileBufferLength, LogonId, Token, Quotas,
+                               SubStatus);
+}
+
+
+NTSTATUS
+NTAPI
+LsapClientSspiNetworkLogon(
+    _In_ HANDLE LsaHandle,
+    _In_ PLSA_STRING OriginName,
+    _In_ ULONG AuthenticationPackage,
+    _In_reads_bytes_(AuthenticationInformationLength) PVOID AuthenticationInformation,
+    _In_ ULONG AuthenticationInformationLength,
+    _In_ PTOKEN_SOURCE SourceContext,
+    _Out_ PVOID *ProfileBuffer,
+    _Out_ PULONG ProfileBufferLength,
+    _Out_ PLUID LogonId,
+    _Out_ PHANDLE Token,
+    _Out_ PQUOTA_LIMITS Quotas,
+    _Out_ PNTSTATUS SubStatus)
+{
+    return LsapClientLogonUser(LSASS_REQUEST_SSPI_NETWORK_LOGON, LsaHandle, OriginName, Network,
+                               AuthenticationPackage, AuthenticationInformation,
+                               AuthenticationInformationLength, NULL, SourceContext,
+                               ProfileBuffer, ProfileBufferLength, LogonId, Token, Quotas,
+                               SubStatus);
 }
 
 

@@ -7,6 +7,8 @@
 
 #include "precomp.h"
 
+#include <lsass/lsass.h>
+
 #include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(ntlm);
 
@@ -662,8 +664,9 @@ static SECURITY_STATUS NtlmLogonUser(PNegoHelper Context, const WCHAR *Domain, U
     memcpy(Source.SourceName, "NtLmSsp ", sizeof(Source.SourceName));
     AllocateLocallyUniqueId(&Source.SourceIdentifier);
 
-    Status = LsaLogonUser(Lsa, &Origin, Network, Package, Request, RequestLength, NULL, &Source,
-                          (PVOID *)&Profile, &ProfileLength, &LogonId, &Token, &Quotas, &SubStatus);
+    Status = LsapClientSspiNetworkLogon(Lsa, &Origin, Package, Request, RequestLength, &Source,
+                                        (PVOID *)&Profile, &ProfileLength, &LogonId, &Token, &Quotas,
+                                        &SubStatus);
     if (NT_SUCCESS(Status))
     {
         if (Profile && ProfileLength >= sizeof(*Profile))

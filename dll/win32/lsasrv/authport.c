@@ -328,6 +328,12 @@ AuthPortThreadRoutine(PVOID Param)
                         ReplyMsg = &RequestMsg;
                         break;
 
+                    case LSASS_REQUEST_SSPI_NETWORK_LOGON:
+                        RequestMsg.Status = LsapSspiNetworkLogon(&RequestMsg,
+                                                                 LogonContext);
+                        ReplyMsg = &RequestMsg;
+                        break;
+
                     case LSASS_REQUEST_LOOKUP_AUTHENTICATION_PACKAGE:
                         RequestMsg.Status = LsapLookupAuthenticationPackage(&RequestMsg,
                                                                             LogonContext);

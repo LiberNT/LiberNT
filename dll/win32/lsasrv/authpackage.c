@@ -542,7 +542,8 @@ LsapGetClientInfo(
         NtClose(TokenHandle);
     }
 
-    ClientInfo->HasTcbPrivilege = (BOOLEAN)LsapIsTrustedClient(LogonContext->ClientProcessHandle);
+    ClientInfo->HasTcbPrivilege = LogonContext->SspiNetworkLogon ||
+                                  (BOOLEAN)LsapIsTrustedClient(LogonContext->ClientProcessHandle);
 
     return STATUS_SUCCESS;
 }
@@ -1678,6 +1679,24 @@ LsapCheckLogonRights(
 
 
 NTSTATUS
+LsapSspiNetworkLogon(PLSA_API_MSG RequestMsg,
+                     PLSAP_LOGON_CONTEXT LogonContext)
+{
+    NTSTATUS Status;
+
+    if (RequestMsg->LogonUser.Request.LogonType != Network ||
+        RequestMsg->LogonUser.Request.LocalGroupsCount != 0)
+        return STATUS_INVALID_PARAMETER;
+
+    ASSERT(!LogonContext->SspiNetworkLogon);
+    LogonContext->SspiNetworkLogon = TRUE;
+    Status = LsapLogonUser(RequestMsg, LogonContext);
+    LogonContext->SspiNetworkLogon = FALSE;
+    return Status;
+}
+
+
+NTSTATUS
 LsapLogonUser(PLSA_API_MSG RequestMsg,
               PLSAP_LOGON_CONTEXT LogonContext)
 {
@@ -1699,7 +1718,9 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
     SECURITY_LOGON_TYPE LogonType;
     BOOLEAN S4ULogon = FALSE;
     BOOLEAN S4UIdentify = FALSE;
+    BOOLEAN Msv1_0Package;
     BOOLEAN PackageCalled = FALSE;
+    ULONG MessageType = 0;
     NTSTATUS Status;
 
     PUNICODE_STRING UserName = NULL;
@@ -1768,16 +1789,36 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
 
     LsapSetClientContext(LogonContext);
 
-    if (LocalAuthInfo != NULL &&
-        RequestMsg->LogonUser.Request.AuthenticationInformationLength >= sizeof(ULONG) &&
-        Package->Name != NULL &&
-        Package->Name->Buffer != NULL &&
-        Package->Name->Length == sizeof(MSV1_0_PACKAGE_NAME) - 1 &&
-        _strnicmp(Package->Name->Buffer, MSV1_0_PACKAGE_NAME, Package->Name->Length) == 0 &&
-        *(PULONG)LocalAuthInfo == MsV1_0S4ULogon)
+    Msv1_0Package = Package->Name != NULL &&
+                    Package->Name->Buffer != NULL &&
+                    Package->Name->Length == sizeof(MSV1_0_PACKAGE_NAME) - 1 &&
+                    _strnicmp(Package->Name->Buffer, MSV1_0_PACKAGE_NAME, Package->Name->Length) == 0;
+    if (Msv1_0Package &&
+        LocalAuthInfo != NULL &&
+        RequestMsg->LogonUser.Request.AuthenticationInformationLength >= sizeof(ULONG))
+        MessageType = *(PULONG)LocalAuthInfo;
+
+    if (MessageType == MsV1_0S4ULogon)
     {
         S4ULogon = TRUE;
         S4UIdentify = !LsapIsTrustedClient(LogonContext->ClientProcessHandle);
+    }
+
+    if (LogonContext->SspiNetworkLogon &&
+        MessageType != MsV1_0Lm20Logon &&
+        MessageType != MsV1_0NetworkLogon)
+    {
+        Status = STATUS_INVALID_PARAMETER;
+        goto done;
+    }
+
+    if (!LogonContext->SspiNetworkLogon &&
+        (MessageType == MsV1_0Lm20Logon || MessageType == MsV1_0NetworkLogon) &&
+        RequestMsg->LogonUser.Request.AuthenticationInformationLength >= sizeof(MSV1_0_LM20_LOGON) &&
+        ((PMSV1_0_LM20_LOGON)LocalAuthInfo)->Workstation.Length == 0)
+    {
+        Status = STATUS_INVALID_PARAMETER;
+        goto done;
     }
 
     PackageCalled = TRUE;
