@@ -34,11 +34,68 @@
 #define GENERIC_ACCESS (GENERIC_READ | GENERIC_WRITE | \
     GENERIC_EXECUTE | GENERIC_ALL)
 
+#define WINSTA_PACKAGE (WINSTA_ENUMDESKTOPS | WINSTA_READATTRIBUTES | \
+    WINSTA_ACCESSCLIPBOARD | WINSTA_ACCESSGLOBALATOMS | WINSTA_ENUMERATE | \
+    WINSTA_READSCREEN | READ_CONTROL)
+
+#define DESKTOP_PACKAGE (DESKTOP_ALL & ~DESKTOP_SWITCHDESKTOP)
+
 /* GLOBALS ******************************************************************/
 
 static SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
+static SID_IDENTIFIER_AUTHORITY PackageAuthority = {SECURITY_APP_PACKAGE_AUTHORITY};
+static const ULONG PackageRids[] = {SECURITY_BUILTIN_PACKAGE_ANY_RESTRICTED_PACKAGE, SECURITY_BUILTIN_PACKAGE_ANY_PACKAGE};
 
 /* FUNCTIONS ****************************************************************/
+
+static
+DWORD
+PackageAcesSize(
+    _In_ BOOL WindowStation)
+{
+    DWORD Count = (WindowStation ? 2 : 1) * ARRAYSIZE(PackageRids);
+
+    return Count * (sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetSidLengthRequired(2));
+}
+
+static
+BOOL
+AddPackageAces(
+    _Inout_ PACL Dacl,
+    _In_ BOOL WindowStation)
+{
+    PSID PackageSid;
+    BOOL Success = TRUE;
+    ULONG Index;
+
+    for (Index = 0; Success && Index < ARRAYSIZE(PackageRids); Index++)
+    {
+        if (!AllocateAndInitializeSid(&PackageAuthority, 2, SECURITY_APP_PACKAGE_BASE_RID, PackageRids[Index],
+                                      0, 0, 0, 0, 0, 0, &PackageSid))
+        {
+            ERR("AddPackageAces(): Failed to create package SID (error code %lu)\n", GetLastError());
+            return FALSE;
+        }
+        ASSERT(GetLengthSid(PackageSid) == GetSidLengthRequired(2));
+
+        if (WindowStation)
+        {
+            Success = AddAccessAllowedAceEx(Dacl, ACL_REVISION, INHERIT_ONLY_ACE | OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE,
+                                            GENERIC_READ | GENERIC_EXECUTE, PackageSid) &&
+                      AddAccessAllowedAceEx(Dacl, ACL_REVISION, NO_PROPAGATE_INHERIT_ACE, WINSTA_PACKAGE, PackageSid);
+        }
+        else
+        {
+            Success = AddAccessAllowedAceEx(Dacl, ACL_REVISION, 0, DESKTOP_PACKAGE, PackageSid);
+        }
+
+        if (!Success)
+            ERR("AddPackageAces(): Failed to set package ACE (error code %lu)\n", GetLastError());
+        FreeSid(PackageSid);
+    }
+
+    return Success;
+}
 
 /**
  * @brief
@@ -203,7 +260,8 @@ CreateWinstaSecurity(
                sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(WinlogonSid) +
                sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(WinlogonSid) +
                sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(AdminsSid) +
-               sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(AdminsSid);
+               sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(AdminsSid) +
+               PackageAcesSize(TRUE);
 
     /* Allocate the DACL now */
     Dacl = RtlAllocateHeap(RtlGetProcessHeap(),
@@ -267,7 +325,8 @@ CreateWinstaSecurity(
     }
 
     /* Initialize the security descriptor */
-    if (!InitializeSecurityDescriptor(&AbsoluteSd, SECURITY_DESCRIPTOR_REVISION))
+    if (!AddPackageAces(Dacl, TRUE) ||
+        !InitializeSecurityDescriptor(&AbsoluteSd, SECURITY_DESCRIPTOR_REVISION))
     {
         ERR("CreateWinstaSecurity(): Failed to initialize absolute security descriptor (error code %lu)\n", GetLastError());
         goto Quit;
@@ -382,7 +441,8 @@ CreateApplicationDesktopSecurity(
      */
     DaclSize = sizeof(ACL) +
                sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(WinlogonSid) +
-               sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(AdminsSid);
+               sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(AdminsSid) +
+               PackageAcesSize(FALSE);
 
     /* Allocate the DACL now */
     Dacl = RtlAllocateHeap(RtlGetProcessHeap(),
@@ -424,7 +484,8 @@ CreateApplicationDesktopSecurity(
     }
 
     /* Initialize the security descriptor */
-    if (!InitializeSecurityDescriptor(&AbsoluteSd, SECURITY_DESCRIPTOR_REVISION))
+    if (!AddPackageAces(Dacl, FALSE) ||
+        !InitializeSecurityDescriptor(&AbsoluteSd, SECURITY_DESCRIPTOR_REVISION))
     {
         ERR("CreateApplicationDesktopSecurity(): Failed to initialize absolute security descriptor (error code %lu)\n", GetLastError());
         goto Quit;
@@ -867,7 +928,8 @@ AllowWinstaAccessToUser(
                sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(InteractiveSid) +
                sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(InteractiveSid) +
                sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(LogonSid) +
-               sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(LogonSid);
+               sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(LogonSid) +
+               PackageAcesSize(TRUE);
 
     /* Allocate the DACL now */
     Dacl = RtlAllocateHeap(RtlGetProcessHeap(),
@@ -975,7 +1037,8 @@ AllowWinstaAccessToUser(
     }
 
     /* Initialize the security descriptor */
-    if (!InitializeSecurityDescriptor(&AbsoluteSd, SECURITY_DESCRIPTOR_REVISION))
+    if (!AddPackageAces(Dacl, TRUE) ||
+        !InitializeSecurityDescriptor(&AbsoluteSd, SECURITY_DESCRIPTOR_REVISION))
     {
         ERR("AllowWinstaAccessToUser(): Failed to initialize absolute security descriptor (error code %lu)\n", GetLastError());
         goto Quit;
@@ -1112,7 +1175,8 @@ AllowDesktopAccessToUser(
                sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(WinlogonSid) +
                sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(AdminsSid) +
                sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(InteractiveSid) +
-               sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(LogonSid);
+               sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD) + GetLengthSid(LogonSid) +
+               PackageAcesSize(FALSE);
 
     /* Allocate the DACL now */
     Dacl = RtlAllocateHeap(RtlGetProcessHeap(),
@@ -1176,7 +1240,8 @@ AllowDesktopAccessToUser(
     }
 
     /* Initialize the security descriptor */
-    if (!InitializeSecurityDescriptor(&AbsoluteSd, SECURITY_DESCRIPTOR_REVISION))
+    if (!AddPackageAces(Dacl, FALSE) ||
+        !InitializeSecurityDescriptor(&AbsoluteSd, SECURITY_DESCRIPTOR_REVISION))
     {
         ERR("AllowDesktopAccessToUser(): Failed to initialize absolute security descriptor (error code %lu)\n", GetLastError());
         goto Quit;
