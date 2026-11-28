@@ -327,6 +327,10 @@ VWifiMiniportPauseEx(
         NdisMSleep(1000);
     }
 
+    NdisAcquireSpinLock(&Adapter->Lock);
+    Adapter->JobDueTime = 0;
+    NdisReleaseSpinLock(&Adapter->Lock);
+
     VWifiCompletePendingScan(Adapter, NDIS_STATUS_FAILURE);
     VWifiCompletePendingDisconnect(Adapter, NDIS_STATUS_FAILURE);
 
