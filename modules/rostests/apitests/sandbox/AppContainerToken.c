@@ -1,11 +1,12 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Test kernelbase CreateAppContainerToken and the package SID checks of NtCreateLowBoxToken
+ * PURPOSE:     Test kernelbase CreateAppContainerToken, NtCreateLowBoxToken package SIDs and what an AppContainer may open
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include "precomp.h"
+#include <ndk/iofuncs.h>
 
 typedef BOOL (WINAPI *PFN_CREATE_APP_CONTAINER_TOKEN)(HANDLE, PSECURITY_CAPABILITIES, PHANDLE);
 typedef NTSTATUS (NTAPI *PFN_NT_CREATE_LOW_BOX)(PHANDLE, HANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, PSID, ULONG, PSID_AND_ATTRIBUTES, ULONG, HANDLE *);
@@ -194,14 +195,146 @@ CheckTokenClasses(
     }
 }
 
+static BOOL
+DaclHasAce(
+    _In_ PACL Dacl,
+    _In_ PSID Sid,
+    _In_ BYTE Flags,
+    _In_ ACCESS_MASK Mask)
+{
+    ACCESS_ALLOWED_ACE *Ace;
+    ULONG Index;
+
+    for (Index = 0; Dacl && Index < Dacl->AceCount; Index++)
+    {
+        if (!GetAce(Dacl, Index, (PVOID *)&Ace) || Ace->Header.AceType != ACCESS_ALLOWED_ACE_TYPE)
+            continue;
+        if (Ace->Header.AceFlags == Flags && Ace->Mask == Mask && EqualSid((PSID)&Ace->SidStart, Sid))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static VOID
+CheckPackageAces(VOID)
+{
+    static const PCWSTR Packages[] = { L"S-1-15-2-1", L"S-1-15-2-2" };
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Device\\KsecDD");
+    OBJECT_ATTRIBUTES Attributes;
+    IO_STATUS_BLOCK Io;
+    PSECURITY_DESCRIPTOR Descriptor;
+    PACL WinstaDacl = NULL, DesktopDacl = NULL, KsecDacl = NULL;
+    PSECURITY_DESCRIPTOR WinstaSd = NULL, DesktopSd = NULL, KsecSd = NULL;
+    HANDLE Ksec = NULL;
+    NTSTATUS Status;
+    ULONG Index;
+    PSID Sid;
+
+    ok(GetSecurityInfo(GetProcessWindowStation(), SE_WINDOW_OBJECT, DACL_SECURITY_INFORMATION, NULL, NULL, &WinstaDacl, NULL, &WinstaSd) == ERROR_SUCCESS,
+       "window station security failed\n");
+    ok(GetSecurityInfo(GetThreadDesktop(GetCurrentThreadId()), SE_WINDOW_OBJECT, DACL_SECURITY_INFORMATION, NULL, NULL, &DesktopDacl, NULL, &DesktopSd) == ERROR_SUCCESS,
+       "desktop security failed\n");
+    InitializeObjectAttributes(&Attributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtOpenFile(&Ksec, READ_CONTROL | SYNCHRONIZE, &Attributes, &Io, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_SYNCHRONOUS_IO_NONALERT);
+    ok(Status == STATUS_SUCCESS, "KsecDD open status 0x%lx\n", Status);
+    if (NT_SUCCESS(Status))
+    {
+        ok(GetSecurityInfo(Ksec, SE_KERNEL_OBJECT, DACL_SECURITY_INFORMATION, NULL, NULL, &KsecDacl, NULL, &KsecSd) == ERROR_SUCCESS,
+           "KsecDD security failed\n");
+        NtClose(Ksec);
+    }
+
+    for (Index = 0; Index < ARRAYSIZE(Packages); Index++)
+    {
+        Sid = MakeSid(Packages[Index]);
+        if (!Sid)
+            continue;
+        ok(DaclHasAce(WinstaDacl, Sid, NO_PROPAGATE_INHERIT_ACE, 0x20327), "%ls: no window station ACE\n", Packages[Index]);
+        ok(DaclHasAce(WinstaDacl, Sid, INHERIT_ONLY_ACE | OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE, GENERIC_READ | GENERIC_EXECUTE),
+           "%ls: no inherited desktop ACE on the window station\n", Packages[Index]);
+        ok(DaclHasAce(DesktopDacl, Sid, 0, 0xf00ff), "%ls: no desktop ACE\n", Packages[Index]);
+        ok(DaclHasAce(KsecDacl, Sid, 0, 0x1201bf), "%ls: no KsecDD ACE\n", Packages[Index]);
+        LocalFree(Sid);
+    }
+
+    Descriptor = WinstaSd; if (Descriptor) LocalFree(Descriptor);
+    Descriptor = DesktopSd; if (Descriptor) LocalFree(Descriptor);
+    Descriptor = KsecSd; if (Descriptor) LocalFree(Descriptor);
+}
+
+#define AC_CHILD_DESKTOP        0x01
+#define AC_CHILD_INPUT_DESKTOP  0x02
+#define AC_CHILD_KSECDD         0x04
+#define AC_CHILD_RANDOM         0x08
+#define AC_CHILD_PIPE_CREATE    0x10
+#define AC_CHILD_PIPE_OPEN      0x20
+
+typedef BOOLEAN (WINAPI *PFN_RTL_GEN_RANDOM)(PVOID, ULONG);
+
+static DWORD
+RunObjectsChild(VOID)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Device\\KsecDD");
+    OBJECT_ATTRIBUTES Attributes;
+    IO_STATUS_BLOCK Io;
+    PFN_RTL_GEN_RANDOM GenRandom;
+    WCHAR PipeName[96];
+    HANDLE Handle, Server, Client;
+    HDESK Input;
+    DWORD Failures = 0;
+    BYTE Random[16];
+    NTSTATUS Status;
+
+    if (!GetProcessWindowStation() || !GetThreadDesktop(GetCurrentThreadId()) || !GetDesktopWindow())
+        SbxChildFail(&Failures, AC_CHILD_DESKTOP, "window station or desktop", GetLastError());
+    Input = OpenInputDesktop(0, FALSE, DESKTOP_READOBJECTS);
+    if (Input)
+        CloseDesktop(Input);
+    else
+        SbxChildFail(&Failures, AC_CHILD_INPUT_DESKTOP, "OpenInputDesktop", GetLastError());
+
+    InitializeObjectAttributes(&Attributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtOpenFile(&Handle, FILE_READ_DATA | SYNCHRONIZE, &Attributes, &Io, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_SYNCHRONOUS_IO_NONALERT);
+    if (NT_SUCCESS(Status))
+        NtClose(Handle);
+    else
+        SbxChildFail(&Failures, AC_CHILD_KSECDD, "KsecDD open", Status);
+    GenRandom = (PFN_RTL_GEN_RANDOM)GetProcAddress(LoadLibraryW(L"advapi32.dll"), "SystemFunction036");
+    if (!GenRandom || !GenRandom(Random, sizeof(Random)))
+        SbxChildFail(&Failures, AC_CHILD_RANDOM, "RtlGenRandom", GetLastError());
+
+    StringCchPrintfW(PipeName, ARRAYSIZE(PipeName), L"\\\\.\\pipe\\LOCAL\\sbx_ac_pipe.%lu", GetCurrentProcessId());
+    Server = CreateNamedPipeW(PipeName, PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                              PIPE_TYPE_BYTE | PIPE_READMODE_BYTE, 1, 4096, 4096, 5000, NULL);
+    if (Server == INVALID_HANDLE_VALUE)
+    {
+        SbxChildFail(&Failures, AC_CHILD_PIPE_CREATE | AC_CHILD_PIPE_OPEN, "CreateNamedPipe", GetLastError());
+        return Failures;
+    }
+    Client = CreateFileW(PipeName, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+                         SECURITY_SQOS_PRESENT | SECURITY_ANONYMOUS | FILE_FLAG_OVERLAPPED, NULL);
+    if (Client != INVALID_HANDLE_VALUE)
+        CloseHandle(Client);
+    else
+        SbxChildFail(&Failures, AC_CHILD_PIPE_OPEN, "open own pipe", GetLastError());
+    CloseHandle(Server);
+    return Failures;
+}
+
 START_TEST(AppContainerToken)
 {
+    char **Arguments;
+    int Count = winetest_get_mainargs(&Arguments);
+    PROCESS_INFORMATION Child;
     SECURITY_CAPABILITIES Capabilities = { 0 };
     SID_AND_ATTRIBUTES Capability;
     TOKEN_PRIVILEGES Privileges;
     HANDLE Own = NULL, Restricted = NULL, QueryOnly = NULL, Token;
     PSID Package, InternetClient;
     BOOL Result;
+
+    if (SbxIsChild(Arguments, Count, "objects"))
+        ExitProcess(RunObjectsChild());
 
     CreateToken = (PFN_CREATE_APP_CONTAINER_TOKEN)GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "CreateAppContainerToken");
     ok(CreateToken != NULL, "kernelbase does not export CreateAppContainerToken\n");
@@ -256,12 +389,16 @@ START_TEST(AppContainerToken)
     CheckNamedObjectDirectory();
     CheckLowBoxPackageSids(Own);
     CheckTokenClasses("own token", Own, FALSE);
+    CheckPackageAces();
 
     Token = NULL;
-    ok(CreateToken(NULL, &Capabilities, &Token), "class token: error %lu\n", GetLastError());
+    ok(CreateToken(NULL, &Capabilities, &Token), "objects token: error %lu\n", GetLastError());
     if (Token)
     {
         CheckTokenClasses("AppContainer token", Token, TRUE);
+        ok(SbxSpawnChild("AppContainerToken", "objects", NULL, Token, NULL, 0, &Child), "objects child: error %lu\n", GetLastError());
+        if (Child.hProcess)
+            ok(SbxWaitChild(&Child) == 0, "objects child failed\n");
         CloseHandle(Token);
     }
 

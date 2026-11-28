@@ -576,6 +576,13 @@ NpDecodeFileObject(IN PFILE_OBJECT FileObject,
 NTSTATUS
 NTAPI
 NpCreateDefaultPipeSecurityDescriptor(
+    IN PSID PackageSid OPTIONAL,
+    OUT PSECURITY_DESCRIPTOR *SecurityDescriptor);
+
+NTSTATUS
+NTAPI
+NpCreateCreatorPipeSecurityDescriptor(
+    IN PACCESS_TOKEN Token,
     OUT PSECURITY_DESCRIPTOR *SecurityDescriptor);
 
 PNP_FCB
