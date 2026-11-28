@@ -12,6 +12,7 @@ list(APPEND SOURCE
     bind.c
     broadcast.c
     close.c
+    close_inflight.c
     connect_already.c
     connect_any.c
     connect_select.c
