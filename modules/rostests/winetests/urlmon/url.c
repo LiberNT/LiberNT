@@ -3344,6 +3344,14 @@ static void test_BindToObject(int protocol, DWORD flags, HRESULT exhres)
     IUnknown *unk = (IUnknown*)0x00ff00ff;
     IBinding *bind;
 
+#ifdef __REACTOS__
+    if (!(flags & BINDTEST_EMULATE) && exhres == S_OK)
+    {
+        skip("the HTML document object needs Gecko, which LiberNT does not ship\n");
+        return;
+    }
+#endif
+
     init_bind_test(protocol, BINDTEST_TOOBJECT|flags, TYMED_ISTREAM);
     binding_hres = exhres;
 
