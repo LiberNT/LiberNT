@@ -134,6 +134,66 @@ CheckLowBoxPackageSids(
     }
 }
 
+typedef struct _TOKEN_CLASS_CASE
+{
+    TOKEN_INFORMATION_CLASS Class;
+    NTSTATUS Status;
+    ULONG Length;
+    ULONG FirstUlong;
+    ULONG AppContainerFirstUlong;
+} TOKEN_CLASS_CASE;
+
+static VOID
+CheckTokenClasses(
+    _In_ const char *Tag,
+    _In_ HANDLE Token,
+    _In_ BOOL AppContainer)
+{
+    static const TOKEN_CLASS_CASE Cases[] =
+    {
+        { TokenUserClaimAttributes, STATUS_SUCCESS, sizeof(CLAIM_SECURITY_ATTRIBUTES_INFORMATION), 1, 1 },
+        { TokenDeviceClaimAttributes, STATUS_SUCCESS, sizeof(CLAIM_SECURITY_ATTRIBUTES_INFORMATION), 1, 1 },
+        { TokenRestrictedUserClaimAttributes, STATUS_INVALID_INFO_CLASS, 0, 0, 0 },
+        { TokenDeviceGroups, STATUS_SUCCESS, sizeof(TOKEN_GROUPS), 0, 0 },
+        { TokenRestrictedDeviceGroups, STATUS_INVALID_INFO_CLASS, 0, 0, 0 },
+        { TokenProcessTrustLevel, STATUS_SUCCESS, sizeof(PSID), 0, 0 },
+        { TokenPrivateNameSpace, STATUS_SUCCESS, sizeof(ULONG), 0, 0 },
+        { TokenSingletonAttributes, STATUS_SUCCESS, sizeof(CLAIM_SECURITY_ATTRIBUTES_INFORMATION), 1, 1 },
+        { TokenChildProcessFlags, STATUS_INVALID_INFO_CLASS, 0, 0, 0 },
+        { TokenIsLessPrivilegedAppContainer, STATUS_INVALID_INFO_CLASS, 0, 0, 0 },
+        { TokenIsSandboxed, STATUS_SUCCESS, sizeof(ULONG), 0, 1 },
+        { TokenIsAppSilo, STATUS_SUCCESS, sizeof(ULONG), 0, 0 },
+    };
+    ULONG Buffer[64];
+    ULONG Index, Length, Expected;
+    NTSTATUS Status;
+
+    for (Index = 0; Index < ARRAYSIZE(Cases); Index++)
+    {
+        Length = 0xdeadbeef;
+        Status = NtQueryInformationToken(Token, Cases[Index].Class, NULL, 0, &Length);
+        if (Cases[Index].Status == STATUS_SUCCESS)
+        {
+            ok(Status == STATUS_BUFFER_TOO_SMALL, "%s class %d: probe status 0x%lx\n", Tag, Cases[Index].Class, Status);
+            ok(Length == Cases[Index].Length, "%s class %d: needs %lu\n", Tag, Cases[Index].Class, Length);
+        }
+        else
+        {
+            ok(Status == Cases[Index].Status, "%s class %d: probe status 0x%lx\n", Tag, Cases[Index].Class, Status);
+        }
+
+        memset(Buffer, 0xcc, sizeof(Buffer));
+        Length = 0xdeadbeef;
+        Status = NtQueryInformationToken(Token, Cases[Index].Class, Buffer, sizeof(Buffer), &Length);
+        ok(Status == Cases[Index].Status, "%s class %d: status 0x%lx\n", Tag, Cases[Index].Class, Status);
+        if (!NT_SUCCESS(Status))
+            continue;
+        ok(Length == Cases[Index].Length, "%s class %d: returned %lu\n", Tag, Cases[Index].Class, Length);
+        Expected = AppContainer ? Cases[Index].AppContainerFirstUlong : Cases[Index].FirstUlong;
+        ok(Buffer[0] == Expected, "%s class %d: first value %lu\n", Tag, Cases[Index].Class, Buffer[0]);
+    }
+}
+
 START_TEST(AppContainerToken)
 {
     SECURITY_CAPABILITIES Capabilities = { 0 };
@@ -195,6 +255,15 @@ START_TEST(AppContainerToken)
 
     CheckNamedObjectDirectory();
     CheckLowBoxPackageSids(Own);
+    CheckTokenClasses("own token", Own, FALSE);
+
+    Token = NULL;
+    ok(CreateToken(NULL, &Capabilities, &Token), "class token: error %lu\n", GetLastError());
+    if (Token)
+    {
+        CheckTokenClasses("AppContainer token", Token, TRUE);
+        CloseHandle(Token);
+    }
 
     CloseHandle(QueryOnly);
     CloseHandle(Restricted);
