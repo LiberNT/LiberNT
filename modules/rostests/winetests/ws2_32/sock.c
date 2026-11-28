@@ -12275,9 +12275,13 @@ START_TEST( sock )
     test_WSAStringToAddressA();
     test_WSAStringToAddressW();
 
+#ifndef __REACTOS__
     test_errors();
+#endif
     test_listen();
+#ifndef __REACTOS__
     test_select();
+#endif
     test_accept();
     test_getpeername();
     test_getsockname();
@@ -12292,12 +12296,20 @@ START_TEST( sock )
     test_WSASendMsg();
     test_WSASendTo();
     test_WSARecv();
+#ifndef __REACTOS__
     test_WSAPoll();
+#endif
     test_write_watch();
+#ifndef __REACTOS__
     test_iocp();
+#endif
 
+#ifndef __REACTOS__
     test_events(0);
+#endif
+#ifndef __REACTOS__
     test_events(1);
+#endif
 
     test_ipv6only();
     test_TransmitFile();
@@ -12305,9 +12317,15 @@ START_TEST( sock )
     test_GetAddrInfoExW();
     test_getaddrinfo();
 
+#ifndef __REACTOS__
     test_AcceptEx();
+#endif
+#ifndef __REACTOS__
     test_ConnectEx();
+#endif
+#ifndef __REACTOS__
     test_DisconnectEx();
+#endif
 
     test_sioRoutingInterfaceQuery();
     test_sioAddressListChange();
@@ -12319,12 +12337,65 @@ START_TEST( sock )
     test_WSAAsyncGetServByPort();
     test_WSAAsyncGetServByName();
 
+#ifndef __REACTOS__
     test_completion_port();
+#endif
     test_address_list_query();
 
     /* this is an io heavy test, do it at the end so the kernel doesn't start dropping packets */
+#ifndef __REACTOS__
     test_send();
+#endif
     test_synchronous_WSAIoctl();
 
     Exit();
 }
+
+#ifdef __REACTOS__
+START_TEST( sock_events )
+{
+    Init();
+    test_events(0);
+    Exit();
+}
+
+START_TEST( sock_events_ov )
+{
+    Init();
+    test_events(1);
+    Exit();
+}
+
+START_TEST( sock_iocp )
+{
+    Init();
+    test_iocp();
+    Exit();
+}
+
+START_TEST( sock_completion )
+{
+    Init();
+    test_completion_port();
+    Exit();
+}
+
+START_TEST( sock_select )
+{
+    Init();
+    test_select();
+    test_WSAPoll();
+    Exit();
+}
+
+START_TEST( sock_io )
+{
+    Init();
+    test_errors();
+    test_AcceptEx();
+    test_ConnectEx();
+    test_DisconnectEx();
+    test_send();
+    Exit();
+}
+#endif
