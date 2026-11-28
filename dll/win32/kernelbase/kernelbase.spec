@@ -128,6 +128,7 @@
 @ stdcall -arch=x86_64 CopyMemoryNonTemporal(ptr ptr long) ntdll.RtlCopyMemoryNonTemporal
 @ stdcall CopySid(long ptr ptr)
 @ stdcall -thunk CreateActCtxW(ptr) kernel32.CreateActCtxW
+@ stdcall CreateAppContainerToken(ptr ptr ptr)
 @ stdcall -thunk CreateBoundaryDescriptorW(wstr long) kernel32.CreateBoundaryDescriptorW
 @ stdcall CreateConsoleScreenBuffer(long long ptr long ptr)
 @ stdcall -thunk CreateDirectoryA(str ptr) kernel32.CreateDirectoryA
