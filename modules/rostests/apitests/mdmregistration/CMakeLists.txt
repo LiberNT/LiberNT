@@ -1,0 +1,5 @@
+
+add_executable(mdmregistration_apitest mdmregistration.c testlist.c)
+set_module_type(mdmregistration_apitest win32cui)
+add_importlibs(mdmregistration_apitest msvcrt kernel32 ntdll)
+add_rostests_file(TARGET mdmregistration_apitest)
