@@ -3,6 +3,7 @@ list(APPEND SOURCE
     LogonRights.c
     LogonTypes.c
     Negotiate.c
+    S4ULogon.c
     testlist.c)
 
 add_executable(secur32_apitest ${SOURCE})

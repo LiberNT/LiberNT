@@ -4,11 +4,13 @@
 extern void func_LogonRights(void);
 extern void func_LogonTypes(void);
 extern void func_Negotiate(void);
+extern void func_S4ULogon(void);
 
 const struct test winetest_testlist[] =
 {
     { "LogonRights", func_LogonRights },
     { "LogonTypes", func_LogonTypes },
     { "Negotiate", func_Negotiate },
+    { "S4ULogon", func_S4ULogon },
     { 0, 0 }
 };
