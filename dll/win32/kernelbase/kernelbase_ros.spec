@@ -177,7 +177,7 @@
 @ stdcall CopySid(long ptr ptr) kernelbase.CopySid
 # #@ stub CouldMultiUserAppsBehaviorBePossibleForPackage
 #@ stdcall CreateActCtxW(ptr)
-# #@ stub CreateAppContainerToken
+@ stdcall CreateAppContainerToken(ptr ptr ptr) kernelbase.CreateAppContainerToken
 @ stdcall CreateBoundaryDescriptorW(wstr long) kernelbase.CreateBoundaryDescriptorW
 @ stdcall CreateConsoleScreenBuffer(long long ptr long ptr) kernelbase.CreateConsoleScreenBuffer
 #@ stdcall CreateDirectoryA(str ptr)

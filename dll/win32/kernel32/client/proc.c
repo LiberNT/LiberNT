@@ -2612,126 +2612,12 @@ BasepAssignJobListFromAttributes(
     return Status;
 }
 
-#define BASEP_LOWBOX_HANDLE_COUNT 5
-
-static
-NTSTATUS
-BasepCreateAppContainerLink(
-    _In_ HANDLE Directory,
-    _In_ PCWSTR LinkName,
-    _In_ PCWSTR Target,
-    _In_ PSECURITY_DESCRIPTOR Sd,
-    _Out_ PHANDLE Handle)
-{
-    UNICODE_STRING Name, TargetName;
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    NTSTATUS Status;
-
-    RtlInitUnicodeString(&Name, LinkName);
-    RtlInitUnicodeString(&TargetName, Target);
-    InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_CASE_INSENSITIVE | OBJ_OPENIF, Directory, Sd);
-    Status = NtCreateSymbolicLinkObject(Handle, SYMBOLIC_LINK_ALL_ACCESS, &ObjectAttributes, &TargetName);
-    if (Status == STATUS_OBJECT_NAME_COLLISION || Status == STATUS_OBJECT_TYPE_MISMATCH)
-    {
-        InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_CASE_INSENSITIVE, Directory, NULL);
-        Status = NtOpenSymbolicLinkObject(Handle, SYMBOLIC_LINK_QUERY, &ObjectAttributes);
-    }
-    return Status;
-}
-
-static
-NTSTATUS
-BasepCreateAppContainerDirectory(
-    _In_ PSID PackageSid,
-    _Out_writes_(BASEP_LOWBOX_HANDLE_COUNT) PHANDLE Handles,
-    _Out_ PULONG HandleCount)
-{
-    SID_IDENTIFIER_AUTHORITY WorldAuthority = {SECURITY_WORLD_SID_AUTHORITY};
-    SID_IDENTIFIER_AUTHORITY LabelAuthority = {SECURITY_MANDATORY_LABEL_AUTHORITY};
-    UCHAR WorldBuffer[SECURITY_MAX_SID_SIZE], LowBuffer[SECURITY_MAX_SID_SIZE];
-    PSID WorldSid = (PSID)WorldBuffer, LowSid = (PSID)LowBuffer;
-    SECURITY_DESCRIPTOR Sd;
-    PACL Dacl, Sacl;
-    ULONG DaclSize, SaclSize;
-    UNICODE_STRING SidString, Name, SessionString;
-    WCHAR NameBuffer[256], SessionBuffer[16];
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    UNICODE_STRING RpcName;
-    HANDLE Directory = NULL;
-    NTSTATUS Status;
-
-    *HandleCount = 0;
-    RtlInitEmptyUnicodeString(&SessionString, SessionBuffer, sizeof(SessionBuffer));
-    RtlInitializeSid(WorldSid, &WorldAuthority, 1);
-    *RtlSubAuthoritySid(WorldSid, 0) = SECURITY_WORLD_RID;
-    RtlInitializeSid(LowSid, &LabelAuthority, 1);
-    *RtlSubAuthoritySid(LowSid, 0) = SECURITY_MANDATORY_LOW_RID;
-
-    Status = RtlConvertSidToUnicodeString(&SidString, PackageSid, TRUE);
-    if (!NT_SUCCESS(Status)) return Status;
-    RtlInitEmptyUnicodeString(&Name, NameBuffer, sizeof(NameBuffer) - sizeof(UNICODE_NULL));
-    Status = RtlAppendUnicodeToString(&Name, L"\\Sessions\\");
-    if (NT_SUCCESS(Status)) Status = RtlIntegerToUnicodeString(NtCurrentPeb()->SessionId, 10, &SessionString);
-    if (NT_SUCCESS(Status)) Status = RtlAppendUnicodeStringToString(&Name, &SessionString);
-    if (NT_SUCCESS(Status)) Status = RtlAppendUnicodeToString(&Name, L"\\AppContainerNamedObjects\\");
-    if (NT_SUCCESS(Status)) Status = RtlAppendUnicodeStringToString(&Name, &SidString);
-    RtlFreeUnicodeString(&SidString);
-    if (!NT_SUCCESS(Status)) return Status;
-    NameBuffer[Name.Length / sizeof(WCHAR)] = UNICODE_NULL;
-
-    DaclSize = sizeof(ACL) + 2 * FIELD_OFFSET(ACCESS_ALLOWED_ACE, SidStart) + RtlLengthSid(PackageSid) + RtlLengthSid(WorldSid);
-    SaclSize = sizeof(ACL) + FIELD_OFFSET(SYSTEM_MANDATORY_LABEL_ACE, SidStart) + RtlLengthSid(LowSid);
-    Dacl = RtlAllocateHeap(RtlGetProcessHeap(), 0, DaclSize + SaclSize);
-    if (!Dacl) return STATUS_NO_MEMORY;
-    Sacl = (PACL)((PUCHAR)Dacl + DaclSize);
-
-    Status = RtlCreateAcl(Dacl, DaclSize, ACL_REVISION);
-    if (NT_SUCCESS(Status)) Status = RtlAddAccessAllowedAce(Dacl, ACL_REVISION, DIRECTORY_ALL_ACCESS, PackageSid);
-    if (NT_SUCCESS(Status)) Status = RtlAddAccessAllowedAce(Dacl, ACL_REVISION, DIRECTORY_ALL_ACCESS, WorldSid);
-    if (NT_SUCCESS(Status)) Status = RtlCreateAcl(Sacl, SaclSize, ACL_REVISION);
-    if (NT_SUCCESS(Status)) Status = RtlAddMandatoryAce(Sacl, ACL_REVISION, 0, SYSTEM_MANDATORY_LABEL_NO_WRITE_UP, SYSTEM_MANDATORY_LABEL_ACE_TYPE, LowSid);
-    if (NT_SUCCESS(Status)) Status = RtlCreateSecurityDescriptor(&Sd, SECURITY_DESCRIPTOR_REVISION);
-    if (NT_SUCCESS(Status)) Status = RtlSetDaclSecurityDescriptor(&Sd, TRUE, Dacl, FALSE);
-    if (NT_SUCCESS(Status)) Status = RtlSetSaclSecurityDescriptor(&Sd, TRUE, Sacl, FALSE);
-    if (NT_SUCCESS(Status))
-    {
-        InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_CASE_INSENSITIVE | OBJ_OPENIF, NULL, &Sd);
-        Status = NtCreateDirectoryObject(&Directory, DIRECTORY_ALL_ACCESS, &ObjectAttributes);
-    }
-    if (!NT_SUCCESS(Status))
-        DPRINT1("AppContainer directory %wZ creation failed 0x%lx\n", &Name, Status);
-    if (NT_SUCCESS(Status))
-    {
-        Handles[(*HandleCount)++] = Directory;
-        Status = BasepCreateAppContainerLink(Directory, L"Global", L"\\BaseNamedObjects", &Sd, &Handles[*HandleCount]);
-        if (NT_SUCCESS(Status)) (*HandleCount)++;
-        else DPRINT1("AppContainer Global link failed 0x%lx\n", Status);
-    }
-    if (NT_SUCCESS(Status))
-    {
-        Status = BasepCreateAppContainerLink(Directory, L"Local", NameBuffer, &Sd, &Handles[*HandleCount]);
-        if (NT_SUCCESS(Status)) (*HandleCount)++;
-    }
-    if (NT_SUCCESS(Status))
-    {
-        Status = BasepCreateAppContainerLink(Directory, L"Session", L"\\Sessions\\BNOLINKS", &Sd, &Handles[*HandleCount]);
-        if (NT_SUCCESS(Status)) (*HandleCount)++;
-    }
-    if (NT_SUCCESS(Status))
-    {
-        RtlInitUnicodeString(&RpcName, L"RPC Control");
-        InitializeObjectAttributes(&ObjectAttributes, &RpcName, OBJ_CASE_INSENSITIVE | OBJ_OPENIF, Directory, &Sd);
-        Status = NtCreateDirectoryObject(&Handles[*HandleCount], DIRECTORY_ALL_ACCESS, &ObjectAttributes);
-        if (NT_SUCCESS(Status)) (*HandleCount)++;
-        else DPRINT1("AppContainer RPC Control directory failed 0x%lx\n", Status);
-    }
-    RtlFreeHeap(RtlGetProcessHeap(), 0, Dacl);
-    if (!NT_SUCCESS(Status))
-    {
-        while (*HandleCount) NtClose(Handles[--(*HandleCount)]);
-    }
-    return Status;
-}
+BOOL
+WINAPI
+CreateAppContainerToken(
+    _In_opt_ HANDLE TokenHandle,
+    _In_ PSECURITY_CAPABILITIES SecurityCapabilities,
+    _Out_ PHANDLE OutToken);
 
 typedef struct _BASE_CREATE_EXTENDED_ATTRIBUTES
 {
@@ -2941,8 +2827,6 @@ BasepCreateUserProcess(IN HANDLE UserToken,
         PS_ATTRIBUTE Attributes[12];
     } AttributeBuffer;
     HANDLE LowBoxToken = NULL;
-    HANDLE LowBoxHandles[BASEP_LOWBOX_HANDLE_COUNT];
-    ULONG LowBoxHandleCount = 0;
     ULONG JobIndex;
     BASE_API_MESSAGE CsrMessage;
     PBASE_CREATE_PROCESS CreateProcessMessage;
@@ -3108,26 +2992,13 @@ BasepCreateUserProcess(IN HANDLE UserToken,
     EffectiveToken = SaferToken ? SaferToken : UserToken;
     if (Extended->SecurityCapabilities)
     {
-        HANDLE BaseToken = EffectiveToken;
-
-        if (!BaseToken)
+        if (!CreateAppContainerToken(EffectiveToken, Extended->SecurityCapabilities, &LowBoxToken))
         {
-            Status = NtOpenProcessToken(NtCurrentProcess(), TOKEN_DUPLICATE | TOKEN_QUERY, &BaseToken);
-            if (!NT_SUCCESS(Status)) goto Failure;
+            Status = RtlGetLastNtStatus();
+            ASSERT(!NT_SUCCESS(Status));
+            goto Failure;
         }
-        BasepCreateAppContainerDirectory(Extended->SecurityCapabilities->AppContainerSid, LowBoxHandles, &LowBoxHandleCount);
-        Status = NtCreateLowBoxToken(&LowBoxToken,
-                                     BaseToken,
-                                     TOKEN_ALL_ACCESS,
-                                     NULL,
-                                     Extended->SecurityCapabilities->AppContainerSid,
-                                     Extended->SecurityCapabilities->CapabilityCount,
-                                     Extended->SecurityCapabilities->Capabilities,
-                                     LowBoxHandleCount,
-                                     LowBoxHandleCount ? LowBoxHandles : NULL);
-        while (LowBoxHandleCount) NtClose(LowBoxHandles[--LowBoxHandleCount]);
-        if (BaseToken != EffectiveToken) NtClose(BaseToken);
-        if (!NT_SUCCESS(Status)) goto Failure;
+        ASSERT(LowBoxToken != NULL);
         EffectiveToken = LowBoxToken;
     }
     if (Extended->MitigationCount)

@@ -2,6 +2,7 @@
 #include <apitest.h>
 
 extern void func_AppContainer(void);
+extern void func_AppContainerToken(void);
 extern void func_Broker(void);
 extern void func_Desktop(void);
 extern void func_Integrity(void);
@@ -18,6 +19,7 @@ extern void func_Uipi(void);
 const struct test winetest_testlist[] =
 {
     { "AppContainer",    func_AppContainer },
+    { "AppContainerToken", func_AppContainerToken },
     { "Broker",          func_Broker },
     { "Desktop",         func_Desktop },
     { "Integrity",       func_Integrity },

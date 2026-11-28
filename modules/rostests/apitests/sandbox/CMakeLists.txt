@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     AppContainer.c
+    AppContainerToken.c
     Broker.c
     Desktop.c
     Integrity.c
