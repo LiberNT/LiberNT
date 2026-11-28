@@ -688,7 +688,7 @@ RtlpLfhAllocate(PHEAP Heap, ULONG Flags, SIZE_T Size)
 
     if (!RtlpLfhBucketEnabled(Heap, Bucket))
     {
-        if ((*RtlpLfhUsageOfBucket(Heap, Bucket) & RTLP_LFH_USAGE_MASK) <= RTLP_LFH_USAGE_LIMIT)
+        if ((*RtlpLfhUsageOfBucket(Heap, Bucket) & RTLP_LFH_USAGE_MASK) < RTLP_LFH_USAGE_LIMIT)
             return NULL;
 
         RtlEnterHeapLock(Heap->LockVariable, TRUE);
