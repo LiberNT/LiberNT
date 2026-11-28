@@ -45,7 +45,7 @@ TestOpen(PFN_OPENPACKAGEINFOBYFULLNAME Open)
 
     Reference = Untouched;
     Result = Open(L"notafullname", 0, &Reference);
-    ok(Result != ERROR_INVALID_PARAMETER && Result != ERROR_SUCCESS, "malformed name: result %ld\n", Result);
+    ok(Result == ERROR_INVALID_PARAMETER, "malformed name: result %ld\n", Result);
     ok(Reference == Untouched, "malformed name: reference %p\n", Reference);
 }
 
