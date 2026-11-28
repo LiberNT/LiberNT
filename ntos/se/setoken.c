@@ -699,7 +699,6 @@ SepCloneToken(
     _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
     _In_ KPROCESSOR_MODE AccessMode,
     _In_ BOOLEAN KeepModifiedId,
-    _In_ BOOLEAN Child,
     _Out_ PTOKEN *NewToken)
 {
     SEP_TOKEN_CONTENTS Contents;
@@ -777,8 +776,8 @@ SepCloneToken(
     Contents.DefaultDacl = Token->DefaultDacl;
     Contents.AuthenticationId = Token->AuthenticationId;
     Contents.OriginatingLogonSession = Token->OriginatingLogonSession;
-    /* A copy keeps the parent of the token it copies, so copies of one token stay siblings; only a derived token is a child */
-    Contents.ParentTokenId = Child ? Token->TokenId : Token->ParentTokenId;
+    /* A copy, a lowbox token included, keeps the parent of the token it copies, so it stays assignable wherever that token is */
+    Contents.ParentTokenId = Token->ParentTokenId;
     Contents.ExpirationTime = Token->ExpirationTime;
     Contents.Source = Token->TokenSource;
     Contents.Type = Type;
@@ -1386,7 +1385,6 @@ SeCopyClientToken(
                            NULL,
                            PreviousMode,
                            FALSE,
-                           FALSE,
                            (PTOKEN *)NewToken);
     if (NT_SUCCESS(Status)) ObDeleteCapturedInsertInfo(*NewToken);
 
@@ -1410,7 +1408,6 @@ SepCopyImpersonationToken(
                            Level,
                            NULL,
                            PreviousMode,
-                           FALSE,
                            FALSE,
                            (PTOKEN *)NewToken);
     if (NT_SUCCESS(Status)) ObDeleteCapturedInsertInfo(*NewToken);
@@ -1560,7 +1557,6 @@ SepCopyPrimaryToken(
                            NULL,
                            KernelMode,
                            FALSE,
-                           FALSE,
                            &New);
     if (!NT_SUCCESS(Status)) return Status;
 
@@ -1601,7 +1597,6 @@ SeSubProcessToken(
                            SecurityAnonymous,
                            NULL,
                            KernelMode,
-                           FALSE,
                            FALSE,
                            &New);
     if (!NT_SUCCESS(Status)) return Status;
@@ -1992,7 +1987,6 @@ NtDuplicateToken(
                                    ObjectAttributes,
                                    PreviousMode,
                                    SepCopyKeepsModifiedId(Token, EffectiveOnly, TokenType, Level),
-                                   FALSE,
                                    &New);
         }
 
@@ -2443,7 +2437,6 @@ NtCreateLowBoxToken(
                                ObjectAttributes,
                                PreviousMode,
                                FALSE,
-                               TRUE,
                                &New);
         ObDereferenceObject(Token);
     }
