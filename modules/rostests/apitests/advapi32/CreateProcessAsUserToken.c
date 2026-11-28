@@ -7,6 +7,9 @@
 
 #include "precomp.h"
 #include <tlhelp32.h>
+#include <sddl.h>
+
+typedef NTSTATUS (NTAPI *PFN_NT_CREATE_LOW_BOX_TOKEN)(PHANDLE, HANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, PSID, ULONG, PSID_AND_ATTRIBUTES, ULONG, HANDLE *);
 
 static WCHAR CommandPath[MAX_PATH];
 
@@ -51,6 +54,35 @@ CheckAssignable(
         CloseHandle(Info.hProcess);
     }
     CloseHandle(Token);
+}
+
+static
+VOID
+CheckLowBoxAssignable(
+    _In_ const char *Tag,
+    _In_opt_ HANDLE Base)
+{
+    PFN_NT_CREATE_LOW_BOX_TOKEN CreateLowBoxToken;
+    OBJECT_ATTRIBUTES Attributes;
+    HANDLE LowBox = NULL;
+    PSID AppContainer = NULL;
+    NTSTATUS Status;
+
+    CreateLowBoxToken = (PFN_NT_CREATE_LOW_BOX_TOKEN)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtCreateLowBoxToken");
+    ok(CreateLowBoxToken != NULL, "NtCreateLowBoxToken is not exported\n");
+    ok(Base != NULL, "%s: no base token\n", Tag);
+    if (CreateLowBoxToken == NULL || Base == NULL)
+        return;
+    ok(ConvertStringSidToSidW(L"S-1-15-2-1-2-3-4-5-6-7", &AppContainer), "ConvertStringSidToSidW failed\n");
+    InitializeObjectAttributes(&Attributes, NULL, 0, NULL, NULL);
+    Status = CreateLowBoxToken(&LowBox, Base, TOKEN_ALL_ACCESS, &Attributes, AppContainer, 0, NULL, 0, NULL);
+    ok(Status == STATUS_SUCCESS, "%s: NtCreateLowBoxToken returned 0x%lx\n", Tag, Status);
+    if (NT_SUCCESS(Status))
+    {
+        CheckAssignable(Tag, LowBox);
+        CloseHandle(LowBox);
+    }
+    LocalFree(AppContainer);
 }
 
 static
@@ -114,7 +146,13 @@ START_TEST(CreateProcessAsUserToken)
 
     ok(CreateRestrictedToken(Own, 0, 0, NULL, 0, NULL, 0, NULL, &Filtered), "CreateRestrictedToken failed with %lu\n", GetLastError());
     CheckAssignable("filtered", Filtered);
+    CheckLowBoxAssignable("lowbox of filtered", Filtered);
     if (Filtered) CloseHandle(Filtered);
+
+    CheckLowBoxAssignable("lowbox of own", Own);
+    Duplicate = DuplicatePrimary(Own);
+    CheckLowBoxAssignable("lowbox of duplicate", Duplicate);
+    if (Duplicate) CloseHandle(Duplicate);
 
     if (CreateProcessW(CommandPath, CommandLine, NULL, NULL, FALSE, CREATE_SUSPENDED | CREATE_NO_WINDOW, NULL, NULL, &Startup, &Child))
     {
