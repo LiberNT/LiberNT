@@ -31,12 +31,16 @@ NtlmUStrWriteToStruct(
 bool
 NtlmFixupAndValidateUStr(
     _Inout_ PUNICODE_STRING String,
-    _In_ ULONG_PTR FixupOffset);
+    _In_ PVOID SubmitBuffer,
+    _In_ PVOID ClientBufferBase,
+    _In_ ULONG SubmitBufferSize);
 
 bool
 NtlmFixupAStr(
     _Inout_ PSTRING String,
-    _In_ ULONG_PTR FixupOffset);
+    _In_ PVOID SubmitBuffer,
+    _In_ PVOID ClientBufferBase,
+    _In_ ULONG SubmitBufferSize);
 
 /* ClientBuffer */
 typedef struct _NTLM_CLIENT_BUFFER

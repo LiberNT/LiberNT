@@ -214,44 +214,61 @@ NtlmUStrWriteToStruct(
     return true;
 }
 
+static
+bool
+NtlmFixupSubmitBuffer(
+    _Inout_ PVOID *Buffer,
+    _In_ USHORT Length,
+    _In_ PVOID SubmitBuffer,
+    _In_ PVOID ClientBufferBase,
+    _In_ ULONG SubmitBufferSize)
+{
+    ULONG_PTR Offset;
+
+    if (Length == 0)
+    {
+        *Buffer = NULL;
+        return true;
+    }
+
+    if (*Buffer == NULL)
+        return false;
+
+    Offset = (ULONG_PTR)*Buffer - (ULONG_PTR)ClientBufferBase;
+    if (Offset > SubmitBufferSize || Length > SubmitBufferSize - Offset)
+        return false;
+
+    *Buffer = (PVOID)((ULONG_PTR)SubmitBuffer + Offset);
+    return true;
+}
+
 bool
 NtlmFixupAndValidateUStr(
     _Inout_ PUNICODE_STRING String,
-    _In_ ULONG_PTR FixupOffset)
+    _In_ PVOID SubmitBuffer,
+    _In_ PVOID ClientBufferBase,
+    _In_ ULONG SubmitBufferSize)
 {
-    NTSTATUS Status;
+    if (!NtlmFixupSubmitBuffer((PVOID *)&String->Buffer, String->Length,
+                               SubmitBuffer, ClientBufferBase, SubmitBufferSize))
+        return false;
 
-    if (String->Length)
-    {
-        String->Buffer = FIXUP_POINTER(String->Buffer, FixupOffset);
-        String->MaximumLength = String->Length;
-    }
-    else
-    {
-        String->Buffer = NULL;
-        String->MaximumLength = 0;
-    }
-
-    Status = RtlValidateUnicodeString(0, String);
-    return NT_SUCCESS(Status);
+    String->MaximumLength = String->Length;
+    return NT_SUCCESS(RtlValidateUnicodeString(0, String));
 }
 
 bool
 NtlmFixupAStr(
     _Inout_ PSTRING String,
-    _In_ ULONG_PTR FixupOffset)
+    _In_ PVOID SubmitBuffer,
+    _In_ PVOID ClientBufferBase,
+    _In_ ULONG SubmitBufferSize)
 {
-    if (String->Length)
-    {
-        String->Buffer = (PCHAR)FIXUP_POINTER(String->Buffer, FixupOffset);
-        String->MaximumLength = String->Length;
-    }
-    else
-    {
-        String->Buffer = NULL;
-        String->MaximumLength = 0;
-    }
+    if (!NtlmFixupSubmitBuffer((PVOID *)&String->Buffer, String->Length,
+                               SubmitBuffer, ClientBufferBase, SubmitBufferSize))
+        return false;
 
+    String->MaximumLength = String->Length;
     return true;
 }
 

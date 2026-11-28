@@ -6,8 +6,6 @@
  * COPYRIGHT:   Copyright 2013 Eric Kohl
  */
 
-#define FIXUP_POINTER(Pointer, Offset) ((Pointer != NULL) ? ((PWSTR)((ULONG_PTR)Pointer + Offset)) : NULL)
-
 
 typedef struct _RPC_SID
 {
