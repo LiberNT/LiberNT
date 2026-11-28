@@ -200,6 +200,11 @@ E1000AllocateRxBuffers(
             {
                 i--;
                 RxBuffer = &RxQueue->Buffers[i];
+                if (RxBuffer->Mdl != NULL)
+                {
+                    NdisFreeMdl(RxBuffer->Mdl);
+                    RxBuffer->Mdl = NULL;
+                }
                 NdisMFreeSharedMemory(
                     Adapter->MiniportAdapterHandle,
                     E1000_RX_BUFFER_SIZE,
@@ -215,6 +220,13 @@ E1000AllocateRxBuffers(
         RxBuffer->PhysicalAddress = BufferPa;
         RxBuffer->BufferLength = E1000_RX_BUFFER_SIZE;
         RxBuffer->Flags = 0;
+
+        /* Persistent MDL over this buffer, length-adjusted per indication */
+        RxBuffer->Mdl = NdisAllocateMdl(
+            Adapter->MiniportAdapterHandle,
+            BufferVa,
+            E1000_RX_BUFFER_SIZE
+            );
 
         /* Setup descriptor to point to this buffer */
         RxDesc->Address = BufferPa.QuadPart;
@@ -285,6 +297,12 @@ E1000FreeRxQueue(
             {
                 NdisFreeNetBufferList(RxBuffer->NetBufferList);
                 RxBuffer->NetBufferList = NULL;
+            }
+
+            if (RxBuffer->Mdl != NULL)
+            {
+                NdisFreeMdl(RxBuffer->Mdl);
+                RxBuffer->Mdl = NULL;
             }
         }
 
@@ -410,18 +428,14 @@ E1000IndicateReceive(
             goto NextDescriptor;
         }
 
-        /* Allocate an NBL for this packet */
-        Mdl = NdisAllocateMdl(
-                Adapter->MiniportAdapterHandle,
-                RxBuffer->VirtualAddress,
-                PacketLength
-                );
-
+        /* Adjust the buffer's persistent MDL for this packet */
+        Mdl = RxBuffer->Mdl;
         if (Mdl == NULL)
         {
             RxQueue->DroppedPackets++;
             goto NextDescriptor;
         }
+        NdisAdjustMdlLength(Mdl, PacketLength);
 
         Nbl = NdisAllocateNetBufferAndNetBufferList(
                 Adapter->RxNblPool,
@@ -434,7 +448,6 @@ E1000IndicateReceive(
 
         if (Nbl == NULL)
         {
-            NdisFreeMdl(Mdl);
             RxQueue->DroppedPackets++;
             goto NextDescriptor;
         }
@@ -552,8 +565,6 @@ E1000ReturnNetBufferLists(
     PE1000_RX_QUEUE RxQueue = &Adapter->RxQueues[0];  /* Primary queue */
     PNET_BUFFER_LIST CurrentNbl;
     PNET_BUFFER_LIST NextNbl;
-    PNET_BUFFER Nb;
-    PMDL Mdl;
     ULONG RefillCount = 0;
     ULONG Tail;
     BOOLEAN UpdateRdt = FALSE;
@@ -569,17 +580,8 @@ E1000ReturnNetBufferLists(
     {
         NextNbl = NET_BUFFER_LIST_NEXT_NBL(CurrentNbl);
 
-        /* Get the NET_BUFFER and its MDL */
-        Nb = NET_BUFFER_LIST_FIRST_NB(CurrentNbl);
-        if (Nb != NULL)
-        {
-            Mdl = NET_BUFFER_FIRST_MDL(Nb);
-            if (Mdl != NULL)
-            {
-                /* The MDL was allocated by us, free it */
-                NdisFreeMdl(Mdl);
-            }
-        }
+        /* Get the NET_BUFFER; its MDL is the RX buffer's persistent MDL,
+         * kept for the next indication (freed at queue teardown) */
 
         /* Free the NBL */
         NdisFreeNetBufferList(CurrentNbl);
