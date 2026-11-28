@@ -447,7 +447,6 @@ SamValidateNormalUser(
         goto done;
     }
 
-    /* Verify the password, unless this is a passwordless (S4U) logon */
     if (!PasswordlessLogon)
         Status = MsvpCheckPassword(PwdData, UserInfo);
     if (!NT_SUCCESS(Status))
