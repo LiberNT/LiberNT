@@ -11,6 +11,7 @@ list(APPEND SOURCE
     FindOIDInfo.c
     GeneralizedTime.c
     NameToStr.c
+    OtherName.c
     RevocationTimeout.c
     RootProgram.c
     testlist.c)

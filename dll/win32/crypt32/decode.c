@@ -2997,6 +2997,8 @@ static BOOL CRYPT_AsnDecodeAltNameEntry(const BYTE *pbEncoded, DWORD cbEncoded,
 {
     PCERT_ALT_NAME_ENTRY entry = pvStructInfo;
     DWORD dataLen, lenBytes, bytesNeeded = sizeof(CERT_ALT_NAME_ENTRY);
+    DWORD otherOidSize = 0, otherValueLen = 0;
+    const BYTE *otherValue = NULL;
     BOOL ret;
 
     TRACE("%p, %ld, %08lx, %p, %ld\n", pbEncoded, cbEncoded, dwFlags,
@@ -3044,10 +3046,43 @@ static BOOL CRYPT_AsnDecodeAltNameEntry(const BYTE *pbEncoded, DWORD cbEncoded,
             }
             break;
         case 0: /* otherName */
-            FIXME("%d: stub\n", pbEncoded[0] & ASN_TYPE_MASK);
-            SetLastError(CRYPT_E_ASN1_BADTAG);
-            ret = FALSE;
+        {
+            const BYTE *content = pbEncoded + 1 + lenBytes;
+            DWORD oidEncoded = 0, valueLen;
+
+            if (dataLen < 2 || content[0] != ASN_OBJECTIDENTIFIER)
+            {
+                SetLastError(CRYPT_E_ASN1_CORRUPT);
+                ret = FALSE;
+                break;
+            }
+            ret = CRYPT_AsnDecodeOidIgnoreTag(content, dataLen, 0, NULL,
+             &otherOidSize, &oidEncoded);
+            if (ret && (oidEncoded + 2 > dataLen ||
+             content[oidEncoded] != (ASN_CONTEXT | ASN_CONSTRUCTOR | 0)))
+            {
+                SetLastError(CRYPT_E_ASN1_CORRUPT);
+                ret = FALSE;
+            }
+            if (ret)
+                ret = CRYPT_GetLen(content + oidEncoded, dataLen - oidEncoded,
+                 &valueLen);
+            if (ret && oidEncoded + 1 + GET_LEN_BYTES(content[oidEncoded + 1]) +
+             valueLen != dataLen)
+            {
+                SetLastError(CRYPT_E_ASN1_CORRUPT);
+                ret = FALSE;
+            }
+            if (ret)
+            {
+                otherValue = content + oidEncoded + 1 +
+                 GET_LEN_BYTES(content[oidEncoded + 1]);
+                otherValueLen = valueLen;
+                bytesNeeded += sizeof(void *) - 1 + sizeof(CERT_OTHER_NAME) +
+                 otherOidSize - sizeof(LPSTR) + otherValueLen;
+            }
             break;
+        }
         case 3: /* x400Address, unimplemented */
         case 5: /* ediPartyName, unimplemented */
             TRACE("type %d unimplemented\n", pbEncoded[0] & ASN_TYPE_MASK);
@@ -3108,6 +3143,25 @@ static BOOL CRYPT_AsnDecodeAltNameEntry(const BYTE *pbEncoded, DWORD cbEncoded,
                     ret = CRYPT_AsnDecodeOidIgnoreTag(pbEncoded, cbEncoded, 0,
                      &entry->pszRegisteredID, &dataLen, NULL);
                     break;
+                case 0: /* otherName */
+                {
+                    CERT_OTHER_NAME *other = (CERT_OTHER_NAME *)(((ULONG_PTR)entry->pwszURL +
+                     sizeof(void *) - 1) & ~(ULONG_PTR)(sizeof(void *) - 1));
+                    DWORD oidSize = otherOidSize;
+
+                    other->pszObjId = (LPSTR)(other + 1);
+                    ret = CRYPT_AsnDecodeOidIgnoreTag(pbEncoded + 1 + lenBytes,
+                     dataLen, 0, &other->pszObjId, &oidSize, NULL);
+                    if (ret)
+                    {
+                        other->Value.cbData = otherValueLen;
+                        other->Value.pbData = (BYTE *)other->pszObjId +
+                         otherOidSize - sizeof(LPSTR);
+                        memcpy(other->Value.pbData, otherValue, otherValueLen);
+                        entry->pOtherName = other;
+                    }
+                    break;
+                }
                 }
             }
         }

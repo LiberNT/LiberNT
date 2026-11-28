@@ -13,6 +13,7 @@ extern void func_CryptStringToBinary(void);
 extern void func_FindOIDInfo(void);
 extern void func_GeneralizedTime(void);
 extern void func_NameToStr(void);
+extern void func_OtherName(void);
 extern void func_RevocationTimeout(void);
 extern void func_RootProgram(void);
 
@@ -29,6 +30,7 @@ const struct test winetest_testlist[] =
     { "FindOIDInfo", func_FindOIDInfo },
     { "GeneralizedTime", func_GeneralizedTime },
     { "NameToStr", func_NameToStr },
+    { "OtherName", func_OtherName },
     { "RevocationTimeout", func_RevocationTimeout },
     { "RootProgram", func_RootProgram },
 
