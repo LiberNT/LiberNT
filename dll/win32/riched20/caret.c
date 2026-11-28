@@ -133,7 +133,9 @@ int set_selection_cursors(ME_TextEditor *editor, int from, int to)
 {
   int selectionEnd = 0;
   const int len = ME_GetTextLength(editor);
+#ifdef __REACTOS__
   const int end_len = len + (editor->bEmulateVersion10 ? 2 : 1);
+#endif
 
   /* all negative values are effectively the same */
   if (from < 0)
@@ -146,7 +148,11 @@ int set_selection_cursors(ME_TextEditor *editor, int from, int to)
   {
     ME_SetCursorToStart(editor, &editor->pCursors[1]);
     ME_SetCursorToEnd(editor, &editor->pCursors[0], TRUE);
+#ifdef __REACTOS__
     return end_len;
+#else
+    return len + 1;
+#endif
   }
 
   /* if both values are equal and also out of bound, that means to */
@@ -168,7 +174,11 @@ int set_selection_cursors(ME_TextEditor *editor, int from, int to)
           if (end > len)
           {
               editor->pCursors[0].nOffset = 0;
+#ifdef __REACTOS__
               end = len;
+#else
+              end --;
+#endif
           }
           editor->pCursors[1] = editor->pCursors[0];
       }
@@ -177,7 +187,11 @@ int set_selection_cursors(ME_TextEditor *editor, int from, int to)
 
     /* adjust to if it's a negative value */
     if (to < 0)
+#ifdef __REACTOS__
       to = end_len;
+#else
+      to = len + 1;
+#endif
 
     /* flip from and to if they are reversed */
     if (from>to)
@@ -187,12 +201,21 @@ int set_selection_cursors(ME_TextEditor *editor, int from, int to)
       to = tmp;
     }
 
+#ifdef __REACTOS__
     /* after fiddling with the values, we find from >= end_len && to >= end_len */
     if (from >= end_len)
       selectionEnd = 1;
     /* special case with to too big */
     else if (to > end_len)
       to = end_len;
+#else
+    /* after fiddling with the values, we find from > len && to > len */
+    if (from > len)
+      selectionEnd = 1;
+    /* special case with to too big */
+    else if (to > len)
+      to = len + 1;
+#endif
   }
 
   if (selectionEnd)
@@ -210,12 +233,20 @@ int set_selection_cursors(ME_TextEditor *editor, int from, int to)
     editor->pCursors[1].nOffset = 0;
   if (editor->pCursors[0].run->nFlags & MERF_ENDPARA)
   {
+#ifdef __REACTOS__
     if (to >= end_len)
+#else
+    if (to > len)
+#endif
       editor->pCursors[0].nOffset = editor->pCursors[0].run->len;
     else
       editor->pCursors[0].nOffset = 0;
   }
+#ifdef __REACTOS__
   return ME_GetCursorOfs(&editor->pCursors[0]);
+#else
+  return to;
+#endif
 }
 
 
