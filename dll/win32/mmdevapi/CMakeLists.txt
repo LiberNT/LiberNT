@@ -19,7 +19,7 @@ list(APPEND SOURCE
     reactos_capture_engine.h
     reactos_render_engine.c
     reactos_render_engine.h
-    reactos_wdmaud.c
+    libernt_wdmaud.c
     mmdevapi_private.h
     unixlib.h
     precomp.h
