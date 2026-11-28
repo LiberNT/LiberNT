@@ -534,6 +534,14 @@ DxgkPnpBeginChildEnumerationEpoch(
 }
 
 static NTSTATUS
+DxgkpCallDisplayDetectControl(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKDDI_DISPLAYDETECTCONTROL DisplayDetectControl,
+    _In_ DXGK_DISPLAYDETECTCONTROLTYPE Type,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
+    _In_ BOOLEAN NonDestructiveOnly);
+
+static NTSTATUS
 DxgkpPollDisplayChildrenAdapter(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ BOOLEAN NonDestructiveOnly,
@@ -542,11 +550,13 @@ DxgkpPollDisplayChildrenAdapter(
 {
     PDXGKP_POLL_CHILD_SNAPSHOT Children = NULL;
     PDXGKDDI_QUERY_CHILD_STATUS QueryChildStatus;
+    PDXGKDDI_DISPLAYDETECTCONTROL DisplayDetectControl;
     NTSTATUS RebuildStatus;
     NTSTATUS Status;
     ULONG ChildCount = 0;
     ULONG Index;
     BOOLEAN ConnectionChanged = FALSE;
+    BOOLEAN DetectRequested = FALSE;
 
     PAGED_CODE();
     if (!DxgkBeginKmdTransaction(Adapter))
@@ -564,13 +574,20 @@ DxgkpPollDisplayChildrenAdapter(
     Status = DxgkpSnapshotChildrenForPoll(Adapter, PollInterruptible, &Children, &ChildCount);
     if (!NT_SUCCESS(Status) || ChildCount == 0)
         goto Cleanup;
+    DisplayDetectControl = DXGK_CB_FULL(Adapter, DxgkDdiDisplayDetectControl);
+    if (DxgkChildPollsThroughDetectControl(DisplayDetectControl != NULL,
+                                           DXGK_CB_FULL(Adapter, DxgkDdiQueryConnectionChange) != NULL))
+    {
+        Status = DxgkpCallDisplayDetectControl(Adapter, DisplayDetectControl, DXGK_DDCT_POLLALL, 0, NonDestructiveOnly);
+        DetectRequested = NT_SUCCESS(Status);
+        ChildCount = 0;
+    }
     QueryChildStatus = DXGK_CB(Adapter, DxgkDdiQueryChildStatus);
-    if (QueryChildStatus == NULL)
+    if (ChildCount != 0 && QueryChildStatus == NULL)
     {
         Status = STATUS_NOT_SUPPORTED;
         goto Cleanup;
     }
-    Status = STATUS_SUCCESS;
     for (Index = 0; Index < ChildCount; ++Index)
     {
         DXGK_CHILD_STATUS ChildStatus;
@@ -597,6 +614,8 @@ Cleanup:
     DxgkEndKmdTransaction(Adapter);
     if (Children != NULL)
         ExFreePoolWithTag(Children, TAG_DXGK_RESOURCES);
+    if (DetectRequested)
+        (VOID)DxgkVidPnQueueConnectionChangeDrain(Adapter);
     if (ConnectionChanged)
     {
         RebuildStatus = STATUS_SUCCESS;
@@ -1479,13 +1498,17 @@ static NTSTATUS
 DxgkpCallDisplayDetectControl(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ PDXGKDDI_DISPLAYDETECTCONTROL DisplayDetectControl,
-    _In_ DXGK_DISPLAYDETECTCONTROLTYPE Type)
+    _In_ DXGK_DISPLAYDETECTCONTROLTYPE Type,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
+    _In_ BOOLEAN NonDestructiveOnly)
 {
     DXGKARG_DISPLAYDETECTCONTROL Args;
     NTSTATUS Status;
 
-    ASSERT(Adapter->KmdExclusiveOwnerThread == PsGetCurrentThread());
-    Args = DxgkChildMakeDisplayDetectControl(Type, D3DDDI_ID_ALL, FALSE);
+    ASSERT(DisplayDetectControl != NULL);
+    ASSERT(Adapter->KmdExclusiveOwnerThread == PsGetCurrentThread() ||
+           Adapter->KmdTransactionOwnerThread == PsGetCurrentThread());
+    Args = DxgkChildMakeDisplayDetectControl(Type, TargetId, NonDestructiveOnly);
     _SEH2_TRY
     {
         Status = DisplayDetectControl(Adapter->MiniportDeviceContext, &Args);
@@ -1522,7 +1545,7 @@ DxgkPnpEnableHotPlugDetection(
     KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
     if (!HasVideoOutput)
         return STATUS_SUCCESS;
-    Status = DxgkpCallDisplayDetectControl(Adapter, DisplayDetectControl, DXGK_DDCT_ENABLEHPD);
+    Status = DxgkpCallDisplayDetectControl(Adapter, DisplayDetectControl, DXGK_DDCT_ENABLEHPD, D3DDDI_ID_ALL, FALSE);
     if (!NT_SUCCESS(Status))
     {
         DXGKRNL_ERR("DxgkPnpEnableHotPlugDetection: adapter %p refused to enable hot-plug detection 0x%08lX\n",
@@ -1547,7 +1570,7 @@ DxgkPnpDisableHotPlugDetection(
     Adapter->HotPlugDetectEnabled = FALSE;
     DisplayDetectControl = DXGK_CB_FULL(Adapter, DxgkDdiDisplayDetectControl);
     ASSERT(DisplayDetectControl != NULL);
-    Status = DxgkpCallDisplayDetectControl(Adapter, DisplayDetectControl, DXGK_DDCT_DISABLEHPD);
+    Status = DxgkpCallDisplayDetectControl(Adapter, DisplayDetectControl, DXGK_DDCT_DISABLEHPD, D3DDDI_ID_ALL, FALSE);
     if (!NT_SUCCESS(Status))
         DXGKRNL_WARN("DxgkPnpDisableHotPlugDetection: adapter %p failed 0x%08lX\n", Adapter, Status);
 }

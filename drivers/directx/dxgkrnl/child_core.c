@@ -65,6 +65,15 @@ DxgkChildMakeDisplayDetectControl(
     return Args;
 }
 
+/* A miniport that reports connection changes is polled through DisplayDetectControl; the answers arrive as connection changes */
+BOOLEAN
+DxgkChildPollsThroughDetectControl(
+    _In_ BOOLEAN HasDisplayDetectControl,
+    _In_ BOOLEAN HasQueryConnectionChange)
+{
+    return HasDisplayDetectControl && HasQueryConnectionChange;
+}
+
 /* Windows answers DisplayDetectControl and QueryConnectionChange with DxgkDdiQueryChildStatus only for a miniport that lacks them */
 BOOLEAN
 DxgkChildConnectionFromStatusQuery(

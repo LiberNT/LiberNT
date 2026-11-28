@@ -493,6 +493,47 @@ RcddStoreScreenMirror(PRCDD_PDEV ppdev, CONST DWM_MIRROR_FRAME *Frame, ULONG Byt
    return Result;
 }
 
+/* The compositor asks this before any client reads the screen: have the driver say once whether it can capture. */
+BOOL
+RcddScreenMirrorNeeded(PRCDD_PDEV ppdev)
+{
+   DXGK_DESKTOP_CAPTURE Capture;
+   ULONG Returned = 0, Error;
+   BOOL Needed;
+
+   KeWaitForSingleObject(&ppdev->CaptureMutex, Executive, KernelMode, FALSE, NULL);
+   if (!ppdev->ScreenMirrorNeeded && !ppdev->ScreenMirrorProbed && ppdev->BitsPerPixel == 32 &&
+       ppdev->ScreenWidth != 0 && ppdev->ScreenHeight != 0 && RcddEnsureCaptureSurface(ppdev))
+   {
+      RtlZeroMemory(&Capture, sizeof(Capture));
+      Capture.StructSize = sizeof(Capture);
+      Capture.Width = ppdev->ScreenWidth;
+      Capture.Height = ppdev->ScreenHeight;
+      Capture.Pitch = ppdev->CaptureSurface->lDelta;
+      Capture.BufferSize = ppdev->CaptureSurface->cjBits;
+      Capture.Destination = (ULONGLONG)(ULONG_PTR)ppdev->CaptureSurface->pvScan0;
+      Capture.Region.right = 1;
+      Capture.Region.bottom = 1;
+      Error = EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_DXGK_CAPTURE_DESKTOP,
+                                 &Capture, sizeof(Capture), &Capture,
+                                 sizeof(Capture), &Returned);
+      if (Error == (ULONG)STATUS_NOT_SUPPORTED || Error == (ULONG)STATUS_INVALID_DEVICE_REQUEST)
+      {
+         ppdev->ScreenMirrorNeeded = TRUE;
+      }
+      else if (Error == 0 && Returned == sizeof(Capture))
+      {
+         if (!(Capture.Flags & DXGK_DESKTOP_CAPTURE_HAS_IMAGE) && (Capture.Flags & DXGK_DESKTOP_CAPTURE_NEEDS_COMPOSITOR))
+            ppdev->ScreenMirrorNeeded = TRUE;
+         ppdev->ScreenMirrorProbed = ppdev->ScreenMirrorNeeded || (Capture.Flags & DXGK_DESKTOP_CAPTURE_HAS_IMAGE) != 0;
+      }
+   }
+   ASSERT(ppdev->CaptureMutex.OwnerThread == KeGetCurrentThread());
+   Needed = ppdev->ScreenMirrorNeeded;
+   KeReleaseMutex(&ppdev->CaptureMutex, FALSE);
+   return Needed;
+}
+
 static BOOL
 RcddAcquireScreenReadRegion(
    SURFOBJ *Destination,

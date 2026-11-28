@@ -137,6 +137,16 @@ DxgkPostDisplayTestFirmwareScanout(VOID)
 
 static
 VOID
+DxgkPostDisplayTestDisplayOnlyCommitsAtStart(VOID)
+{
+    ok_bool_true(DxgkPostDisplayCoreDisplayOnlyCommitsAtStart(FALSE, FALSE), "no firmware mode: the display-only driver is committed");
+    ok_bool_true(DxgkPostDisplayCoreDisplayOnlyCommitsAtStart(FALSE, TRUE), "no firmware mode: a presenting display-only driver is committed");
+    ok_bool_true(DxgkPostDisplayCoreDisplayOnlyCommitsAtStart(TRUE, TRUE), "a presenting display-only driver is committed over the firmware mode");
+    ok_bool_false(DxgkPostDisplayCoreDisplayOnlyCommitsAtStart(TRUE, FALSE), "a display-only driver without PresentDisplayOnly keeps the firmware mode");
+}
+
+static
+VOID
 DxgkPostDisplayTestApertureRunTakesBootWindow(VOID)
 {
     const ULONGLONG Window = 0x70000000ULL;
@@ -347,6 +357,7 @@ START_TEST(DxgkPostDisplayHandoff)
     DxgkPostDisplayTestHeadlessSize();
     DxgkPostDisplayTestBootScreenAction();
     DxgkPostDisplayTestFirmwareScanout();
+    DxgkPostDisplayTestDisplayOnlyCommitsAtStart();
     DxgkPostDisplayTestApertureRunTakesBootWindow();
     DxgkPostDisplayTestUefiRangeSegment();
     DxgkPostDisplayTestFirmwareRequest();

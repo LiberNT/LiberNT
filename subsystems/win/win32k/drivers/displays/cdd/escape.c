@@ -311,7 +311,7 @@ RcddEscape(
       if (pvOut == NULL || cjOut < sizeof(LONG))
          return 0;
 
-      *(PLONG)pvOut = ppdev->ScreenMirrorNeeded ? 1 : 0;
+      *(PLONG)pvOut = RcddScreenMirrorNeeded(ppdev) ? 1 : 0;
       return 1;
    }
 

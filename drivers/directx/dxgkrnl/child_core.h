@@ -27,6 +27,11 @@ DxgkChildMakeDisplayDetectControl(
     _In_ BOOLEAN NonDestructiveOnly);
 
 BOOLEAN
+DxgkChildPollsThroughDetectControl(
+    _In_ BOOLEAN HasDisplayDetectControl,
+    _In_ BOOLEAN HasQueryConnectionChange);
+
+BOOLEAN
 DxgkChildConnectionFromStatusQuery(
     _In_ DXGK_CHILD_DEVICE_HPD_AWARENESS HpdAwareness,
     _In_ BOOLEAN ReportsConnectionChanges);

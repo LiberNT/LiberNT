@@ -92,6 +92,10 @@ START_TEST(DxgkChildConnectionRecord)
     ok_eq_bool(DxgkChildConnectionFromStatusQuery(HpdAwarenessAlwaysConnected, FALSE), FALSE);
     ok_eq_bool(DxgkChildConnectionFromStatusQuery(HpdAwarenessNone, FALSE), FALSE);
     ok_eq_bool(DxgkChildConnectionFromStatusQuery(HpdAwarenessUninitialized, FALSE), FALSE);
+    ok_eq_bool(DxgkChildPollsThroughDetectControl(TRUE, TRUE), TRUE);
+    ok_eq_bool(DxgkChildPollsThroughDetectControl(TRUE, FALSE), FALSE);
+    ok_eq_bool(DxgkChildPollsThroughDetectControl(FALSE, TRUE), FALSE);
+    ok_eq_bool(DxgkChildPollsThroughDetectControl(FALSE, FALSE), FALSE);
 
     /* GTX 1070 laptop: HDMI 0x1100, internal panel 0x1101, DisplayPort 0x1102. */
     RtlZeroMemory(Children, sizeof(Children));

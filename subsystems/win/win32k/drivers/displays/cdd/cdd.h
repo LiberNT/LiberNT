@@ -53,6 +53,7 @@ typedef struct _RCDD_PDEV
    PVOID ScreenPtr;            /* Mapped WDDM scan-out (dxgkrnl shadow FB)    */
    BOOL ScreenMirrorNeeded;   /* The driver cannot capture: reads use DWM's copy */
    BOOL ScreenMirrorValid;    /* CaptureSurface holds such a copy */
+   BOOL ScreenMirrorProbed;   /* The driver has answered whether it can capture */
    KMUTEX CaptureMutex;       /* Protects the reusable composed-screen DIB. */
    HSURF CaptureBitmap;
    SURFOBJ *CaptureSurface;
@@ -521,5 +522,6 @@ RcddEscape(
 
 BOOL RcddPresentComposition(PRCDD_PDEV ppdev, const CDD_PRESENT_SOURCE *Source);
 ULONG RcddStoreScreenMirror(PRCDD_PDEV ppdev, CONST DWM_MIRROR_FRAME *Frame, ULONG Bytes);
+BOOL RcddScreenMirrorNeeded(PRCDD_PDEV ppdev);
 
 #endif /* _CDD_PCH_ */
