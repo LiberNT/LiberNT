@@ -366,6 +366,14 @@ Used Version: 2.12.10
 License: MIT (https://spdx.org/licenses/MIT.htmlf)
 URL: http://xmlsoft.org, ftp://xmlsoft.org/libxml2/
 
+Title: OpenSSL
+Path: submodules/openssl (feed)
+Path: sdk/lib/3rdparty/openssl
+Used Version: 3.5.4 (git tag openssl-3.5.4)
+License: Apache-2.0 (https://spdx.org/licenses/Apache-2.0.html)
+URL: https://github.com/openssl/openssl
+Modifications: none; only libcrypto and libssl are built, from a no-asm, no-shared, no-module MinGW configuration without the algorithms and protocols the RDP server does not use, generated at configure time
+
 Title: STLport
 Path: sdk/lib/3rdparty/stlport
 Used Version: 5.2.1

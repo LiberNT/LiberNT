@@ -477,6 +477,25 @@ config FFMPEG_FROM_SOURCE
       the ffmpeg source feed. sdk/tools/ffmpeg_payload.py uses this to
       produce the payload.
 
+config ENABLE_RDPSERVER
+    prompt "Remote Desktop server"
+    type bool
+    default n
+    depends TOOLCHAIN!=msvc
+    depends ARCH=i386 || ARCH=amd64 || ARCH=arm64
+    help
+      Build the Remote Desktop server. It links OpenSSL and FreeRDP
+      statically; by default they come from the LiberNT release payload.
+
+config RDPSERVER_FROM_SOURCE
+    prompt "Build OpenSSL and FreeRDP from source"
+    type bool
+    default n
+    depends ENABLE_RDPSERVER=y
+    help
+      Instead of the release payload, build OpenSSL and FreeRDP from the
+      openssl and freerdp source feeds.
+
 endmenu
 
 menu "Kernel debugging"

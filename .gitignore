@@ -23,3 +23,4 @@ feeds.conf
 /submodules/fex-arm64ec/
 /submodules/ffmpeg/
 /submodules/mesa/
+/submodules/openssl/

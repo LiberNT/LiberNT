@@ -266,6 +266,13 @@ cmake_dependent_option(FFMPEG_FROM_SOURCE
                        "Build the LGPL FFmpeg libraries from the ffmpeg feed instead of using the LiberNT release payload." OFF
                        "ENABLE_FFMPEG" OFF)
 
+cmake_dependent_option(ENABLE_RDPSERVER
+                       "Build the Remote Desktop server with OpenSSL and FreeRDP" OFF
+                       "ARCH STREQUAL i386 OR ARCH STREQUAL amd64 OR ARCH STREQUAL arm64;NOT MSVC" OFF)
+cmake_dependent_option(RDPSERVER_FROM_SOURCE
+                       "Build OpenSSL and FreeRDP from the openssl and freerdp feeds instead of using the LiberNT release payload." OFF
+                       "ENABLE_RDPSERVER" OFF)
+
 cmake_dependent_option(ENABLE_DXILCONV
                        "Build dxilconv.dll, the DXBC to DXIL converter of the Direct3D 12 runtime, from the dxc feed" ON
                        "ARCH STREQUAL i386 OR ARCH STREQUAL amd64 OR ARCH STREQUAL arm64;CMAKE_C_COMPILER_ID STREQUAL Clang;NOT MSVC" OFF)

@@ -25,3 +25,6 @@ src-git felix86 https://github.com/OFFTKP/felix86.git;26.10
 # Pinned to a release tag. Only dxilconv is built; the host TableGen build of a
 # Linux host still configures SPIR-V, so its two submodules are checked out.
 src-git dxc https://github.com/microsoft/DirectXShaderCompiler.git;v1.10.2605.37 external/SPIRV-Headers,external/SPIRV-Tools
+
+# Pinned to a release tag. Only libcrypto and libssl are built, for the RDP server.
+src-git openssl https://github.com/openssl/openssl.git;openssl-3.5.4

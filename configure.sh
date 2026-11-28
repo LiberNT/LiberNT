@@ -172,6 +172,35 @@ ffmpeg_enabled() {
 	return 1
 }
 
+rdpserver_from_source_enabled() {
+	case "$ARCH" in
+		i386|amd64|arm64) ;;
+		*) return 1 ;;
+	esac
+
+	RDPSERVER_SETTING=$(rosconfig_cache_get ENABLE_RDPSERVER)
+	RDPSERVER_SOURCE_SETTING=$(rosconfig_cache_get RDPSERVER_FROM_SOURCE)
+	for RDPSERVER_ARG in $ROS_CMAKEOPTS; do
+		case "$RDPSERVER_ARG" in
+			-DENABLE_RDPSERVER=*|-DENABLE_RDPSERVER:*=*)
+				RDPSERVER_SETTING=$(printf %s "${RDPSERVER_ARG#*=}" | tr [:lower:] [:upper:])
+				;;
+			-DRDPSERVER_FROM_SOURCE=*|-DRDPSERVER_FROM_SOURCE:*=*)
+				RDPSERVER_SOURCE_SETTING=$(printf %s "${RDPSERVER_ARG#*=}" | tr [:lower:] [:upper:])
+				;;
+		esac
+	done
+
+	case "$RDPSERVER_SETTING" in
+		y|1|ON|YES|TRUE|Y) ;;
+		*) return 1 ;;
+	esac
+	case "$RDPSERVER_SOURCE_SETTING" in
+		y|1|ON|YES|TRUE|Y) return 0 ;;
+	esac
+	return 1
+}
+
 felix86_enabled() {
 	[ "$ARCH" = "riscv64" ] || return 1
 
@@ -255,6 +284,9 @@ sync_feeds() {
 	fi
 	if felix86_enabled; then
 		FEEDS_WANTED="$FEEDS_WANTED felix86"
+	fi
+	if rdpserver_from_source_enabled; then
+		FEEDS_WANTED="$FEEDS_WANTED openssl"
 	fi
 
 	echo "Updating source feeds:$FEEDS_WANTED"
