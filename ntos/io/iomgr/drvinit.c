@@ -806,7 +806,13 @@ IopInitializeBootDrivers(VOID)
                                       Link);
         ListEntry = ListEntry->Flink;
 
-        if (BootEntry->LdrEntry == NULL) continue;
+        if (BootEntry->LdrEntry == NULL)
+        {
+            DPRINT1("I/O: the boot driver %wZ is missing (not loaded by the boot loader)\n",
+                    &BootEntry->FilePath);
+            IopBootLog(&BootEntry->FilePath, FALSE);
+            continue;
+        }
 
         if (!MmVerifyImageIsOkForMpUse(BootEntry->LdrEntry->DllBase))
         {

@@ -431,7 +431,14 @@ OslLoadBootDrivers(
                           &Module))
         {
             FwPrint(L"The boot driver %wZ could not be loaded.\r\n", &Driver->FilePath);
-            RemoveEntryList(Link);
+            /* Keep the entry with LdrEntry NULL so the kernel logs which
+               driver is missing instead of never hearing about it */
+            Driver->LdrEntry = NULL;
+            Driver->RegistryPath.Buffer = PaToVa(Driver->RegistryPath.Buffer);
+            Driver->FilePath.Buffer = PaToVa(Driver->FilePath.Buffer);
+            Node->Name.Buffer = PaToVa(Node->Name.Buffer);
+            if (Node->Group.Buffer)
+                Node->Group.Buffer = PaToVa(Node->Group.Buffer);
             continue;
         }
 
