@@ -1069,10 +1069,109 @@ START_TEST(ftp)
     test_getfile(hFtp, hHttp);
     test_openfile(hFtp, hHttp);
     test_putfile(hFtp, hHttp);
+#ifdef __REACTOS__
+    InternetCloseHandle(hHttp);
+    InternetCloseHandle(hFtp);
+    InternetCloseHandle(hInternet);
+}
+
+START_TEST(ftp_more)
+{
+    HMODULE hWininet;
+    HANDLE hInternet, hFtp, hHttp;
+
+    hWininet = GetModuleHandleA("wininet.dll");
+    pFtpCommandA = (void*)GetProcAddress(hWininet, "FtpCommandA");
+    pInternetSetStatusCallbackA = (void*)GetProcAddress(hWininet, "InternetSetStatusCallbackA");
+
+    hInternet = InternetOpenA("winetest", 0, NULL, NULL, 0);
+    ok(hInternet != NULL, "InternetOpen failed: %lu\n", GetLastError());
+    hFtp = InternetConnectA(hInternet, "test.winehq.org", INTERNET_DEFAULT_FTP_PORT, "anonymous", "IEUser@", INTERNET_SERVICE_FTP, INTERNET_FLAG_PASSIVE, 0);
+    if (!hFtp)
+    {
+        InternetCloseHandle(hInternet);
+        skip("No ftp connection could be made to test.winehq.org\n");
+        return;
+    }
+    hHttp = InternetConnectA(hInternet, "www.winehq.org", INTERNET_DEFAULT_HTTP_PORT, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
+    if (!hHttp)
+    {
+        InternetCloseHandle(hFtp);
+        InternetCloseHandle(hInternet);
+        skip("No http connection could be made to www.winehq.org\n");
+        return;
+    }
+#endif
     test_removedir(hFtp, hHttp);
     test_renamefile(hFtp, hHttp);
     test_command(hFtp);
+#ifdef __REACTOS__
+    InternetCloseHandle(hHttp);
+    InternetCloseHandle(hFtp);
+    InternetCloseHandle(hInternet);
+}
+
+START_TEST(ftp_find)
+{
+    HMODULE hWininet;
+    HANDLE hInternet, hFtp, hHttp;
+
+    hWininet = GetModuleHandleA("wininet.dll");
+    pFtpCommandA = (void*)GetProcAddress(hWininet, "FtpCommandA");
+    pInternetSetStatusCallbackA = (void*)GetProcAddress(hWininet, "InternetSetStatusCallbackA");
+
+    hInternet = InternetOpenA("winetest", 0, NULL, NULL, 0);
+    ok(hInternet != NULL, "InternetOpen failed: %lu\n", GetLastError());
+    hFtp = InternetConnectA(hInternet, "test.winehq.org", INTERNET_DEFAULT_FTP_PORT, "anonymous", "IEUser@", INTERNET_SERVICE_FTP, INTERNET_FLAG_PASSIVE, 0);
+    if (!hFtp)
+    {
+        InternetCloseHandle(hInternet);
+        skip("No ftp connection could be made to test.winehq.org\n");
+        return;
+    }
+    hHttp = InternetConnectA(hInternet, "www.winehq.org", INTERNET_DEFAULT_HTTP_PORT, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
+    if (!hHttp)
+    {
+        InternetCloseHandle(hFtp);
+        InternetCloseHandle(hInternet);
+        skip("No http connection could be made to www.winehq.org\n");
+        return;
+    }
+#endif
     test_find_first_file(hFtp, hHttp);
+#ifdef __REACTOS__
+    InternetCloseHandle(hHttp);
+    InternetCloseHandle(hFtp);
+    InternetCloseHandle(hInternet);
+}
+
+START_TEST(ftp_status)
+{
+    HMODULE hWininet;
+    HANDLE hInternet, hFtp, hHttp;
+
+    hWininet = GetModuleHandleA("wininet.dll");
+    pFtpCommandA = (void*)GetProcAddress(hWininet, "FtpCommandA");
+    pInternetSetStatusCallbackA = (void*)GetProcAddress(hWininet, "InternetSetStatusCallbackA");
+
+    hInternet = InternetOpenA("winetest", 0, NULL, NULL, 0);
+    ok(hInternet != NULL, "InternetOpen failed: %lu\n", GetLastError());
+    hFtp = InternetConnectA(hInternet, "test.winehq.org", INTERNET_DEFAULT_FTP_PORT, "anonymous", "IEUser@", INTERNET_SERVICE_FTP, INTERNET_FLAG_PASSIVE, 0);
+    if (!hFtp)
+    {
+        InternetCloseHandle(hInternet);
+        skip("No ftp connection could be made to test.winehq.org\n");
+        return;
+    }
+    hHttp = InternetConnectA(hInternet, "www.winehq.org", INTERNET_DEFAULT_HTTP_PORT, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
+    if (!hHttp)
+    {
+        InternetCloseHandle(hFtp);
+        InternetCloseHandle(hInternet);
+        skip("No http connection could be made to www.winehq.org\n");
+        return;
+    }
+#endif
     test_get_current_dir(hFtp, hHttp);
     test_status_callbacks(hInternet);
 

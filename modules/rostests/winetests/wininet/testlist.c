@@ -4,6 +4,9 @@
 #include <wine/test.h>
 
 extern void func_ftp(void);
+extern void func_ftp_more(void);
+extern void func_ftp_find(void);
+extern void func_ftp_status(void);
 extern void func_generated(void);
 extern void func_http(void);
 extern void func_http_more(void);
@@ -16,6 +19,9 @@ extern void func_urlcache(void);
 const struct test winetest_testlist[] =
 {
     { "ftp", func_ftp },
+    { "ftp_more", func_ftp_more },
+    { "ftp_find", func_ftp_find },
+    { "ftp_status", func_ftp_status },
     { "generated", func_generated },
     { "http", func_http },
     { "http_flags", func_http_flags },
