@@ -1916,7 +1916,7 @@ done:
     if (Status == STATUS_NO_SUCH_USER ||
         Status == STATUS_WRONG_PASSWORD)
     {
-        *SubStatus = (!S4ULogon && (LogonType == Network || LogonType == NetworkCleartext || LogonPwdData.TrustedClient)) ? Status : STATUS_SUCCESS;
+        *SubStatus = STATUS_SUCCESS;
         Status = STATUS_LOGON_FAILURE;
     }
 
