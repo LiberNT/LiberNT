@@ -3834,6 +3834,7 @@ NTSTATUS
 DxgkDisplayEstablishInitialMode(
     _In_ PDXGKRNL_ADAPTER Adapter)
 {
+    BOOLEAN PresentsDisplayOnly;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -3843,8 +3844,15 @@ DxgkDisplayEstablishInitialMode(
 
     if (Adapter->MiniportContext == NULL ||
         !Adapter->MiniportContext->IsDisplayOnlyDriver ||
-        Adapter->VidPnCommitted ||
-        (Adapter->PostDisplayWidth != 0 && Adapter->PostDisplayHeight != 0))
+        Adapter->VidPnCommitted)
+    {
+        return STATUS_SUCCESS;
+    }
+    PresentsDisplayOnly =
+        Adapter->MiniportContext->InitDataSize >= FIELD_OFFSET(KMDDOD_INITIALIZATION_DATA, DxgkDdiPresentDisplayOnly) + sizeof(PVOID) &&
+        Adapter->MiniportContext->InitData.dod.DxgkDdiPresentDisplayOnly != NULL;
+    if (!DxgkPostDisplayCoreDisplayOnlyCommitsAtStart(Adapter->PostDisplayWidth != 0 && Adapter->PostDisplayHeight != 0,
+                                                     PresentsDisplayOnly))
     {
         return STATUS_SUCCESS;
     }

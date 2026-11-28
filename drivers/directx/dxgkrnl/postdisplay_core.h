@@ -61,6 +61,16 @@ DxgkPostDisplayCoreFirmwareScanout(
     return DisplayOnlyDriver || !VidPnCommitted;
 }
 
+/* A display-only driver that presents is committed at start even over a firmware mode; only one without PresentDisplayOnly keeps the firmware scanout */
+FORCEINLINE
+BOOLEAN
+DxgkPostDisplayCoreDisplayOnlyCommitsAtStart(
+    _In_ BOOLEAN FirmwareModeKnown,
+    _In_ BOOLEAN PresentsDisplayOnly)
+{
+    return !FirmwareModeKnown || PresentsDisplayOnly;
+}
+
 /* Who may hold the boot display, weakest first: a holder gives way to a stronger claimant. */
 typedef enum _DXGK_POST_DISPLAY_ROLE
 {
