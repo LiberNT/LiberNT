@@ -230,7 +230,7 @@ TDI_STATUS InfoTdiQueryGetConnectionTcpTable(PADDRESS_FILE AddrFile,
     TDI_STATUS Status = TDI_INVALID_REQUEST;
     ULONG ListenerRemoteAddr = 0;
     USHORT ListenerRemotePort = 0;
-    BOOLEAN HasListener = FALSE, Locked = FALSE;
+    BOOLEAN HasListener = FALSE;
 
     TI_DbgPrint(DEBUG_INFO, ("Called.\n"));
 
@@ -254,56 +254,43 @@ TDI_STATUS InfoTdiQueryGetConnectionTcpTable(PADDRESS_FILE AddrFile,
         return TDI_INVALID_REQUEST;
 
     /* Accepted endpoints chain onto the listening address file; emit one row per endpoint. */
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     KeEnterCriticalRegion();
-    Locked = ExAcquireResourceExclusiveLite(&AddrFile->Resource, FALSE);
-    if (Locked)
+    ExAcquireResourceExclusiveLite(&AddrFile->Resource, TRUE);
+    if (AddrFile->Listener != NULL)
     {
-        if (AddrFile->Listener != NULL)
-        {
-            Count++;
-            HasListener = TRUE;
-            if (AddrFile->Listener->AddressFile)
-            {
-                ListenerRemoteAddr = AddrFile->Listener->AddressFile->Address.Address.IPv4Address;
-                ListenerRemotePort = AddrFile->Listener->AddressFile->Port;
-            }
-        }
-        for (Connection = AddrFile->Connection; Connection; Connection = Connection->Next)
-            if (Connection->SocketContext)
-                Count++;
-
-        if (AddrFile->Connection)
-        {
-            Connections = ExAllocatePoolWithTag(NonPagedPool,
-                                                (Count + 1) * sizeof(*Connections),
-                                                QUERY_CONTEXT_TAG);
-            if (Connections)
-            {
-                for (Connection = AddrFile->Connection, i = 0; Connection; Connection = Connection->Next)
-                {
-                    if (Connection->SocketContext)
-                    {
-                        ReferenceObject(Connection);
-                        Connections[i++] = Connection;
-                    }
-                }
-                Connections[i] = NULL;
-            }
-        }
-
-        ExReleaseResourceLite(&AddrFile->Resource);
-    }
-    else if (AddrFile->Listener != NULL ||
-             (AddrFile->Connection && AddrFile->Connection->SocketContext))
-    {
-        Count = 1;
-        HasListener = AddrFile->Listener != NULL;
-        if (HasListener && AddrFile->Listener->AddressFile)
+        Count++;
+        HasListener = TRUE;
+        if (AddrFile->Listener->AddressFile)
         {
             ListenerRemoteAddr = AddrFile->Listener->AddressFile->Address.Address.IPv4Address;
             ListenerRemotePort = AddrFile->Listener->AddressFile->Port;
         }
     }
+    for (Connection = AddrFile->Connection; Connection; Connection = Connection->Next)
+        if (Connection->SocketContext)
+            Count++;
+
+    if (AddrFile->Connection)
+    {
+        Connections = ExAllocatePoolWithTag(NonPagedPool,
+                                            (Count + 1) * sizeof(*Connections),
+                                            QUERY_CONTEXT_TAG);
+        if (Connections)
+        {
+            for (Connection = AddrFile->Connection, i = 0; Connection; Connection = Connection->Next)
+            {
+                if (Connection->SocketContext)
+                {
+                    ReferenceObject(Connection);
+                    Connections[i++] = Connection;
+                }
+            }
+            Connections[i] = NULL;
+        }
+    }
+
+    ExReleaseResourceLite(&AddrFile->Resource);
     KeLeaveCriticalRegion();
 
     if (Count == 0)
@@ -345,15 +332,7 @@ TDI_STATUS InfoTdiQueryGetConnectionTcpTable(PADDRESS_FILE AddrFile,
         Emitted++;
     }
 
-    if (!Locked && !HasListener)
-    {
-        /* Legacy path: this address file owns a single connected endpoint */
-        Connection = AddrFile->Connection;
-    }
-    else
-    {
-        Connection = NULL;
-    }
+    Connection = NULL;
 
     for (i = 0; Emitted < Count && (Connection || (Connections && Connections[i])); i++)
     {
@@ -392,7 +371,6 @@ TDI_STATUS InfoTdiQueryGetConnectionTcpTable(PADDRESS_FILE AddrFile,
                 TcpRow.dwRemotePort = EndPoint.Address[0].Address[0].sin_port;
 
                 RowStatus = TCPGetSocketStatus(Connection, &TcpRow.dwState);
-                ASSERT(NT_SUCCESS(RowStatus));
             }
         }
 

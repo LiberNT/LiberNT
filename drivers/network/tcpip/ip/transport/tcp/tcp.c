@@ -1063,14 +1063,20 @@ TCPGetSocketStatus(
     PCONNECTION_ENDPOINT Connection,
     PULONG State)
 {
+    NTSTATUS Status = STATUS_UNSUCCESSFUL;
+
     if (!Connection)
         return STATUS_UNSUCCESSFUL;
 
-    if (Connection->SocketContext == NULL)
-        return STATUS_UNSUCCESSFUL;
+    LockObject(Connection);
+    if (Connection->SocketContext != NULL)
+    {
+        LibTCPGetSocketStatus(Connection->SocketContext, State);
+        Status = STATUS_SUCCESS;
+    }
+    UnlockObject(Connection);
 
-    LibTCPGetSocketStatus(Connection->SocketContext, State);
-    return STATUS_SUCCESS;
+    return Status;
 }
 
 /* EOF */
