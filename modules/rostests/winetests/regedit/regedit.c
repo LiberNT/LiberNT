@@ -3753,6 +3753,33 @@ static void test_export(void)
     delete_key(HKEY_CURRENT_USER, KEY_BASE);
 }
 
+#ifdef __REACTOS__
+static BOOL regedit_elevated(void)
+{
+    HKEY hkey;
+    LONG err;
+
+    err = RegDeleteKeyA(HKEY_CLASSES_ROOT, KEY_BASE);
+    if (err == ERROR_ACCESS_DENIED)
+    {
+        win_skip("User is a non-elevated admin; skipping regedit tests.\n");
+        return FALSE;
+    }
+    if (err == ERROR_FILE_NOT_FOUND)
+    {
+        if (RegCreateKeyExA(HKEY_CLASSES_ROOT, KEY_BASE, 0, NULL, REG_OPTION_NON_VOLATILE,
+                            KEY_READ, NULL, &hkey, NULL))
+        {
+            win_skip("User is a non-elevated admin; skipping regedit tests.\n");
+            return FALSE;
+        }
+        RegCloseKey(hkey);
+        RegDeleteKeyA(HKEY_CLASSES_ROOT, KEY_BASE);
+    }
+    return TRUE;
+}
+
+#endif
 START_TEST(regedit)
 {
     HKEY hkey;
@@ -3780,16 +3807,78 @@ START_TEST(regedit)
     test_basic_import();
     test_basic_import_unicode();
     test_basic_import_31();
+#ifndef __REACTOS__
+    test_invalid_import();
+#endif
+#ifndef __REACTOS__
+    test_invalid_import_unicode();
+#endif
+#ifndef __REACTOS__
+    test_invalid_import_31();
+#endif
+#ifndef __REACTOS__
+    test_comments();
+#endif
+#ifndef __REACTOS__
+    test_comments_unicode();
+#endif
+#ifndef __REACTOS__
+    test_import_with_whitespace();
+#endif
+#ifndef __REACTOS__
+    test_import_with_whitespace_unicode();
+#endif
+#ifndef __REACTOS__
+    test_key_creation_and_deletion();
+#endif
+#ifndef __REACTOS__
+    test_key_creation_and_deletion_unicode();
+#endif
+#ifndef __REACTOS__
+    test_value_deletion();
+#endif
+#ifndef __REACTOS__
+    test_value_deletion_unicode();
+#endif
+#ifndef __REACTOS__
+    test_export();
+#endif
+}
+
+#ifdef __REACTOS__
+START_TEST(regedit_invalid)
+{
+    if (!regedit_elevated())
+        return;
     test_invalid_import();
     test_invalid_import_unicode();
     test_invalid_import_31();
+}
+
+START_TEST(regedit_comments)
+{
+    if (!regedit_elevated())
+        return;
     test_comments();
     test_comments_unicode();
     test_import_with_whitespace();
     test_import_with_whitespace_unicode();
+}
+
+START_TEST(regedit_keys)
+{
+    if (!regedit_elevated())
+        return;
     test_key_creation_and_deletion();
     test_key_creation_and_deletion_unicode();
     test_value_deletion();
     test_value_deletion_unicode();
+}
+
+START_TEST(regedit_export)
+{
+    if (!regedit_elevated())
+        return;
     test_export();
 }
+#endif
