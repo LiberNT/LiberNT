@@ -2724,7 +2724,7 @@
 @ stdcall NtQueryInformationResourceManager(ptr long ptr long ptr)
 @ stdcall NtQueryInformationTransaction(ptr long ptr long ptr)
 @ stdcall NtQueryInformationTransactionManager(ptr long ptr long ptr)
-@ stub -arch=win64 NtQuerySecurityAttributesToken
+@ stdcall -arch=win64 NtQuerySecurityAttributesToken(ptr ptr long ptr long ptr)
 @ stdcall -version=0x601+ -arch=win64 NtQuerySystemInformationEx(long ptr long ptr long ptr)
 @ stdcall NtReadOnlyEnlistment(ptr ptr)
 @ stdcall NtRecoverEnlistment(ptr ptr)
@@ -3368,7 +3368,7 @@
 @ stdcall ZwQueryInformationTransaction(ptr long ptr long ptr)
 @ stdcall ZwQueryInformationTransactionManager(ptr long ptr long ptr)
 @ stdcall ZwQueryLicenseValue(ptr ptr ptr long ptr)
-@ stub -arch=win64 ZwQuerySecurityAttributesToken
+@ stdcall -arch=win64 ZwQuerySecurityAttributesToken(ptr ptr long ptr long ptr)
 @ stub -arch=win64 ZwQuerySecurityPolicy
 @ stdcall -version=0x601+ -arch=win64 ZwQuerySystemInformationEx(long ptr long ptr long ptr)
 @ stdcall -version=0x602+ -arch=win64 ZwQueryWnfStateData(ptr ptr ptr ptr ptr ptr)
