@@ -8,6 +8,7 @@
 /* INCLUDES *******************************************************************/
 
 #include "ksecdd.h"
+#include <wdmsec.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -15,6 +16,9 @@
 /* GLOBALS ********************************************************************/
 
 PDEVICE_OBJECT KsecDeviceObject;
+
+static const UNICODE_STRING KsecDeviceSddl = RTL_CONSTANT_STRING(
+    L"D:(A;;0x1201bf;;;WD)(A;;FA;;;SY)(A;;FA;;;BA)(A;;0x1200a9;;;RC)(A;;0x1201bf;;;AC)(A;;0x1201bf;;;S-1-15-2-2)");
 
 
 /* FUNCTIONS ******************************************************************/
@@ -29,13 +33,16 @@ DriverEntry(
     NTSTATUS Status;
 
     /* Create the KsecDD device */
-    Status = IoCreateDevice(DriverObject,
-                            0,
-                            &DeviceName,
-                            FILE_DEVICE_KSEC,
-                            0x100u,
-                            FALSE,
-                            &KsecDeviceObject);
+    /* TODO: own the device by administrators and label it low integrity, as the reference security does */
+    Status = IoCreateDeviceSecure(DriverObject,
+                                  0,
+                                  &DeviceName,
+                                  FILE_DEVICE_KSEC,
+                                  FILE_DEVICE_SECURE_OPEN,
+                                  FALSE,
+                                  &KsecDeviceSddl,
+                                  NULL,
+                                  &KsecDeviceObject);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Failed to create KsecDD device: 0x%lx\n", Status);

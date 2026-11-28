@@ -21,7 +21,7 @@ add_library(ksecdd MODULE ${SOURCE})
 target_compile_definitions(ksecdd PRIVATE
     __WINE_PE_BUILD
     SYMCRYPT_PLATFORM_WINE=1)
-target_link_libraries(ksecdd cryptlib pseh symcrypt_km)
+target_link_libraries(ksecdd cryptlib pseh symcrypt_km wdmsec)
 set_module_type(ksecdd kernelmodedriver)
 add_importlibs(ksecdd ntoskrnl hal)
 add_cd_file(TARGET ksecdd DESTINATION reactos/system32/drivers NO_CAB FOR all)
