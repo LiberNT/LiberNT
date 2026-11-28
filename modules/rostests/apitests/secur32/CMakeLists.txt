@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    LogonFailure.c
     LogonRights.c
     LogonTypes.c
     Negotiate.c

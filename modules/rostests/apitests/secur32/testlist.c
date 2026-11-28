@@ -1,6 +1,7 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_LogonFailure(void);
 extern void func_LogonRights(void);
 extern void func_LogonTypes(void);
 extern void func_Negotiate(void);
@@ -8,6 +9,7 @@ extern void func_S4ULogon(void);
 
 const struct test winetest_testlist[] =
 {
+    { "LogonFailure", func_LogonFailure },
     { "LogonRights", func_LogonRights },
     { "LogonTypes", func_LogonTypes },
     { "Negotiate", func_Negotiate },
