@@ -93,7 +93,7 @@ START_TEST(GetOwnerModuleFromUdp6Entry)
 
         if (!Found)
         {
-            skip("Our UDP6 socket wasn't found!\n");
+            ok(0, "Our UDP6 socket wasn't found!\n");
         }
         else
         {
