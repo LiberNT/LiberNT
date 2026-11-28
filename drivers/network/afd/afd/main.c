@@ -796,7 +796,6 @@ AfdCloseSocket(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     if (FCB->ReceiveWorkItem)
         IoFreeWorkItem(FCB->ReceiveWorkItem);
 
-    /* No new drain timeouts; flush any DPC in flight, then drain a queued worker */
     KeCancelTimer(&FCB->DisconnectTimer);
     KeFlushQueuedDpcs();
     KeWaitForSingleObject(&FCB->DisconnectWorkerDone, Executive, KernelMode, FALSE, NULL);
@@ -935,7 +934,6 @@ AfdDisconnectTimeoutWorker(PDEVICE_OBJECT DeviceObject,
 
     if (SocketAcquireStateLock(FCB))
     {
-        /* The send window did not drain in time; fail it so the disconnect can proceed */
         if (FCB->DisconnectPending &&
             FCB->SharedData.State != SOCKET_STATE_CLOSED &&
             !FCB->DisconnectIrp.InFlightRequest &&
@@ -943,8 +941,6 @@ AfdDisconnectTimeoutWorker(PDEVICE_OBJECT DeviceObject,
         {
             if (FCB->SendIrp.InFlightRequest)
                 IoCancelIrp(FCB->SendIrp.InFlightRequest);
-            /* The in-flight send's completion owns the window accounting;
-               only fail the queue once nothing is in flight */
             if (!FCB->SendIrp.InFlightRequest)
             {
                 AfdFailSendQueue(FCB, STATUS_TIMEOUT);
@@ -981,7 +977,6 @@ AfdDisconnectTimeoutDpc(PKDPC Dpc,
     }
     else
     {
-        /* A worker is already queued or running; its single run handles the drain */
         InterlockedDecrement(&FCB->DisconnectWorkerActive);
     }
 }
@@ -1116,11 +1111,8 @@ AfdDisconnect(PDEVICE_OBJECT DeviceObject, PIRP Irp,
             }
             else if (FCB->DisconnectTimeout.QuadPart == 0)
             {
-                /* A zero timeout means don't wait for unsent data; drop it and disconnect now */
                 if (FCB->SendIrp.InFlightRequest)
                     IoCancelIrp(FCB->SendIrp.InFlightRequest);
-                /* FailSendQueue must only run once the in-flight send completed:
-                   SendComplete owns the send window accounting until then */
                 if (!FCB->SendIrp.InFlightRequest)
                 {
                     AfdFailSendQueue(FCB, STATUS_FILE_CLOSED);
@@ -1129,7 +1121,6 @@ AfdDisconnect(PDEVICE_OBJECT DeviceObject, PIRP Irp,
             }
             else
             {
-                /* Bound the wait for the send window to drain by the requested timeout */
                 KeSetTimer(&FCB->DisconnectTimer, FCB->DisconnectTimeout, &FCB->DisconnectDpc);
             }
 
