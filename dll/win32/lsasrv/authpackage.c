@@ -1699,6 +1699,7 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
     SECURITY_LOGON_TYPE LogonType;
     BOOLEAN S4ULogon = FALSE;
     BOOLEAN S4UIdentify = FALSE;
+    BOOLEAN PackageCalled = FALSE;
     NTSTATUS Status;
 
     PUNICODE_STRING UserName = NULL;
@@ -1708,6 +1709,10 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
 
 
     TRACE("LsapLogonUser(%p %p)\n", RequestMsg, LogonContext);
+
+    C_ASSERT(FIELD_OFFSET(LSA_LOGON_USER_MSG, Reply.SubStatus) >=
+             sizeof(((PLSA_LOGON_USER_MSG)NULL)->Request));
+    RequestMsg->LogonUser.Reply.SubStatus = STATUS_SUCCESS;
 
     PackageId = RequestMsg->LogonUser.Request.AuthenticationPackage;
     LogonType = RequestMsg->LogonUser.Request.LogonType;
@@ -1774,6 +1779,8 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
         S4ULogon = TRUE;
         S4UIdentify = !LsapIsTrustedClient(LogonContext->ClientProcessHandle);
     }
+
+    PackageCalled = TRUE;
 
     if (Package->LsaApLogonUserEx2 != NULL)
     {
@@ -2053,7 +2060,7 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
     }
 
 done:
-    if (!NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status) && PackageCalled)
     {
         /* Notify the authentification package of the failure */
         Package->LsaApLogonTerminated(&RequestMsg->LogonUser.Reply.LogonId);
