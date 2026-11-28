@@ -1697,6 +1697,8 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
     ULONG i;
     ULONG PackageId;
     SECURITY_LOGON_TYPE LogonType;
+    BOOLEAN S4ULogon = FALSE;
+    BOOLEAN S4UIdentify = FALSE;
     NTSTATUS Status;
 
     PUNICODE_STRING UserName = NULL;
@@ -1761,16 +1763,7 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
 
     LsapSetClientContext(LogonContext);
 
-    /*
-     * S4U logons create a logon session without presenting any credentials,
-     * so they must be restricted to trusted callers: according to the
-     * LsaLogonUser documentation SeTcbPrivilege is required when an S4U
-     * logon is used. The MSV1_0 authentication data starts with the
-     * message type, so it can be inspected here without depending on
-     * package internals.
-     */
-    if (!LogonContext->TrustedCaller &&
-        LocalAuthInfo != NULL &&
+    if (LocalAuthInfo != NULL &&
         RequestMsg->LogonUser.Request.AuthenticationInformationLength >= sizeof(ULONG) &&
         Package->Name != NULL &&
         Package->Name->Buffer != NULL &&
@@ -1778,9 +1771,8 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
         _strnicmp(Package->Name->Buffer, MSV1_0_PACKAGE_NAME, Package->Name->Length) == 0 &&
         *(PULONG)LocalAuthInfo == MsV1_0S4ULogon)
     {
-        ERR("S4U logon attempt by an untrusted caller, access denied\n");
-        Status = STATUS_PRIVILEGE_NOT_HELD;
-        goto done;
+        S4ULogon = TRUE;
+        S4UIdentify = !LsapIsTrustedClient(LogonContext->ClientProcessHandle);
     }
 
     if (Package->LsaApLogonUserEx2 != NULL)
@@ -1965,7 +1957,7 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
         }
 
         Qos.Length = sizeof(SECURITY_QUALITY_OF_SERVICE);
-        Qos.ImpersonationLevel = SecurityImpersonation;
+        Qos.ImpersonationLevel = S4UIdentify ? SecurityIdentification : SecurityImpersonation;
         Qos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
         Qos.EffectiveOnly = FALSE;
 
@@ -1980,7 +1972,7 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
         Status = NtCreateToken(&TokenHandle,
                                TOKEN_ALL_ACCESS,
                                &ObjectAttributes,
-                               (LogonType == Network || LogonType == NetworkCleartext) ? TokenImpersonation : TokenPrimary,
+                               (S4UIdentify || LogonType == Network || LogonType == NetworkCleartext) ? TokenImpersonation : TokenPrimary,
                                &RequestMsg->LogonUser.Reply.LogonId,
                                &TokenInfo1->ExpirationTime,
                                &TokenInfo1->User,
@@ -2007,11 +1999,12 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
         goto done;
     }
 
-    if (LogonType == Interactive ||
-        LogonType == RemoteInteractive ||
-        LogonType == Batch ||
-        LogonType == Service ||
-        LogonType == Unlock)
+    if (!S4ULogon &&
+        (LogonType == Interactive ||
+         LogonType == RemoteInteractive ||
+         LogonType == Batch ||
+         LogonType == Service ||
+         LogonType == Unlock))
     {
         UserName = &((PMSV1_0_INTERACTIVE_LOGON)LocalAuthInfo)->UserName;
         LogonDomainName = &((PMSV1_0_INTERACTIVE_LOGON)LocalAuthInfo)->LogonDomainName;
