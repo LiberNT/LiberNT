@@ -13,6 +13,11 @@ target_include_directories(ci PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REACTOS_SOUR
 target_compile_definitions(ci PRIVATE MBEDTLS_CONFIG_FILE="ci_config.h")
 set_property(SOURCE ${REACTOS_SOURCE_DIR}/dll/3rdparty/mbedtls/x509_crt.c APPEND PROPERTY COMPILE_DEFINITIONS MBEDTLS_TEST_SW_INET_PTON)
 
+# Image verification hashes whole files through this code, which undefined behavior checks slow down by an order of magnitude.
+if(ENABLE_KERNEL_UBSAN)
+    set_property(SOURCE ${CI_MBEDTLS_SOURCE} APPEND PROPERTY COMPILE_OPTIONS -fno-sanitize=undefined)
+endif()
+
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     set_property(SOURCE ${REACTOS_SOURCE_DIR}/dll/3rdparty/mbedtls/bignum.c APPEND PROPERTY COMPILE_OPTIONS -Wno-unused-but-set-variable)
     set_property(SOURCE ${REACTOS_SOURCE_DIR}/dll/3rdparty/mbedtls/x509_crt.c APPEND PROPERTY COMPILE_OPTIONS -Wno-uninitialized-const-pointer)
