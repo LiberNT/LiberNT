@@ -1196,7 +1196,9 @@ static HRESULT WINAPI client_GetSharedModeEnginePeriod(IAudioClient3 *iface,
         return hr;
 
     *default_period_frames = def_period * format->nSamplesPerSec / (REFERENCE_TIME)10000000;
-    *min_period_frames     = min_period * format->nSamplesPerSec / (REFERENCE_TIME)10000000;
+    /* Round up: a minimum rounded down (132 frames for 3 ms at 44.1 kHz) converts back below the engine's
+     * minimum, and InitializeSharedAudioStream then rejects the very period reported here. */
+    *min_period_frames     = (min_period * format->nSamplesPerSec + 10000000 - 1) / (REFERENCE_TIME)10000000;
     *max_period_frames     = *default_period_frames;
     *unit_period_frames    = 1;
 
@@ -1235,7 +1237,10 @@ static HRESULT WINAPI client_InitializeSharedAudioStream(IAudioClient3 *iface, D
     if (!format)
         return E_POINTER;
 
-    period = period_frames * (REFERENCE_TIME)10000000 / format->nSamplesPerSec;
+    if (!format->nSamplesPerSec)
+        return AUDCLNT_E_UNSUPPORTED_FORMAT;
+    /* Round up, so a period of whole frames at or above the reported minimum is not below it in 100 ns units. */
+    period = (period_frames * (REFERENCE_TIME)10000000 + format->nSamplesPerSec - 1) / format->nSamplesPerSec;
 
     return stream_init(This, FALSE, AUDCLNT_SHAREMODE_SHARED, flags, 0, period, format, session_guid);
 }
