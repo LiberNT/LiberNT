@@ -144,12 +144,15 @@ LsapCheckLogonProcess(PLSA_API_MSG RequestMsg,
             break;
 
         case YES:
-            Context->TrustedCaller = TRUE;
-            break;
-
         case CHECK:
         default:
-            Context->TrustedCaller = LsapIsTrustedClient(ProcessHandle);
+            if (!LsapIsTrustedClient(ProcessHandle))
+            {
+                RtlFreeHeap(RtlGetProcessHeap(), 0, Context);
+                NtClose(ProcessHandle);
+                return STATUS_PORT_CONNECTION_REFUSED;
+            }
+            Context->TrustedCaller = TRUE;
             break;
     }
 

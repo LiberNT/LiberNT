@@ -151,6 +151,8 @@ OpenLogonLsaHandle(VOID)
     Status = LsaRegisterLogonProcess(&LogonProcessName,
                                      &LsaHandle,
                                      &SecurityMode);
+    if (Status == STATUS_PORT_CONNECTION_REFUSED)
+        Status = LsaConnectUntrusted(&LsaHandle);
     if (!NT_SUCCESS(Status))
     {
         TRACE("LsaRegisterLogonProcess failed (Status 0x%08lx)\n", Status);
