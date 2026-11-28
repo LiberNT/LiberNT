@@ -286,7 +286,7 @@ sync_feeds() {
 		FEEDS_WANTED="$FEEDS_WANTED felix86"
 	fi
 	if rdpserver_from_source_enabled; then
-		FEEDS_WANTED="$FEEDS_WANTED openssl"
+		FEEDS_WANTED="$FEEDS_WANTED openssl freerdp"
 	fi
 
 	echo "Updating source feeds:$FEEDS_WANTED"

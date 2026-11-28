@@ -28,3 +28,7 @@ src-git dxc https://github.com/microsoft/DirectXShaderCompiler.git;v1.10.2605.37
 
 # Pinned to a release tag. Only libcrypto and libssl are built, for the RDP server.
 src-git openssl https://github.com/openssl/openssl.git;openssl-3.5.4
+
+# Pinned to a release tag. Only WinPR, the core and the server channels the RDP
+# server uses are built, with submodules/freerdp-libernt.patch applied.
+src-git freerdp https://github.com/FreeRDP/FreeRDP.git;3.32.0

@@ -20,6 +20,7 @@ sdk/tools/winesync/winesync.cfg
 feeds.conf
 /submodules/dxc/
 /submodules/felix86/
+/submodules/freerdp/
 /submodules/fex-arm64ec/
 /submodules/ffmpeg/
 /submodules/mesa/
