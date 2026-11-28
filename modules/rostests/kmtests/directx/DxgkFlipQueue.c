@@ -112,9 +112,18 @@ static VOID TestScanoutStatus(VOID)
     { NTSTATUS Observed = DxgkFlipCoreScanoutStatus(STATUS_DEVICE_REMOVED); ok_eq_hex(Observed, STATUS_DEVICE_REMOVED); }
 }
 
+static VOID TestCompositorOcclusion(VOID)
+{
+    ok_bool_true(DxgkFlipCoreCompositorOccluded(FALSE, TRUE), "another device's exclusive ownership");
+    ok_bool_false(DxgkFlipCoreCompositorOccluded(TRUE, TRUE), "the compositor's own exclusive ownership");
+    ok_bool_false(DxgkFlipCoreCompositorOccluded(FALSE, FALSE), "another device's shared ownership");
+    ok_bool_false(DxgkFlipCoreCompositorOccluded(TRUE, FALSE), "the compositor's own shared ownership");
+}
+
 START_TEST(DxgkFlipQueue)
 {
     TestScanoutStatus();
+    TestCompositorOcclusion();
     TestSourceOwnership();
     TestImmediateFlip();
     TestIntervalPacing();

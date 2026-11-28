@@ -1247,6 +1247,12 @@ DxgkpPresent(
     Entry.Window = (ULONG_PTR)pPresent->hWindow;
     Entry.CompositorGeneration = DxgkVidPnCaptureCompositorGeneration(
         Adapter, Device, Entry.VidPnSourceId, Entry.Window);
+    if (pPresent->Flags.Flip && Entry.CompositorGeneration != 0 &&
+        DxgkVidPnCompositorOccluded(Adapter, Device, Entry.VidPnSourceId))
+    {
+        DxgkpReleasePresentEntry(&Entry);
+        return STATUS_GRAPHICS_PRESENT_OCCLUDED;
+    }
 
     /* Source rectangle. */
     if (pPresent->Flags.SrcRectValid)

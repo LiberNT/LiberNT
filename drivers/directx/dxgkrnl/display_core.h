@@ -111,6 +111,8 @@ BOOLEAN DxgkFlipCoreNotifyVSync(_Inout_ PDXGK_FLIP_QUEUE Queue, _Out_ PULONGLONG
 ULONG DxgkFlipCoreQueuedCount(_In_ const DXGK_FLIP_QUEUE *Queue);
 /* A flip whose source another client owns at scanout is occluded; only DMA faults put a device in error */
 NTSTATUS DxgkFlipCoreScanoutStatus(_In_ NTSTATUS LeaseStatus);
+/* The compositor's flip is occluded at submission while another device owns its source exclusively */
+BOOLEAN DxgkFlipCoreCompositorOccluded(_In_ BOOLEAN OwnerIsPresenter, _In_ BOOLEAN OwnerExclusive);
 
 D3DDDIFORMAT DxgkVidPnCoreDesktopSurfaceFormat(_In_ D3DDDIFORMAT PinnedFormat);
 /* An unpinned path rotation takes the first one the miniport supports; one that names none keeps identity, the rotation a display configuration path always carries. */

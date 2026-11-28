@@ -181,6 +181,12 @@ DxgkVidPnCaptureCompositorGeneration(
     _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId,
     _In_ ULONG_PTR Window);
 
+BOOLEAN
+DxgkVidPnCompositorOccluded(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_DEVICE Device,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId);
+
 /* Device == NULL identifies CDD backing-only work. Program == TRUE owns a
  * programming lease until ReleaseScanoutLease; FALSE owns no lease. */
 NTSTATUS

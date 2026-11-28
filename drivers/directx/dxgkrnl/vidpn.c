@@ -573,6 +573,35 @@ DxgkVidPnCaptureCompositorGeneration(
     return Generation;
 }
 
+BOOLEAN
+DxgkVidPnCompositorOccluded(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_DEVICE Device,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId)
+{
+    PDXGKP_SOURCE_OWNER_ADAPTER_STATE State;
+    PDXGKP_VIDPN_SOURCE_OWNER Owner;
+    BOOLEAN Occluded = FALSE;
+
+    PAGED_CODE();
+    ASSERT(Adapter != NULL);
+    ASSERT(Device != NULL);
+    if (SourceId >= DXGKP_MAX_SOURCES)
+        return FALSE;
+    DxgkpEnsureSourceOwnerMutex();
+    ExAcquireFastMutex(&g_SourceOwnerMutex);
+    State = DxgkpFindSourceOwnerAdapterLocked(Adapter);
+    if (State != NULL && State->Owners[SourceId].OwnerDevice != NULL)
+    {
+        Owner = &State->Owners[SourceId];
+        Occluded = DxgkFlipCoreCompositorOccluded(Owner->OwnerDevice == Device,
+                                                  Owner->OwnerType == D3DKMT_VIDPNSOURCEOWNER_EXCLUSIVE ||
+                                                  Owner->OwnerType == D3DKMT_VIDPNSOURCEOWNER_EXCLUSIVEGDI);
+    }
+    ExReleaseFastMutex(&g_SourceOwnerMutex);
+    return Occluded;
+}
+
 NTSTATUS
 DxgkVidPnAcquireScanoutLease(
     _In_ PDXGKRNL_ADAPTER Adapter,
