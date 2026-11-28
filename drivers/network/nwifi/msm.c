@@ -161,7 +161,6 @@ NwifiMsmDestroy(
     }
 
     InterlockedExchangePointer((PVOID volatile *)&Adapter->MsmContext, NULL);
-    Adapter->MsmZombie = Msm;
     KeAcquireSpinLock(&Msm->WorkItemLock, &OldIrql);
     Msm->WorkItemsHalting = 1;
     KeReleaseSpinLock(&Msm->WorkItemLock, OldIrql);
@@ -174,10 +173,8 @@ NwifiMsmDestroy(
                           FALSE,
                           NULL);
     NwifiSupplicantFree(Msm);
-    /* The Msm memory itself stays valid until the adapter's last reference
-     * drops: an ioctl that grabbed the adapter before the context was cleared
-     * may still be inside one of these paths, and the guard flags above are
-     * what keeps it a no-op rather than a use-after-free. */
+    NdisFreeSpinLock(&Msm->Lock);
+    NwifiFree(Msm);
 }
 
 /* Deferred (PASSIVE_LEVEL) scan-confirm handler. */

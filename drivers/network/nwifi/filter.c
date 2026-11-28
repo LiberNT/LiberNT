@@ -167,8 +167,8 @@ NwifiFilterOidRequestComplete(
     NdisFOidRequestComplete(Adapter->FilterHandle, OidRequest, Status);
 }
 
+static
 VOID
-NTAPI
 NwifiDestroyAdapter(
     _In_ PNWIFI_ADAPTER Adapter)
 {
@@ -275,7 +275,7 @@ NwifiFilterAttach(
 
     InitializeListHead(&Adapter->Link);
     NdisAllocateSpinLock(&Adapter->DataLock);
-    Adapter->RefCount = 1;   /* the adapter list's own reference */
+    ExInitializeRundownProtection(&Adapter->Rundown);
     Adapter->FilterHandle = NdisFilterHandle;
     Adapter->State = NwifiStatePaused;
     Adapter->CurrentLookahead = ETH_MAX_FRAME;
@@ -311,7 +311,7 @@ NwifiFilterAttach(
     return NDIS_STATUS_SUCCESS;
 
 Fail:
-    NwifiDereferenceAdapter(Adapter);
+    NwifiDestroyAdapter(Adapter);
     return Status;
 }
 
@@ -327,15 +327,15 @@ NwifiFilterDetach(
     DPRINT1("NWIFI: detaching interface %u\n", Adapter->InterfaceIndex);
 
     Adapter->State = NwifiStateHalting;
-    if (Adapter->Announced)
-        NwifiMsmInterfaceRemoval(Adapter);
-    NwifiMsmDestroy(Adapter);
-
     NdisAcquireSpinLock(&gNwifi.AdapterLock);
     RemoveEntryList(&Adapter->Link);
     NdisReleaseSpinLock(&gNwifi.AdapterLock);
+    ExWaitForRundownProtectionRelease(&Adapter->Rundown);
 
-    NwifiDereferenceAdapter(Adapter);
+    if (Adapter->Announced)
+        NwifiMsmInterfaceRemoval(Adapter);
+    NwifiMsmDestroy(Adapter);
+    NwifiDestroyAdapter(Adapter);
 }
 
 static

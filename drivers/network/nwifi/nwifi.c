@@ -55,8 +55,8 @@ NwifiReferenceAdapterByIndex(
         PNWIFI_ADAPTER Adapter = CONTAINING_RECORD(Entry, NWIFI_ADAPTER, Link);
         if (Adapter->InterfaceIndex == InterfaceIndex)
         {
-            InterlockedIncrement(&Adapter->RefCount);
-            Found = Adapter;
+            if (ExAcquireRundownProtection(&Adapter->Rundown))
+                Found = Adapter;
             break;
         }
     }
@@ -68,17 +68,7 @@ VOID
 NwifiDereferenceAdapter(
     _In_ PNWIFI_ADAPTER Adapter)
 {
-    if (InterlockedDecrement(&Adapter->RefCount) == 0)
-    {
-        /* The list reference dropped in detach was the last one: no ioctl
-         * user can find the adapter any more, and every earlier user has
-         * released it.  The MSM memory (if the teardown ran) goes with it. */
-        if (Adapter->MsmZombie != NULL)
-            NwifiFree(Adapter->MsmZombie);
-        if (Adapter->MsmContext != NULL)
-            NwifiFree(Adapter->MsmContext);
-        NwifiDestroyAdapter(Adapter);
-    }
+    ExReleaseRundownProtection(&Adapter->Rundown);
 }
 
 static const WCHAR NwifiFilterFriendlyName[] = L"LiberNT Native WiFi Filter";

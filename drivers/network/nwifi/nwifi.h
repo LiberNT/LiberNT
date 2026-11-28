@@ -78,7 +78,7 @@ typedef struct _NWIFI_ADAPTER
 {
     LIST_ENTRY    Link;
     ULONG         InterfaceIndex;
-    volatile LONG RefCount;
+    EX_RUNDOWN_REF Rundown;
 
     NDIS_HANDLE   FilterHandle;
     BOOLEAN       LowerPrepared;
@@ -122,7 +122,6 @@ typedef struct _NWIFI_ADAPTER
     /* Station management object; typed as PNWIFI_MSM (see msm.h), kept as
      * PVOID so this header need not pull in MSM internals. */
     PVOID         MsmContext;
-    PVOID         MsmZombie;   /* torn down by destroy, freed with the last reference */
 } NWIFI_ADAPTER, *PNWIFI_ADAPTER;
 
 /* Per-NBL bookkeeping for locally built NBLs, stored in the pool's per-NBL
@@ -222,7 +221,6 @@ VOID  NwifiFree(_In_ PVOID Buffer);
  * such interface is bound.  Caller must hold no locks; runs at <= DISPATCH. */
 PNWIFI_ADAPTER NwifiReferenceAdapterByIndex(_In_ ULONG InterfaceIndex);
 VOID NwifiDereferenceAdapter(_In_ PNWIFI_ADAPTER Adapter);
-VOID NTAPI NwifiDestroyAdapter(_In_ PNWIFI_ADAPTER Adapter);
 
 /* --- control.c : \Device\Nwifi control device + IOCTL dispatch ------------- */
 NDIS_STATUS NwifiCreateControlDevice(VOID);
