@@ -1130,13 +1130,14 @@ LsaApCallPackage(IN PLSA_CLIENT_REQUEST ClientRequest,
             break;
 
         case MsV1_0ChangePassword:
-            Status = MsvpChangePassword(ClientRequest,
-                                        ProtocolSubmitBuffer,
-                                        ClientBufferBase,
-                                        SubmitBufferLength,
-                                        ProtocolReturnBuffer,
-                                        ReturnBufferLength,
-                                        ProtocolStatus);
+            *ProtocolStatus = MsvpChangePassword(ClientRequest,
+                                                 ProtocolSubmitBuffer,
+                                                 ClientBufferBase,
+                                                 SubmitBufferLength,
+                                                 ProtocolReturnBuffer,
+                                                 ReturnBufferLength,
+                                                 ProtocolStatus);
+            Status = STATUS_SUCCESS;
             break;
 
         case MsV1_0ChangeCachedPassword:
@@ -1201,13 +1202,16 @@ LsaApCallPackageUntrusted(IN PLSA_CLIENT_REQUEST ClientRequest,
     *ReturnBufferLength = 0;
 
     if (MessageType == MsV1_0ChangePassword)
-        Status = MsvpChangePassword(ClientRequest,
-                                    ProtocolSubmitBuffer,
-                                    ClientBufferBase,
-                                    SubmitBufferLength,
-                                    ProtocolReturnBuffer,
-                                    ReturnBufferLength,
-                                    ProtocolStatus);
+    {
+        *ProtocolStatus = MsvpChangePassword(ClientRequest,
+                                             ProtocolSubmitBuffer,
+                                             ClientBufferBase,
+                                             SubmitBufferLength,
+                                             ProtocolReturnBuffer,
+                                             ReturnBufferLength,
+                                             ProtocolStatus);
+        Status = STATUS_SUCCESS;
+    }
     else
         Status = STATUS_ACCESS_DENIED;
 
