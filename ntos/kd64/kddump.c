@@ -206,6 +206,19 @@ static VOID KdpDisplayCrashDumpProgress(_In_ ULONG Percent)
     InbvDisplayString(ProgressText);
 }
 
+#define KDP_DUMP_BREAKIN_POLL_PAGES 256
+
+/* A host that asks for the debugger while the dump is written gets it then; the dump resumes when it continues */
+static VOID KdpPollBreakInDuringDump(_In_ ULONG64 PagesWritten)
+{
+#ifndef _WINKD_
+    if (((PagesWritten % KDP_DUMP_BREAKIN_POLL_PAGES) == 0) && KdBugCheckBreakInPending())
+        DbgBreakPointWithStatus(DBG_STATUS_BUGCHECK_FIRST);
+#else
+    UNREFERENCED_PARAMETER(PagesWritten);
+#endif
+}
+
 static VOID KdpDisplayCrashDumpFailure(_In_ NTSTATUS Status)
 {
     CHAR FailureText[128];
@@ -1691,6 +1704,7 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
                 goto Exit;
 
             PagesWritten++;
+            KdpPollBreakInDuringDump(PagesWritten);
             while ((Step <= KDP_DUMP_DATA_PROGRESS_STEPS) && (PagesWritten >= ProgressPages[Step - 1]))
             {
                 ULONG Percent = Step * (100 / KDP_DUMP_PROGRESS_STEPS);
@@ -1716,6 +1730,7 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
             PhysicalAddress.QuadPart += Length;
             Remaining -= Length;
             PagesWritten += Length >> PAGE_SHIFT;
+            KdpPollBreakInDuringDump(PagesWritten);
             while ((Step <= KDP_DUMP_DATA_PROGRESS_STEPS) && (PagesWritten >= ProgressPages[Step - 1]))
             {
                 ULONG Percent = Step * (100 / KDP_DUMP_PROGRESS_STEPS);

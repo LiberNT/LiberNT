@@ -11,6 +11,7 @@ extern void func_DeviceClassName(void);
 extern void func_DeviceDescription(void);
 extern void func_DeviceExtension(void);
 extern void func_DeviceInterfaceAlias(void);
+extern void func_DisabledService(void);
 extern void func_KmdfServiceSection(void);
 extern void func_PackageRootDevice(void);
 extern void func_DriverFeatureScore(void);
@@ -64,6 +65,7 @@ const struct test winetest_testlist[] =
     { "DeviceDescription", func_DeviceDescription },
     { "DeviceExtension", func_DeviceExtension },
     { "DeviceInterfaceAlias", func_DeviceInterfaceAlias },
+    { "DisabledService", func_DisabledService },
     { "KmdfServiceSection", func_KmdfServiceSection },
     { "PackageRootDevice", func_PackageRootDevice },
     { "DriverFeatureScore", func_DriverFeatureScore },

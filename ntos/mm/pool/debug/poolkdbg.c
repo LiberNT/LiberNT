@@ -12,7 +12,7 @@
 #define NDEBUG
 #include <debug.h>
 
-#if DBG && defined(KDBG)
+#ifdef KDBG
 
 #include <kdbg/kdb.h>
 

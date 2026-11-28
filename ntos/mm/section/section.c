@@ -124,7 +124,8 @@ BOOLEAN
 MiSegmentSparse(
     _In_ PMI_SEGMENT Segment)
 {
-    return (BOOLEAN)(Segment->Kind == MiSegmentDataFile);
+    return (BOOLEAN)(Segment->Kind == MiSegmentDataFile ||
+                     (Segment->Kind == MiSegmentPageFileBacked && Segment->Reserved));
 }
 
 static
@@ -277,6 +278,7 @@ MiSegmentGrow(
         while (Capacity < Needed)
             Capacity *= 2;
 
+        /* TODO: a sparse segment's chunk directory still covers its whole size in nonpaged pool; prototype PTEs belong in a pageable, demand-filled pool */
         Directory = MI_ALLOCATE((Capacity + 1) * sizeof(PMI_PTE));
         if (Directory == NULL)
             return STATUS_INSUFFICIENT_RESOURCES;
@@ -710,6 +712,15 @@ MiSegmentCommitPages(
     Last = MiSegmentPages(Segment);
     if (FirstPage < Last && PageCount < Last - FirstPage)
         Last = FirstPage + PageCount;
+
+    for (Page = FirstPage; Page < Last; Page = MiSegmentNextChunkPage(Page))
+    {
+        if (MiSegmentProtoEnsure(Segment, Page) == NULL)
+        {
+            MI_MUTEX_RELEASE(&Segment->Lock);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+    }
 
     for (Page = FirstPage; Page < Last; Page++)
     {
@@ -1549,7 +1560,7 @@ MiViewPageCommitted(
 
     Page = Vad->SegmentPageOffset + ((VirtualAddress - MI_VAD_START(Vad)) >> PAGE_SHIFT);
     return (BOOLEAN)(Page < MiSegmentPages(Segment) &&
-                     MiSoftKind(MiArchPteRead(MiSegmentProto(Segment, Page))) != MiSoftDecommitted);
+                     MiSoftKind(MiSegmentProtoRead(Segment, Page)) != MiSoftDecommitted);
 }
 
 ULONG
@@ -1931,7 +1942,11 @@ MiResolvePrototypeFault(
 
     Proto = MiSegmentProtoPresent(Segment, Page);
     if (Proto == NULL)
+    {
+        if (MiSoftKind(MiSegmentDefaultProto(Segment, Page)) == MiSoftDecommitted)
+            return STATUS_ACCESS_VIOLATION;
         return STATUS_PENDING_PAGE_IN;
+    }
     ProtoPte = MiArchPteRead(Proto);
     Frame = (ULONG)MiSoftValue(ProtoPte);
 

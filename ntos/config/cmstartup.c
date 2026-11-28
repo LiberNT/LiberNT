@@ -1001,6 +1001,26 @@ CmpMarkPerformanceKeys(VOID)
     }
 }
 
+static
+VOID
+CmpMachineHiveNotLoaded(
+    _In_ PCUNICODE_STRING HiveName,
+    _In_ NTSTATUS Status)
+{
+    ASSERT(!NT_SUCCESS(Status));
+
+    /* Text-mode setup boots with the system hive alone */
+    if (ExpInTextModeSetup) return;
+
+    DPRINT1("CM: machine hive %wZ could not be loaded (0x%08lx)\n", HiveName, Status);
+
+#if DBG
+    KeBugCheckEx(BAD_SYSTEM_CONFIG_INFO, 0, 0, 0, (ULONG_PTR)Status);
+#else
+    /* FIXME: release builds go on without the hive instead of stopping with BAD_SYSTEM_CONFIG_INFO */
+#endif
+}
+
 /*
  * Reads in every hive the machine is made of that is not already in memory.
  * Only possible once a file system is running, so it is asked for again from
@@ -1058,7 +1078,11 @@ CmpInitializeHiveList(VOID)
                                      &Allocate,
                                      CM_CHECK_REGISTRY_VALIDATE_HIVE |
                                      CM_CHECK_REGISTRY_PURGE_VOLATILES);
-        if (!NT_SUCCESS(Status)) continue;
+        if (!NT_SUCCESS(Status))
+        {
+            CmpMachineHiveNotLoaded(&HiveName, Status);
+            continue;
+        }
 
         Hive->Flags |= Entry->CmHiveFlags;
         Entry->CmHive = Hive;
@@ -1072,6 +1096,7 @@ CmpInitializeHiveList(VOID)
         {
             Entry->CmHive = NULL;
             CmpDestroyHive(Hive);
+            CmpMachineHiveNotLoaded(&HiveName, Status);
             continue;
         }
 
@@ -1081,6 +1106,13 @@ CmpInitializeHiveList(VOID)
 
         CmpAddToHiveFileList(Hive);
         CmpNotifyMachineHiveLoaded(&HiveName, Hive);
+    }
+
+    for (i = 0; i < CM_NUMBER_OF_MACHINE_HIVES; i++)
+    {
+        ASSERT(ExpInTextModeSetup ||
+               CmpMachineHiveList[i].BaseName == NULL ||
+               CmpMachineHiveList[i].CmHive != NULL);
     }
 
     /* Published only once every hive is in place, so the unlocked fast path above cannot see a half-built list */
