@@ -2693,14 +2693,45 @@ RtlpGrowBlockInPlace (IN PHEAP Heap,
 
         /* Next entry is free, check if it can fit the block we need */
         FreeSize = InUseEntry->Size + FreeEntry->Size;
-        if (FreeSize < Index) return FALSE;
+        if (FreeSize < Index)
+        {
+            SIZE_T CommitSize;
+            PHEAP_FREE_ENTRY CommittedEntry;
 
-        /* Remember flags of this free entry */
-        RememberFlags = FreeEntry->Flags;
+            /* A free block that ends the committed range is followed by reserved pages */
+            if (!RtlpIsLastCommittedEntry((PHEAP_ENTRY)FreeEntry)) return FALSE;
 
-        /* Remove this block from the free list */
-        RtlpRemoveFreeBlock(Heap, FreeEntry, FALSE);
-        Heap->TotalFreeSize -= FreeEntry->Size;
+            CommitSize = ROUND_UP((Index - FreeSize) << HEAP_ENTRY_SHIFT, PAGE_SIZE);
+            CommittedEntry = RtlpFindAndCommitPages(Heap,
+                                                    RtlpHeapSegmentFromAddress(Heap, InUseEntry),
+                                                    &CommitSize,
+                                                    (PVOID)PAGE_ROUND_UP((PHEAP_ENTRY)FreeEntry + FreeEntry->Size));
+            if (!CommittedEntry) return FALSE;
+
+            CommitSize >>= HEAP_ENTRY_SHIFT;
+            FreeEntry = RtlpCoalesceFreeBlocks(Heap, CommittedEntry, &CommitSize, FALSE);
+            ASSERT(FreeEntry == (PHEAP_FREE_ENTRY)(InUseEntry + InUseEntry->Size));
+            ASSERT(!(FreeEntry->Flags & HEAP_ENTRY_BUSY));
+
+            if (CommitSize + InUseEntry->Size < Index)
+            {
+                RtlpInsertFreeBlock(Heap, FreeEntry, CommitSize);
+                Heap->TotalFreeSize += CommitSize;
+                return FALSE;
+            }
+
+            RememberFlags = FreeEntry->Flags;
+            FreeSize = CommitSize + InUseEntry->Size;
+        }
+        else
+        {
+            /* Remember flags of this free entry */
+            RememberFlags = FreeEntry->Flags;
+
+            /* Remove this block from the free list */
+            RtlpRemoveFreeBlock(Heap, FreeEntry, FALSE);
+            Heap->TotalFreeSize -= FreeEntry->Size;
+        }
     }
 
     PrevSize = (InUseEntry->Size << HEAP_ENTRY_SHIFT) - InUseEntry->UnusedBytes;

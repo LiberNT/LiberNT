@@ -8,6 +8,7 @@ add_subdirectory(werhandler)
 add_message_headers(ANSI FormatMessage.mc)
 
 list(APPEND SOURCE
+    HeapGrowInPlace.c
     ApiSetHosts.c
     ExportForwarders.c
     PackageInfo.c

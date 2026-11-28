@@ -2,6 +2,7 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_HeapGrowInPlace(void);
 extern void func_ExportForwarders(void);
 extern void func_PackageInfo(void);
 extern void func_ApiSetHosts(void);
@@ -246,6 +247,7 @@ extern void func_FileSecurityCache(void);
 
 const struct test winetest_testlist[] =
 {
+    { "HeapGrowInPlace", func_HeapGrowInPlace },
     { "ExportForwarders", func_ExportForwarders },
     { "PackageInfo", func_PackageInfo },
     { "GlobalMemoryStatusVirtual", func_GlobalMemoryStatusVirtual },
