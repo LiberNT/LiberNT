@@ -66,7 +66,7 @@ static_assert(XSTATE_ARM64_SVE == 2 && XSTATE_MASK_ARM64_SVE == 4, "SVE feature"
 #endif
 #ifdef _ARM64_
 static_assert(XSTATE_MASK_ALLOWED == 4 && XSTATE_MASK_LEGACY == 0, "ARM64 state masks");
-static_assert(CONTEXT_XSTATE == 0x00400020 && CONTEXT_ALL == 0x004000df, "ARM64 context flags");
+static_assert(CONTEXT_XSTATE == 0x00400020 && CONTEXT_ALL == 0x0040001f, "ARM64 context flags");
 #endif
 
 static_assert(JobObjectGroupInformation == 11, "job processor groups");
