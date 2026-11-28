@@ -121,15 +121,114 @@ RemoveMapping(PUNICODE_STRING DomainName, PUNICODE_STRING AccountName)
     FreeOutput(Output);
 }
 
+static NTSTATUS
+Manage(LSA_SID_NAME_MAPPING_OPERATION_TYPE Type, PLSA_SID_NAME_MAPPING_OPERATION_INPUT Input, int *Error)
+{
+    PLSA_SID_NAME_MAPPING_OPERATION_OUTPUT Output = NULL;
+    NTSTATUS Status;
+
+    Status = pLsaManageSidNameMapping(Type, Input, &Output);
+    *Error = Output ? (int)Output->AddOutput.ErrorCode : -1;
+    FreeOutput(Output);
+    return Status;
+}
+
+static void
+SetAddInput(PLSA_SID_NAME_MAPPING_OPERATION_INPUT Input, PUNICODE_STRING Domain, PUNICODE_STRING Account, PSID Sid)
+{
+    ZeroMemory(Input, sizeof(*Input));
+    Input->AddInput.DomainName = *Domain;
+    Input->AddInput.AccountName = *Account;
+    Input->AddInput.Sid = Sid;
+}
+
+static void
+SetRemoveInput(PLSA_SID_NAME_MAPPING_OPERATION_INPUT Input, PUNICODE_STRING Domain, PUNICODE_STRING Account)
+{
+    ZeroMemory(Input, sizeof(*Input));
+    Input->RemoveInput.DomainName = *Domain;
+    Input->RemoveInput.AccountName = *Account;
+}
+
+static BOOL
+SetTcbPrivilege(BOOL Enable, BOOL *WasEnabled)
+{
+    TOKEN_PRIVILEGES New, Old;
+    DWORD Len = sizeof(Old);
+    HANDLE Token;
+    BOOL Ret;
+
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &Token))
+        return FALSE;
+    New.PrivilegeCount = 1;
+    New.Privileges[0].Attributes = Enable ? SE_PRIVILEGE_ENABLED : 0;
+    Ret = LookupPrivilegeValueW(NULL, SE_TCB_NAME, &New.Privileges[0].Luid) &&
+          AdjustTokenPrivileges(Token, FALSE, &New, sizeof(Old), &Old, &Len) &&
+          GetLastError() == ERROR_SUCCESS;
+    if (WasEnabled)
+        *WasEnabled = Ret && Old.PrivilegeCount == 1 && (Old.Privileges[0].Attributes & SE_PRIVILEGE_ENABLED);
+    CloseHandle(Token);
+    return Ret;
+}
+
+static
+void
+TestMappingWithoutTcb(PUNICODE_STRING DomainName, PUNICODE_STRING AccountName, PSID Sid)
+{
+    LSA_SID_NAME_MAPPING_OPERATION_INPUT Input;
+    NTSTATUS Status;
+    int Error;
+
+    SetRemoveInput(&Input, DomainName, AccountName);
+    Status = Manage(LsaSidNameMappingOperation_Remove, &Input, &Error);
+    ok(Status == STATUS_PRIVILEGE_NOT_HELD, "Remove without SeTcbPrivilege: status 0x%08lx\n", Status);
+    ok(Error == LsaSidNameMappingOperation_NonMappingError, "Remove without SeTcbPrivilege: error %d\n", Error);
+
+    SetAddInput(&Input, DomainName, AccountName, Sid);
+    Status = Manage(LsaSidNameMappingOperation_Add, &Input, &Error);
+    ok(Status == STATUS_PRIVILEGE_NOT_HELD, "Add without SeTcbPrivilege: status 0x%08lx\n", Status);
+    ok(Error == LsaSidNameMappingOperation_NonMappingError, "Add without SeTcbPrivilege: error %d\n", Error);
+}
+
+static
+void
+TestVirtualLogon(PCWSTR Account, PCWSTR Domain, DWORD ExpectedError)
+{
+    WCHAR AccountName[64], DomainName[64];
+    HANDLE Token = NULL;
+    DWORD Error;
+    BOOL Result;
+
+    if (pLogonUserExExW == NULL)
+    {
+        skip("LogonUserExExW not available\n");
+        return;
+    }
+
+    wcscpy(AccountName, Account);
+    wcscpy(DomainName, Domain);
+    SetLastError(0xdeadbeef);
+    Result = pLogonUserExExW(AccountName, DomainName, (LPWSTR)L"",
+                             LOGON32_LOGON_SERVICE, LOGON32_PROVIDER_VIRTUAL,
+                             NULL, &Token, NULL, NULL, NULL, NULL);
+    Error = GetLastError();
+    ok(!Result, "Virtual logon of %ls\\%ls unexpectedly succeeded\n", Domain, Account);
+    ok(Error == ExpectedError, "Virtual logon of %ls\\%ls: error %lu, expected %lu\n",
+       Domain, Account, Error, ExpectedError);
+    if (Token != NULL)
+        CloseHandle(Token);
+}
+
 static
 void
 TestMappingRoundtrip(VOID)
 {
     LSA_SID_NAME_MAPPING_OPERATION_INPUT Input;
     PLSA_SID_NAME_MAPPING_OPERATION_OUTPUT Output;
-    UNICODE_STRING DomainName, AccountName, AccountName2;
+    UNICODE_STRING DomainName, AccountName, AccountName2, OtherDomain;
     NTSTATUS Status;
     PSID Sid, Sid2;
+    int Error;
 
     Sid = MakeTestSid(0x44444444);
     Sid2 = MakeTestSid(0x55555555);
@@ -140,151 +239,83 @@ TestMappingRoundtrip(VOID)
     RtlInitUnicodeString(&DomainName, TEST_DOMAIN);
     RtlInitUnicodeString(&AccountName, TEST_ACCOUNT);
     RtlInitUnicodeString(&AccountName2, TEST_ACCOUNT2);
+    RtlInitUnicodeString(&OtherDomain, L"LntNoSuchDomain");
 
-    /* Clean leftovers from earlier runs */
+    if (!SetTcbPrivilege(TRUE, NULL))
+    {
+        trace("Caller does not hold SeTcbPrivilege\n");
+        TestMappingWithoutTcb(&DomainName, &AccountName, Sid);
+        TestVirtualLogon(TEST_ACCOUNT, TEST_DOMAIN, ERROR_ACCESS_DENIED);
+        FreeSid(Sid);
+        FreeSid(Sid2);
+        return;
+    }
+
     RemoveMapping(&DomainName, &AccountName);
     RemoveMapping(&DomainName, &AccountName2);
 
-    /* Removing an absent mapping fails and reports MappingNotFound */
-    Output = NULL;
-    ZeroMemory(&Input, sizeof(Input));
-    Input.RemoveInput.DomainName = DomainName;
-    Input.RemoveInput.AccountName = AccountName;
-    Status = pLsaManageSidNameMapping(LsaSidNameMappingOperation_Remove, &Input, &Output);
-    if (Status == STATUS_ACCESS_DENIED || Status == STATUS_PRIVILEGE_NOT_HELD)
-    {
-        if (Status == STATUS_PRIVILEGE_NOT_HELD)
-            ok(Output != NULL && Output->RemoveOutput.ErrorCode == LsaSidNameMappingOperation_NonMappingError,
-               "Without the privilege the error is %d, expected NonMappingError\n",
-               Output ? Output->RemoveOutput.ErrorCode : -1);
-        skip("Mapping operations need administrator rights\n");
-        FreeOutput(Output);
-        FreeSid(Sid);
-        FreeSid(Sid2);
-        return;
-    }
-    ok(!NT_SUCCESS(Status), "Absent remove unexpectedly succeeded (0x%08lx)\n", Status);
-    ok(Output != NULL, "Absent remove produced no output\n");
-    if (Output != NULL)
-        ok(Output->RemoveOutput.ErrorCode == LsaSidNameMappingOperation_MappingNotFound,
-           "Absent remove error %d, expected MappingNotFound\n", Output->RemoveOutput.ErrorCode);
-    FreeOutput(Output);
+    SetRemoveInput(&Input, &DomainName, &AccountName);
+    Status = Manage(LsaSidNameMappingOperation_Remove, &Input, &Error);
+    ok(Status == STATUS_NOT_FOUND, "Absent remove: status 0x%08lx\n", Status);
+    ok(Error == LsaSidNameMappingOperation_MappingNotFound, "Absent remove: error %d\n", Error);
 
-    /* Add the mapping: succeeds and reports Success */
-    Output = NULL;
-    ZeroMemory(&Input, sizeof(Input));
-    Input.AddInput.DomainName = DomainName;
-    Input.AddInput.AccountName = AccountName;
-    Input.AddInput.Sid = Sid;
-    Input.AddInput.Flags = 0;
-    Status = pLsaManageSidNameMapping(LsaSidNameMappingOperation_Add, &Input, &Output);
-    if (Status == STATUS_ACCESS_DENIED || Status == STATUS_PRIVILEGE_NOT_HELD)
+    TestVirtualLogon(TEST_ACCOUNT, TEST_DOMAIN, ERROR_NONE_MAPPED);
+
+    SetAddInput(&Input, &DomainName, &AccountName, Sid);
+    Status = Manage(LsaSidNameMappingOperation_Add, &Input, &Error);
+    ok(Status == STATUS_SUCCESS, "Add: status 0x%08lx\n", Status);
+    ok(Error == LsaSidNameMappingOperation_Success, "Add: error %d\n", Error);
+
+    Status = Manage(LsaSidNameMappingOperation_Add, &Input, &Error);
+    ok(Status == STATUS_INVALID_PARAMETER, "Re-add: status 0x%08lx\n", Status);
+    ok(Error == LsaSidNameMappingOperation_SidCollision, "Re-add: error %d\n", Error);
+
+    SetAddInput(&Input, &DomainName, &AccountName, Sid2);
+    Status = Manage(LsaSidNameMappingOperation_Add, &Input, &Error);
+    ok(Status == STATUS_INVALID_PARAMETER, "Name collision: status 0x%08lx\n", Status);
+    ok(Error == LsaSidNameMappingOperation_NameCollision, "Name collision: error %d\n", Error);
+
+    SetAddInput(&Input, &DomainName, &AccountName2, Sid);
+    Status = Manage(LsaSidNameMappingOperation_Add, &Input, &Error);
+    ok(Status == STATUS_INVALID_PARAMETER, "SID collision: status 0x%08lx\n", Status);
+    ok(Error == LsaSidNameMappingOperation_SidCollision, "SID collision: error %d\n", Error);
+
+    SetAddInput(&Input, &OtherDomain, &AccountName2, Sid2);
+    Status = Manage(LsaSidNameMappingOperation_Add, &Input, &Error);
+    ok(Status == STATUS_INVALID_PARAMETER, "Unknown domain: status 0x%08lx\n", Status);
+    ok(Error == LsaSidNameMappingOperation_DomainNotFound, "Unknown domain: error %d\n", Error);
+
+    SetAddInput(&Input, &DomainName, &AccountName2, NULL);
+    Status = Manage(LsaSidNameMappingOperation_Add, &Input, &Error);
+    ok(Status == RPC_NT_NULL_REF_POINTER, "NULL SID: status 0x%08lx\n", Status);
+    ok(Error == LsaSidNameMappingOperation_NonMappingError, "NULL SID: error %d\n", Error);
+
+    Output = (PVOID)0xdeadbeef;
+    Status = pLsaManageSidNameMapping((LSA_SID_NAME_MAPPING_OPERATION_TYPE)7, &Input, &Output);
+    ok(Status == STATUS_INVALID_PARAMETER, "Bad operation: status 0x%08lx\n", Status);
+    ok(Output == (PVOID)0xdeadbeef, "Bad operation: output %p\n", Output);
+
+    TestVirtualLogon(TEST_ACCOUNT, TEST_DOMAIN, ERROR_ACCESS_DENIED);
+
+    if (SetTcbPrivilege(FALSE, NULL))
     {
-        if (Status == STATUS_PRIVILEGE_NOT_HELD)
-            ok(Output != NULL && Output->AddOutput.ErrorCode == LsaSidNameMappingOperation_NonMappingError,
-               "Without the privilege the error is %d, expected NonMappingError\n",
-               Output ? Output->AddOutput.ErrorCode : -1);
-        skip("Mapping operations need administrator rights\n");
-        FreeOutput(Output);
-        FreeSid(Sid);
-        FreeSid(Sid2);
-        return;
-    }
-    ok(NT_SUCCESS(Status), "Add failed with status 0x%08lx\n", Status);
-    ok(Output != NULL, "Add produced no output\n");
-    if (Output != NULL)
-        ok(Output->AddOutput.ErrorCode == LsaSidNameMappingOperation_Success,
-           "Add error %d, expected Success\n", Output->AddOutput.ErrorCode);
-    FreeOutput(Output);
-    if (!NT_SUCCESS(Status))
-    {
-        skip("Cannot exercise the store\n");
-        FreeSid(Sid);
-        FreeSid(Sid2);
-        return;
+        TestMappingWithoutTcb(&DomainName, &AccountName2, Sid2);
+        ok(SetTcbPrivilege(TRUE, NULL), "Re-enabling SeTcbPrivilege failed\n");
     }
 
-    /* Re-adding the exact same mapping is idempotent */
-    Output = NULL;
-    Status = pLsaManageSidNameMapping(LsaSidNameMappingOperation_Add, &Input, &Output);
-    ok(NT_SUCCESS(Status), "Idempotent re-add failed with 0x%08lx\n", Status);
-    ok(Output != NULL && Output->AddOutput.ErrorCode == LsaSidNameMappingOperation_Success,
-       "Re-add error %d, expected Success\n",
-       Output ? (int)Output->AddOutput.ErrorCode : -1);
-    FreeOutput(Output);
+    SetRemoveInput(&Input, &DomainName, &AccountName);
+    Status = Manage(LsaSidNameMappingOperation_Remove, &Input, &Error);
+    ok(Status == STATUS_SUCCESS, "Remove: status 0x%08lx\n", Status);
+    ok(Error == LsaSidNameMappingOperation_Success, "Remove: error %d\n", Error);
 
-    /* Same name with a different SID: name collision, store unchanged */
-    Output = NULL;
-    Input.AddInput.Sid = Sid2;
-    Status = pLsaManageSidNameMapping(LsaSidNameMappingOperation_Add, &Input, &Output);
-    ok(!NT_SUCCESS(Status), "Name collision unexpectedly succeeded\n");
-    ok(Output != NULL, "Name collision produced no output\n");
-    if (Output != NULL)
-        ok(Output->AddOutput.ErrorCode == LsaSidNameMappingOperation_NameCollision,
-           "Collision error %d, expected NameCollision\n", Output->AddOutput.ErrorCode);
-    FreeOutput(Output);
+    Status = Manage(LsaSidNameMappingOperation_Remove, &Input, &Error);
+    ok(Status == STATUS_NOT_FOUND, "Second remove: status 0x%08lx\n", Status);
+    ok(Error == LsaSidNameMappingOperation_MappingNotFound, "Second remove: error %d\n", Error);
 
-    /* Same SID under a different name: SID collision */
-    Output = NULL;
-    Input.AddInput.AccountName = AccountName2;
-    Input.AddInput.Sid = Sid;
-    Status = pLsaManageSidNameMapping(LsaSidNameMappingOperation_Add, &Input, &Output);
-    ok(!NT_SUCCESS(Status), "SID collision unexpectedly succeeded\n");
-    ok(Output != NULL, "SID collision produced no output\n");
-    if (Output != NULL)
-        ok(Output->AddOutput.ErrorCode == LsaSidNameMappingOperation_SidCollision,
-           "Collision error %d, expected SidCollision\n", Output->AddOutput.ErrorCode);
-    FreeOutput(Output);
-
-    /* The original mapping survived the collisions: removing it succeeds */
-    Output = NULL;
-    ZeroMemory(&Input, sizeof(Input));
-    Input.RemoveInput.DomainName = DomainName;
-    Input.RemoveInput.AccountName = AccountName;
-    Status = pLsaManageSidNameMapping(LsaSidNameMappingOperation_Remove, &Input, &Output);
-    ok(NT_SUCCESS(Status), "Remove failed with status 0x%08lx\n", Status);
-    ok(Output != NULL && Output->RemoveOutput.ErrorCode == LsaSidNameMappingOperation_Success,
-       "Remove error %d, expected Success\n",
-       Output ? (int)Output->RemoveOutput.ErrorCode : -1);
-    FreeOutput(Output);
-
-    /* And now it is gone */
-    Output = NULL;
-    Status = pLsaManageSidNameMapping(LsaSidNameMappingOperation_Remove, &Input, &Output);
-    ok(!NT_SUCCESS(Status), "Second remove unexpectedly succeeded\n");
-    FreeOutput(Output);
+    TestVirtualLogon(TEST_ACCOUNT, TEST_DOMAIN, ERROR_NONE_MAPPED);
 
     FreeSid(Sid);
     FreeSid(Sid2);
-}
-
-static
-void
-TestVirtualLogon(VOID)
-{
-    WCHAR AccountName[] = TEST_ACCOUNT;
-    WCHAR DomainName[] = TEST_DOMAIN;
-    HANDLE Token = NULL;
-    BOOL Result;
-    DWORD Error;
-
-    if (pLogonUserExExW == NULL)
-    {
-        skip("LogonUserExExW not available\n");
-        return;
-    }
-
-    /* Logging on an unmapped virtual account fails */
-    SetLastError(0xdeadbeef);
-    Result = pLogonUserExExW(AccountName, DomainName, (LPWSTR)L"",
-                             LOGON32_LOGON_SERVICE, LOGON32_PROVIDER_VIRTUAL,
-                             NULL, &Token, NULL, NULL, NULL, NULL);
-    Error = GetLastError();
-    ok(!Result, "Unmapped virtual logon unexpectedly succeeded\n");
-    trace("unmapped logon error: %lu\n", Error);
-    ok(Error != 0xdeadbeef, "Error was not set\n");
-    if (Token != NULL)
-        CloseHandle(Token);
 }
 
 START_TEST(LogonUserVirtual)
@@ -304,6 +335,4 @@ START_TEST(LogonUserVirtual)
         skip("LsaManageSidNameMapping not available\n");
     else
         TestMappingRoundtrip();
-
-    TestVirtualLogon();
 }
