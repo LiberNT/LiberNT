@@ -1662,10 +1662,24 @@ START_TEST(minidump)
 
     test_minidump_contents();
     test_current_process();
+#ifndef __REACTOS__
+    test_callback();
+    test_vm_read();
+    test_exception();
+#endif
+}
+
+#ifdef __REACTOS__
+START_TEST(minidump_cb)
+{
+    if ((pSetThreadDescription = (void *)GetProcAddress(GetModuleHandleW(L"kernel32"), "SetThreadDescription")))
+        pSetThreadDescription(GetCurrentThread(), main_thread_name);
+
     test_callback();
     test_vm_read();
     test_exception();
 }
+#endif
 
 START_TEST(minidump_full)
 {
