@@ -247,13 +247,9 @@ TDI_STATUS InfoTdiQueryGetConnectionTcpTable(PADDRESS_FILE AddrFile,
         Size = sizeof(MIB_TCPROW);
     }
 
-    /* The entity list keeps this pointer registered until late in AddrFileFree,
-     * so the object may already be mid-teardown with a zero reference count.
-     * Pin it only if it is still live; a dead or dying file contributes no rows. */
     if (!AddrFileReferenceByPointer(AddrFile))
         return TDI_INVALID_REQUEST;
 
-    /* Accepted endpoints chain onto the listening address file; emit one row per endpoint. */
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(&AddrFile->Resource, TRUE);
@@ -473,9 +469,6 @@ TDI_STATUS InfoTdiQueryGetConnectionUdpTable(PADDRESS_FILE AddrFile,
         Size = sizeof(MIB_UDPROW);
     }
 
-    /* Same entity-context lifetime race as the TCP table: pin or bail. The
-     * fields read below are immutable after creation, so no lock is needed
-     * once the object is known-live. */
     if (!AddrFileReferenceByPointer(AddrFile))
         return TDI_INVALID_REQUEST;
 
