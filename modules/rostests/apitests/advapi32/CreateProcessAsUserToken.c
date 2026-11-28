@@ -134,7 +134,7 @@ START_TEST(CreateProcessAsUserToken)
     if (Own == NULL) return;
 
     Privileges.PrivilegeCount = 1;
-    ok(LookupPrivilegeValueW(NULL, SE_ASSIGNPRIMARYTOKEN_NAME, &Privileges.Privileges[0].Luid), "LookupPrivilegeValueW failed\n");
+    ok(LookupPrivilegeValueW(NULL, L"SeAssignPrimaryTokenPrivilege", &Privileges.Privileges[0].Luid), "LookupPrivilegeValueW failed\n");
     Privileges.Privileges[0].Attributes = SE_PRIVILEGE_REMOVED;
     ok(AdjustTokenPrivileges(Own, FALSE, &Privileges, 0, NULL, NULL), "AdjustTokenPrivileges failed with %lu\n", GetLastError());
 
