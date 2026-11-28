@@ -275,8 +275,22 @@ static void CheckOfferedName(const wchar_t *model, const wchar_t *title, const w
        OfferedName(update).c_str(), expected);
 }
 
+static void CheckInstallAllStopped(DWORD scanError, size_t failed, bool stopped, int exitCode)
+{
+    int code = -1;
+    bool result = InstallAllStopped(scanError, failed, code);
+
+    ok(result == stopped, "scan 0x%lx, %Iu failed: stopped %d, expected %d\n", scanError, failed, result, stopped);
+    ok(code == exitCode, "scan 0x%lx, %Iu failed: exit %d, expected %d\n", scanError, failed, code, exitCode);
+}
+
 START_TEST(CatalogRules)
 {
+    CheckInstallAllStopped(ERROR_INTERNET_CANNOT_CONNECT, 0, true, ERROR_INTERNET_CANNOT_CONNECT);
+    CheckInstallAllStopped(ERROR_INTERNET_NAME_NOT_RESOLVED, 0, true, ERROR_INTERNET_NAME_NOT_RESOLVED);
+    CheckInstallAllStopped(ERROR_LNTDRV_CATALOG_THROTTLED, 1, true, (int)ERROR_LNTDRV_CATALOG_THROTTLED);
+    CheckInstallAllStopped(ERROR_SUCCESS, 2, false, 2);
+    CheckInstallAllStopped(ERROR_CANCELLED, 0, false, 0);
     CheckOfferedName(L"AMD Radeon(TM) 780M Graphics", L"Advanced Micro Devices, Inc. - Display - 32.0.21025.1001",
                      L"AMD Radeon(TM) 780M Graphics");
     CheckOfferedName(L"", L"Realtek Semiconductor Corp. - Net - 10.74.1128.2024",

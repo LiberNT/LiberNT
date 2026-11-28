@@ -113,6 +113,14 @@ bool StopsCatalogScan(DWORD error)
     return IsOfflineError(error) || error == ERROR_LNTDRV_CATALOG_THROTTLED;
 }
 
+bool InstallAllStopped(DWORD scanError, size_t failed, int &exitCode)
+{
+    bool stopped = StopsCatalogScan(scanError);
+
+    exitCode = stopped ? (int)scanError : (int)failed;
+    return stopped;
+}
+
 std::wstring SpeedNumber(ULONGLONG bytesPerSecond, bool &megabytes)
 {
     ULONGLONG tenths;

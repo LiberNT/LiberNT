@@ -353,26 +353,24 @@ ListContains(
     return FALSE;
 }
 
-static VOID
-RemoveDevicesUsingInf(
-    _In_ PCWSTR PublishedName)
+static BOOL
+UninstallDriverPackage(
+    _In_ PCWSTR PublishedName,
+    _Out_ PBOOL NeedReboot)
 {
-    SP_DEVINFO_DATA DeviceInfoData;
-    HDEVINFO DeviceInfoSet;
-    DWORD Index;
+    WCHAR InfPath[MAX_PATH];
+    UINT Length;
 
-    DeviceInfoSet = SetupDiGetClassDevsW(NULL, NULL, NULL, DIGCF_ALLCLASSES);
-    if (DeviceInfoSet == INVALID_HANDLE_VALUE)
-        return;
-
-    DeviceInfoData.cbSize = sizeof(DeviceInfoData);
-    for (Index = 0; SetupDiEnumDeviceInfo(DeviceInfoSet, Index, &DeviceInfoData); Index++)
+    *NeedReboot = FALSE;
+    Length = GetSystemWindowsDirectoryW(InfPath, _countof(InfPath));
+    if (Length == 0 || Length + 5 + wcslen(PublishedName) >= _countof(InfPath) || wcschr(PublishedName, L'\\'))
     {
-        if (IsUsingInf(DeviceInfoSet, &DeviceInfoData, PublishedName))
-            SetupDiCallClassInstaller(DIF_REMOVE, DeviceInfoSet, &DeviceInfoData);
+        SetLastError(ERROR_NOT_AN_INSTALLED_OEM_INF);
+        return FALSE;
     }
-
-    SetupDiDestroyDeviceInfoList(DeviceInfoSet);
+    wcscat(InfPath, L"\\inf\\");
+    wcscat(InfPath, PublishedName);
+    return DiUninstallDriverW(NULL, InfPath, 0, NeedReboot);
 }
 
 static VOID
@@ -625,6 +623,7 @@ CommandDeleteDriver(
     BOOL Uninstall = FALSE;
     BOOL Force = LegacyForce;
     BOOL Reboot = FALSE;
+    BOOL NeedReboot = FALSE;
     DWORD Error = ERROR_SUCCESS;
     INT i;
 
@@ -653,14 +652,11 @@ CommandDeleteDriver(
         Force = FALSE;
     }
 
-    if (Uninstall)
+    if (Uninstall ? UninstallDriverPackage(Name, &NeedReboot)
+                  : SetupUninstallOEMInfW(Name, Force ? SUOI_FORCEDELETE : 0, NULL))
     {
-        RemoveDevicesUsingInf(Name);
-        ConPuts(StdOut, L"Driver package uninstalled.\n");
-    }
-
-    if (SetupUninstallOEMInfW(Name, Force ? SUOI_FORCEDELETE : 0, NULL))
-    {
+        if (Uninstall)
+            ConPuts(StdOut, L"Driver package uninstalled.\n");
         ConPuts(StdOut, L"Driver package deleted successfully.\n");
     }
     else
@@ -680,7 +676,7 @@ CommandDeleteDriver(
     if (Uninstall)
         ScanDevices();
 
-    return FinishOperation(Error, FALSE, Reboot);
+    return FinishOperation(Error, NeedReboot, Reboot);
 }
 
 static VOID

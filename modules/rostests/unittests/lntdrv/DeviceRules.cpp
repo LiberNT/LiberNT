@@ -58,6 +58,46 @@ static void CheckVersion(const wchar_t *installed, const wchar_t *offered, Drive
        offered, (int)CompareVersionText(device, offered), (int)expected);
 }
 
+static void CheckOfferedRank()
+{
+    DeviceInfo gpu = Device(L"PCI\\VEN_1002&DEV_15D8&SUBSYS_01231002&REV_C2\\4&8AC26EC8&0&0041",
+                            { L"PCI\\VEN_1002&DEV_15D8&SUBSYS_01231002&REV_C2", L"PCI\\VEN_1002&DEV_15D8&SUBSYS_01231002" },
+                            { L"PCI\\VEN_1002&DEV_15D8&REV_C2", L"PCI\\VEN_1002&DEV_15D8", L"PCI\\CC_0300" });
+    const std::vector<std::wstring> sameId = { L"pci\\ven_1002&dev_15d8&rev_c2" };
+    const std::vector<std::wstring> subsysId = { L"PCI\\VEN_1002&DEV_15D8&SUBSYS_01231002" };
+
+    gpu.Inf = L"oem1.inf";
+    gpu.Service = L"amdkmdag";
+    gpu.DriverVersion = L"31.0.21923.11000";
+    gpu.MatchingId = L"PCI\\VEN_1002&DEV_15D8&REV_C2";
+    ok(GenericDriver(gpu), "vendor driver on a compatible ID is not ranked as a compatible-ID match\n");
+    ok(CompareVersionText(gpu, L"31.0.12027.9001", sameId) == DriverOrder::Older,
+       "older update on the same ID: order %d\n", (int)CompareVersionText(gpu, L"31.0.12027.9001", sameId));
+    ok(CompareVersionText(gpu, L"31.0.25000.0", sameId) == DriverOrder::Newer,
+       "newer update on the same ID: order %d\n", (int)CompareVersionText(gpu, L"31.0.25000.0", sameId));
+    ok(CompareVersionText(gpu, L"31.0.21923.11000", sameId) == DriverOrder::Same,
+       "same update on the same ID: order %d\n", (int)CompareVersionText(gpu, L"31.0.21923.11000", sameId));
+    ok(CompareVersionText(gpu, L"31.0.12027.9001", subsysId) == DriverOrder::Newer,
+       "older update on a hardware ID: order %d\n", (int)CompareVersionText(gpu, L"31.0.12027.9001", subsysId));
+    ok(CompareVersionText(gpu, L"31.0.12027.9001") == DriverOrder::Newer,
+       "update without IDs on a compatible-ID driver: order %d\n", (int)CompareVersionText(gpu, L"31.0.12027.9001"));
+
+    gpu.Inf = L"basicdisplay.inf";
+    gpu.Service = L"BasicDisplay";
+    gpu.DriverVersion = L"10.0.26100.1";
+    gpu.MatchingId = L"PCI\\CC_0300";
+    ok(CompareVersionText(gpu, L"1.0.0.0", sameId) == DriverOrder::Newer,
+       "vendor update over the class-code driver: order %d\n", (int)CompareVersionText(gpu, L"1.0.0.0", sameId));
+
+    gpu.MatchingId = L"PCI\\VEN_1002&DEV_15D8&SUBSYS_01231002&REV_C2";
+    gpu.Inf = L"oem1.inf";
+    gpu.Service = L"amdkmdag";
+    gpu.DriverVersion = L"31.0.21923.11000";
+    ok(CompareVersionText(gpu, L"31.0.30000.0", sameId) == DriverOrder::Older,
+       "newer update on a compatible ID over a hardware-ID driver: order %d\n",
+       (int)CompareVersionText(gpu, L"31.0.30000.0", sameId));
+}
+
 static void CheckCatalogSource()
 {
     const wchar_t *nicIds[] = { L"PCI\\VEN_8086&DEV_15F3&SUBSYS_00008086&REV_03", L"PCI\\VEN_8086&DEV_15F3&SUBSYS_00008086" };
@@ -249,6 +289,7 @@ START_TEST(DeviceRules)
     CheckVersion(L"31.0.101.2140", L"32.0.101.2140", DriverOrder::Newer);
     CheckVersion(L"65535.0.0.0", L"1.0.0.0", DriverOrder::Older);
     CheckVersion(L"1.65535.0.0", L"2.0.0.0", DriverOrder::Newer);
+    CheckOfferedRank();
     CheckCatalogSource();
     CheckCatalogTarget();
     CheckInstallAllSelection();

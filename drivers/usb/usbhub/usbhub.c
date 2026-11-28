@@ -6902,6 +6902,91 @@ Exit:
     return Status;
 }
 
+#define USBH_REATTACH_POLL_MS       100
+#define USBH_REATTACH_WINDOW_MS     3000
+#define USBH_REATTACH_DEBOUNCE_MS   100
+
+static
+NTSTATUS
+USBH_ResetAndEnumeratePort(
+    _In_ PUSBHUB_FDO_EXTENSION HubExtension,
+    _In_ USHORT Port,
+    _In_ PUSBHUB_PORT_PDO_EXTENSION PortExtension,
+    _Inout_ PUSB_DEVICE_HANDLE *DeviceHandle,
+    _In_ BOOLEAN IsWait)
+{
+    USB_PORT_STATUS_AND_CHANGE PortStatus;
+    NTSTATUS Status;
+
+    ASSERT(*DeviceHandle == NULL);
+
+    Status = USBH_SyncResetPort(HubExtension, Port);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = USBH_SyncGetPortStatus(HubExtension,
+                                    Port,
+                                    &PortStatus,
+                                    sizeof(USB_PORT_STATUS_AND_CHANGE));
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (!USBH_PortStatusIsConnected(&PortStatus))
+        return STATUS_DEVICE_NOT_CONNECTED;
+
+    Status = USBD_CreateDeviceEx(HubExtension,
+                                 DeviceHandle,
+                                 PortStatus.PortStatus,
+                                 Port);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (IsWait)
+        USBH_Wait(50);
+
+    Status = USBD_InitializeDeviceEx(HubExtension,
+                                     *DeviceHandle,
+                                     &PortExtension->DeviceDescriptor.bLength,
+                                     sizeof(PortExtension->DeviceDescriptor),
+                                     &PortExtension->ConfigDescriptor.bLength,
+                                     sizeof(PortExtension->ConfigDescriptor));
+    if (!NT_SUCCESS(Status))
+        *DeviceHandle = NULL;
+
+    return Status;
+}
+
+/* A device may drop off the port right after a reset and attach again once its firmware restarts */
+static
+BOOLEAN
+USBH_WaitForPortReattach(
+    _In_ PUSBHUB_FDO_EXTENSION HubExtension,
+    _In_ USHORT Port)
+{
+    USB_PORT_STATUS_AND_CHANGE PortStatus;
+    ULONG Waited;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    /* TODO: a boot device that leaves the port is held for up to 60 seconds before it is given up */
+    for (Waited = 0; Waited < USBH_REATTACH_WINDOW_MS; Waited += USBH_REATTACH_POLL_MS)
+    {
+        if (NT_SUCCESS(USBH_SyncGetPortStatus(HubExtension,
+                                              Port,
+                                              &PortStatus,
+                                              sizeof(USB_PORT_STATUS_AND_CHANGE))) &&
+            USBH_PortStatusIsConnected(&PortStatus))
+        {
+            USBH_Wait(USBH_REATTACH_DEBOUNCE_MS);
+            return TRUE;
+        }
+
+        USBH_Wait(USBH_REATTACH_POLL_MS);
+    }
+
+    return FALSE;
+}
+
 NTSTATUS
 NTAPI
 USBH_ResetDevice(IN PUSBHUB_FDO_EXTENSION HubExtension,
@@ -6995,44 +7080,13 @@ USBH_ResetDevice(IN PUSBHUB_FDO_EXTENSION HubExtension,
         goto ErrorExit;
     }
 
-    Status = USBH_SyncResetPort(HubExtension, Port);
-
-    if (!NT_SUCCESS(Status))
+    Status = USBH_ResetAndEnumeratePort(HubExtension, Port, PortExtension, DeviceHandle, IsWait);
+    if (!NT_SUCCESS(Status) && (*DeviceHandle == NULL) && USBH_WaitForPortReattach(HubExtension, Port))
     {
-        goto ErrorExit;
+        DPRINT1("USBH_ResetDevice: port %u device attached again after its reset (0x%08lx), enumerating it again\n",
+                Port, Status);
+        Status = USBH_ResetAndEnumeratePort(HubExtension, Port, PortExtension, DeviceHandle, IsWait);
     }
-
-    Status = USBH_SyncGetPortStatus(HubExtension,
-                                    Port,
-                                    &PortStatus,
-                                    sizeof(USB_PORT_STATUS_AND_CHANGE));
-
-    if (!NT_SUCCESS(Status))
-    {
-        goto ErrorExit;
-    }
-
-    Status = USBD_CreateDeviceEx(HubExtension,
-                                 DeviceHandle,
-                                 PortStatus.PortStatus,
-                                 Port);
-
-    if (!NT_SUCCESS(Status))
-    {
-        goto ErrorExit;
-    }
-
-    if (IsWait)
-    {
-        USBH_Wait(50);
-    }
-
-    Status = USBD_InitializeDeviceEx(HubExtension,
-                                     *DeviceHandle,
-                                     &PortExtension->DeviceDescriptor.bLength,
-                                     sizeof(PortExtension->DeviceDescriptor),
-                                     &PortExtension->ConfigDescriptor.bLength,
-                                     sizeof(PortExtension->ConfigDescriptor));
 
     if (NT_SUCCESS(Status))
     {
@@ -7059,8 +7113,6 @@ USBH_ResetDevice(IN PUSBHUB_FDO_EXTENSION HubExtension,
 
         goto Exit;
     }
-
-    *DeviceHandle = NULL;
 
 ErrorExit:
 

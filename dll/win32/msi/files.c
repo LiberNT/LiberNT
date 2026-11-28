@@ -44,6 +44,9 @@
 #include "winreg.h"
 #include "shlwapi.h"
 #include "patchapi.h"
+#ifdef __REACTOS__
+#include "sfc.h"
+#endif
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(msi);
@@ -398,6 +401,29 @@ static msi_file_state calculate_install_state( MSIPACKAGE *package, MSIFILE *fil
     return msifs_present;
 }
 
+#ifdef __REACTOS__
+static BOOL is_resource_protected( MSIPACKAGE *package, MSIFILE *file )
+{
+    MSIRECORD *row;
+    BOOL is_protected;
+
+    msi_disable_fs_redirection( package );
+    is_protected = SfcIsFileProtected( NULL, file->TargetPath );
+    msi_revert_fs_redirection( package );
+    if (!is_protected) return FALSE;
+
+    WARN("not overwriting %s, protected by Windows Resource Protection\n", debugstr_w(file->TargetPath));
+    if ((row = MSI_CreateRecord( 1 )))
+    {
+        MSI_RecordSetStringW( row, 0, L"Windows Resource Protection: [1] is protected and was not installed." );
+        MSI_RecordSetStringW( row, 1, file->TargetPath );
+        MSI_ProcessMessage( package, INSTALLMESSAGE_INFO, row );
+        msiobj_release( &row->hdr );
+    }
+    return TRUE;
+}
+#endif
+
 static void schedule_install_files(MSIPACKAGE *package)
 {
     MSIFILE *file;
@@ -412,6 +438,11 @@ static void schedule_install_files(MSIPACKAGE *package)
             TRACE("not overwriting %s\n", debugstr_w(file->TargetPath));
             file->state = msifs_skipped;
         }
+#ifdef __REACTOS__
+        /* Windows Installer skips a file Windows Resource Protection owns, logs it and goes on */
+        if (file->state == msifs_overwrite && is_resource_protected( package, file ))
+            file->state = msifs_skipped;
+#endif
     }
 }
 

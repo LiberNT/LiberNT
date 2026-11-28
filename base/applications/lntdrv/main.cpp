@@ -199,7 +199,7 @@ std::wstring CatalogNote(const DeviceInfo &device, const std::vector<CatalogUpda
         return LoadText(IDS_NOTE_NOT_FOUND);
     if (error)
         return FormatText(IDS_NOTE_FAILED, ErrorText(error));
-    switch (CompareVersionText(device, updates.front().Version))
+    switch (CompareVersionText(device, updates.front().Version, updates.front().HardwareIds))
     {
         case DriverOrder::Missing:
             return FormatText(IDS_NOTE_AVAILABLE, updates.front().Version);
@@ -216,7 +216,7 @@ ChoiceState StateOf(const DeviceInfo &device, const CatalogUpdate &update, const
 
     if (entry && _wcsicmp(entry->UpdateId.c_str(), update.Id.c_str()) == 0)
         return ChoiceState::Same;
-    switch (CompareVersionText(device, update.Version))
+    switch (CompareVersionText(device, update.Version, update.HardwareIds))
     {
         case DriverOrder::Missing:
             return ChoiceState::Missing;
@@ -2309,6 +2309,7 @@ int RunCommand(int argc, LPWSTR *argv)
         std::vector<SearchPlan> plans;
         InstallSink sink(groups);
         size_t missing = 0;
+        int exitCode;
 
         catalog.SetThrottleCallback(&throttle);
         for (const std::vector<DeviceInfo> &group : groups)
@@ -2317,12 +2318,14 @@ int RunCommand(int argc, LPWSTR *argv)
             plans.push_back(DevicePlan(group.front()));
         }
         Print(FormatText(IDS_CLI_MISSING_TOTAL, NumberText(missing)));
-        ScanPlans(catalog, plans, sink);
+        error = ScanPlans(catalog, plans, sink);
+        if (InstallAllStopped(error, sink.Failed(), exitCode))
+            Print(ErrorText(error));
         Print(FormatText(IDS_CLI_SUMMARY, NumberText(sink.Installed()), NumberText(sink.Absent()),
                          NumberText(sink.Failed())) +
               (sink.Restart() ? L" " + LoadText(IDS_CLI_RESTART) : std::wstring()));
         OutputDebugStringW((L"[LNTDRV] Scan sent " + NumberText(catalog.Searches()) + L" catalog searches\n").c_str());
-        return (int)sink.Failed();
+        return exitCode;
     }
     if (_wcsicmp(command.c_str(), L"search") == 0 || install)
     {

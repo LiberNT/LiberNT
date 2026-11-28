@@ -79,6 +79,7 @@ DWORD EnumerateDevices(std::vector<DeviceInfo> &devices);
 bool FindDevice(const std::wstring &instanceId, DeviceInfo &device);
 bool HasDriver(const DeviceInfo &device);
 DWORD InstalledRank(const DeviceInfo &device);
+DWORD OfferedRank(const DeviceInfo &device, const std::vector<std::wstring> &ids);
 bool GenericDriver(const DeviceInfo &device);
 bool NeedsDriver(const DeviceInfo &device);
 bool NullDriver(const DeviceInfo &device);
@@ -90,7 +91,8 @@ std::vector<std::vector<DeviceInfo>> MissingInstallAllGroups(const std::vector<D
 std::wstring DeviceStatus(const DeviceInfo &device);
 std::wstring DeviceDetails(const DeviceInfo &device, const std::vector<HistoryEntry> &history);
 std::vector<std::wstring> CatalogQueries(const DeviceInfo &device);
-DriverOrder CompareVersionText(const DeviceInfo &device, const std::wstring &version);
+DriverOrder CompareVersionText(const DeviceInfo &device, const std::wstring &version,
+                               const std::vector<std::wstring> &offeredIds = {});
 DriverOrder CompareWithInstalled(const DeviceInfo &device, const PackageDriver &driver);
 std::wstring ReadInfText(const std::wstring &path);
 std::wstring CachedDeviceName(const DeviceInfo &device);

@@ -578,22 +578,41 @@ bool NullDriver(const DeviceInfo &device)
     return !device.Inf.empty() && device.Service.empty();
 }
 
-DWORD InstalledRank(const DeviceInfo &device)
+static DWORD IdRank(const DeviceInfo &device, const std::wstring &id)
 {
     const std::vector<std::wstring> *lists[] = { &device.HardwareIds, &device.CompatibleIds };
     const DWORD bases[] = { 0, 0x2000 };
 
-    if (device.MatchingId.empty())
+    if (id.empty())
         return MAXDWORD;
     for (size_t list = 0; list < _countof(lists); list++)
     {
         for (size_t i = 0; i < lists[list]->size(); i++)
         {
-            if (_wcsicmp((*lists[list])[i].c_str(), device.MatchingId.c_str()) == 0)
+            if (_wcsicmp((*lists[list])[i].c_str(), id.c_str()) == 0)
                 return bases[list] + (DWORD)i;
         }
     }
     return MAXDWORD;
+}
+
+DWORD InstalledRank(const DeviceInfo &device)
+{
+    return IdRank(device, device.MatchingId);
+}
+
+DWORD OfferedRank(const DeviceInfo &device, const std::vector<std::wstring> &ids)
+{
+    DWORD best = MAXDWORD;
+
+    for (const std::wstring &id : ids)
+    {
+        DWORD rank = IdRank(device, id);
+
+        if (rank < best)
+            best = rank;
+    }
+    return best;
 }
 
 bool GenericDriver(const DeviceInfo &device)
@@ -725,13 +744,19 @@ std::vector<std::wstring> CatalogQueries(const DeviceInfo &device)
     return queries;
 }
 
-DriverOrder CompareVersionText(const DeviceInfo &device, const std::wstring &version)
+DriverOrder CompareVersionText(const DeviceInfo &device, const std::wstring &version,
+                               const std::vector<std::wstring> &offeredIds)
 {
     DWORDLONG installed, offered;
+    DWORD installedRank, offeredRank;
 
     if (NeedsDriver(device) || device.Inf.empty() || device.DriverVersion.empty())
         return DriverOrder::Missing;
-    if (GenericDriver(device))
+    installedRank = InstalledRank(device);
+    offeredRank = OfferedRank(device, offeredIds);
+    if (installedRank != MAXDWORD && offeredRank != MAXDWORD && offeredRank != installedRank)
+        return offeredRank < installedRank ? DriverOrder::Newer : DriverOrder::Older;
+    if (offeredRank == MAXDWORD && GenericDriver(device))
         return DriverOrder::Newer;
     installed = ParseVersion(device.DriverVersion);
     offered = ParseVersion(version);

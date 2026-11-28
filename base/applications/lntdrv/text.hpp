@@ -42,5 +42,6 @@ std::wstring SpeedText(ULONGLONG bytesPerSecond);
 std::wstring ErrorText(DWORD error);
 bool IsOfflineError(DWORD error);
 bool StopsCatalogScan(DWORD error);
+bool InstallAllStopped(DWORD scanError, size_t failed, int &exitCode);
 
 }
