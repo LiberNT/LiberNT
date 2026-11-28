@@ -79,20 +79,6 @@ static PLIST_ENTRY AddrFileNextLive(
     return Entry;
 }
 
-/*
- * FUNCTION: Takes a reference on an address file known only by its pointer
- * ARGUMENTS:
- *     AddrFile = Candidate pointer obtained outside any lock (entity context)
- * RETURNS:
- *     TRUE with a reference held if the object is still live, FALSE otherwise
- * NOTES:
- *     The entity list keeps its context pointers registered until the final
- *     stages of AddrFileFree, so a query can resolve to an address file whose
- *     teardown has already begun or even completed. The address file list is
- *     unlinked first in the free path, so any pointer still present there is
- *     backed by valid memory; entries with a zero count are being freed and
- *     are skipped. A pointer absent from the list is never dereferenced.
- */
 BOOLEAN AddrFileReferenceByPointer(
     PADDRESS_FILE AddrFile)
 {
