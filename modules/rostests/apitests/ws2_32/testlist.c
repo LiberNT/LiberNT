@@ -14,6 +14,7 @@ extern void func_afunix(void);
 extern void func_bind(void);
 extern void func_broadcast(void);
 extern void func_close(void);
+extern void func_close_inflight(void);
 extern void func_connect_already(void);
 extern void func_connect_any(void);
 extern void func_connect_select(void);
@@ -61,6 +62,7 @@ const struct test winetest_testlist[] =
     { "bind", func_bind },
     { "broadcast", func_broadcast },
     { "close", func_close },
+    { "close_inflight", func_close_inflight },
     { "connect_already", func_connect_already },
     { "connect_any", func_connect_any },
     { "connect_select", func_connect_select },
