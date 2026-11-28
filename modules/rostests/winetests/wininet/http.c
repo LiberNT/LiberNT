@@ -8718,14 +8718,69 @@ START_TEST(http)
     InternetReadFile_test(0, &test_data[1]);
     InternetReadFile_test(INTERNET_FLAG_ASYNC, &test_data[2]);
     test_secure_connection();
+#ifdef __REACTOS__
+    free_events();
+}
+
+START_TEST(http_flags)
+{
+    HMODULE hdll;
+    hdll = GetModuleHandleA("wininet.dll");
+
+    pInternetSetStatusCallbackA = (void*)GetProcAddress(hdll, "InternetSetStatusCallbackA");
+    pInternetSetStatusCallbackW = (void*)GetProcAddress(hdll, "InternetSetStatusCallbackW");
+    pInternetGetSecurityInfoByURLA = (void*)GetProcAddress(hdll, "InternetGetSecurityInfoByURLA");
+    if(!pInternetGetSecurityInfoByURLA)
+        is_ie7plus = FALSE;
+
+    init_events();
+    init_status_tests();
+#endif
     test_security_flags();
     InternetReadFile_test(0, &test_data[2]);
     InternetReadFileExA_test(INTERNET_FLAG_ASYNC);
+#ifdef __REACTOS__
+    free_events();
+}
+
+START_TEST(http_async)
+{
+    HMODULE hdll;
+    hdll = GetModuleHandleA("wininet.dll");
+
+    pInternetSetStatusCallbackA = (void*)GetProcAddress(hdll, "InternetSetStatusCallbackA");
+    pInternetSetStatusCallbackW = (void*)GetProcAddress(hdll, "InternetSetStatusCallbackW");
+    pInternetGetSecurityInfoByURLA = (void*)GetProcAddress(hdll, "InternetGetSecurityInfoByURLA");
+    if(!pInternetGetSecurityInfoByURLA)
+        is_ie7plus = FALSE;
+
+    init_events();
+    init_status_tests();
+#endif
     test_open_url_async();
     test_async_HttpSendRequestEx(&notification_data[0]);
     test_async_HttpSendRequestEx(&notification_data[1]);
     test_async_HttpSendRequestEx(&notification_data[2]);
     test_async_HttpSendRequestEx(&notification_data[3]);
+#ifdef __REACTOS__
+    free_events();
+}
+
+START_TEST(http_more)
+{
+    HMODULE hdll;
+    hdll = GetModuleHandleA("wininet.dll");
+
+    pInternetSetStatusCallbackA = (void*)GetProcAddress(hdll, "InternetSetStatusCallbackA");
+    pInternetSetStatusCallbackW = (void*)GetProcAddress(hdll, "InternetSetStatusCallbackW");
+    pInternetGetSecurityInfoByURLA = (void*)GetProcAddress(hdll, "InternetGetSecurityInfoByURLA");
+    if(!pInternetGetSecurityInfoByURLA)
+        is_ie7plus = FALSE;
+
+    init_events();
+    init_status_tests();
+    first_connection_to_test_url = FALSE;
+#endif
     InternetOpenRequest_test();
     test_http_cache();
     InternetLockRequestFile_test();
