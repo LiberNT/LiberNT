@@ -14,6 +14,8 @@ list(APPEND SOURCE
     fullscreen.cpp
     history.cpp
     main.cpp
+    modern_ui.cpp
+    modern_layers.cpp
     miniature.cpp
     mouse.cpp
     palette.cpp

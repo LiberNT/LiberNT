@@ -7,6 +7,7 @@
  */
 
 #include "precomp.h"
+#include "modern_layers.h"
 
 ImageModel imageModel;
 
@@ -71,6 +72,7 @@ void ImageModel::SwapPart()
 
 void ImageModel::Undo(BOOL bClearRedo)
 {
+    if (ModernLayersUndo()) return;
     ATLTRACE("%s: %d\n", __FUNCTION__, m_undoSteps);
     if (!CanUndo())
         return;
@@ -93,6 +95,7 @@ void ImageModel::Undo(BOOL bClearRedo)
 
 void ImageModel::Redo()
 {
+    if (ModernLayersRedo()) return;
     ATLTRACE("%s: %d\n", __FUNCTION__, m_redoSteps);
     if (!CanRedo())
         return;
@@ -219,7 +222,10 @@ void ImageModel::Crop(int nWidth, int nHeight, int nOffsetX, int nOffsetY)
 
 void ImageModel::SaveImage(LPCWSTR lpFileName)
 {
-    SaveDIBToFile(m_hbmMaster, lpFileName, TRUE);
+    // PNG/BMP/JPEG export is flattened; .lpaint preserves editable layers.
+    HBITMAP merged = ModernLayersFlatten(m_hbmMaster);
+    SaveDIBToFile(merged ? merged : m_hbmMaster, lpFileName, TRUE);
+    if (merged) ::DeleteObject(merged);
 }
 
 BOOL ImageModel::IsImageSaved() const
