@@ -356,7 +356,7 @@ START_TEST(AppContainerToken)
 
     ok(OpenProcessToken(GetCurrentProcess(), TOKEN_ALL_ACCESS, &Own), "OpenProcessToken failed with %lu\n", GetLastError());
     Privileges.PrivilegeCount = 1;
-    LookupPrivilegeValueW(NULL, SE_ASSIGNPRIMARYTOKEN_NAME, &Privileges.Privileges[0].Luid);
+    LookupPrivilegeValueW(NULL, L"SeAssignPrimaryTokenPrivilege", &Privileges.Privileges[0].Luid);
     Privileges.Privileges[0].Attributes = SE_PRIVILEGE_REMOVED;
     AdjustTokenPrivileges(Own, FALSE, &Privileges, 0, NULL, NULL);
 
