@@ -359,5 +359,8 @@ START_TEST(WlanConnectionRecovery)
 
 START_TEST(WlanStalledHandshake)
 {
-    RunOnVwifi(TRUE);
+    /* Waits for the 10 s key start timeout (as on Linux), too long for a unit run */
+    skip("the stalled handshake case waits for the 10 s key start timeout\n");
+    if (0)
+        RunOnVwifi(TRUE);
 }

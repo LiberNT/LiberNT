@@ -854,6 +854,11 @@ static void test_SQLValidDSNW(void)
 static void test_SQLConfigDataSource(void)
 {
     BOOL ret;
+#ifdef __REACTOS__
+    /* Needs the "SQL Server" ODBC driver Windows ships and LiberNT does not */
+    skip("no SQL Server ODBC driver\n");
+    return;
+#endif
 
     ret = SQLConfigDataSource(0, ODBC_ADD_DSN, "SQL Server", "DSN=WINEMQIS\0Database=MQIS\0\0");
     todo_wine ok(ret, "got %d\n", ret);
@@ -976,7 +981,10 @@ static void test_SQLWriteDSNToIni(void)
             ok(res == ERROR_SUCCESS, "RegGetValueA failed\n");
             ok(type == REG_SZ, "got %lu\n", type);
             /* WINE doesn't have a 'SQL Server' driver available */
+#ifndef __REACTOS__
+            /* The "SQL Server" ODBC driver is not installed, so its DSN has no driver path */
             todo_wine ok(strlen(path) != 0, "Invalid value\n");
+#endif
 
             RegCloseKey(hkey);
         }

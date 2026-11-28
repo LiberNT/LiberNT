@@ -264,6 +264,12 @@ static void test_WNetUseConnection(void)
     DWORD ret, bufSize, outRes;
     LPNETRESOURCEA netRes;
     char outBuf[4], drive[] = "J:", letter;
+#ifdef __REACTOS__
+    /* Maps \\127.0.0.1\c$, which needs an SMB redirector and server LiberNT does not have yet */
+    skip("no SMB server for \\\\127.0.0.1\\c$\n");
+    return;
+#endif
+
 
     if (!pWNetUseConnectionA)
     {
