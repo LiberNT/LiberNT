@@ -6449,9 +6449,11 @@ static void test_recursive_async(void)
 
 START_TEST (winhttp)
 {
+#ifndef __REACTOS__
     struct server_info si;
     HANDLE thread;
     DWORD ret;
+#endif
     HMODULE mod = GetModuleHandleA("winhttp.dll");
 
     pWinHttpWebSocketClose = (void *)GetProcAddress(mod, "WinHttpWebSocketClose");
@@ -6483,6 +6485,23 @@ START_TEST (winhttp)
     test_max_http_automatic_redirects();
     test_decompression();
     test_recursive_async();
+#ifdef __REACTOS__
+}
+
+START_TEST (winhttp_server)
+{
+    struct server_info si;
+    HANDLE thread;
+    DWORD ret;
+    HMODULE mod = GetModuleHandleA("winhttp.dll");
+
+    pWinHttpWebSocketClose = (void *)GetProcAddress(mod, "WinHttpWebSocketClose");
+    pWinHttpWebSocketCompleteUpgrade = (void *)GetProcAddress(mod, "WinHttpWebSocketCompleteUpgrade");
+    pWinHttpWebSocketQueryCloseStatus = (void *)GetProcAddress(mod, "WinHttpWebSocketQueryCloseStatus");
+    pWinHttpWebSocketSend = (void *)GetProcAddress(mod, "WinHttpWebSocketSend");
+    pWinHttpWebSocketShutdown = (void *)GetProcAddress(mod, "WinHttpWebSocketShutdown");
+    pWinHttpWebSocketReceive = (void *)GetProcAddress(mod, "WinHttpWebSocketReceive");
+#endif
 
     si.event = CreateEventW(NULL, 0, 0, NULL);
     si.port = 7532;
