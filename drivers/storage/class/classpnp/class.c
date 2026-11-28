@@ -3645,7 +3645,11 @@ Return Value:
                 }
 
                 entireXferLen -= thisPieceLen;
+#ifdef __REACTOS__
                 bufPtr = (PUCHAR)((ULONG_PTR)bufPtr + thisPieceLen);
+#else
+                bufPtr += thisPieceLen;
+#endif
                 targetLocation.QuadPart += thisPieceLen;
             }
             NT_ASSERT(SimpleIsSlistEmpty(&pktList));
