@@ -32,7 +32,7 @@ struct error_table
     const DWORD *table;
 };
 
-static const struct error_table error_table[31];
+static const struct error_table error_table[32];
 
 /**************************************************************************
  *           RtlNtStatusToDosErrorNoTeb (NTDLL.@)
@@ -1575,6 +1575,15 @@ static const DWORD table_c0000716[] =
     ERROR_NO_UNICODE_TRANSLATION          /* c0000717 (STATUS_NO_UNICODE_TRANSLATION) */
 };
 
+static const DWORD table_c000a200[] =
+{
+    ERROR_NOT_APPCONTAINER,               /* c000a200 (STATUS_NOT_APPCONTAINER) */
+    ERROR_NOT_SUPPORTED_IN_APPCONTAINER,  /* c000a201 (STATUS_NOT_SUPPORTED_IN_APPCONTAINER) */
+    ERROR_INVALID_PACKAGE_SID_LENGTH,     /* c000a202 (STATUS_INVALID_PACKAGE_SID_LENGTH) */
+    ERROR_ACCESS_DENIED,                  /* c000a203 (STATUS_LPAC_ACCESS_DENIED) */
+    ERROR_ACCESS_DENIED                   /* c000a204 (STATUS_ADMINLESS_ACCESS_DENIED) */
+};
+
 static const DWORD table_c01d0001[] =
 {
     ERROR_MONITOR_NO_DESCRIPTOR
@@ -1791,6 +1800,7 @@ static const struct error_table error_table[] =
     { 0xc000049d, 0xc000049e, table_c000049d },
     { 0xc0000604, 0xc0000605, table_c0000604 },
     { 0xc0000716, 0xc0000718, table_c0000716 },
+    { 0xc000a200, 0xc000a205, table_c000a200 },
     { 0xc0020001, 0xc0020064, table_c0020001 },
     { 0xc0030001, 0xc003000d, table_c0030001 },
     { 0xc0030059, 0xc0030062, table_c0030059 },
