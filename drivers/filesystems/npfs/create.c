@@ -671,6 +671,7 @@ NpCreateNewNamedPipe(IN PNP_DCB Dcb,
     USHORT NamedPipeConfiguration;
     PSECURITY_SUBJECT_CONTEXT SecurityContext;
     PSECURITY_DESCRIPTOR SecurityDescriptor, CachedSecurityDescriptor;
+    PSECURITY_DESCRIPTOR CreatorSecurityDescriptor = NULL;
     PNP_CCB Ccb;
     PNP_FCB Fcb;
     PAGED_CODE();
@@ -739,16 +740,22 @@ NpCreateNewNamedPipe(IN PNP_DCB Dcb,
     }
 
     SecurityContext = &AccessState->SubjectSecurityContext;
-    SeLockSubjectContext(SecurityContext);
-
-    Status = SeAssignSecurity(NpVcb->DefaultPipeSecurityDescriptor,
-                              AccessState->SecurityDescriptor,
-                              &SecurityDescriptor,
-                              FALSE,
-                              SecurityContext,
-                              IoGetFileObjectGenericMapping(),
-                              PagedPool);
-    SeUnlockSubjectContext(SecurityContext);
+    /* TODO: place an AppContainer's LOCAL pipes in its AppContainerNamedObjects directory and keep it out of the root */
+    Status = NpCreateCreatorPipeSecurityDescriptor(SeQuerySubjectContextToken(SecurityContext), &CreatorSecurityDescriptor);
+    if (NT_SUCCESS(Status))
+    {
+        SeLockSubjectContext(SecurityContext);
+        Status = SeAssignSecurity(CreatorSecurityDescriptor ? CreatorSecurityDescriptor : NpVcb->DefaultPipeSecurityDescriptor,
+                                  AccessState->SecurityDescriptor,
+                                  &SecurityDescriptor,
+                                  FALSE,
+                                  SecurityContext,
+                                  IoGetFileObjectGenericMapping(),
+                                  PagedPool);
+        SeUnlockSubjectContext(SecurityContext);
+        if (CreatorSecurityDescriptor != NULL)
+            ExFreePoolWithTag(CreatorSecurityDescriptor, NPFS_CCB_TAG);
+    }
     if (!NT_SUCCESS(Status))
     {
         NpDeleteCcb(Ccb, List);

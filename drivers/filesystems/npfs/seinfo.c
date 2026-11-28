@@ -18,6 +18,7 @@
 NTSTATUS
 NTAPI
 NpCreateDefaultPipeSecurityDescriptor(
+    IN PSID PackageSid OPTIONAL,
     OUT PSECURITY_DESCRIPTOR *SecurityDescriptor)
 {
     SECURITY_DESCRIPTOR Absolute;
@@ -37,6 +38,11 @@ NpCreateDefaultPipeSecurityDescriptor(
                  RtlLengthSid(SeExports->SeCreatorOwnerSid) +
                  RtlLengthSid(SeExports->SeWorldSid) +
                  RtlLengthSid(SeExports->SeAnonymousLogonSid);
+    if (PackageSid != NULL)
+    {
+        ASSERT(RtlValidSid(PackageSid));
+        DaclLength += FIELD_OFFSET(ACCESS_ALLOWED_ACE, SidStart) + RtlLengthSid(PackageSid);
+    }
 
     Dacl = ExAllocatePoolWithTag(PagedPool, DaclLength, NPFS_CCB_TAG);
     if (Dacl == NULL)
@@ -47,6 +53,8 @@ NpCreateDefaultPipeSecurityDescriptor(
         Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, OBJECT_INHERIT_ACE, FILE_ALL_ACCESS, SeExports->SeLocalSystemSid);
     if (NT_SUCCESS(Status))
         Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, OBJECT_INHERIT_ACE, FILE_ALL_ACCESS, SeExports->SeAliasAdminsSid);
+    if (NT_SUCCESS(Status) && PackageSid != NULL)
+        Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, OBJECT_INHERIT_ACE, FILE_ALL_ACCESS, PackageSid);
     if (NT_SUCCESS(Status))
         Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, OBJECT_INHERIT_ACE, FILE_ALL_ACCESS, SeExports->SeCreatorOwnerSid);
     if (NT_SUCCESS(Status))
@@ -87,6 +95,41 @@ NpCreateDefaultPipeSecurityDescriptor(
 
     *SecurityDescriptor = SelfRelative;
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+NpCreateCreatorPipeSecurityDescriptor(
+    IN PACCESS_TOKEN Token,
+    OUT PSECURITY_DESCRIPTOR *SecurityDescriptor)
+{
+    UCHAR Buffer[sizeof(TOKEN_APPCONTAINER_INFORMATION) + SECURITY_MAX_SID_SIZE];
+    PTOKEN_APPCONTAINER_INFORMATION AppContainer = (PTOKEN_APPCONTAINER_INFORMATION)Buffer;
+    ULONG IsAppContainer = 0, Length;
+    HANDLE TokenHandle;
+    NTSTATUS Status;
+    PAGED_CODE();
+
+    *SecurityDescriptor = NULL;
+
+    Status = ObOpenObjectByPointer(Token, OBJ_KERNEL_HANDLE, NULL, TOKEN_QUERY, *SeTokenObjectType, KernelMode, &TokenHandle);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = ZwQueryInformationToken(TokenHandle, TokenIsAppContainer, &IsAppContainer, sizeof(IsAppContainer), &Length);
+    if (NT_SUCCESS(Status) && IsAppContainer)
+    {
+        Status = ZwQueryInformationToken(TokenHandle, TokenAppContainerSid, Buffer, sizeof(Buffer), &Length);
+        if (NT_SUCCESS(Status))
+        {
+            ASSERT(AppContainer->TokenAppContainer != NULL);
+            Status = NpCreateDefaultPipeSecurityDescriptor(AppContainer->TokenAppContainer, SecurityDescriptor);
+        }
+    }
+
+    ZwClose(TokenHandle);
+    ASSERT(NT_SUCCESS(Status) || *SecurityDescriptor == NULL);
+    return Status;
 }
 
 NTSTATUS
