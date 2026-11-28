@@ -1473,7 +1473,10 @@ static UINT64 query_stream_position(struct reactos_stream *stream)
     if (!wdmaud_ioctl(IOCTL_GETPOS, &info))
         return stream->position;
 
-    return info.u.Position;
+    /* wdmaud reports the pin's KSAUDIO_POSITION.PlayOffset, a byte count; IAudioClock counts frames here
+     * (GetFrequency returns the sample rate for these streams). */
+    /* FIXME: MMixerGetWavePosition truncates the byte offset to 32 bits, so this clock wraps after 4 GiB. */
+    return stream->device_frame_size ? info.u.Position / stream->device_frame_size : info.u.Position;
 }
 
 static UINT64 query_performance_time_100ns(void)
