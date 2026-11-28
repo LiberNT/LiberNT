@@ -23,11 +23,11 @@ BOOLEAN ExpKdbgExtPfn(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtVad(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtAddress(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtVm(ULONG Argc, PCHAR Argv[]);
-#if DBG
-BOOLEAN ExpKdbgExtHandle(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtPool(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtPoolUsed(ULONG Argc, PCHAR Argv[]);
 BOOLEAN ExpKdbgExtPoolFind(ULONG Argc, PCHAR Argv[]);
+#if DBG
+BOOLEAN ExpKdbgExtHandle(ULONG Argc, PCHAR Argv[]);
 #endif
 #endif
 
@@ -3316,11 +3316,11 @@ static const KDB_COMMAND KdbpCommands[] =
     {"!vm", "!vm", "Shows what memory is being used for", ExpKdbgExtVm},
     {"!filecache", "!filecache", "Shows the file cache", ExpKdbgExtFileCache},
     {"!defwrites", "!defwrites", "Shows the writes being held back", ExpKdbgExtDefWrites},
-#if DBG
-    {"!handle", "!handle [address]", "Shows a handle table", ExpKdbgExtHandle},
     {"!pool", "!pool [address]", "Shows the pool, or one block of it", ExpKdbgExtPool},
     {"!poolused", "!poolused [tag]", "Shows what the pool is used for", ExpKdbgExtPoolUsed},
     {"!poolfind", "!poolfind <tag>", "Looks for pool blocks by tag", ExpKdbgExtPoolFind},
+#if DBG
+    {"!handle", "!handle [address]", "Shows a handle table", ExpKdbgExtHandle},
 #endif
 #endif
 
