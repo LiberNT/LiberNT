@@ -34,6 +34,8 @@ static const PageInfo Pages[] =
     { PageId::Storage, IDS_PAGE_STORAGE, L"storage_20_regular", PageId::System, BuildStorage, L"storagesense" },
     { PageId::Multitasking, IDS_PAGE_MULTITASKING, L"window_multiple_20_regular", PageId::System, BuildMultitasking,
       L"multitasking" },
+    { PageId::RemoteDesktop, IDS_PAGE_REMOTE_DESKTOP, L"desktop_20_regular", PageId::System, BuildRemoteDesktop,
+      L"remotedesktop", RemoteDesktopAvailable },
     { PageId::About, IDS_PAGE_ABOUT, L"info_20_regular", PageId::System, BuildAbout, L"about" },
     { PageId::Bluetooth, IDS_PAGE_BLUETOOTH, L"bluetooth_20_regular", PageId::Devices, BuildBluetooth,
       L"bluetooth" },
@@ -93,6 +95,12 @@ FindPage(PageId id)
             return &Pages[i];
     }
     return NULL;
+}
+
+bool
+PageAvailable(const PageInfo *info)
+{
+    return info && (!info->Available || info->Available());
 }
 
 SettingGroup &

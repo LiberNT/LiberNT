@@ -1,0 +1,65 @@
+#ifndef WINPR_CONFIG_H
+#define WINPR_CONFIG_H
+
+/* Include files */
+#define WINPR_HAVE_FCNTL_H
+#define WINPR_HAVE_UNISTD_H
+#define WINPR_HAVE_INTTYPES_H
+#define WINPR_HAVE_STDBOOL_H
+/* #undef WINPR_HAVE_AIO_H */
+/* #undef WINPR_HAVE_SYS_FILIO_H */
+/* #undef WINPR_HAVE_SYS_SELECT_H */
+/* #undef WINPR_HAVE_SYS_SOCKIO_H */
+/* #undef WINPR_HAVE_SYS_EVENTFD_H */
+/* #undef WINPR_HAVE_SYS_TIMERFD_H */
+/* #undef WINPR_HAVE_SYS_XATTR_H */
+/* #undef WINPR_HAVE_LINUX_MSDOS_FS_H */
+/* #undef WINPR_HAVE_TM_GMTOFF */
+/* #undef WINPR_HAVE_AIO_H */
+/* #undef WINPR_HAVE_POLL_H */
+/* #undef WINPR_HAVE_SYSLOG_H */
+/* #undef WINPR_HAVE_JOURNALD_H */
+/* #undef WINPR_HAVE_PTHREAD_MUTEX_TIMEDLOCK */
+/* #undef WINPR_HAVE_EXECINFO_H */
+/* #undef WINPR_HAVE_GETLOGIN_R */
+/* #undef WINPR_HAVE_GETPWUID_R */
+/* #undef WINPR_HAVE_STRNDUP */
+/* #undef WINPR_HAVE_STRNSTR */
+/* #undef WINPR_HAVE_PIPE2 */
+/* #undef WINPR_HAVE_ACCEPT4 */
+/* #undef WINPR_HAVE_UNWIND_H */
+/* #undef WINPR_HAVE_SSIZE_T */
+#define WINPR_HAVE_WIN_SSIZE_T
+/* #undef WINPR_WITH_PNG */
+
+/* #undef WINPR_HAVE_STRERROR_R */
+
+/* #undef WITH_EVENTFD_READ_WRITE */
+
+#define WITH_NATIVE_SSPI
+/* #undef WITH_INTERNAL_RC4 */
+/* #undef WITH_INTERNAL_MD4 */
+/* #undef WITH_INTERNAL_MD5 */
+
+/* #undef WITH_WINPR_JSON */
+
+/* #undef WITH_DEBUG_NTLM */
+/* #undef WITH_DEBUG_THREADS */
+/* #undef WITH_DEBUG_EVENTS */
+/* #undef WITH_DEBUG_MUTEX */
+
+/* #undef WINPR_UTILS_IMAGE_DIBv5 */
+/* #undef WINPR_UTILS_IMAGE_WEBP */
+/* #undef WINPR_UTILS_IMAGE_PNG */
+/* #undef WINPR_UTILS_IMAGE_JPEG */
+
+#if !defined(WITHOUT_WINPR_3x_DEPRECATED)
+/* #undef WITHOUT_WINPR_3x_DEPRECATED */
+#endif
+#if !defined(WITH_WINPR_DEPRECATED)
+/* #undef WITH_WINPR_DEPRECATED */
+#endif
+
+/* #undef DISABLE_SUPPORTED_ARCH_CHECKS */
+
+#endif /* WINPR_CONFIG_H */

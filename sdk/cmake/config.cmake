@@ -266,6 +266,13 @@ cmake_dependent_option(FFMPEG_FROM_SOURCE
                        "Build the LGPL FFmpeg libraries from the ffmpeg feed instead of using the LiberNT release payload." OFF
                        "ENABLE_FFMPEG" OFF)
 
+cmake_dependent_option(ENABLE_RDPSERVER
+                       "Build the Remote Desktop server with OpenSSL and FreeRDP" OFF
+                       "ARCH STREQUAL i386 OR ARCH STREQUAL amd64 OR ARCH STREQUAL arm64;NOT MSVC" OFF)
+cmake_dependent_option(RDPSERVER_FROM_SOURCE
+                       "Build OpenSSL and FreeRDP from the openssl and freerdp feeds instead of using the LiberNT release payload." OFF
+                       "ENABLE_RDPSERVER" OFF)
+
 cmake_dependent_option(ENABLE_DXILCONV
                        "Build dxilconv.dll, the DXBC to DXIL converter of the Direct3D 12 runtime, from the dxc feed" ON
                        "ARCH STREQUAL i386 OR ARCH STREQUAL amd64 OR ARCH STREQUAL arm64;CMAKE_C_COMPILER_ID STREQUAL Clang;NOT MSVC" OFF)
@@ -290,10 +297,8 @@ option(ENABLE_RT2800USB "Whether to build the Ralink RT2870/RT2770 USB Wi-Fi dri
 
 option(ENABLE_RTW8852BS "Whether to build the Realtek RTL8852BS SDIO Wi-Fi driver." OFF)
 
-set(RDPSERVER_DIR "" CACHE PATH
-    "MinGW build of the RDP console server (install directory) to stage into the live and preinstalled images")
 set(RDPSERVER_CONFIG_DIR "" CACHE PATH
-    "Directory with a private rdpserver.ini and its TLS certificate/key for the RDP console server")
+    "Directory with a private rdpserver.ini for the RDP console server")
 
 cmake_dependent_option(ENABLE_ROSAUTOTEST_BOOT_RUN
                        "Whether to run the full RosAutoTest suite automatically at boot." OFF

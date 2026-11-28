@@ -330,26 +330,14 @@ config ENABLE_RTW8852BS
       Build the rtw8852bs Native 802.11 miniport for the Realtek RTL8852BS
       SDIO Wi-Fi chip, with its firmware.
 
-config RDPSERVER_DIR
-    prompt "RDP console server build directory"
-    type string
-    default ""
-    depends ARCH=amd64
-    help
-      Install directory of a MinGW build of base/services/rdpserver
-      (bin/ and licenses/). The live and preinstalled images then carry the
-      server and start it with the interactive desktop; its in-tree
-      rdpserver.ini keeps it disabled. Empty leaves the server out.
-
 config RDPSERVER_CONFIG_DIR
     prompt "RDP console server private configuration directory"
     type string
     default ""
-    depends ARCH=amd64
+    depends ENABLE_RDPSERVER=y
     help
-      Directory outside the source tree with an rdpserver.ini that enables
-      the server, and its TLS certificate and key. Empty keeps the
-      disabled in-tree configuration.
+      Directory outside the source tree with an rdpserver.ini, for example
+      one with a file transfer root. Empty keeps the in-tree configuration.
 
 endmenu
 
@@ -476,6 +464,25 @@ config FFMPEG_FROM_SOURCE
       Instead of the release payload, build the LGPL FFmpeg libraries from
       the ffmpeg source feed. sdk/tools/ffmpeg_payload.py uses this to
       produce the payload.
+
+config ENABLE_RDPSERVER
+    prompt "Remote Desktop server"
+    type bool
+    default n
+    depends TOOLCHAIN!=msvc
+    depends ARCH=i386 || ARCH=amd64 || ARCH=arm64
+    help
+      Build the Remote Desktop server. It links OpenSSL and FreeRDP
+      statically; by default they come from the LiberNT release payload.
+
+config RDPSERVER_FROM_SOURCE
+    prompt "Build OpenSSL and FreeRDP from source"
+    type bool
+    default n
+    depends ENABLE_RDPSERVER=y
+    help
+      Instead of the release payload, build OpenSSL and FreeRDP from the
+      openssl and freerdp source feeds.
 
 endmenu
 

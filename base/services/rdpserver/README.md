@@ -1,98 +1,86 @@
 # LiberNT RDP console server
 
-`rdpserver.exe` mirrors the interactive console desktop over RDP for a test
-LAN. FreeRDP implements the wire protocol and TLS; the server captures the
-desktop with GDI and injects keyboard and mouse input with `SendInput` once a
-client has authenticated. It does not implement Terminal Services or create
-remote sessions. The RDP drive redirection channel also carries authenticated
-file transfers to a configured local directory.
+`rdpserver.exe` is the Remote Desktop server of LiberNT. Like Windows 11 Pro,
+it serves the console session to one client at a time once Remote Desktop is
+turned on; a client that signs in replaces the one already connected. FreeRDP implements the wire protocol, TLS and CredSSP; the server
+captures the desktop with GDI and injects keyboard and mouse input with
+`SendInput` once a client has authenticated. It does not implement Terminal
+Services or create remote sessions. The RDP drive redirection channel also
+carries authenticated file transfers to a configured local directory.
 
 ## Building
 
-The server is built outside the LiberNT toolchain, with an x86_64 MinGW
-compiler, against FreeRDP 3.32.0 and OpenSSL 3:
+`-DENABLE_RDPSERVER=ON` (*Submodules > Remote Desktop server* in rosconfig)
+builds the server; it is off by default. It links statically against FreeRDP
+3.32.0 (WinPR, the core library and the server with the `drdynvc` and `rdpdr`
+channels) and OpenSSL 3.5.4 (without assembler and with the legacy provider
+built in for NTLM):
 
-1. Apply `freerdp-rdpdr.patch` to FreeRDP 3.32.0 and build and install it
-   with MinGW (`WITH_SERVER=ON`, `WITH_CHANNELS=ON`, `WITH_SERVER_CHANNELS=ON`
-   and the `rdpdr` channel; the client, shadow and proxy parts are not
-   needed). The patch keeps the 64-bit offsets of RDPDR read and write
-   requests and handles a write acknowledgement as a length without a data
-   payload ([MS-RDPEFS]).
-2. Configure and build `mingw/CMakeLists.txt` against that installation and
-   install it to the same prefix.
-3. Add the OpenSSL and MinGW runtime DLLs next to the server, so that the
-   install directory holds:
+- With `-DRDPSERVER_FROM_SOURCE=ON`, configure.sh checks out the `freerdp` and
+  `openssl` feeds, and `sdk/lib/3rdparty/freerdp` and
+  `sdk/lib/3rdparty/openssl` build them. The `rdpserver_payload` target then
+  packs the libraries, their headers and licenses into
+  `libernt-rdpserver-<arch>-<compiler>.zip`.
+- Otherwise the libraries come from such a payload: the release asset named in
+  `submodules/rdpserver-payload.cmake`, or a local one given with
+  `-DRDPSERVER_PAYLOAD=/path/to/payload.zip`. Without either, the server is
+  left out.
 
-   ```
-   bin/rdpserver.exe
-   bin/libfreerdp3.dll  bin/libfreerdp-server3.dll  bin/libwinpr3.dll
-   bin/libssl-3-x64.dll  bin/libcrypto-3-x64.dll
-   bin/libgcc_s_seh-1.dll  bin/libwinpthread-1.dll
-   bin/ossl-modules/legacy.dll
-   licenses/FreeRDP-LICENSE  licenses/OpenSSL-LICENSE
-   ```
+The images then carry a single `%SystemRoot%\system32\rdpserver\rdpserver.exe`,
+its `rdpserver.ini`, the automatic `LiberNTRDPServer` service and the FreeRDP
+and OpenSSL licenses in `licenses`.
 
-Point a 64-bit build directory at it (arm64 and riscv64 run the server as x64 code) (or set *System > RDP console server
-build directory* in rosconfig):
+The service (`rdpserver.exe /service [ini]`) runs in session 0, which has no
+interactive desktop. While `fDenyTSConnections` under
+`HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server` is 0, it starts
+the server as SYSTEM in the active console session and restarts it when it
+exits or when the console session changes; it stops the server within seconds
+when the value changes back to 1. *Settings > System > Remote Desktop* sets
+this value, and it is 1 on a new installation, as on Windows 11.
+The server follows the desktop that receives input, so a client sees and
+drives the logon screen and the lock screen as well as the user's desktop.
+Started by hand, the server ignores `fDenyTSConnections`, runs in the
+caller's session and reaches the Winlogon desktop only when it runs as SYSTEM.
 
-```sh
-cmake -DRDPSERVER_DIR=/path/to/install .
-```
-
-The live and preinstalled images then carry `%SystemRoot%\system32\rdpserver`
-and an HKCU `Run` value that starts the server with the interactive desktop.
-`RDPSERVER_DIR` is empty by default, which leaves the server out.
+The server listens on port 3389 of every address and only accepts Network
+Level Authentication (CredSSP): a client that offers only TLS or standard
+RDP security gets `HYBRID_REQUIRED_BY_SERVER`. The credentials go through the
+Negotiate package, and the server logs the user on with `LogonUser`. The
+account needs a password, and it, or one of its enabled groups, must hold
+`SeRemoteInteractiveLogonRight` without `SeDenyRemoteInteractiveLogonRight`;
+a new installation grants the right to Administrators and Remote Desktop
+Users. At its first start the server creates a self-signed certificate for
+the computer name (RSA 2048, server authentication, valid 183 days) as
+`server.crt` and `server.key` next to `rdpserver.exe`; the key is readable by
+SYSTEM and Administrators only. It creates a new one when the certificate has
+expired or either file is missing.
 
 ## Configuration
 
-The in-tree `rdpserver.ini` sets `enabled=0`, so the server exits at once.
-To enable it, keep a private directory outside the source tree with an
-`rdpserver.ini` and a TLS certificate/key pair, and point the build at it
-with `-DRDPSERVER_CONFIG_DIR=/path/to/private/rdpserver`. Its
-`rdpserver.ini`, `*.crt`, `*.key` and `*.pem` files replace the in-tree
-configuration in the images:
+`rdpserver.ini` only holds the optional file transfer root. The in-tree file
+leaves it out; to set it, keep a private directory outside the source tree
+with an `rdpserver.ini` and point the build at it with
+`-DRDPSERVER_CONFIG_DIR=/path/to/private/rdpserver`:
 
 ```ini
 [server]
-enabled=1
-bind=10.42.0.2
-allow=10.42.0.1
-username=ros-test
-password=REPLACE_WITH_A_RANDOM_TEST_PASSWORD
-certificate=server.crt
-privatekey=server.key
-interface_mac=02:de:ad:10:ec:68,20:46:a1:08:d0:53
-netmask=255.255.255.0
 transfer_root=C:\
 ```
 
-- `bind` and `allow` are explicit IPv4 addresses. The server accepts one
-  controller, from exactly the `allow` address, over TLS with these
-  credentials; NLA is not enabled. Use a random password of at least 16
-  characters and pin the certificate fingerprint in the client.
-- A relative `certificate` or `privatekey` path names a file next to the
-  configuration, so the same configuration works on the live image (`X:`)
-  and on an installed disk.
-- `interface_mac` (a comma-separated list of up to eight addresses) and
-  `netmask` are optional. With them, the server waits for a network adapter
-  with one of these MAC addresses and adds `bind` to it with `AddIPAddress`,
-  keeping its other addresses, and removes that address again on a clean
-  exit. Without them, an adapter must already have the `bind` address. The
-  server waits for PnP and the network stack instead of failing when the
-  address is not ready yet.
-- `transfer_root` enables file transfers below that local directory after
-  authentication. Leave it out to disable transfers.
+`transfer_root` enables file transfers below that local directory after
+authentication. Leave it out to disable transfers.
 
 Authentication, the first frame and disconnects are logged as `RDPTEST`
 lines on the kernel debugger and on stdout. An idle server captures nothing;
-a connected session captures at most ten frames per second and sends the
-changed 64x32 tiles.
+a connected session captures 30 frames per second, or the rate
+`DWMFRAMEINTERVAL` under `...\Terminal Server\WinStations` sets (four frames
+per second each, up to 60), and sends the changed 64x32 tiles in batched
+bitmap updates.
 
 ## Client and file transfer
 
-Connect with a FreeRDP 3 client: `/sec:tls`, the configured user name and
-password (prefer `/args-from:stdin` over the command line) and
-`/cert:fingerprint:sha256:<fingerprint of the certificate>`. For file
+Connect with any Remote Desktop client, such as mstsc or a FreeRDP 3 client
+with `/sec:nla`, and a local account allowed to log on remotely. For file
 transfers, also redirect a dedicated host directory as the `ROSXFER` drive
 (`/drive:ROSXFER,<directory>`).
 

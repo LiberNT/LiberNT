@@ -318,6 +318,14 @@ Used Version: 2.2.0
 License: Modified BSD License (drivers/network/tcpip/lwip/COPYING)
 URL: https://savannah.nongnu.org/projects/lwip/
 
+Title: FreeRDP
+Path: submodules/freerdp (feed)
+Path: sdk/lib/3rdparty/freerdp
+Used Version: 3.32.0 (git tag 3.32.0)
+License: Apache-2.0 (https://spdx.org/licenses/Apache-2.0.html)
+URL: https://github.com/FreeRDP/FreeRDP
+Modifications: submodules/freerdp-libernt.patch: RDPDR read and write requests keep 64-bit offsets and a write acknowledgement is read as a length; Windows SDK paths instead of the MinGW-w64 ones, an fgetpos _ftelli64, NAN for nan(""), memmove_s for wmemmove_s and an empty FREERDP_API under __REACTOS__. Only the WinPR, core library and server sources the RDP server uses are built, with the headers CMake generates for LiberNT in sdk/lib/3rdparty/freerdp
+
 Title: FreeType
 Path: sdk/lib/3rdparty/freetype
 Used Version: 2.15.0
@@ -365,6 +373,14 @@ Path: sdk/lib/3rdparty/libxml2
 Used Version: 2.12.10
 License: MIT (https://spdx.org/licenses/MIT.htmlf)
 URL: http://xmlsoft.org, ftp://xmlsoft.org/libxml2/
+
+Title: OpenSSL
+Path: submodules/openssl (feed)
+Path: sdk/lib/3rdparty/openssl
+Used Version: 3.5.4 (git tag openssl-3.5.4)
+License: Apache-2.0 (https://spdx.org/licenses/Apache-2.0.html)
+URL: https://github.com/openssl/openssl
+Modifications: none; only libcrypto and libssl are built, from a no-asm, no-shared, no-module MinGW configuration without the algorithms and protocols the RDP server does not use, generated at configure time
 
 Title: STLport
 Path: sdk/lib/3rdparty/stlport

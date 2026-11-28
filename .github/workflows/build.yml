@@ -160,6 +160,7 @@ jobs:
         [ "${{matrix.compiler}}" = "clang" ] && case "${{matrix.arch}}" in amd64|arm64|riscv64) FLAGS="$FLAGS -DENABLE_MESA_LLVMPIPE=ON" ;; esac
         [ "$BUILD_TYPE" = "release" ] && case "${{matrix.arch}}" in i386|amd64) FLAGS="$FLAGS -DBOOTLOADER_WIM_RAMDISK=ON" ;; esac
         [ "$BUILD_TYPE" = "release" ] && FLAGS="$FLAGS -DENABLE_LNTWEB=ON"
+        case "${{matrix.compiler}}-${{matrix.arch}}" in gcc-i386|clang-amd64) FLAGS="$FLAGS -DENABLE_RDPSERVER=ON -DRDPSERVER_FROM_SOURCE=ON" ;; esac
         [ "$LIVE_CD" = "true" ] || FLAGS="$FLAGS -DPREINSTALL_IMAGE_SIZE_MB=4096"
         ./configure.sh $FLAGS -a ${{matrix.arch}} \
           -DREACTOS_TARGET_NT=0xA00 \

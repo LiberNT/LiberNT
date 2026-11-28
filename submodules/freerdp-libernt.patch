@@ -1,0 +1,300 @@
+diff -ruN a/channels/rdpdr/server/rdpdr_main.c b/channels/rdpdr/server/rdpdr_main.c
+--- a/channels/rdpdr/server/rdpdr_main.c
++++ b/channels/rdpdr/server/rdpdr_main.c
+@@ -2397,7 +2397,7 @@
+ 	if (fileNameLength / sizeof(WCHAR) > ARRAYSIZE(fdi->FileName))
+ 		return ERROR_INVALID_DATA;
+ 
+-#if defined(__MINGW32__) || defined(WITH_WCHAR_FILE_DIRECTORY_INFORMATION)
++#if (defined(__MINGW32__) && !defined(__REACTOS__)) || defined(WITH_WCHAR_FILE_DIRECTORY_INFORMATION)
+ 	if (Stream_Read_UTF16_String(s, fdi->FileName, fileNameLength / sizeof(WCHAR)))
+ 		return ERROR_INVALID_DATA;
+ #else
+@@ -2563,7 +2563,7 @@
+  */
+ static UINT rdpdr_server_send_device_read_request(RdpdrServerContext* context, UINT32 deviceId,
+                                                   UINT32 fileId, UINT32 completionId, UINT32 length,
+-                                                  UINT32 offset)
++                                                  UINT64 offset)
+ {
+ 	WINPR_ASSERT(context);
+ 	WINPR_ASSERT(context->priv);
+@@ -2572,7 +2572,7 @@
+ 
+ 	WLog_Print(priv->log, WLOG_DEBUG,
+ 	           "RdpdrServerSendDeviceReadRequest: deviceId=%" PRIu32 ", fileId=%" PRIu32
+-	           ", length=%" PRIu32 ", offset=%" PRIu32 "",
++	           ", length=%" PRIu32 ", offset=%" PRIu64 "",
+ 	           deviceId, fileId, length, offset);
+ 	wStream* s = Stream_New(nullptr, 128);
+ 
+@@ -2584,8 +2584,7 @@
+ 
+ 	rdpdr_server_write_device_iorequest(s, deviceId, fileId, completionId, IRP_MJ_READ, 0);
+ 	Stream_Write_UINT32(s, length); /* Length (4 bytes) */
+-	Stream_Write_UINT32(s, offset); /* Offset (8 bytes) */
+-	Stream_Write_UINT32(s, 0);
++	Stream_Write_UINT64(s, offset); /* Offset (8 bytes) */
+ 	Stream_Zero(s, 20); /* Padding (20 bytes) */
+ 	return rdpdr_seal_send_free_request(context, s);
+ }
+@@ -2597,7 +2596,7 @@
+  */
+ static UINT rdpdr_server_send_device_write_request(RdpdrServerContext* context, UINT32 deviceId,
+                                                    UINT32 fileId, UINT32 completionId,
+-                                                   const char* data, UINT32 length, UINT32 offset)
++                                                   const char* data, UINT32 length, UINT64 offset)
+ {
+ 	WINPR_ASSERT(context);
+ 	WINPR_ASSERT(context->priv);
+@@ -2606,7 +2605,7 @@
+ 
+ 	WLog_Print(priv->log, WLOG_DEBUG,
+ 	           "RdpdrServerSendDeviceWriteRequest: deviceId=%" PRIu32 ", fileId=%" PRIu32
+-	           ", length=%" PRIu32 ", offset=%" PRIu32 "",
++	           ", length=%" PRIu32 ", offset=%" PRIu64 "",
+ 	           deviceId, fileId, length, offset);
+ 	wStream* s = Stream_New(nullptr, 64 + length);
+ 
+@@ -2618,8 +2617,7 @@
+ 
+ 	rdpdr_server_write_device_iorequest(s, deviceId, fileId, completionId, IRP_MJ_WRITE, 0);
+ 	Stream_Write_UINT32(s, length); /* Length (4 bytes) */
+-	Stream_Write_UINT32(s, offset); /* Offset (8 bytes) */
+-	Stream_Write_UINT32(s, 0);
++	Stream_Write_UINT64(s, offset); /* Offset (8 bytes) */
+ 	Stream_Zero(s, 20);            /* Padding (20 bytes) */
+ 	Stream_Write(s, data, length); /* WriteData (variable) */
+ 	return rdpdr_seal_send_free_request(context, s);
+@@ -3302,7 +3300,7 @@
+  */
+ static UINT rdpdr_server_drive_read_file(RdpdrServerContext* context, void* callbackData,
+                                          UINT32 deviceId, UINT32 fileId, UINT32 length,
+-                                         UINT32 offset)
++                                         UINT64 offset)
+ {
+ 	WINPR_ASSERT(context);
+ 	WINPR_ASSERT(context->priv);
+@@ -3349,8 +3347,7 @@
+ 	const UINT32 length = Stream_Get_UINT32(s); /* Length (4 bytes) */
+ 	Stream_Seek(s, 1);                          /* Padding (1 byte) */
+ 
+-	if (!Stream_CheckAndLogRequiredLengthWLog(priv->log, s, length))
+-		return ERROR_INVALID_DATA;
++	/* MS-RDPEFS: Length counts written bytes, not a response payload. */
+ 
+ 	/* Invoke the write file completion routine. */
+ 	context->OnDriveWriteFileComplete(context, irp->CallbackData, ioStatus, length);
+@@ -3366,7 +3363,7 @@
+  */
+ static UINT rdpdr_server_drive_write_file(RdpdrServerContext* context, void* callbackData,
+                                           UINT32 deviceId, UINT32 fileId, const char* buffer,
+-                                          UINT32 length, UINT32 offset)
++                                          UINT32 length, UINT64 offset)
+ {
+ 	WINPR_ASSERT(context);
+ 	WINPR_ASSERT(context->priv);
+diff -ruN a/include/freerdp/api.h b/include/freerdp/api.h
+--- a/include/freerdp/api.h
++++ b/include/freerdp/api.h
+@@ -37,7 +37,9 @@
+ #define FREERDP_CC
+ #endif
+ 
+-#if defined _WIN32 || defined __CYGWIN__
++#if defined(__REACTOS__)
++#define FREERDP_API
++#elif defined _WIN32 || defined __CYGWIN__
+ #ifdef FREERDP_EXPORTS
+ #ifdef __GNUC__
+ #define FREERDP_API __attribute__((dllexport))
+diff -ruN a/include/freerdp/server/rdpdr.h b/include/freerdp/server/rdpdr.h
+--- a/include/freerdp/server/rdpdr.h
++++ b/include/freerdp/server/rdpdr.h
+@@ -50,7 +50,7 @@
+ 		UINT16 PacketId;  /**< Packet identifier */
+ 	} RDPDR_HEADER;
+ 
+-#ifndef __MINGW32__
++#if !defined(__MINGW32__) || defined(__REACTOS__)
+ 	/** File directory information structure */
+ 	typedef struct
+ 	{
+@@ -100,10 +100,10 @@
+ 	                                     UINT32 createDisposition);
+ 	typedef UINT (*psRdpdrDriveReadFile)(RdpdrServerContext* context, void* callbackData,
+ 	                                     UINT32 deviceId, UINT32 fileId, UINT32 length,
+-	                                     UINT32 offset);
++	                                     UINT64 offset);
+ 	typedef UINT (*psRdpdrDriveWriteFile)(RdpdrServerContext* context, void* callbackData,
+ 	                                      UINT32 deviceId, UINT32 fileId, const char* buffer,
+-	                                      UINT32 length, UINT32 offset);
++	                                      UINT32 length, UINT64 offset);
+ 	typedef UINT (*psRdpdrDriveCloseFile)(RdpdrServerContext* context, void* callbackData,
+ 	                                      UINT32 deviceId, UINT32 fileId);
+ 	typedef UINT (*psRdpdrDriveDeleteFile)(RdpdrServerContext* context, void* callbackData,
+diff -ruN a/winpr/include/winpr/crt.h b/winpr/include/winpr/crt.h
+--- a/winpr/include/winpr/crt.h
++++ b/winpr/include/winpr/crt.h
+@@ -35,6 +35,18 @@
+ WINPR_PRAGMA_DIAG_IGNORED_RESERVED_IDENTIFIER
+ // NOLINTBEGIN(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp)
+ 
++#ifdef __REACTOS__
++/* msvcrt.dll has no _ftelli64 */
++static inline INT64 winpr_ftelli64(FILE* fp)
++{
++	fpos_t pos;
++	if (fgetpos(fp, &pos) != 0)
++		return -1;
++	return (INT64)pos;
++}
++#define _ftelli64 winpr_ftelli64
++#endif
++
+ #ifndef _WIN32
+ 
+ #include <unistd.h>
+diff -ruN a/winpr/include/winpr/intrin.h b/winpr/include/winpr/intrin.h
+--- a/winpr/include/winpr/intrin.h
++++ b/winpr/include/winpr/intrin.h
+@@ -22,7 +22,7 @@
+ #ifndef WINPR_INTRIN_H
+ #define WINPR_INTRIN_H
+ 
+-#if !defined(_WIN32) || defined(__MINGW32__) || defined(_M_ARM64)
++#if !defined(_WIN32) || (defined(__MINGW32__) && !defined(__REACTOS__)) || defined(_M_ARM64)
+ 
+ /**
+  * __lzcnt16, __lzcnt, __lzcnt64:
+diff -ruN a/winpr/include/winpr/nt.h b/winpr/include/winpr/nt.h
+--- a/winpr/include/winpr/nt.h
++++ b/winpr/include/winpr/nt.h
+@@ -1271,7 +1271,7 @@
+ }
+ #endif
+ 
+-#if defined(_WIN32) && !defined(__MINGW32__)
++#if defined(_WIN32) && (!defined(__MINGW32__) || defined(__REACTOS__))
+ 
+ /**
+  * winternl.h contains an incomplete definition of enum FILE_INFORMATION_CLASS
+@@ -1296,7 +1296,7 @@
+ #include <winternl.h>
+ #endif
+ 
+-#ifndef __MINGW32__
++#if !defined(__MINGW32__) || defined(__REACTOS__)
+ typedef enum
+ {
+ 	FileDirectoryInformation = 1,
+@@ -1342,7 +1342,7 @@
+ } FILE_INFORMATION_CLASS;
+ #endif /* !__MINGW32__ */
+ 
+-#if !defined(_WIN32) || defined(__MINGW32__)
++#if !defined(_WIN32) || (defined(__MINGW32__) && !defined(__REACTOS__))
+ /* defined in <winternl.h> */
+ #define FILE_SUPERSEDED 0x00000000
+ #define FILE_OPENED 0x00000001
+diff -ruN a/winpr/include/winpr/pool.h b/winpr/include/winpr/pool.h
+--- a/winpr/include/winpr/pool.h
++++ b/winpr/include/winpr/pool.h
+@@ -110,7 +110,7 @@
+ #define WINPR_THREAD_POOL 1
+ #elif defined(_WIN32) && (_WIN32_WINNT < 0x0600)
+ #define WINPR_THREAD_POOL 1
+-#elif defined(__MINGW32__) && (__MINGW64_VERSION_MAJOR < 7)
++#elif defined(__MINGW32__) && !defined(__REACTOS__) && (__MINGW64_VERSION_MAJOR < 7)
+ #define WINPR_THREAD_POOL 1
+ #endif
+ 
+@@ -258,7 +258,7 @@
+ #define WINPR_CALLBACK_ENVIRON 1
+ #elif defined(_WIN32) && (_WIN32_WINNT < 0x0600)
+ #define WINPR_CALLBACK_ENVIRON 1
+-#elif defined(__MINGW32__) && (__MINGW64_VERSION_MAJOR < 9)
++#elif defined(__MINGW32__) && !defined(__REACTOS__) && (__MINGW64_VERSION_MAJOR < 9)
+ #define WINPR_CALLBACK_ENVIRON 1
+ #endif
+ 
+diff -ruN a/winpr/include/winpr/sspi.h b/winpr/include/winpr/sspi.h
+--- a/winpr/include/winpr/sspi.h
++++ b/winpr/include/winpr/sspi.h
+@@ -537,7 +537,7 @@
+ 
+ #endif /* !defined(_WIN32) || defined(_UWP) */
+ 
+-#if !defined(_WIN32) || defined(_UWP) || (defined(__MINGW32__) && (__MINGW64_VERSION_MAJOR <= 8))
++#if !defined(_WIN32) || defined(_UWP) || (defined(__MINGW32__) && !defined(__REACTOS__) && (__MINGW64_VERSION_MAJOR <= 8))
+ 
+ #define SECPKG_CRED_ATTR_KDC_PROXY_SETTINGS 3
+ 
+diff -ruN a/winpr/libwinpr/path/path.c b/winpr/libwinpr/path/path.c
+--- a/winpr/libwinpr/path/path.c
++++ b/winpr/libwinpr/path/path.c
+@@ -948,7 +948,12 @@
+ 
+ 		if (IsCharAlphaW(pszPath[4]) && (pszPath[5] == L':')) /* like C: */
+ 		{
++#ifdef __REACTOS__
++			if (memmove_s(pszPath, cchPath * sizeof(WCHAR), &pszPath[4],
++			              (cchPath - 4) * sizeof(WCHAR)) != 0)
++#else
+ 			if (wmemmove_s(pszPath, cchPath, &pszPath[4], cchPath - 4) < 0)
++#endif
+ 				return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+ 			/* since the passed pszPath must not necessarily be null terminated
+ 			 * and we always have enough space after the strip we can always
+diff -ruN a/winpr/libwinpr/sspi/NTLM/ntlm.h b/winpr/libwinpr/sspi/NTLM/ntlm.h
+--- a/winpr/libwinpr/sspi/NTLM/ntlm.h
++++ b/winpr/libwinpr/sspi/NTLM/ntlm.h
+@@ -75,7 +75,7 @@
+ 	NTLM_STATE_FINAL
+ } NTLM_STATE;
+ 
+-#ifdef __MINGW32__
++#if defined(__MINGW32__) && !defined(__REACTOS__)
+ typedef MSV1_0_AVID NTLM_AV_ID;
+ 
+ #if __MINGW64_VERSION_MAJOR < 9
+diff -ruN a/winpr/libwinpr/utils/json/json-stub.c b/winpr/libwinpr/utils/json/json-stub.c
+--- a/winpr/libwinpr/utils/json/json-stub.c
++++ b/winpr/libwinpr/utils/json/json-stub.c
+@@ -96,7 +96,11 @@
+ double WINPR_JSON_GetNumberValue(const WINPR_JSON* item)
+ {
+ 	WINPR_UNUSED(item);
++#ifdef __REACTOS__
++	return NAN;
++#else
+ 	return nan("");
++#endif
+ }
+ 
+ BOOL WINPR_JSON_IsInvalid(const WINPR_JSON* item)
+diff -ruN a/winpr/libwinpr/utils/json/json.c b/winpr/libwinpr/utils/json/json.c
+--- a/winpr/libwinpr/utils/json/json.c
++++ b/winpr/libwinpr/utils/json/json.c
+@@ -21,6 +21,9 @@
+ #include <errno.h>
+ 
+ #include <winpr/file.h>
++#ifdef __REACTOS__
++#include <winpr/crt.h>
++#endif
+ #include <winpr/json.h>
+ #include <winpr/assert.h>
+ 
+diff -ruN a/winpr/libwinpr/wtsapi/wtsapi_win32.c b/winpr/libwinpr/wtsapi/wtsapi_win32.c
+--- a/winpr/libwinpr/wtsapi/wtsapi_win32.c
++++ b/winpr/libwinpr/wtsapi/wtsapi_win32.c
+@@ -675,7 +675,7 @@
+ 
+ 		if (ntstatus >= 0)
+ 		{
+-#if defined(NONAMELESSUNION) && !defined(__MINGW32__)
++#if defined(NONAMELESSUNION) && (!defined(__MINGW32__) || defined(__REACTOS__))
+ 			ntstatus = ioStatusBlock.DUMMYUNIONNAME.Status;
+ #else
+ 			ntstatus = ioStatusBlock.Status;

@@ -780,4 +780,13 @@ BEGIN
     IDS_DEVELOPMENT_PREVIEW "開発プレビュー"
     IDS_TARGET "ターゲット"
     IDS_TARGET_FORMAT "Windows 11 %s %s"
+    IDS_PAGE_REMOTE_DESKTOP "リモート デスクトップ"
+    IDS_REMOTE_DESKTOP_DESC "リモート デスクトップ ユーザー、接続のアクセス許可"
+    IDS_REMOTE_DESKTOP_TOGGLE_DESC "リモート デスクトップ アプリを使って、別のデバイスからこの PC に接続して使用します"
+    IDS_REMOTE_DESKTOP_CONFIRM "リモート デスクトップを有効にしますか?"
+    IDS_REMOTE_DESKTOP_CONFIRM_TEXT "リモートでのサインインを許可されたユーザーは、別のデバイスからこの PC に接続できます。"
+    IDS_REMOTE_DESKTOP_CONFIRM_ACTION "確認"
+    IDS_REMOTE_DESKTOP_PC_NAME "PC 名"
+    IDS_REMOTE_DESKTOP_PC_NAME_DESC "別のデバイスからこの PC に接続するときは、この名前を使います"
+    IDS_REMOTE_DESKTOP_PORT "リモート デスクトップ ポート"
 END

@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT RDP console server
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Console desktop RDP server for an explicitly configured test LAN
+ * PURPOSE:     Remote Desktop server of the console session
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif193@gmail.com>
  */
 
@@ -13,47 +13,68 @@
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <windows.h>
-#include <iphlpapi.h>
+#include <sddl.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <mmsystem.h>
 #include <freerdp/freerdp.h>
 #include <freerdp/peer.h>
 #include <freerdp/listener.h>
 #include <freerdp/settings.h>
 #include <freerdp/constants.h>
+#include <freerdp/codec/color.h>
+#include <freerdp/codec/planar.h>
 #include <freerdp/crypto/certificate.h>
 #include <freerdp/crypto/privatekey.h>
 #include <winpr/ssl.h>
+#include <openssl/bio.h>
+#include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <openssl/rand.h>
+#include <openssl/x509v3.h>
 #include <freerdp/channels/wtsvc.h>
 #include <freerdp/channels/channels.h>
+#include <ntsecapi.h>
 #include "transfer.h"
 
 typedef ULONG (__cdecl *DEBUG_PRINT)(const char *, ...);
 static DEBUG_PRINT DebugPrint;
 static HANDLE StopEvent;
-static volatile LONG ClientConnected;
-static char BindAddress[64], AllowedPeer[64], Username[128], Password[256];
+static volatile LONG ClientCount, ClientGeneration;
 static char Certificate[MAX_PATH], PrivateKey[MAX_PATH];
-#define MAX_INTERFACE_MACS 8
-static BYTE InterfaceMac[MAX_INTERFACE_MACS][6];
-static unsigned InterfaceMacCount;
-static BOOL ConfigureAddress;
-static IPMask InterfaceMask;
-static ULONG AddressContext;
-static BOOL AddressAdded;
 static WCHAR TransferRoot[MAX_PATH];
+static SERVICE_STATUS_HANDLE ServiceHandle;
+static SERVICE_STATUS ServiceState;
+static HANDLE ServiceStopEvent, SessionStopEvent;
+static char ServiceConfig[MAX_PATH];
+static DWORD FrameInterval;
+
+#define SERVICE_NAME "LiberNTRDPServer"
+#define SERVICE_STOP_EVENT "Global\\LiberNT-RDPServer-Stop"
+#define TERMINAL_SERVER_KEY "SYSTEM\\CurrentControlSet\\Control\\Terminal Server"
+#define WINSTATIONS_KEY TERMINAL_SERVER_KEY "\\WinStations"
+#define CERTIFICATE_DAYS 183
+#define TILE_BATCH 64
+#define TILE_BYTES (64 * 32 * 4 + 2)
+/* TS_UPDATE_BITMAP_DATA header, and TS_BITMAP_DATA fields with its TS_CD_HEADER */
+#define UPDATE_HEADER_BYTES 4
+#define TILE_HEADER_BYTES 26
 
 typedef struct DESKTOP_CONTEXT
 {
     rdpContext rdp;
-    BOOL Authorized, Active, Suppressed, Refresh;
+    BOOL Authorized, Active, Suppressed, Refresh, NlaLogon;
+    LONG Generation;
     int Width, Height;
     HDC ScreenDC, MemoryDC;
     HBITMAP Bitmap;
     HGDIOBJ OldBitmap;
+    HDESK Desktop, HomeDesktop;
     BYTE *Pixels, *Previous;
-    BYTE Tile[64 * 32 * 4];
+    BITMAP_DATA Batch[TILE_BATCH];
+    BYTE Tiles[TILE_BATCH][TILE_BYTES];
+    BITMAP_PLANAR_CONTEXT *Planar;
     BOOL Keys[512];
     DWORD MouseButtons;
     ULONGLONG Frames, Updates, Inputs;
@@ -74,66 +95,25 @@ static void Log(const char *fmt, ...)
     if (DebugPrint) DebugPrint("RDPTEST: %s\n", buffer);
 }
 
+static BOOL FollowInputDesktop(DESKTOP_CONTEXT *ctx);
+
+static ULONGLONG Milliseconds(void)
+{
+    LARGE_INTEGER counter, frequency;
+    QueryPerformanceCounter(&counter);
+    QueryPerformanceFrequency(&frequency);
+    return (ULONGLONG)(counter.QuadPart / (frequency.QuadPart / 1000));
+}
+
+static BOOL Superseded(DESKTOP_CONTEXT *ctx)
+{
+    return ctx->Authorized && ctx->Generation != InterlockedCompareExchange(&ClientGeneration, 0, 0);
+}
+
 static BOOL InputReady(rdpInput *input)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)input->context;
-    return ctx->Authorized && ctx->Active;
-}
-
-static BOOL ConfiguredInterface(const IP_ADAPTER_INFO *adapter)
-{
-    unsigned i;
-    if (adapter->AddressLength != sizeof(InterfaceMac[0])) return FALSE;
-    for (i = 0; i < InterfaceMacCount; ++i)
-        if (!memcmp(adapter->Address, InterfaceMac[i], sizeof(InterfaceMac[i]))) return TRUE;
-    return FALSE;
-}
-
-/* Optional, explicit test-LAN setup. Select by MAC, never by adapter order,
- * and retain existing addresses. The temporary alias is removed on exit. */
-static BOOL EnsureAddress(void)
-{
-    IP_ADAPTER_INFO *adapters, *adapter;
-    IP_ADDR_STRING *ip;
-    ULONG size = 0, instance;
-    DWORD status;
-    if (!ConfigureAddress || AddressAdded) return TRUE;
-    if (GetAdaptersInfo(NULL, &size) != ERROR_BUFFER_OVERFLOW) return FALSE;
-    adapters = malloc(size);
-    if (!adapters) return FALSE;
-    status = GetAdaptersInfo(adapters, &size);
-    if (status != NO_ERROR) { free(adapters); return FALSE; }
-    for (adapter = adapters; adapter; adapter = adapter->Next)
-    {
-        if (!ConfiguredInterface(adapter)) continue;
-        for (ip = &adapter->IpAddressList; ip; ip = ip->Next)
-            if (!strcmp(ip->IpAddress.String, BindAddress))
-            { free(adapters); return TRUE; }
-        status = AddIPAddress(inet_addr(BindAddress), InterfaceMask,
-                              adapter->Index, &AddressContext, &instance);
-        Log("Test Ethernet interface %lu: address %s, AddIPAddress=%lu",
-            adapter->Index, BindAddress, status);
-        AddressAdded = status == NO_ERROR;
-        free(adapters);
-        return AddressAdded;
-    }
-    free(adapters);
-    return FALSE;
-}
-
-/* A relative certificate or key path names a file next to the configuration,
- * so one configuration works from the live image and from an installed disk. */
-static BOOL ConfigRelativePath(const char *config, char *path, size_t size)
-{
-    const char *separator = strrchr(config, '\\');
-    size_t directory, length = strlen(path);
-    if (!path[0] || path[0] == '\\' || path[0] == '/' || path[1] == ':') return TRUE;
-    if (!separator) return FALSE;
-    directory = (size_t)(separator - config) + 1;
-    if (directory + length >= size) return FALSE;
-    memmove(path + directory, path, length + 1);
-    memcpy(path, config, directory);
-    return TRUE;
+    return ctx->Authorized && ctx->Active && !Superseded(ctx) && FollowInputDesktop(ctx);
 }
 
 static BOOL Keyboard(rdpInput *input, UINT16 flags, UINT8 code)
@@ -238,7 +218,37 @@ static BOOL AllocateCapture(DESKTOP_CONTEXT *ctx)
     if (!ctx->OldBitmap || ctx->OldBitmap == HGDI_ERROR) { ctx->OldBitmap = NULL; return FALSE; }
     ctx->Previous = calloc((size_t)ctx->Width * ctx->Height, 4);
     ctx->Refresh = TRUE;
+    ctx->Refresh = TRUE;
     return ctx->Previous != NULL;
+}
+
+/* Winlogon owns input before logon and while locked; follow the input desktop. */
+static BOOL FollowInputDesktop(DESKTOP_CONTEXT *ctx)
+{
+    char inputName[64], currentName[64];
+    DWORD length;
+    HDESK current = GetThreadDesktop(GetCurrentThreadId());
+    HDESK input = OpenInputDesktop(0, FALSE, GENERIC_ALL);
+    if (!input) return ctx->ScreenDC || AllocateCapture(ctx);
+    if (GetUserObjectInformationA(input, UOI_NAME, inputName, sizeof(inputName), &length) &&
+        GetUserObjectInformationA(current, UOI_NAME, currentName, sizeof(currentName), &length) &&
+        !_stricmp(inputName, currentName))
+    {
+        CloseDesktop(input);
+        return ctx->ScreenDC || AllocateCapture(ctx);
+    }
+    FreeDesktopCapture(ctx);
+    if (!ctx->HomeDesktop) ctx->HomeDesktop = current;
+    if (!SetThreadDesktop(input))
+    {
+        Log("Cannot switch to the input desktop error=%lu", GetLastError());
+        CloseDesktop(input);
+        return FALSE;
+    }
+    if (ctx->Desktop) CloseDesktop(ctx->Desktop);
+    ctx->Desktop = input;
+    Log("Following input desktop %s", inputName);
+    return AllocateCapture(ctx);
 }
 
 static BOOL Capabilities(freerdp_peer *peer)
@@ -249,19 +259,91 @@ static BOOL Capabilities(freerdp_peer *peer)
                                        GetSystemMetrics(SM_CYSCREEN));
 }
 
-static BOOL PostConnect(freerdp_peer *peer)
+static BOOL HasAccountRight(LSA_HANDLE policy, PSID sid, const WCHAR *right)
+{
+    LSA_UNICODE_STRING *rights;
+    ULONG count, i;
+    BOOL found = FALSE;
+    if (LsaEnumerateAccountRights(policy, sid, &rights, &count)) return FALSE;
+    for (i = 0; i < count && !found; ++i)
+        found = rights[i].Length == wcslen(right) * sizeof(WCHAR) &&
+                !_wcsnicmp(rights[i].Buffer, right, wcslen(right));
+    LsaFreeMemory(rights);
+    return found;
+}
+
+static BOOL RemoteLogonAllowed(HANDLE token)
+{
+    LSA_OBJECT_ATTRIBUTES attributes = {0};
+    LSA_HANDLE policy;
+    TOKEN_GROUPS *groups = NULL;
+    BYTE user[SECURITY_MAX_SID_SIZE + sizeof(TOKEN_USER)];
+    DWORD length = 0, i;
+    BOOL allowed = FALSE, denied = FALSE;
+    if (!GetTokenInformation(token, TokenUser, user, sizeof(user), &length)) return FALSE;
+    GetTokenInformation(token, TokenGroups, NULL, 0, &length);
+    groups = length ? malloc(length) : NULL;
+    if (!groups || !GetTokenInformation(token, TokenGroups, groups, length, &length) ||
+        LsaOpenPolicy(NULL, &attributes, POLICY_LOOKUP_NAMES, &policy))
+    {
+        free(groups);
+        return FALSE;
+    }
+    denied = HasAccountRight(policy, ((TOKEN_USER *)user)->User.Sid, L"SeDenyRemoteInteractiveLogonRight");
+    allowed = HasAccountRight(policy, ((TOKEN_USER *)user)->User.Sid, L"SeRemoteInteractiveLogonRight");
+    for (i = 0; i < groups->GroupCount && !denied; ++i)
+    {
+        denied = HasAccountRight(policy, groups->Groups[i].Sid, L"SeDenyRemoteInteractiveLogonRight");
+        if (!allowed && (groups->Groups[i].Attributes & SE_GROUP_ENABLED))
+            allowed = HasAccountRight(policy, groups->Groups[i].Sid, L"SeRemoteInteractiveLogonRight");
+    }
+    LsaClose(policy);
+    free(groups);
+    return allowed && !denied;
+}
+
+static BOOL Logon(freerdp_peer *peer, const SEC_WINNT_AUTH_IDENTITY *identity, BOOL automatic)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)peer->context;
     rdpSettings *settings = ctx->rdp.settings;
     const char *user = freerdp_settings_get_string(settings, FreeRDP_Username);
+    const char *domain = freerdp_settings_get_string(settings, FreeRDP_Domain);
     const char *password = freerdp_settings_get_string(settings, FreeRDP_Password);
-    if (!user || !password || strcmp(user, Username) || strcmp(password, Password))
+    WCHAR wuser[128], wdomain[256], wpassword[256];
+    HANDLE token;
+    (void)identity;
+    if (!automatic || !user || !password ||
+        !MultiByteToWideChar(CP_UTF8, 0, user, -1, wuser, ARRAYSIZE(wuser)) ||
+        !MultiByteToWideChar(CP_UTF8, 0, (domain && *domain) ? domain : ".", -1, wdomain, ARRAYSIZE(wdomain)) ||
+        !MultiByteToWideChar(CP_UTF8, 0, password, -1, wpassword, ARRAYSIZE(wpassword)))
+    {
+        Log("NLA logon rejected for peer %s", peer->hostname);
+        return FALSE;
+    }
+    ctx->NlaLogon = LogonUserW(wuser, wdomain, wpassword, LOGON32_LOGON_INTERACTIVE, LOGON32_PROVIDER_DEFAULT, &token);
+    SecureZeroMemory(wpassword, sizeof(wpassword));
+    if (ctx->NlaLogon)
+    {
+        ctx->NlaLogon = RemoteLogonAllowed(token);
+        if (!ctx->NlaLogon) SetLastError(ERROR_LOGON_TYPE_NOT_GRANTED);
+        CloseHandle(token);
+    }
+    Log("NLA logon of %s for peer %s: %s (%lu)", user, peer->hostname, ctx->NlaLogon ? "accepted" : "rejected",
+        ctx->NlaLogon ? 0UL : GetLastError());
+    return ctx->NlaLogon;
+}
+
+static BOOL PostConnect(freerdp_peer *peer)
+{
+    DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)peer->context;
+    if (!ctx->NlaLogon)
     {
         Log("Authentication rejected for peer %s", peer->hostname);
         return FALSE;
     }
+    ctx->Generation = InterlockedIncrement(&ClientGeneration);
     ctx->Authorized = TRUE;
-    if (!AllocateCapture(ctx)) return FALSE;
+    if (!FollowInputDesktop(ctx)) return FALSE;
     if (*TransferRoot && WTSVirtualChannelManagerIsChannelJoined(ctx->Vcm, "rdpdr"))
     {
         ctx->Transfer = TransferStart(ctx->Vcm, &ctx->rdp, TransferRoot, Log);
@@ -277,6 +359,11 @@ static BOOL Activate(freerdp_peer *peer)
     POINTER_SYSTEM_UPDATE pointer = {0};
     if (!ctx->Authorized) return FALSE;
     if (!freerdp_settings_set_bool(ctx->rdp.settings, FreeRDP_NoBitmapCompressionHeader, FALSE)) return FALSE;
+    if (!ctx->Planar)
+    {
+        ctx->Planar = freerdp_bitmap_planar_context_new(PLANAR_FORMAT_HEADER_RLE, 64, 32);
+        if (!ctx->Planar) return FALSE;
+    }
     ctx->Active = TRUE;
     ctx->Refresh = TRUE;
     pointer.type = SYSPTR_NULL;
@@ -298,13 +385,26 @@ static BOOL Suppress(rdpContext *rdp, BYTE allow, const RECTANGLE_16 *area)
     return TRUE;
 }
 
+static BOOL SendTiles(DESKTOP_CONTEXT *ctx, UINT32 *count, size_t *length)
+{
+    BITMAP_UPDATE update = {0};
+    if (!*count) return TRUE;
+    update.number = *count; update.rectangles = ctx->Batch; update.skipCompression = TRUE;
+    if (!ctx->rdp.update->BitmapUpdate(&ctx->rdp, &update)) return FALSE;
+    ctx->Updates += *count;
+    *count = 0; *length = 0;
+    return TRUE;
+}
+
 static BOOL Capture(DESKTOP_CONTEXT *ctx)
 {
     int x, y, row;
     CURSORINFO cursor = {0};
-    BITMAP_DATA rectangle = {0};
-    BITMAP_UPDATE update = {0};
+    BITMAP_DATA *rectangle;
+    UINT32 count = 0;
+    size_t length = 0, limit = freerdp_settings_get_uint32(ctx->rdp.settings, FreeRDP_MultifragMaxRequestSize);
     if (!ctx->Authorized || !ctx->Active || ctx->Suppressed) return TRUE;
+    if (!FollowInputDesktop(ctx)) return FALSE;
     if (ctx->Width != GetSystemMetrics(SM_CXSCREEN) || ctx->Height != GetSystemMetrics(SM_CYSCREEN))
     {
         if (!AllocateCapture(ctx) ||
@@ -331,8 +431,6 @@ static BOOL Capture(DESKTOP_CONTEXT *ctx)
         }
     }
     GdiFlush();
-    update.number = 1; update.rectangles = &rectangle; update.skipCompression = TRUE;
-    rectangle.bitsPerPixel = 32; rectangle.bitmapDataStream = ctx->Tile;
     for (y = 0; y < ctx->Height; y += 32)
         for (x = 0; x < ctx->Width; x += 64)
         {
@@ -344,16 +442,25 @@ static BOOL Capture(DESKTOP_CONTEXT *ctx)
                 changed = memcmp(ctx->Pixels + offset, ctx->Previous + offset, width * 4) != 0;
             }
             if (!changed) continue;
-            for (row = 0; row < height; ++row)
-                memcpy(ctx->Tile + (size_t)row * width * 4,
-                       ctx->Pixels + ((size_t)(y + height - 1 - row) * ctx->Width + x) * 4, width * 4);
-            rectangle.destLeft = x; rectangle.destTop = y;
-            rectangle.destRight = x + width - 1; rectangle.destBottom = y + height - 1;
-            rectangle.width = width; rectangle.height = height;
-            rectangle.bitmapLength = width * height * 4;
-            if (!ctx->rdp.update->BitmapUpdate(&ctx->rdp, &update)) return FALSE;
-            ++ctx->Updates;
+            if ((count == TILE_BATCH || UPDATE_HEADER_BYTES + length + TILE_HEADER_BYTES + TILE_BYTES > limit) &&
+                !SendTiles(ctx, &count, &length)) return FALSE;
+            rectangle = &ctx->Batch[count];
+            memset(rectangle, 0, sizeof(*rectangle));
+            rectangle->bitsPerPixel = 32; rectangle->compressed = TRUE;
+            rectangle->bitmapDataStream = freerdp_bitmap_compress_planar(ctx->Planar,
+                ctx->Pixels + ((size_t)y * ctx->Width + x) * 4, PIXEL_FORMAT_BGRX32, width, height,
+                ctx->Width * 4, ctx->Tiles[count], &rectangle->bitmapLength);
+            if (!rectangle->bitmapDataStream) return FALSE;
+            rectangle->destLeft = x; rectangle->destTop = y;
+            rectangle->destRight = x + width - 1; rectangle->destBottom = y + height - 1;
+            rectangle->width = width; rectangle->height = height;
+            rectangle->cbScanWidth = width * 4;
+            rectangle->cbUncompressedSize = width * height * 4;
+            rectangle->cbCompMainBodySize = rectangle->bitmapLength;
+            length += TILE_HEADER_BYTES + rectangle->bitmapLength;
+            ++count;
         }
+    if (!SendTiles(ctx, &count, &length)) return FALSE;
     memcpy(ctx->Previous, ctx->Pixels, (size_t)ctx->Width * ctx->Height * 4);
     ctx->Refresh = FALSE;
     if (++ctx->Frames == 1) Log("First desktop frame sent, bitmap updates=%llu", ctx->Updates);
@@ -367,6 +474,7 @@ static void ContextFree(freerdp_peer *peer, rdpContext *rdp)
     INPUT event = {0};
     (void)peer;
     TransferStop(ctx->Transfer);
+    freerdp_bitmap_planar_context_free(ctx->Planar);
     if (ctx->Vcm) WTSCloseServer(ctx->Vcm);
     /* A disconnected controller must not leave Ctrl/Alt or mouse buttons held. */
     for (i = 0; i < 512; ++i)
@@ -386,6 +494,7 @@ static void ContextFree(freerdp_peer *peer, rdpContext *rdp)
     if (event.mi.dwFlags) SendInput(1, &event, sizeof(event));
     Log("Session closed: frames=%llu updates=%llu input events=%llu", ctx->Frames, ctx->Updates, ctx->Inputs);
     FreeDesktopCapture(ctx);
+    if (ctx->Desktop && SetThreadDesktop(ctx->HomeDesktop)) CloseDesktop(ctx->Desktop);
 }
 
 static DWORD WINAPI ClientThread(void *arg)
@@ -394,7 +503,8 @@ static DWORD WINAPI ClientThread(void *arg)
     rdpSettings *settings;
     rdpPrivateKey *key;
     rdpCertificate *cert;
-    DWORD count, status, started = GetTickCount(), lastFrame = 0;
+    DWORD count, status, started = GetTickCount(), wait;
+    ULONGLONG lastFrame = 0, elapsed;
     HANDLE events[32];
     DESKTOP_CONTEXT *ctx;
     peer->ContextSize = sizeof(DESKTOP_CONTEXT);
@@ -412,8 +522,9 @@ static DWORD WINAPI ClientThread(void *arg)
     if (!freerdp_settings_set_pointer_len(settings, FreeRDP_RdpServerCertificate, cert, 1))
     { freerdp_certificate_free(cert); goto cleanup; }
     if (!freerdp_settings_set_bool(settings, FreeRDP_RdpSecurity, FALSE) ||
-        !freerdp_settings_set_bool(settings, FreeRDP_TlsSecurity, TRUE) ||
-        !freerdp_settings_set_bool(settings, FreeRDP_NlaSecurity, FALSE) ||
+        !freerdp_settings_set_bool(settings, FreeRDP_TlsSecurity, FALSE) ||
+        !freerdp_settings_set_bool(settings, FreeRDP_NlaSecurity, TRUE) ||
+        /* TODO: HYBRID_EX, which needs the Early User Authorization Result PDU from the FreeRDP server */
         !freerdp_settings_set_bool(settings, FreeRDP_ExtSecurity, FALSE) ||
         !freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, FALSE) ||
         !freerdp_settings_set_bool(settings, FreeRDP_NSCodec, FALSE) ||
@@ -421,7 +532,7 @@ static DWORD WINAPI ClientThread(void *arg)
         !freerdp_settings_set_bool(settings, FreeRDP_SuppressOutput, TRUE) ||
         !freerdp_settings_set_uint32(settings, FreeRDP_ColorDepth, 32)) goto cleanup;
     peer->Capabilities = Capabilities;
-    peer->PostConnect = PostConnect; peer->Activate = Activate;
+    peer->Logon = Logon; peer->PostConnect = PostConnect; peer->Activate = Activate;
     ctx->rdp.input->SynchronizeEvent = Synchronize;
     ctx->rdp.input->KeyboardEvent = Keyboard;
     ctx->rdp.input->UnicodeKeyboardEvent = UnicodeKeyboard;
@@ -429,43 +540,54 @@ static DWORD WINAPI ClientThread(void *arg)
     ctx->rdp.update->RefreshRect = Refresh;
     ctx->rdp.update->SuppressOutput = Suppress;
     if (!peer->Initialize(peer)) goto cleanup;
+    timeBeginPeriod(1);
     for (;;)
     {
         events[0] = StopEvent;
         count = peer->GetEventHandles(peer, events + 1, 30);
         if (!count) break;
         events[++count] = WTSVirtualChannelManagerGetEventHandle(ctx->Vcm);
-        status = WaitForMultipleObjects(count + 1, events, FALSE, 100);
+        wait = 100;
+        if (ctx->Active && peer->activated)
+        {
+            elapsed = Milliseconds() - lastFrame;
+            wait = elapsed >= FrameInterval ? 0 : (DWORD)(FrameInterval - elapsed);
+        }
+        status = WaitForMultipleObjects(count + 1, events, FALSE, wait);
         if (status == WAIT_OBJECT_0 || status == WAIT_FAILED) break;
         if (!peer->CheckFileDescriptor(peer)) break;
         if (!WTSVirtualChannelManagerCheckFileDescriptor(ctx->Vcm)) break;
         if (!ctx->Authorized && GetTickCount() - started > 30000) break;
-        if (ctx->Active && peer->activated && GetTickCount() - lastFrame >= 100)
+        if (Superseded(ctx))
         {
+            Log("Peer %s replaced by a newer connection", peer->hostname);
+            freerdp_set_error_info(ctx->rdp.rdp, ERRINFO_DISCONNECTED_BY_OTHER_CONNECTION);
+            if (!freerdp_send_error_info(ctx->rdp.rdp)) Log("Cannot tell peer %s why it is disconnected", peer->hostname);
+            break;
+        }
+        if (ctx->Active && peer->activated && Milliseconds() - lastFrame >= FrameInterval)
+        {
+            lastFrame = Milliseconds();
             if (!Capture(ctx)) break;
-            lastFrame = GetTickCount();
         }
     }
+    timeEndPeriod(1);
     peer->Disconnect(peer);
 cleanup:
     freerdp_peer_context_free(peer);
 done:
     freerdp_peer_free(peer);
-    InterlockedExchange(&ClientConnected, 0);
+    InterlockedDecrement(&ClientCount);
     return 0;
 }
 
 static BOOL Accepted(freerdp_listener *listener, freerdp_peer *peer)
 {
     HANDLE thread;
-    struct sockaddr_in address;
-    int length = sizeof(address);
     (void)listener;
-    if (getpeername((SOCKET)peer->sockfd, (struct sockaddr *)&address, &length) ||
-        address.sin_family != AF_INET || address.sin_addr.s_addr != inet_addr(AllowedPeer)) return FALSE;
-    if (InterlockedCompareExchange(&ClientConnected, 1, 0)) return FALSE;
+    InterlockedIncrement(&ClientCount);
     thread = CreateThread(NULL, 0, ClientThread, peer, 0, NULL);
-    if (!thread) { InterlockedExchange(&ClientConnected, 0); return FALSE; }
+    if (!thread) { InterlockedDecrement(&ClientCount); return FALSE; }
     CloseHandle(thread);
     return TRUE;
 }
@@ -477,91 +599,291 @@ static BOOL WINAPI Stop(DWORD event)
     return TRUE;
 }
 
+static BOOL WriteFileData(const char *path, BIO *bio, const char *sddl)
+{
+    SECURITY_ATTRIBUTES security = {sizeof(security), NULL, FALSE};
+    char *data;
+    long size = BIO_get_mem_data(bio, &data);
+    DWORD written = 0;
+    HANDLE file;
+    BOOL ok;
+    if (size <= 0) return FALSE;
+    if (sddl && !ConvertStringSecurityDescriptorToSecurityDescriptorA(sddl, SDDL_REVISION_1,
+                                                                      &security.lpSecurityDescriptor, NULL))
+        return FALSE;
+    DeleteFileA(path);
+    file = CreateFileA(path, GENERIC_WRITE, 0, &security, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+    LocalFree(security.lpSecurityDescriptor);
+    if (file == INVALID_HANDLE_VALUE) return FALSE;
+    ok = WriteFile(file, data, (DWORD)size, &written, NULL) && written == (DWORD)size;
+    CloseHandle(file);
+    return ok;
+}
+
+static BOOL AddExtension(X509 *x509, int nid, const char *value)
+{
+    X509V3_CTX v3;
+    X509_EXTENSION *extension;
+    BOOL ok;
+    X509V3_set_ctx(&v3, x509, x509, NULL, NULL, 0);
+    extension = X509V3_EXT_conf_nid(NULL, &v3, nid, value);
+    ok = extension && X509_add_ext(x509, extension, -1);
+    X509_EXTENSION_free(extension);
+    return ok;
+}
+
+/* FIXME: Windows keeps this certificate in the Remote Desktop store of the machine. */
+static BOOL CreateCertificate(void)
+{
+    WCHAR wide[MAX_COMPUTERNAME_LENGTH + 1];
+    char name[3 * (MAX_COMPUTERNAME_LENGTH + 1)];
+    DWORD length = ARRAYSIZE(wide);
+    unsigned char serial[16];
+    EVP_PKEY *key = NULL;
+    X509 *x509 = NULL;
+    X509_NAME *subject;
+    BIGNUM *number = NULL;
+    BIO *keyData = BIO_new(BIO_s_mem()), *certificateData = BIO_new(BIO_s_mem());
+    BOOL ok = keyData && certificateData && GetComputerNameW(wide, &length) &&
+              WideCharToMultiByte(CP_UTF8, 0, wide, -1, name, sizeof(name), NULL, NULL) &&
+              RAND_bytes(serial, sizeof(serial)) == 1 &&
+              (key = EVP_RSA_gen(2048)) && (x509 = X509_new());
+    if (ok)
+    {
+        serial[0] &= 0x7f;
+        number = BN_bin2bn(serial, sizeof(serial), NULL);
+        subject = X509_get_subject_name(x509);
+        ok = number && BN_to_ASN1_INTEGER(number, X509_get_serialNumber(x509)) &&
+             X509_set_version(x509, 2) &&
+             X509_gmtime_adj(X509_getm_notBefore(x509), 0) &&
+             X509_gmtime_adj(X509_getm_notAfter(x509), (long)CERTIFICATE_DAYS * 24 * 60 * 60) &&
+             X509_NAME_add_entry_by_txt(subject, "CN", MBSTRING_UTF8, (const unsigned char *)name, -1, -1, 0) &&
+             X509_set_issuer_name(x509, subject) && X509_set_pubkey(x509, key) &&
+             AddExtension(x509, NID_ext_key_usage, "serverAuth") &&
+             AddExtension(x509, NID_key_usage, "keyEncipherment,dataEncipherment") &&
+             X509_sign(x509, key, EVP_sha256()) &&
+             PEM_write_bio_PrivateKey(keyData, key, NULL, NULL, 0, NULL, NULL) &&
+             PEM_write_bio_X509(certificateData, x509) &&
+             WriteFileData(PrivateKey, keyData, "D:P(A;;FA;;;SY)(A;;FA;;;BA)") &&
+             WriteFileData(Certificate, certificateData, NULL);
+    }
+    Log("Self-signed certificate for %s: %s", ok ? name : "this computer", ok ? "created" : "failed");
+    BN_free(number);
+    X509_free(x509);
+    EVP_PKEY_free(key);
+    BIO_free(keyData);
+    BIO_free(certificateData);
+    return ok;
+}
+
+static BOOL EnsureCertificate(void)
+{
+    BIO *data = BIO_new_file(Certificate, "r");
+    X509 *x509 = data ? PEM_read_bio_X509(data, NULL, NULL, NULL) : NULL;
+    BOOL valid = x509 && GetFileAttributesA(PrivateKey) != INVALID_FILE_ATTRIBUTES &&
+                 X509_cmp_current_time(X509_get0_notAfter(x509)) > 0;
+    X509_free(x509);
+    BIO_free(data);
+    return valid || CreateCertificate();
+}
+
+static void ReportService(DWORD state, DWORD exitCode)
+{
+    ServiceState.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
+    ServiceState.dwCurrentState = state;
+    ServiceState.dwControlsAccepted = state == SERVICE_RUNNING ? SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN : 0;
+    ServiceState.dwWin32ExitCode = exitCode;
+    ServiceState.dwWaitHint = state == SERVICE_STOP_PENDING ? 15000 : 0;
+    SetServiceStatus(ServiceHandle, &ServiceState);
+}
+
+static DWORD WINAPI ServiceControl(DWORD control, DWORD type, void *data, void *context)
+{
+    (void)type; (void)data; (void)context;
+    if (control != SERVICE_CONTROL_STOP && control != SERVICE_CONTROL_SHUTDOWN) return NO_ERROR;
+    ReportService(SERVICE_STOP_PENDING, NO_ERROR);
+    SetEvent(ServiceStopEvent);
+    return NO_ERROR;
+}
+
+/* Session 0 has no interactive desktop; serve the console session as SYSTEM. */
+static HANDLE StartSessionServer(DWORD session)
+{
+    char path[MAX_PATH], command[2 * MAX_PATH + 16];
+    HANDLE token = NULL, primary = NULL;
+    STARTUPINFOA startup = {0};
+    PROCESS_INFORMATION process = {0};
+    BOOL started = FALSE;
+    startup.cb = sizeof(startup);
+    startup.lpDesktop = "winsta0\\default";
+    if (GetModuleFileNameA(NULL, path, sizeof(path)) &&
+        snprintf(command, sizeof(command), *ServiceConfig ? "\"%s\" /session \"%s\"" : "\"%s\" /session",
+                 path, ServiceConfig) < (int)sizeof(command) &&
+        OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE, &token) &&
+        DuplicateTokenEx(token, TOKEN_ALL_ACCESS, NULL, SecurityImpersonation, TokenPrimary, &primary) &&
+        SetTokenInformation(primary, TokenSessionId, &session, sizeof(session)))
+        started = CreateProcessAsUserA(primary, path, command, NULL, NULL, FALSE, CREATE_NO_WINDOW,
+                                       NULL, NULL, &startup, &process);
+    if (!started) Log("Cannot start the server in console session %lu error=%lu", session, GetLastError());
+    if (primary) CloseHandle(primary);
+    if (token) CloseHandle(token);
+    if (!started) return NULL;
+    CloseHandle(process.hThread);
+    Log("Server started in console session %lu", session);
+    return process.hProcess;
+}
+
+static void StopSessionServer(HANDLE *server)
+{
+    SetEvent(SessionStopEvent);
+    if (WaitForSingleObject(*server, 10000) == WAIT_TIMEOUT) TerminateProcess(*server, 1);
+    CloseHandle(*server);
+    *server = NULL;
+    ResetEvent(SessionStopEvent);
+}
+
+/* DWMFRAMEINTERVAL counts 4 frames per second each and defaults to 30 frames per second. */
+static DWORD ReadFrameInterval(void)
+{
+    DWORD value = 0, size = sizeof(value), type;
+    HKEY key;
+    if (!RegOpenKeyExA(HKEY_LOCAL_MACHINE, WINSTATIONS_KEY, 0, KEY_QUERY_VALUE, &key))
+    {
+        if (RegQueryValueExA(key, "DWMFRAMEINTERVAL", NULL, &type, (BYTE *)&value, &size) || type != REG_DWORD)
+            value = 0;
+        RegCloseKey(key);
+    }
+    if (!value) return 1000 / 30;
+    return 1000 / (min(value, 15) * 4);
+}
+
+static BOOL RemoteDesktopAllowed(HKEY key)
+{
+    DWORD deny = 1, size = sizeof(deny), type;
+    if (RegQueryValueExA(key, "fDenyTSConnections", NULL, &type, (BYTE *)&deny, &size) || type != REG_DWORD)
+        deny = 1;
+    return !deny;
+}
+
+static void WINAPI ServiceMain(DWORD argc, char **argv)
+{
+    HANDLE server = NULL, changed, waits[2];
+    HKEY key = NULL;
+    DWORD session = 0, console, code = 0, wait;
+    BOOL armed = FALSE, failed = FALSE, allowed;
+    (void)argc; (void)argv;
+    ServiceHandle = RegisterServiceCtrlHandlerExA(SERVICE_NAME, ServiceControl, NULL);
+    if (!ServiceHandle) return;
+    ServiceStopEvent = CreateEventA(NULL, TRUE, FALSE, NULL);
+    SessionStopEvent = CreateEventA(NULL, TRUE, FALSE, SERVICE_STOP_EVENT);
+    changed = CreateEventA(NULL, FALSE, FALSE, NULL);
+    if (!ServiceStopEvent || !SessionStopEvent || !changed ||
+        RegOpenKeyExA(HKEY_LOCAL_MACHINE, TERMINAL_SERVER_KEY, 0, KEY_QUERY_VALUE | KEY_NOTIFY, &key))
+    {
+        code = GetLastError();
+        goto done;
+    }
+    waits[0] = ServiceStopEvent;
+    waits[1] = changed;
+    ReportService(SERVICE_RUNNING, NO_ERROR);
+    for (;;)
+    {
+        if (!armed)
+            armed = !RegNotifyChangeKeyValue(key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, changed, TRUE);
+        allowed = RemoteDesktopAllowed(key);
+        console = WTSGetActiveConsoleSessionId();
+        if (server && WaitForSingleObject(server, 0) == WAIT_OBJECT_0)
+        {
+            GetExitCodeProcess(server, &code);
+            CloseHandle(server);
+            server = NULL;
+            Log("Server in console session %lu exited with %lu", session, code);
+            failed = code == 2;
+        }
+        if (server && (!allowed || console != session)) StopSessionServer(&server);
+        if (!server && !failed && allowed && console != 0 && console != 0xFFFFFFFF)
+        {
+            server = StartSessionServer(console);
+            session = console;
+        }
+        wait = WaitForMultipleObjects(2, waits, FALSE, 2000);
+        if (wait == WAIT_OBJECT_0 || wait == WAIT_FAILED) break;
+        if (wait == WAIT_OBJECT_0 + 1) armed = failed = FALSE;
+    }
+    if (server) StopSessionServer(&server);
+    code = NO_ERROR;
+done:
+    if (key) RegCloseKey(key);
+    if (changed) CloseHandle(changed);
+    if (SessionStopEvent) CloseHandle(SessionStopEvent);
+    if (ServiceStopEvent) CloseHandle(ServiceStopEvent);
+    ReportService(SERVICE_STOPPED, code);
+}
+
+static DWORD WINAPI WaitServiceStop(void *event)
+{
+    if (WaitForSingleObject(event, INFINITE) == WAIT_OBJECT_0) SetEvent(StopEvent);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
-    char config[MAX_PATH], modules[MAX_PATH], *separator;
-    char mac[MAX_INTERFACE_MACS * 18 + 16], mask[64], tail;
-    unsigned octets[6], i;
-    typedef int (__cdecl *SET_PROVIDER_PATH)(void *, const char *);
-    SET_PROVIDER_PATH setProviderPath;
+    char config[MAX_PATH] = "", directory[MAX_PATH], *separator;
     freerdp_listener *listener;
     HANDLE events[32], singleton;
     DWORD count, status;
     WSADATA winsock;
+    HANDLE serviceStop = NULL, thread;
+    BOOL serviceMode = argc >= 2 && !_stricmp(argv[1], "/service");
+    BOOL sessionMode = argc >= 2 && !_stricmp(argv[1], "/session");
+    int first = (serviceMode || sessionMode) ? 2 : 1;
     DebugPrint = (DEBUG_PRINT)(void *)GetProcAddress(GetModuleHandleA("ntdll.dll"), "DbgPrint");
-    if (argc != 2 || !GetFullPathNameA(argv[1], sizeof(config), config, NULL))
-    { Log("Usage: rdpserver.exe path-to-test-config.ini"); return 2; }
-    if (!GetPrivateProfileIntA("server", "enabled", 0, config)) return 0;
-    GetPrivateProfileStringA("server", "bind", "", BindAddress, sizeof(BindAddress), config);
-    GetPrivateProfileStringA("server", "allow", "", AllowedPeer, sizeof(AllowedPeer), config);
-    GetPrivateProfileStringA("server", "username", "", Username, sizeof(Username), config);
-    GetPrivateProfileStringA("server", "password", "", Password, sizeof(Password), config);
-    GetPrivateProfileStringA("server", "certificate", "", Certificate, sizeof(Certificate), config);
-    GetPrivateProfileStringA("server", "privatekey", "", PrivateKey, sizeof(PrivateKey), config);
-    GetPrivateProfileStringA("server", "interface_mac", "", mac, sizeof(mac), config);
-    GetPrivateProfileStringA("server", "netmask", "", mask, sizeof(mask), config);
+    if (argc > first + 1 || (argc == first + 1 && !GetFullPathNameA(argv[first], sizeof(config), config, NULL)))
+    { Log("Usage: rdpserver.exe [/service] [rdpserver.ini]"); return 2; }
+    if (serviceMode)
+    {
+        SERVICE_TABLE_ENTRYA table[] = {{(char *)SERVICE_NAME, ServiceMain}, {NULL, NULL}};
+        strcpy(ServiceConfig, config);
+        return StartServiceCtrlDispatcherA(table) ? 0 : 1;
+    }
+    if (*config)
     {
         char root[MAX_PATH];
         GetPrivateProfileStringA("server", "transfer_root", "", root, sizeof(root), config);
         if (*root && !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, root, -1,
                                          TransferRoot, MAX_PATH)) return 2;
     }
-    if (mac[0])
-    {
-        char *entry, *next;
-        if ((InterfaceMask = inet_addr(mask)) == INADDR_NONE || !InterfaceMask)
-        { Log("Invalid test Ethernet MAC or netmask"); return 2; }
-        for (entry = mac; entry; entry = next)
-        {
-            next = strchr(entry, ',');
-            if (next) *next++ = 0;
-            if (InterfaceMacCount == MAX_INTERFACE_MACS ||
-                sscanf(entry, " %x:%x:%x:%x:%x:%x %c", &octets[0], &octets[1], &octets[2],
-                       &octets[3], &octets[4], &octets[5], &tail) != 6)
-            { Log("Invalid test Ethernet MAC or netmask"); return 2; }
-            for (i = 0; i < 6; ++i)
-            {
-                if (octets[i] > 255) return 2;
-                InterfaceMac[InterfaceMacCount][i] = (BYTE)octets[i];
-            }
-            ++InterfaceMacCount;
-        }
-        ConfigureAddress = TRUE;
-    }
-    if (!ConfigRelativePath(config, Certificate, sizeof(Certificate)) ||
-        !ConfigRelativePath(config, PrivateKey, sizeof(PrivateKey)))
-    { Log("Certificate or private key path is too long"); return 2; }
-    if (!Username[0] || strlen(Password) < 16 || inet_addr(BindAddress) == INADDR_NONE ||
-        inet_addr(BindAddress) == INADDR_ANY || inet_addr(AllowedPeer) == INADDR_NONE ||
-        inet_addr(AllowedPeer) == INADDR_ANY || !Certificate[0] || !PrivateKey[0])
-    { Log("Invalid configuration: explicit bind/peer IPv4, credentials and TLS files required"); return 2; }
+    if (!GetModuleFileNameA(NULL, directory, sizeof(directory))) return 1;
+    separator = strrchr(directory, '\\');
+    if (!separator) return 1;
+    *separator = 0;
+    if (snprintf(Certificate, sizeof(Certificate), "%s\\server.crt", directory) >= (int)sizeof(Certificate) ||
+        snprintf(PrivateKey, sizeof(PrivateKey), "%s\\server.key", directory) >= (int)sizeof(PrivateKey)) return 1;
     singleton = CreateMutexA(NULL, FALSE, "Local\\LiberNT-RDPServer-Console");
     if (!singleton || GetLastError() == ERROR_ALREADY_EXISTS) { if (singleton) CloseHandle(singleton); return 1; }
     if (WSAStartup(MAKEWORD(2, 2), &winsock)) return 1;
-    if (!GetModuleFileNameA(NULL, modules, sizeof(modules))) return 1;
-    separator = strrchr(modules, '\\');
-    if (!separator || (size_t)(separator - modules) + sizeof("\\ossl-modules") > sizeof(modules)) return 1;
-    strcpy(separator, "\\ossl-modules");
-    SetEnvironmentVariableA("OPENSSL_MODULES", modules);
-    /* OpenSSL's CRT may cache its environment before main. Set its provider
-     * path directly so ReactOS does not fall back to the build-machine path. */
-    setProviderPath = (SET_PROVIDER_PATH)(void *)GetProcAddress(
-        GetModuleHandleA("libcrypto-3-x64.dll"), "OSSL_PROVIDER_set_default_search_path");
-    if (!setProviderPath || !setProviderPath(NULL, modules))
-    { Log("Cannot configure the bundled OpenSSL provider directory"); return 1; }
     if (!winpr_InitializeSSL(WINPR_SSL_INIT_DEFAULT)) return 1;
+    if (!EnsureCertificate()) return 2;
     StopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (!StopEvent) return 1;
+    FrameInterval = ReadFrameInterval();
+    if (sessionMode)
+    {
+        serviceStop = OpenEventA(SYNCHRONIZE, FALSE, SERVICE_STOP_EVENT);
+        thread = serviceStop ? CreateThread(NULL, 0, WaitServiceStop, serviceStop, 0, NULL) : NULL;
+        if (!thread) { Log("Cannot watch the service stop event error=%lu", GetLastError()); return 1; }
+        CloseHandle(thread);
+    }
     SetConsoleCtrlHandler(Stop, TRUE);
     listener = freerdp_listener_new();
     if (!listener) return 1;
     listener->PeerAccepted = Accepted;
     if (!WTSRegisterWtsApiFunctionTable(FreeRDP_InitWtsApi())) return 1;
-    Log("Starting console server; waiting for %s:3389", BindAddress);
-    /* Autostart may run before PnP has finished configuring Ethernet. */
-    while (!EnsureAddress() || !listener->Open(listener, BindAddress, 3389))
+    Log("Starting console server on port 3389");
+    /* Autostart may run before PnP has finished configuring the network. */
+    while (!listener->Open(listener, NULL, 3389))
         if (WaitForSingleObject(StopEvent, 2000) != WAIT_TIMEOUT) goto done;
-    Log("Listening on %s:3389; TLS; allowed controller %s", BindAddress, AllowedPeer);
+    Log("Listening on port 3389 with NLA");
     for (;;)
     {
         events[0] = StopEvent;
@@ -574,12 +896,10 @@ int main(int argc, char **argv)
     listener->Close(listener);
 done:
     SetEvent(StopEvent);
-    while (InterlockedCompareExchange(&ClientConnected, 0, 0)) Sleep(50);
+    while (InterlockedCompareExchange(&ClientCount, 0, 0)) Sleep(50);
     freerdp_listener_free(listener);
     SetConsoleCtrlHandler(Stop, FALSE);
     CloseHandle(StopEvent); CloseHandle(singleton);
-    SecureZeroMemory(Password, sizeof(Password));
-    if (AddressAdded) DeleteIPAddress(AddressContext);
     WSACleanup();
     return 0;
 }
