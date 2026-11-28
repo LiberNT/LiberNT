@@ -637,6 +637,7 @@ HRESULT WINAPI RegisterDragDrop(HWND hwnd, LPDROPTARGET pDropTarget)
  */
 HRESULT WINAPI RevokeDragDrop(HWND hwnd)
 {
+  DWORD pid = 0;
   HANDLE map;
   IStream *stream;
   IDropTarget *drop_target;
@@ -653,6 +654,14 @@ HRESULT WINAPI RevokeDragDrop(HWND hwnd)
   /* no registration data */
   if (!(map = get_droptarget_handle(hwnd)))
     return DRAGDROP_E_NOTREGISTERED;
+
+  GetWindowThreadProcessId(hwnd, &pid);
+  if (pid != GetCurrentProcessId())
+  {
+    RemovePropW(hwnd, prop_oledroptarget);
+    RemovePropW(hwnd, prop_marshalleddroptarget);
+    return RPC_E_WRONG_THREAD;
+  }
 
   drop_target = GetPropW(hwnd, prop_oledroptarget);
   if(drop_target) IDropTarget_Release(drop_target);
