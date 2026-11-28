@@ -119,8 +119,6 @@ AfdFailSendQueue(PAFD_FCB FCB, NTSTATUS Status)
     PIO_STACK_LOCATION IrpSp;
     PAFD_SEND_INFO SendReq;
 
-    /* The in-flight send's completion owns the window accounting; only
-       reset it once nothing is still in flight into the transport */
     if (!FCB->SendIrp.InFlightRequest)
     {
         FCB->Send.BytesUsed = 0;
