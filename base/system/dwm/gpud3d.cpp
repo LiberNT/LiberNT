@@ -2730,7 +2730,7 @@ DwmD3dSetPointerImage(LONG Width, LONG Height, const ULONG *Image, const ULONG *
 
 /* FIXME: the copy has no overlay plane, and it assumes the canvas origin is the device's. */
 BOOL
-DwmD3dMirrorCanvas(HDC Screen)
+DwmD3dMirrorCanvas(HDC Screen, ULONG ReadRequest)
 {
     if (!State.Active || State.Canvas.Resource == NULL)
         return FALSE;
@@ -2758,7 +2758,7 @@ DwmD3dMirrorCanvas(HDC Screen)
         Frame->Width = (ULONG)State.Width;
         Frame->Height = (ULONG)State.Height;
         Frame->Pitch = RowBytes;
-        Frame->Reserved = 0;
+        Frame->ReadRequest = ReadRequest;
         for (LONG Row = 0; Row < State.Height; ++Row)
             memcpy((BYTE *)(Frame + 1) + (ULONG)Row * RowBytes, (const BYTE *)Mapped.pData + (SIZE_T)Row * Mapped.RowPitch, RowBytes);
         Done = ExtEscape(Screen, DWM_ESCAPE_MIRROR_FRAME, (int)Bytes, (LPCSTR)Frame, 0, NULL) > 0;

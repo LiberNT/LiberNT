@@ -70,7 +70,7 @@ typedef struct _DWM_MIRROR_FRAME
     ULONG Width;
     ULONG Height;
     ULONG Pitch;
-    ULONG Reserved;
+    ULONG ReadRequest;      /* the screen-read request this copy serves, 0 = none */
 } DWM_MIRROR_FRAME;
 
 /* Pixels at DestRect were at SourcePoint in the previous frame; Rect still covers DestRect. */

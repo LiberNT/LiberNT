@@ -602,6 +602,16 @@ IntCompositionDwmPresented(_In_ DWORD_PTR Param)
     return STATUS_SUCCESS;
 }
 
+/* dwm stored a copy of the composed desktop: the readers up to its request are served. */
+VOID
+IntCompositionScreenReadServed(_In_ ULONG Request)
+{
+    if (Request == 0 || g_ScreenReadEvent == NULL)
+        return;
+    InterlockedExchange(&g_ScreenReadServed, (LONG)Request);
+    KeSetEvent(g_ScreenReadEvent, IO_NO_INCREMENT, FALSE);
+}
+
 /* A driver that cannot capture the composed desktop reads dwm's copy instead: have dwm refresh it before a screen read. */
 VOID
 IntCompositionPrepareScreenRead(_In_opt_ HDC hDC)
@@ -624,7 +634,8 @@ IntCompositionPrepareScreenRead(_In_opt_ HDC hDC)
     Screen = pdc->dctype == DCTYPE_DIRECT && pdc->ppdev != NULL &&
              pdc->dclevel.pSurface != NULL && pdc->dclevel.pSurface == pdc->ppdev->pSurface;
     DC_UnlockDc(pdc);
-    if (!Screen || s_MirroredFrame == g_DwmFramePresented)
+    /* An occluded output presents nothing, so dwm's copy is current as long as it fetched no newer frame. */
+    if (!Screen || s_MirroredFrame == g_DwmFrameIssued)
         return;
 
     Target = InterlockedIncrement(&g_ScreenReadRequest);
@@ -635,7 +646,7 @@ IntCompositionPrepareScreenRead(_In_opt_ HDC hDC)
         KeClearEvent(g_ScreenReadEvent);
         if ((LONG)(g_ScreenReadServed - Target) >= 0)
         {
-            s_MirroredFrame = g_DwmFramePresented;
+            s_MirroredFrame = g_DwmFrameIssued;
             return;
         }
         if (KeWaitForSingleObject(g_ScreenReadEvent, Executive, KernelMode, FALSE, &Timeout) == STATUS_TIMEOUT)

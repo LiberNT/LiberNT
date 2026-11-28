@@ -4481,6 +4481,7 @@ DwmComposeLoop(HANDLE hStopEvent)
     ULONG screenCaptureProbes = 0;
     LONG screenMirrorNeeded = 0;
     BOOL gpuDeferred = FALSE;
+    BOOL occludedService = FALSE;
     DWORD gpuLastOutputCheck = 0;
     DWORD gpuRetryLast = GetTickCount();
     ULONG gpuRetryFailures = 0;
@@ -4605,21 +4606,33 @@ DwmComposeLoop(HANDLE hStopEvent)
         if (WaitForSingleObject(hStopEvent, 0) == WAIT_OBJECT_0)
             break;
 
+        occludedService = FALSE;
         if (gpuDeferred)
         {
             DWORD Elapsed = GetTickCount() - gpuLastOutputCheck;
-            DWM_GPU_RESULT Output;
 
             /* Keep servicing this thread's windows while an exclusive owner
              * has the output. Dirty notifications must not turn suspension
-             * into a render loop; only test output availability periodically. */
+             * into a render loop; a wake only fetches the frame, which
+             * serves pending screen reads, and output availability is tested
+             * periodically. */
             if (Elapsed < 200)
             {
-                if (MsgWaitForMultipleObjects(1, &hStopEvent, FALSE,
-                                              200 - Elapsed, QS_ALLINPUT) == WAIT_OBJECT_0)
+                HANDLE WaitHandles[2] = {hStopEvent, hWake};
+                DWORD Wait = MsgWaitForMultipleObjects(ARRAYSIZE(WaitHandles), WaitHandles, FALSE,
+                                                       200 - Elapsed, QS_ALLINPUT);
+
+                if (Wait == WAIT_OBJECT_0)
                     break;
-                continue;
+                if (Wait != WAIT_OBJECT_0 + 1)
+                    continue;
+                occludedService = TRUE;
             }
+        }
+        if (gpuDeferred && !occludedService)
+        {
+            DWM_GPU_RESULT Output;
+
             Output = DwmGpuComposeCheckOutput();
             gpuLastOutputCheck = GetTickCount();
             if (Output == DWM_GPU_DEFERRED)
@@ -4789,6 +4802,13 @@ DwmComposeLoop(HANDLE hStopEvent)
 
         pointerChanged = DwmPointerUpdate(hdcScreen, hdr);
         screenRead = hdr->ScreenReadRequest;
+        if (occludedService)
+        {
+            /* The fetched damage is redrawn in full once the output returns; an occluded output composes only for a screen read. */
+            forceFull = TRUE;
+            if (screenRead == 0)
+                continue;
+        }
         if (hdr->Dirty == 0 && !forceFull && !pointerChanged && screenRead == 0)
         {
             HANDLE WaitHandles[2] = {hStopEvent, hWake};
@@ -4995,7 +5015,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                     }
 
                     if (gpuFrame && screenRead != 0)
-                        DwmGpuComposeMirror(hdcScreen);
+                        DwmGpuComposeMirror(hdcScreen, screenRead);
                     if (gpuFrame && g_pointer.Composed && g_pointer.Valid)
                     {
                         RECT PointerRect = g_pointer.Rect;
@@ -5041,6 +5061,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                     }
                     if (gpuResult == DWM_GPU_COMPLETE)
                     {
+                        gpuDeferred = FALSE;
                         NtUserCallOneParam(DWM_PRESENTED_FRAME, DWM_ROUTINE_PRESENTED);
                         /* A read tells CDD whether the driver can capture, before any client reads;
                          * one issued before the compositor owns the output finds nothing yet. */

@@ -1564,9 +1564,9 @@ DwmGpuComposeSetPointerImage(LONG Width, LONG Height, const ULONG *Image, const 
 }
 
 BOOL
-DwmGpuComposeMirror(HDC Screen)
+DwmGpuComposeMirror(HDC Screen, ULONG ReadRequest)
 {
-    return DwmD3dMirrorCanvas(Screen);
+    return DwmD3dMirrorCanvas(Screen, ReadRequest);
 }
 
 BOOL

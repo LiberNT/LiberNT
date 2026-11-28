@@ -111,7 +111,7 @@ BOOL DwmGpuComposeSetPointerImage(LONG Width, LONG Height, const ULONG *Image, c
 BOOL DwmGpuComposePointer(const RECT *Rect);
 
 /* Gives CDD a copy of the frame so far, for a screen read. */
-BOOL DwmGpuComposeMirror(HDC Screen);
+BOOL DwmGpuComposeMirror(HDC Screen, ULONG ReadRequest);
 
 /* COMPLETE means presentation was accepted. DEFERRED means the output is
  * temporarily unavailable and GPU reads have completed, so client copies

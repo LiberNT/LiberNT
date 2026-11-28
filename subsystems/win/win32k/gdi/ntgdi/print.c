@@ -287,6 +287,11 @@ NtGdiExtEscape(
          SafeInData,
          OutSize,
          SafeOutData);
+   if (Escape == DWM_ESCAPE_MIRROR_FRAME && Result > 0)
+   {
+      ASSERT(SafeInData != NULL && (ULONG)InSize >= sizeof(DWM_MIRROR_FRAME));
+      IntCompositionScreenReadServed(((const DWM_MIRROR_FRAME *)SafeInData)->ReadRequest);
+   }
 
    if (OutSize != 0 && UnsafeOutData != NULL && SafeOutData != NULL)
    {
