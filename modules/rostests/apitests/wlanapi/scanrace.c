@@ -41,8 +41,6 @@ ScanThreadProc(PVOID Parameter)
         else
         {
             InterlockedIncrement(&Context->ScanErrors);
-            /* The interface is going away or already gone: a few errors are
-             * expected during teardown, continuous ones mean we are done. */
             if (Context->ScanErrors > 20)
                 break;
         }
@@ -73,14 +71,6 @@ START_TEST(WlanScanDetachRace)
     if (Error != ERROR_SUCCESS)
         return;
 
-    /*
-     * Each iteration installs the vwifi adapter, hammers it with scan ioctls
-     * and removes the adapter while the ioctls are in flight. Without
-     * reference counting in the nwifi ioctl path the detach frees the adapter
-     * while an ioctl still uses it, crashing the kernel or hanging the scan;
-     * either one ends this test process, so every finished iteration is
-     * evidence the race is closed.
-     */
     for (Iteration = 0; Iteration < RACE_ITERATIONS; Iteration++)
     {
         SCAN_THREAD Context;
@@ -106,8 +96,6 @@ START_TEST(WlanScanDetachRace)
         Thread = CreateThread(NULL, 0, ScanThreadProc, &Context, 0, NULL);
         ok(Thread != NULL, "CreateThread failed: %lu\n", GetLastError());
 
-        /* Vary the teardown delay so the detach lands at different points
-         * of the scan pipeline. */
         Sleep((Iteration * 7) % 23);
 
         RemoveVwifi(Devices, &Device);
