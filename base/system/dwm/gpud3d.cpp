@@ -1767,10 +1767,7 @@ BOOL DrawLayer(const DWM_WIN *Window, const BYTE *Pixels, BOOL Client, LONG Orig
         ULONG Key = DwmFrameKey(Window);
         RECTL ButtonBounds;
 
-        Data.FrameKey[0] = ((Key >> 16) & 0xFFu) / 255.0f;
-        Data.FrameKey[1] = ((Key >> 8) & 0xFFu) / 255.0f;
-        Data.FrameKey[2] = (Key & 0xFFu) / 255.0f;
-        Data.FrameKey[3] = 1.0f;
+        SetColor(Data.FrameKey, RGB(Key >> 16, Key >> 8, Key));
         Buttons = FrameButtonsView(Window, Key, &ButtonBounds);
         if (Buttons != NULL)
         {
@@ -2502,7 +2499,6 @@ DwmD3dBegin(ULONG BackdropColor, const BYTE *BackdropPixels, BOOL RefreshBackdro
         if (!Success)
             return FALSE;
     }
-    Data.SourceSize[2] = 1;
     return Draw(State.Canvas, Copy, State.Draw, Data, State.Backdrop.View);
 }
 
