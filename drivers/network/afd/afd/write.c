@@ -207,7 +207,7 @@ static NTSTATUS NTAPI SendComplete
     }
 
     if( !NT_SUCCESS(Status) ) {
-        AfdFailSendQueue(FCB, Status);
+        AfdFailSendQueue(FCB, Status == STATUS_CANCELLED ? STATUS_CONNECTION_ABORTED : Status);
         RetryDisconnectCompletion(FCB);
 
         if (FCB->TdiRundownEvent) AfdSignalTdiRundown(FCB);
